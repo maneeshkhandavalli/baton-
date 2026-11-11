@@ -1,30 +1,42 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Lock } from "lucide-react";
+import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/shared/page-header";
-import { ProgressIndicator, type ProgressStep } from "@/components/shared/progress-indicator";
+import { ProcessingView } from "@/components/processing/processing-view";
+import { EmptyState } from "@/components/shared/empty-state";
+import { LoadingState } from "@/components/shared/loading-state";
+import { getMockQueries } from "@/lib/mocks/queries";
 
 export const metadata: Metadata = { title: "Processing" };
 
-const PIPELINE_STEPS: readonly ProgressStep[] = [
-  { id: "ingest", label: "Reading documents" },
-  { id: "extract", label: "Extracting knowledge" },
-  { id: "verify", label: "Checking sources" },
-  { id: "gaps", label: "Identifying gaps" },
-];
-
-export default function ProcessingPage() {
+export default function ProcessingPage({ params }: PageProps<"/handover/[id]/processing">) {
   return (
-    <PageContainer width="wide" className="space-y-8">
-      <PageHeader
-        eyebrow="Handover"
-        title="Processing"
-        description="Baton is reading your documents and tracing every claim back to its source."
-      />
-      <section className="max-w-xl rounded-xl border border-border bg-card p-6 shadow-soft">
-        {/* Not yet connected to the processing pipeline: no step is active. */}
-        <ProgressIndicator label="Processing pipeline" steps={PIPELINE_STEPS} currentStep={-1} />
-      </section>
+    <PageContainer width="wide" className="lg:py-8">
+      <Suspense fallback={<LoadingState label="Loading processing status…" className="min-h-96" />}>
+        <ProcessingContent params={params} />
+      </Suspense>
     </PageContainer>
+  );
+}
+
+async function ProcessingContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const queries = getMockQueries();
+  const handover = await queries.getHandover(id);
+  if (!handover.ok) notFound();
+  const h = handover.data;
+  const status = await queries.getProcessingStatus(id);
+  if (!status.ok) {
+    return <EmptyState icon={<Lock />} title="Processing is for reviewers" description="Only the creator, outgoing member and reviewers can see processing details." />;
+  }
+  return (
+    <ProcessingView
+      handoverId={id}
+      status={status.data}
+      canStart={h.viewerIsCreator || h.viewerRole === "outgoing"}
+      canCancel={h.viewerIsCreator}
+    />
   );
 }

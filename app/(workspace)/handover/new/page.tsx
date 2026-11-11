@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { Upload } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { NewHandoverWizard } from "@/components/wizard/new-handover-wizard";
 
 export const metadata: Metadata = { title: "New handover" };
 
@@ -13,13 +12,9 @@ export default function NewHandoverPage() {
       <PageHeader
         eyebrow="New handover"
         title="Start a handover"
-        description="Name the role or team being handed over and add the documents that hold its knowledge."
+        description="Four short steps: who is involved, the chats and documents that hold the knowledge, what Baton may read, and consent."
       />
-      <EmptyState
-        icon={<Upload />}
-        title="Handover setup is coming soon"
-        description="Document upload and handover details will be added in a later phase."
-      />
+      <NewHandoverWizard />
     </PageContainer>
   );
 }
