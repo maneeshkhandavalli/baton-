@@ -11,6 +11,7 @@
  *   4. Exactly one fenced `completeJob`: succeeded | retry (backoff 30 s, 2 min, 8 min) | failed |
  *      skipped | yield. Ordering never costs an attempt: `claimReadyJobs` only returns ready jobs (DB-1).
  *   5. On a terminal job status, `listRunJobs` + `decideRunOutcome` decide whether to finish the run.
+ *      Each drain also starts by closing the runs `listFinishableRuns` nominates (DB-15).
  */
 
 import type { Result } from "../contracts/api";
@@ -23,6 +24,7 @@ import {
   finishRun,
   getJobContext,
   heartbeatJob,
+  listFinishableRuns,
   listRunJobs,
   type ClaimedJob,
   type JobCompletion,
@@ -34,9 +36,13 @@ import { decideRunOutcome } from "./finish";
 import type { PipelineLogger } from "./log";
 import type { VerifiedPepper } from "./pepper-core";
 import type { StageContext, StageHandler } from "./stage-context";
+import type { PipelineAi } from "./ai";
 import { runAnalyze } from "./stages/analyze";
+import { runExtract } from "./stages/extract";
 import { runParse } from "./stages/parse";
 import { runPrepareReview } from "./stages/prepare-review";
+import { runVerifyQuotes } from "./stages/verify-quotes";
+import { runVerifySupport } from "./stages/verify-support";
 import { failed, LeaseLostError, type StageOutcome } from "./types";
 
 export interface DrainReport {
@@ -62,6 +68,7 @@ export interface DrainerDeps {
   storage: StorageClient;
   logger: PipelineLogger;
   getPepper(): Result<VerifiedPepper>;
+  ai: PipelineAi;
   now?: () => number;
   handlers?: Partial<Record<PipelineStage, StageHandler>>;
   leaseSeconds?: number;
@@ -74,14 +81,11 @@ export const DEFAULT_DEADLINE_MS = 240_000;
 export const DEFAULT_MAX_JOBS = 25;
 export const DEFAULT_MIN_REMAINING_MS = 30_000;
 
-/** AI stages are wired in P2 (after I1 lands). Until then they fail the run loudly, never fake success. */
-const notWired: StageHandler = async () => failed("internal", "stage_not_wired");
-
 export const DEFAULT_HANDLERS: Record<PipelineStage, StageHandler> = {
   parse: runParse,
-  extract: notWired,
-  verify_quotes: notWired,
-  verify_support: notWired,
+  extract: runExtract,
+  verify_quotes: runVerifyQuotes,
+  verify_support: runVerifySupport,
   analyze: runAnalyze,
   prepare_review: runPrepareReview,
 };
@@ -169,6 +173,7 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
           now,
           deadlineAt,
           getPepper: deps.getPepper,
+          ai: deps.ai,
           heartbeat: async (progress) => {
             const status = await heartbeatJob(db, { jobId: claimed.id, attempt: claimed.attempt, leaseSeconds: lease, progress });
             if (status === "lost") throw new LeaseLostError();
@@ -192,7 +197,7 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
       case "succeeded":
         completion = "succeeded";
         if (disposition.progress) extra.progress = disposition.progress;
-        if (disposition.attemptRecord) extra.attemptRecord = disposition.attemptRecord;
+        if (disposition.attemptRecord) extra.attemptRecord = { ...disposition.attemptRecord };
         break;
       case "skipped":
         completion = "skipped";
@@ -206,7 +211,8 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
         extra.errorCode = disposition.failure.code;
         extra.errorMessage = disposition.failure.reason;
         if (disposition.failure.retryable) extra.nextAttemptAt = nextAttemptAt(now(), claimed.attempt);
-        if (disposition.attemptRecord) extra.attemptRecord = disposition.attemptRecord;
+        if (disposition.attemptRecord) extra.attemptRecord = { ...disposition.attemptRecord };
+        if (disposition.progress) extra.progress = disposition.progress;
         break;
     }
     extra.outcome = completion;
@@ -244,6 +250,14 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
     const report: DrainReport = { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0, skipped: 0, lost: 0 };
     const maxJobs = Math.max(0, Math.floor(opts.maxJobs ?? DEFAULT_MAX_JOBS));
     const deadlineAt = now() + Math.max(0, opts.deadlineMs ?? DEFAULT_DEADLINE_MS);
+
+    // DB-15: runs whose last job was reaped (or that already hold a deciding failure) are closed here,
+    // since no job completion would trigger it.
+    try {
+      for (const runId of await listFinishableRuns(db)) await maybeFinishRun(runId);
+    } catch (e) {
+      logger.warn("finishable_runs_error", { code: e instanceof DbError ? e.code : "internal" });
+    }
 
     while (report.claimed < maxJobs && deadlineAt - now() >= minRemaining) {
       let jobs: ClaimedJob[];

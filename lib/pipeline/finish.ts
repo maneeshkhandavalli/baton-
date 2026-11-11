@@ -3,7 +3,7 @@
  * publishes: a succeeded run only moves the handover to `in_review` (`_close_run`).
  *
  * - failed at once when any job failed with a run-fatal reason (`provider_not_configured`,
- *   `ai_config_changed`, `stage_not_wired`), even while other jobs are still open;
+ *   `ai_config_changed`), even while other jobs are still open;
  * - failed at once when a handover-level stage (`verify_support`, `analyze`, `prepare_review`) failed
  *   after its retries (every per-source job is terminal by then: claim ordering, DB-1);
  * - otherwise wait until every job is terminal; then failed when no `extract` job succeeded
@@ -26,8 +26,7 @@ const TERMINAL: ReadonlySet<string> = new Set(["succeeded", "failed", "cancelled
 export function decideRunOutcome(jobs: ReadonlyArray<Pick<RunJobState, "stage" | "status" | "errorMessage">>): RunDecision {
   const fatal = jobs.find((j) => j.status === "failed" && j.errorMessage !== null && RUN_FATAL_REASONS.has(j.errorMessage));
   if (fatal) {
-    const errorCode: ErrorCode = fatal.errorMessage === "stage_not_wired" ? "internal" : "precondition_failed";
-    return { kind: "finish", status: "failed", errorCode, errorMessage: fatal.errorMessage as string };
+    return { kind: "finish", status: "failed", errorCode: "precondition_failed", errorMessage: fatal.errorMessage as string };
   }
 
   const handoverFailure = jobs.find((j) => HANDOVER_STAGES.has(j.stage) && j.status === "failed");

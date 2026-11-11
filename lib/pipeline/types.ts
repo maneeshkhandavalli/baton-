@@ -6,6 +6,7 @@
  * must match REASON_TOKEN_PATTERN and never contain content (§12.7).
  */
 
+import type { AiAttemptRecord } from "../ai/provider";
 import type { ErrorCode } from "../contracts/api";
 import type { ParserErrorCode, ParserInputErrorCode } from "../contracts/parser";
 
@@ -17,7 +18,13 @@ export type FailureReason =
   | "ai_config_changed"
   | "ai_transient"
   | "ai_invalid_output"
+  | "ai_tool_call"
+  | "ai_provider_error"
+  | "ai_timed_out"
+  | "ai_aborted"
+  | "ai_request_too_large"
   | "ai_budget_exceeded"
+  | "source_changed"
   | "identity_pepper_unverified"
   | "integrity_mismatch"
   | "raw_unavailable"
@@ -29,7 +36,7 @@ export type FailureReason =
   | "source_unavailable"
   | "handover_unavailable"
   | "run_inactive"
-  | "stage_not_wired"
+  | "ai_request_invalid"
   | "db_transient"
   | "db_rejected"
   | "internal";
@@ -38,7 +45,6 @@ export type FailureReason =
 export const RUN_FATAL_REASONS: ReadonlySet<string> = new Set<FailureReason>([
   "provider_not_configured",
   "ai_config_changed",
-  "stage_not_wired",
 ]);
 
 export interface PipelineFailure {
@@ -53,13 +59,14 @@ export interface JobProgress {
   total: number;
 }
 
-/** Non-sensitive per-attempt record (§11.8 AiAttemptRecord); only AI stages produce one. */
-export type AttemptRecord = Record<string, string | number | boolean | null>;
+/** Non-sensitive per-attempt record (§11.8); only AI stages produce one. */
+export type AttemptRecord = AiAttemptRecord;
 
 /** What a stage handler returns. The runner turns it into exactly one `completeJob` call. */
 export type StageOutcome =
   | { kind: "succeeded"; progress?: JobProgress; attemptRecord?: AttemptRecord }
-  | { kind: "failed"; failure: PipelineFailure; attemptRecord?: AttemptRecord }
+  /** `progress` keeps a checkpoint across a retry (e.g. extract chunks already stored). */
+  | { kind: "failed"; failure: PipelineFailure; attemptRecord?: AttemptRecord; progress?: JobProgress }
   | { kind: "skipped"; reason: "upstream_failed" }
   | { kind: "yield"; progress: JobProgress };
 

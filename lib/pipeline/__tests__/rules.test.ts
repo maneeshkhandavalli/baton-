@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { nextAttemptAt, retryDelayMs } from "../backoff";
+import { mapAiFailure } from "../ai";
 import { decideRunOutcome } from "../finish";
 import { DROPPED, toLogRecord } from "../log";
 import { IDS, runJob } from "./fakes";
@@ -40,6 +41,21 @@ describe("pipeline logs carry ids, counts and reason tokens only (§12.7)", () =
     assert.equal(r.event, DROPPED);
     assert.equal(r.scope, "pipeline");
     assert.equal(r.level, "warn");
+  });
+});
+
+describe("mapAiFailure (I1 reasons)", () => {
+  it("keeps known reason tokens; configuration failures are never retryable", () => {
+    const e = (reason: string, retryable: boolean) => ({ code: "precondition_failed" as const, message: "m", retryable, details: { reason } });
+    assert.deepEqual(mapAiFailure(e("ai_config_changed", true)), { code: "precondition_failed", reason: "ai_config_changed", retryable: false });
+    assert.deepEqual(mapAiFailure(e("provider_not_configured", false)), { code: "precondition_failed", reason: "provider_not_configured", retryable: false });
+    assert.deepEqual(mapAiFailure({ ...e("ai_timed_out", true), code: "processing_failed" }), { code: "processing_failed", reason: "ai_timed_out", retryable: true });
+    assert.deepEqual(mapAiFailure({ ...e("ai_request_invalid", false), code: "validation_failed" }), { code: "validation_failed", reason: "ai_request_invalid", retryable: false });
+    assert.deepEqual(mapAiFailure({ code: "processing_failed", message: "m", retryable: true, details: { reason: "Some Free Text" } }), {
+      code: "processing_failed",
+      reason: "ai_transient",
+      retryable: true,
+    });
   });
 });
 

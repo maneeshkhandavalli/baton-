@@ -10,7 +10,7 @@ import { computeIdentityHash } from "../../privacy/identity";
 import { createMemoryLogger } from "../log";
 import { verifyIdentityPepper } from "../pepper-core";
 import { createDrainer } from "../runner";
-import { claimed, fakeDb, fakeStorage, IDS, jobContext, rpcError } from "./fakes";
+import { claimed, fakeAi, fakeDb, fakeStorage, IDS, jobContext, rpcError } from "./fakes";
 
 const SECRET_PHONE = "+91 99999 00042";
 const CHAT = [
@@ -73,6 +73,7 @@ async function scenario(opts: {
     storage,
     logger,
     getPepper: opts.pepper ?? goodPepper,
+    ai: fakeAi().ai,
     now: () => Date.UTC(2026, 10, 12),
   })({ maxJobs: 5 });
   const completion = db.called("complete_processing_job")[0]?.args;
@@ -225,7 +226,7 @@ describe("parse stage (§10.3, D14)", () => {
     );
     const { storage } = fakeStorage(BYTES, log, true);
     const logger = createMemoryLogger();
-    await createDrainer({ db: db.client, storage, logger, getPepper: goodPepper })({});
+    await createDrainer({ db: db.client, storage, logger, getPepper: goodPepper, ai: fakeAi().ai })({});
     assert.equal(db.called("complete_processing_job")[0].args.p_outcome, "succeeded");
     assert.equal(db.called("mark_source_raw_deleted").length, 0);
     assert.ok(logger.records.some((r) => r.event === "raw_delete_deferred"));
