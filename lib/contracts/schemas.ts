@@ -14,7 +14,12 @@ import {
   CREATOR_ROLES,
   DATE_ORDERS,
   DEPENDENCY_TYPES,
+  EXCLUSION_SCOPES,
   GAP_ANSWER_DECISIONS,
+  GAP_PRIORITIES,
+  IDENTITY_KINDS,
+  IDENTITY_MATCH_DECISIONS,
+  IDENTITY_PEPPER_VERSIONS,
   MEMBER_ROLES,
   POINT_CATEGORIES,
   PRIVACY_REVIEW_DECISIONS,
@@ -23,6 +28,7 @@ import {
   RISK_LEVELS,
   SOURCE_KINDS,
 } from "./enums";
+import { IDENTITY_HASH_PATTERN } from "./identity";
 
 // ── Primitives ───────────────────────────────────────────────────────────────
 
@@ -214,9 +220,18 @@ export const eraseParticipantInput = z.object({
   confirm: z.literal(true),
 });
 
+/** The word the user must type to delete their account (D25). Checked on the server, not only in the UI. */
+export const ACCOUNT_DELETION_CONFIRMATION = "DELETE";
+
+/**
+ * D25 (accepted): blocked until every created handover is transferred or listed here for an
+ * explicitly confirmed immediate purge (§12.9). `confirm` is the exact typed word, case-sensitive.
+ */
 export const deleteAccountInput = z.object({
-  confirm: z.literal(true),
-  purgeHandoverIds: z.array(uuidSchema),
+  confirm: z.literal(ACCOUNT_DELETION_CONFIRMATION),
+  purgeHandoverIds: z
+    .array(uuidSchema)
+    .refine((ids) => new Set(ids.map((id) => id.toLowerCase())).size === ids.length, "Each handover once"),
 });
 
 // ── Inputs: sources (§11.5) ──────────────────────────────────────────────────
@@ -240,6 +255,61 @@ export const recordSourceConsentInput = z.object({
   timezone: z.string().min(1),
   dateOrder: z.enum(DATE_ORDERS).optional(),
   documentDate: z.iso.date().optional(),
+});
+
+/** The context a positional conversation id was chosen in (§10.3, ParseContext in §11.4). */
+export const parseContextSchema = z.strictObject({
+  timezone: z.string().min(1),
+  dateOrder: z.enum(DATE_ORDERS).nullable(),
+  parserVersion: z.string().min(1),
+});
+
+const exclusionReason = z.string().trim().min(1).max(500).optional();
+const isoInstant = z.iso.datetime({ offset: true }); // explicit offset or Z; never server-local time
+
+/**
+ * Pre-parse exclusions (§10.3 step 2, §6.8). After a successful final parse a participant opt-out is
+ * a participant erasure instead (§12.8). The server derives the handover from the source.
+ */
+export const addExclusionInput = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("participant"),
+    sourceId: uuidSchema, // the source the participant was seen in
+    // "handover" also covers later uploads. A handover-wide `name` rule is only DETECTED in other
+    // sources and needs confirmIdentityMatch there (§6.8.1); it is never silently applied.
+    scope: z.enum(EXCLUSION_SCOPES),
+    identityKind: z.enum(IDENTITY_KINDS),
+    participantIdentityHash: z.string().regex(IDENTITY_HASH_PATTERN),
+    identityPepperVersion: z.enum(IDENTITY_PEPPER_VERSIONS),
+    reason: exclusionReason,
+  }),
+  z.object({
+    kind: z.literal("conversation"),
+    sourceId: uuidSchema, // always source-scoped
+    conversationLocalId: z.string().regex(/^c_[1-9][0-9]*$/),
+    parseContext: parseContextSchema, // SourcePreview.parseContext of the preview it was chosen from
+    reason: exclusionReason,
+  }),
+  z
+    .object({
+      kind: z.literal("date_range"),
+      sourceId: uuidSchema,
+      scope: z.enum(EXCLUSION_SCOPES),
+      rangeStart: isoInstant,
+      rangeEnd: isoInstant,
+      reason: exclusionReason,
+    })
+    .refine((v) => Date.parse(v.rangeStart) <= Date.parse(v.rangeEnd), {
+      path: ["rangeEnd"],
+      message: "The range must not end before it starts",
+    }),
+]);
+
+/** Creator decision on a `detect` match between a handover-wide name exclusion and a source (§6.8.1). */
+export const confirmIdentityMatchInput = z.object({
+  sourceId: uuidSchema,
+  exclusionId: uuidSchema,
+  decision: z.enum(IDENTITY_MATCH_DECISIONS),
 });
 
 // ── Inputs: review (§5, §11.5) ───────────────────────────────────────────────
@@ -326,7 +396,71 @@ export const reviewPointInput = z.discriminatedUnion("action", [
   resolvePrivacyReviewAction,
 ]);
 
+/**
+ * A point written by a review role (`origin = 'manual'`). Category and attributes are validated
+ * together (§3.1). Without testimony or a rationale the point derives `missing` (§4.2).
+ */
+export const createManualPointInput = z
+  .intersection(
+    z.object({
+      handoverId: uuidSchema,
+      title: z.string().trim().min(1).max(120),
+      statement: z.string().trim().min(1).max(1000),
+      inferenceRationale: z.string().trim().min(1).max(2000).optional(),
+      accessOverride: accessLevelSchema.nullable().optional(),
+      // The author's own statement, stored as testimony (`stated_by_profile_id`, §6.10, §8.4).
+      testimony: z
+        .object({
+          text: z.string().trim().min(1).max(4000),
+          accessLevel: accessLevelSchema.default("everyone"),
+        })
+        .optional(),
+    }),
+    categorizedPointAttributesSchema,
+  )
+  // D5: a typed-in direct contact is stored at leads_only or stricter.
+  .refine(
+    (v) =>
+      v.category !== "contact" ||
+      v.attributes.directContact === null ||
+      v.accessOverride === "leads_only" ||
+      v.accessOverride === "reviewer_only",
+    { path: ["accessOverride"], message: "A direct contact needs leads_only or reviewer_only access" },
+  );
+
 // ── Inputs: gaps (§11.3, §11.5) ──────────────────────────────────────────────
+
+/** Review roles only. A question about a point takes its category from the point. */
+export const createGapQuestionInput = z
+  .object({
+    handoverId: uuidSchema,
+    pointId: uuidSchema.optional(),
+    category: pointCategorySchema.optional(),
+    question: z.string().trim().min(1).max(500),
+    context: z.string().trim().min(1).max(2000).optional(), // masked; must not quote evidence above accessLevel
+    priority: z.enum(GAP_PRIORITIES),
+    accessLevel: accessLevelSchema.default("everyone"), // the server raises it to the point's level
+    assignedMemberId: uuidSchema.optional(),
+  })
+  .refine((v) => v.pointId === undefined || v.category === undefined, {
+    path: ["category"],
+    message: "A question about a point takes the point's category",
+  });
+
+/** Review roles only. Gap Interview links allow 20 uses (§12.4); that is not an input. */
+export const createGapLinkInput = z.object({
+  handoverId: uuidSchema,
+  questionIds: z
+    .array(uuidSchema)
+    .min(1)
+    .max(50)
+    .refine((ids) => new Set(ids.map((id) => id.toLowerCase())).size === ids.length, "Each question once"),
+  maxAccessLevel: accessLevelSchema.default("everyone"),
+  expiresInDays: z.number().int().min(1).max(30).default(7),
+});
+
+/** Creator: any token of the handover. Other review roles: Gap Interview links only (§12.4). */
+export const revokeAccessTokenInput = z.object({ tokenId: uuidSchema });
 
 export const submitGapAnswersInput = z
   .object({
@@ -391,6 +525,17 @@ export type CreateSourceUploadInput = z.input<typeof createSourceUploadInput>;
 export type SourceIdInput = z.input<typeof sourceIdInput>;
 export type RecordSourceConsentInput = z.input<typeof recordSourceConsentInput>;
 export type RecordSourceConsentValues = z.output<typeof recordSourceConsentInput>;
+export type ParseContextInput = z.input<typeof parseContextSchema>;
+export type AddExclusionInput = z.input<typeof addExclusionInput>;
+export type AddExclusionValues = z.output<typeof addExclusionInput>;
+export type ConfirmIdentityMatchInput = z.input<typeof confirmIdentityMatchInput>;
+export type CreateManualPointInput = z.input<typeof createManualPointInput>;
+export type CreateManualPointValues = z.output<typeof createManualPointInput>;
+export type CreateGapQuestionInput = z.input<typeof createGapQuestionInput>;
+export type CreateGapQuestionValues = z.output<typeof createGapQuestionInput>;
+export type CreateGapLinkInput = z.input<typeof createGapLinkInput>;
+export type CreateGapLinkValues = z.output<typeof createGapLinkInput>;
+export type RevokeAccessTokenInput = z.input<typeof revokeAccessTokenInput>;
 export type PrivacySurfaceDecisionInput = z.input<typeof privacySurfaceDecisionInput>;
 export type ReviewPointInput = z.input<typeof reviewPointInput>;
 export type SubmitGapAnswersInput = z.input<typeof submitGapAnswersInput>;

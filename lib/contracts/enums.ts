@@ -137,6 +137,29 @@ export type MessageKind = (typeof MESSAGE_KINDS)[number];
 export const EXCLUSION_KINDS = ["participant", "conversation", "date_range"] as const;
 export type ExclusionKind = (typeof EXCLUSION_KINDS)[number];
 
+// Where an exclusion applies (§6.8): its own source, or every source of the handover. Conversation
+// exclusions are always source-scoped. A handover-wide `name` exclusion never applies to another
+// source without an explicit confirmation (§6.8.1, §12.2).
+export const EXCLUSION_SCOPES = ["source", "handover"] as const;
+export type ExclusionScope = (typeof EXCLUSION_SCOPES)[number];
+
+export const EXCLUSION_REQUESTED_VIA = ["uploader", "participant_request"] as const;
+export type ExclusionRequestedVia = (typeof EXCLUSION_REQUESTED_VIA)[number];
+
+// Participant identity namespaces (§12.11). `phone` is a strong identity (E.164 or a local
+// number); `name` is a weak, best-effort saved-contact name. They never match each other.
+export const IDENTITY_KINDS = ["phone", "name"] as const;
+export type IdentityKind = (typeof IDENTITY_KINDS)[number];
+
+// How the parser uses a participant exclusion rule (§11.4): `apply` drops the participant;
+// `detect` only reports a match for a human to confirm (handover-wide name rules, §6.8.1).
+export const EXCLUSION_RULE_MODES = ["apply", "detect"] as const;
+export type ExclusionRuleMode = (typeof EXCLUSION_RULE_MODES)[number];
+
+// A creator's answer to "is this the same person who asked to be excluded?" (§6.8.1).
+export const IDENTITY_MATCH_DECISIONS = ["same_person", "different_person"] as const;
+export type IdentityMatchDecision = (typeof IDENTITY_MATCH_DECISIONS)[number];
+
 export const MASK_KINDS = [
   "phone",
   "email",
@@ -169,6 +192,10 @@ export type GapAnswerDecision = (typeof GAP_ANSWER_DECISIONS)[number];
 
 export const TOKEN_PURPOSES = ["member_invite", "gap_interview"] as const;
 export type TokenPurpose = (typeof TOKEN_PURPOSES)[number];
+
+// Derived for listings only (§11.6 AccessTokenSummary); never stored. Precedence: revoked, expired, exhausted.
+export const ACCESS_TOKEN_STATUSES = ["active", "revoked", "expired", "exhausted"] as const;
+export type AccessTokenStatus = (typeof ACCESS_TOKEN_STATUSES)[number];
 
 export const RUN_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number]; // used by processing_runs and processing_jobs

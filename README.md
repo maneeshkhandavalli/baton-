@@ -11,7 +11,14 @@ npm install
 npm run dev     # http://localhost:3000
 npm run lint
 npm run build
+
+# Shared-contract tests (Node's built-in runner; no extra dependency)
+node --import ./lib/contracts/__tests__/resolve-ts.mjs --test "lib/contracts/__tests__/*.test.ts"
 ```
+
+Shared contracts (enums, Zod schemas, DTOs, parser and identity contracts, the read facade) live in
+`lib/contracts/` and are specified in `docs/architecture/shared-contracts.md`. The latest
+reconciliation with the feature branches is in `docs/architecture/contract-reconciliation.md`.
 
 ## Structure
 
@@ -29,7 +36,7 @@ components/
                       EmptyState, ConfirmDialog, ProgressIndicator, FadeIn
   dashboard/ handover/ review/   feature components, one folder per feature
 config/               site metadata, navigation, evidence-status metadata
-lib/                  fonts, routes (path helpers), utils (cn)
+lib/                  contracts (shared types and schemas), fonts, routes (path helpers), utils (cn)
 types/                shared domain types (EvidenceStatus)
 hooks/                shared client hooks
 ```

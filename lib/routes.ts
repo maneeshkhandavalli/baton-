@@ -4,8 +4,12 @@
  */
 export const routes = {
   home: "/",
+  /** Public, read-only demo with synthetic data. */
+  demo: "/demo",
   login: "/login",
   dashboard: "/dashboard",
+  /** Account settings: creatorship offers and account deletion (§12.9). */
+  account: "/account",
   handover: {
     new: "/handover/new",
     processing: (id: string) => `/handover/${encodeURIComponent(id)}/processing`,

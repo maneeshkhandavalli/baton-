@@ -7,15 +7,21 @@
 
 import type {
   AccessLevel,
+  AccessTokenStatus,
   EvidenceKind,
   EvidenceStance,
   EvidenceStatus,
+  ExclusionKind,
+  ExclusionRequestedVia,
+  ExclusionScope,
   GapAnswerStatus,
   GapPriority,
   GapQuestionStatus,
   HandoverState,
+  IdentityKind,
   MaskKind,
   MemberRole,
+  MessageKind,
   PipelineStage,
   PointCategory,
   PointOrigin,
@@ -30,6 +36,7 @@ import type {
   SourceKind,
   SourceState,
   SupportVerdict,
+  TokenPurpose,
 } from "./enums";
 import type { MessageLocation } from "./parser";
 import type { PointAttributes } from "./schemas";
@@ -44,16 +51,63 @@ export interface HandoverSummary {
   viewerIsCreator: boolean;
   viewerClearance: AccessLevel;
   currentPublicationId: string | null;
+  /** An open creatorship offer (§12.9). Visible to the creator and to the offered member; otherwise null. */
+  pendingCreatorTransfer: { toMemberId: string; offeredAt: string } | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface MemberSummary {
   id: string;
-  displayName: string;
+  displayName: string; // per-handover label: duplicates get a stable " #abcd" suffix (§12.3)
   role: MemberRole;
   clearance: AccessLevel | null; // null unless the viewer is the creator
   ackRequired: boolean;
+  isCreator: boolean;
+  /** True for exactly one row: the signed-in viewer's own membership. */
+  isViewer: boolean;
+}
+
+/** An open creatorship offer addressed to the signed-in user (§12.9, `/account`). */
+export interface CreatorTransferOffer {
+  handoverId: string;
+  handoverTitle: string;
+  offeredByLabel: string;
+  offeredAt: string;
+}
+
+/**
+ * Invitation and Gap Interview links (§12.4). Review roles see Gap Interview links; only the creator
+ * sees member invitations and their recipient address. The raw token is never listed.
+ */
+export interface AccessTokenSummary {
+  id: string;
+  purpose: TokenPurpose;
+  status: AccessTokenStatus;
+  grantRole: MemberRole | null; // member_invite only
+  recipientEmail: string | null; // member_invite, creator only
+  maxAccessLevel: AccessLevel; // gap_interview
+  expiresAt: string;
+  maxUses: number;
+  useCount: number;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+/** Returned once by inviteMember and createGapInterviewLink; `url` contains the raw token. */
+export interface CreatedLink {
+  tokenId: string;
+  url: string;
+  expiresAt: string;
+}
+
+/** Returned by publishHandover (§9.2). */
+export interface PublicationSummary {
+  publicationId: string;
+  handoverId: string;
+  version: number;
+  publishedAt: string;
+  handoverState: HandoverState; // "approved" after a publish
 }
 
 export interface SourceSummary {
@@ -71,6 +125,55 @@ export interface SourceSummary {
   messageCount: number | null;
   maskingCounts: Partial<Record<MaskKind, number>> | null;
   errorCode: string | null;
+}
+
+/** A parsed chat participant (§6.6). Review roles only, within clearance. The identity hash is never returned. */
+export interface SourceParticipantSummary {
+  id: string;
+  sourceId: string;
+  sourceTitle: string;
+  localId: string;
+  displayLabel: string; // "Removed participant" after an erasure
+  identityKind: IdentityKind;
+  messageCount: number;
+  excluded: boolean;
+}
+
+/** A recorded exclusion (§6.8), for settings. Review roles only. Never names the participant. */
+export interface ExclusionSummary {
+  id: string;
+  kind: ExclusionKind;
+  scope: ExclusionScope;
+  sourceId: string | null; // null when handover-wide
+  identityKind: IdentityKind | null; // participant only
+  conversationLocalId: string | null;
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  reason: string | null;
+  requestedVia: ExclusionRequestedVia;
+  createdAt: string;
+}
+
+/**
+ * Messages around one quoted message (§11.6). Review roles only, within clearance. Messages are
+ * masked; excluded and erased messages do not exist, and pruned ones are simply absent.
+ */
+export interface SourceMessageContext {
+  pointEvidenceId: string;
+  sourceId: string;
+  sourceTitle: string;
+  available: boolean; // false once the quoted message was pruned (§12.6) or the source removed
+  messages: Array<{
+    seq: number;
+    sentAt: string | null;
+    authorLabel: string | null;
+    kind: MessageKind;
+    body: string;
+    location: MessageLocation | null;
+    isQuoted: boolean;
+  }>;
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
 }
 
 export interface SourceUploadTicket {
@@ -267,6 +370,11 @@ export interface ErasureReport {
   pointsFlaggedForPrivacyReview: number;
   publicationsRedacted: number;
   acknowledgementsInvalidated: number;
+  /**
+   * Name identities only: participants in OTHER sources with the same saved name. They are not erased
+   * (names are weak identities); the creator reviews each one separately (§12.8). Always 0 for phone.
+   */
+  sameNameParticipantsElsewhere: number;
 }
 
 /** Returned by `getAccountDeletionBlockers` (§11.3, §12.9). */

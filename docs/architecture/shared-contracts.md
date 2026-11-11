@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **REVISION 7: APPROVED.** Implementation has begun: Phase 02C implements the TypeScript contract layer in `lib/contracts/`. Nothing else in this document is implemented yet. |
+| **Status** | **REVISION 8 (contract reconciliation): APPROVED** on 2026-11-12. R8 ratifies D28–D35, accepts D24 and D25, and reconciles the contracts with the parser, Supabase and UI implementations (`docs/architecture/contract-reconciliation.md`). `lib/contracts/` implements the TypeScript layer. Feature implementations are not merged yet and must apply the changes listed in the reconciliation log. Sections changed in R8 are marked "R8". |
 | **Phase** | 02B (contracts before parallel implementation) |
 | **Base commit** | `89c83c6` (`master`) |
 | **Owner** | Main integration workspace (`master`) |
@@ -195,6 +195,19 @@ export type MessageKind = (typeof MESSAGE_KINDS)[number];
 export const EXCLUSION_KINDS = ["participant", "conversation", "date_range"] as const;
 export type ExclusionKind = (typeof EXCLUSION_KINDS)[number];
 
+// Reconciliation (R8). Where an exclusion applies; conversation exclusions are always "source".
+export const EXCLUSION_SCOPES = ["source", "handover"] as const;
+export const EXCLUSION_REQUESTED_VIA = ["uploader", "participant_request"] as const;
+
+// Participant identity namespaces (§12.11). "phone" is strong, "name" is weak; they never match.
+export const IDENTITY_KINDS = ["phone", "name"] as const;
+// How the parser uses a participant rule: "apply" drops, "detect" only reports a match (§6.8.1).
+export const EXCLUSION_RULE_MODES = ["apply", "detect"] as const;
+export const IDENTITY_MATCH_DECISIONS = ["same_person", "different_person"] as const;
+
+// Derived for token listings only (§11.6); never stored.
+export const ACCESS_TOKEN_STATUSES = ["active", "revoked", "expired", "exhausted"] as const;
+
 export const MASK_KINDS = [
   "phone", "email", "upi", "bank_account", "ifsc", "card",
   "government_id", "password", "api_key", "secret",
@@ -305,6 +318,34 @@ export type Result<T> = { ok: true; data: T } | { ok: false; error: AppError };
   `conflict`/`invalid_transition`, 412 `precondition_failed`, 413, 415, 429, 500.
 - Internal errors are logged on the server with a correlation ID. Only `{ code: "internal", message,
   retryable }` and the correlation ID (in `details.requestId`) reach the client.
+
+**Database error categories (R8).** The DB layer (`lib/db`) throws `DbError` with a
+`DbErrorCode`, which is a subset of `ErrorCode` and is passed through to `AppError.code`
+**unchanged**. There is no coarser mapping: `precondition_failed`, `forbidden`, `token_invalid` and
+`validation_failed` must survive to the action, because §5.5, §11.3 and §12.4 depend on them.
+
+```ts
+export const DB_ERROR_CODES = [
+  "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict",
+  "invalid_transition", "precondition_failed", "rate_limited", "token_invalid", "internal",
+] as const satisfies readonly ErrorCode[];
+export interface DbErrorShape { code: DbErrorCode; retryable: boolean }
+```
+
+Baton's SQL functions raise these custom SQLSTATEs (`DB_SQLSTATE_ERROR_CODES` in `api.ts`):
+
+| SQLSTATE | Code | | SQLSTATE | Code |
+|---|---|---|---|---|
+| `BTVF0` | `validation_failed` | | `BTCF0` | `conflict` |
+| `BTUA0` | `unauthenticated` | | `BTIT0` | `invalid_transition` |
+| `BTFB0` | `forbidden` | | `BTPF0` | `precondition_failed` |
+| `BTNF0` | `not_found` | | `BTTI0` | `token_invalid` |
+
+Standard SQLSTATEs: `23505` → `conflict`; `40001`, `40P01`, `55P03` → `conflict` with
+`retryable: true` (§5.5 concurrency); `22P02`, `23502`, `23514`, `22023` → `validation_failed`;
+`23503` → `not_found`; `42501` → `forbidden`; anything else → `internal`. `rate_limited` is raised by
+the TypeScript rate-limit helper, not by SQL (§12.4). A hidden resource is still `not_found`, never
+`forbidden` (§8.5).
 
 ---
 
@@ -818,6 +859,9 @@ makes cross-handover references impossible:
 | `source_participants`, `source_conversations`, `source_messages`, `processing_jobs` | `(handover_id, source_id)` | `sources (handover_id, id)` | Cascade |
 | `source_exclusions` | `(handover_id, source_id)` | `sources (handover_id, id)` | Cascade (`source_id IS NULL` means handover-wide and is not checked) |
 | `participant_erasures` | `(handover_id, exclusion_id)` | `source_exclusions (handover_id, id)` | Cascade |
+| `participant_erasures` | `(handover_id, scope_source_id)` (R8) | `sources (handover_id, id)` | `SET NULL (scope_source_id)` |
+| `source_identity_confirmations` | `(handover_id, source_id)` (R8) | `sources (handover_id, id)` | Cascade |
+| `source_identity_confirmations` | `(handover_id, exclusion_id)` (R8) | `source_exclusions (handover_id, id)` | Cascade |
 | `source_messages` | `(source_id, conversation_id)` | `source_conversations (source_id, id)` | Cascade |
 | `source_messages` | `(source_id, participant_id)` | `source_participants (source_id, id)` | Cascade |
 | `evidence_quotes` | `(handover_id, source_id)` | `sources (handover_id, id)` | `SET NULL (source_id)` |
@@ -854,7 +898,7 @@ written by the Supabase agent.
 | An `evidence_quotes` row's message belongs to that row's source (`source_messages.source_id = evidence_quotes.source_id`) | `source_id` and `source_message_id` are set to `NULL` **independently**, by source purge and by message pruning. A composite `(source_id, source_message_id)` key with one column `NULL` stops being checked, and the two `SET NULL` actions would race | A `BEFORE INSERT` trigger. Both columns are immutable after insert (no `UPDATE` grant) |
 | `processing_runs.source_ids uuid[]` belong to the run's handover | Array elements can't carry FKs. The array is a **historical snapshot** of the run's scope and must survive source purge. The work itself is FK-checked through `processing_jobs` | The `start_processing` function validates every id at insert. The column is immutable |
 | `audit_logs.entity_id` | Polymorphic, and must outlive the entity it describes. `audit_logs.handover_id` is `SET NULL` on purge (D17), so it can't anchor a composite key | No FK by design. `actor_token_id` is a plain FK → `access_tokens` `ON DELETE SET NULL` |
-| `handover_members.invitation_token_id` refers to a `member_invite` token | It would need a second purpose column on every member row only for this check | `redeem_access_token`, the only code path that writes this column |
+| `handover_members.invitation_token_id` refers to a `member_invite` token | It would need a second purpose column on every member row only for this check | `redeem_member_invite` (R8 name; formerly `redeem_access_token`), the only code path that writes this column |
 | A token's scoped questions are at or below the token's `max_access_level` | The rule compares values (`access_rank`), not identities | Trigger on `access_token_questions` insert |
 | `gap_questions.access_level` is at least the linked point's `access_level`; testimony `access_level` matches its gap question | Value comparisons across rows | Triggers on insert and on point access change |
 | The creator's membership row keeps role `outgoing` or `reviewer` and is never removed (§6.3) | Depends on `handovers.created_by` | Trigger on `handover_members` |
@@ -907,7 +951,7 @@ written by the Supabase agent.
 | Check | `purpose = 'member_invite'` ⇒ `grant_role IS NOT NULL AND recipient_email IS NOT NULL`. `grant_role IN ('outgoing','reviewer')` ⇒ `grant_clearance IS NULL OR grant_clearance = 'reviewer_only'` (mirrors §6.3) |
 | Unique | `(token_hash)`. Also `(handover_id, id)` and `(id, purpose)` as FK targets (§6.0) |
 | Indexes | `(handover_id, purpose)` |
-| RLS | **No client `SELECT`.** Only server code using the service role redeems tokens, through an RPC `redeem_access_token(raw_token, purpose)` that compares hashes in constant time and increments `use_count` atomically |
+| RLS | **No client `SELECT`.** Only server code using the service role redeems tokens. The server hashes the raw token (SHA-256) and passes only the hash to purpose-specific RPCs (R8: `peek_member_invite`, `redeem_member_invite`, `get_gap_interview`, `submit_gap_answers_with_token`), which look the hash up by its unique index, check expiry, revocation and uses, and increment `use_count` atomically. The raw token never reaches the database. Listings for settings go through `list_access_tokens` (§11.6 `AccessTokenSummary`), never the table |
 | Soft delete | `revoked_at` |
 
 ### 6.4.1 `access_token_questions`
@@ -942,9 +986,9 @@ written by the Supabase agent.
 | Purpose | Distinct authors in a chat export, so exclusion and opt-out can work |
 | PK | `id uuid` |
 | FKs | `handover_id`, `source_id` (composite, §6.0) |
-| Fields | `local_id text NOT NULL` (from the parser, e.g. `p_3`), `display_label text NOT NULL` (masked: a saved contact name or `"Participant 3"`; **never a raw phone number**), `identity_hash bytea NOT NULL` (HMAC-SHA256 of the normalized sender string with the server-side identity pepper; used to match opt-outs across sources without storing the identifier), `identity_pepper_version text NOT NULL CHECK (identity_pepper_version = 'p1')` (the pepper version that produced the hash; v1 allows only `p1`, §12.8 point 9), `message_count int`, `excluded boolean NOT NULL DEFAULT false` |
+| Fields | `local_id text NOT NULL` (from the parser, e.g. `p_3`), `display_label text NOT NULL` (masked: a saved contact name or `"Participant 3"`; **never a raw phone number**), `identity_kind text NOT NULL CHECK (identity_kind IN ('phone','name'))` (R8: the namespace the hash was computed in, §12.11), `identity_hash bytea NOT NULL` (HMAC-SHA256 of the normalized sender string with the server-side identity pepper; used to match opt-outs across sources without storing the identifier), `identity_pepper_version text NOT NULL CHECK (identity_pepper_version = 'p1')` (the pepper version that produced the hash; v1 allows only `p1`, §12.8 point 9), `message_count int`, `excluded boolean NOT NULL DEFAULT false` |
 | Unique | `(source_id, local_id)`. Also `(source_id, id)` as an FK target (§6.0) |
-| Indexes | `(handover_id, identity_hash)` |
+| Indexes | `(handover_id, identity_kind, identity_hash)` |
 | Soft delete | No |
 
 ### 6.7 `source_conversations`
@@ -955,6 +999,7 @@ written by the Supabase agent.
 | PK | `id uuid` |
 | FKs | `handover_id`, `source_id` (composite, §6.0) |
 | Fields | `local_id text NOT NULL`, `started_at`, `ended_at`, `message_count int`, `participant_local_ids text[]`, `preview text NULL` (first masked line, at most 140 characters), `excluded boolean NOT NULL DEFAULT false` |
+| Derived values | `started_at`, `ended_at`, `message_count`, `participant_local_ids` and `preview` describe **retained** messages only. A participant erasure updates them (§12.8 step 1) so they never describe erased content |
 | Unique | `(source_id, local_id)`. Also `(source_id, id)` as an FK target (§6.0) |
 | Soft delete | No |
 
@@ -965,11 +1010,27 @@ written by the Supabase agent.
 | Purpose | Exclusion requests ("leave my messages out", "skip this conversation"). They are applied at parse time **and** after the fact |
 | PK | `id uuid` |
 | FKs | `handover_id`, `source_id` NULL (composite, §6.0; NULL means it applies to every source in the handover), `requested_by` → `profiles` NULL ON DELETE SET NULL |
-| Fields | `kind text NOT NULL` (ExclusionKind), `participant_identity_hash bytea NULL`, `participant_identity_pepper_version text NULL CHECK (participant_identity_pepper_version = 'p1')` (set together with the hash), `conversation_local_id text NULL`, `range_start timestamptz NULL`, `range_end timestamptz NULL`, `reason text NULL`, `requested_via text NOT NULL` (`'uploader'\|'participant_request'`), `created_at` |
-| Check | The fields required by `kind` are present. `kind = 'participant'` requires both `participant_identity_hash` and `participant_identity_pepper_version` |
-| Unique | Partial unique index `(handover_id, participant_identity_hash, participant_identity_pepper_version) WHERE kind = 'participant' AND source_id IS NULL`, so replaying an erasure (§12.8) never duplicates the handover-wide exclusion. Also `(handover_id, id)` as an FK target (§6.0) |
+| Fields | `kind text NOT NULL` (ExclusionKind), `participant_identity_kind text NULL CHECK (participant_identity_kind IN ('phone','name'))` (R8), `participant_identity_hash bytea NULL`, `participant_identity_pepper_version text NULL CHECK (participant_identity_pepper_version = 'p1')` (set together with the hash), `conversation_local_id text NULL`, `parse_timezone text NULL`, `parse_date_order text NULL`, `parser_version text NULL` (R8: the `ParseContext` a conversation id was chosen in, §10.3), `range_start timestamptz NULL`, `range_end timestamptz NULL`, `reason text NULL`, `requested_via text NOT NULL` (`'uploader'\|'participant_request'`), `created_at` |
+| Check | The fields required by `kind` are present. `kind = 'participant'` requires `participant_identity_kind`, `participant_identity_hash` and `participant_identity_pepper_version` (all three or none). `kind = 'conversation'` requires `source_id`, `conversation_local_id`, `parse_timezone` and `parser_version` (`parse_date_order` is NULL only for sources without a date order). `kind = 'date_range'` requires both ends, with `range_start <= range_end` |
+| Scope | `source_id` set: this source only. `source_id` NULL: handover-wide. A handover-wide **`phone`** exclusion applies to every source (`mode = 'apply'`). A handover-wide **`name`** exclusion applies without confirmation only to sources where a `same_person` confirmation exists (§6.8.1); everywhere else it is passed to the parser as `mode = 'detect'` and never drops content by itself (R8, §12.2) |
+| Unique | Partial unique index `(handover_id, participant_identity_kind, participant_identity_hash, participant_identity_pepper_version) WHERE kind = 'participant' AND source_id IS NULL`, so replaying an erasure (§12.8) never duplicates the handover-wide exclusion. Also `(handover_id, id)` as an FK target (§6.0) |
 | Indexes | `(handover_id)` |
 | Soft delete | No (append-only; reversing one is a new decision, made by the creator) |
+
+### 6.8.1 `source_identity_confirmations` (R8)
+
+| | |
+|---|---|
+| Purpose | A creator's explicit decision on whether a participant in one source is the same person as a handover-wide **`name`** exclusion. Names are weak identities, so this mapping is never inferred |
+| PK | `id uuid` |
+| FKs | `handover_id`; `source_id` and `exclusion_id`, both composite (§6.0); `decided_by` → `profiles` NULL ON DELETE SET NULL |
+| Fields | `decision text NOT NULL` (IdentityMatchDecision: `'same_person'\|'different_person'`), `decided_at timestamptz NOT NULL` |
+| Check | The referenced exclusion has `kind = 'participant'`, `participant_identity_kind = 'name'` and `source_id IS NULL` (trigger) |
+| Unique | `(source_id, exclusion_id)`: one decision per source and exclusion. Changing it before the final parse replaces the row; every decision is audited |
+| Writes | `confirmIdentityMatch` (creator only, server-only mutation, §8.3). Only for sources that are not yet `parsed` (the parse decides what is persisted) |
+| Effect | `same_person`: the rule is passed to that source's preview and final parse with `mode = 'apply'`. `different_person`: it is not passed for that source. No decision: it is passed with `mode = 'detect'`, and a final parse that reports a match for it **fails before anything is persisted** (§10.3 step 3), so the raw upload is kept and the creator is asked |
+| RLS | Review roles read. No client writes |
+| Soft delete | No |
 
 ### 6.9 `source_messages`
 
@@ -992,7 +1053,7 @@ written by the Supabase agent.
 | Purpose | One piece of evidence: either an exact quote from a source message or a person's testimony. **One quote can back many points** |
 | PK | `id uuid` |
 | FKs | `handover_id`; `source_id` NULL, `source_message_id` NULL and `gap_answer_id` NULL, all composite (§6.0). `source_id` and `source_message_id` use `ON DELETE SET NULL (column)`, so the quote **survives message pruning** and source purge. `stated_by_profile_id` → `profiles` NULL ON DELETE SET NULL. The message's source must equal `source_id` (insert trigger, §6.0 exceptions) |
-| Fields | `kind text NOT NULL` (EvidenceKind), `quote_text text NOT NULL` (masked), `quote_start int NULL`, `quote_end int NULL` (character offsets in `body`), `message_sent_at timestamptz NULL`, `author_label text NULL` (snapshot: the chat participant's label, or, for testimony, the answerer's name; account-derived when `stated_by_profile_id` is set or the gap answer has `answered_by_profile_id`, see §12.9), `author_identity_hash bytea NULL` (snapshot of the author's `source_participants.identity_hash`; lets erasure find the quote after message pruning, §12.8), `author_identity_pepper_version text NULL CHECK (author_identity_pepper_version = 'p1')` (snapshot, set together with the hash), `source_title text NULL` (snapshot), `location jsonb NULL` (snapshot), `quote_check text NOT NULL DEFAULT 'pending'` (QuoteCheck), `quote_checked_at timestamptz NULL`, `access_level text NOT NULL` (copied from the source, or from the gap question for testimony), `created_at` |
+| Fields | `kind text NOT NULL` (EvidenceKind), `quote_text text NOT NULL` (masked), `quote_start int NULL`, `quote_end int NULL` (character offsets in `body`), `message_sent_at timestamptz NULL`, `author_label text NULL` (snapshot: the chat participant's label, or, for testimony, the answerer's name; account-derived when `stated_by_profile_id` is set or the gap answer has `answered_by_profile_id`, see §12.9), `author_identity_kind text NULL CHECK (author_identity_kind IN ('phone','name'))` (R8, snapshot, set together with the hash), `author_identity_hash bytea NULL` (snapshot of the author's `source_participants.identity_hash`; lets erasure find the quote after message pruning, §12.8), `author_identity_pepper_version text NULL CHECK (author_identity_pepper_version = 'p1')` (snapshot, set together with the hash), `source_title text NULL` (snapshot), `location jsonb NULL` (snapshot), `quote_check text NOT NULL DEFAULT 'pending'` (QuoteCheck), `quote_checked_at timestamptz NULL`, `access_level text NOT NULL` (copied from the source, or from the gap question for testimony), `created_at` |
 | Testimony sync | For testimony from a gap answer, `quote_text` always equals `gap_answers.answer_text`; a trigger enforces this. It changes only through `resolve_privacy_review` (redact), and the row is hard-deleted when that answer is removed (§5.5) |
 | Check | `kind = 'source_quote'` ⇒ `source_id IS NOT NULL` (at creation). `kind = 'testimony'` ⇒ `gap_answer_id IS NOT NULL OR stated_by_profile_id IS NOT NULL`. Testimony is `quote_check = 'exact'` by construction |
 | Unique | `(source_message_id, quote_start, quote_end) WHERE source_message_id IS NOT NULL` (deduplicates quotes shared across points). Also `(handover_id, id)` as an FK target (§6.0) |
@@ -1162,9 +1223,23 @@ The snapshot makes published handovers independent of message pruning and of lat
 |---|---|
 | Purpose | The in-database record that an erasure has been **applied**, so replaying it after a restore is idempotent (§12.8). The durable copy that survives handover purge and database loss is the external recovery manifest, not this table |
 | PK | `id uuid`: the erasure's idempotency key, taken from the manifest entry. It is **not** generated by the database. This table stores no identity hash; the hash and its pepper version live on the referenced exclusion row |
-| FKs | `handover_id` → `handovers` (cascade on purge), `exclusion_id` (composite, §6.0), `actor_profile_id` → `profiles` NULL ON DELETE SET NULL |
-| Fields | `applied_at timestamptz NOT NULL`, `replayed boolean NOT NULL DEFAULT false` (true when it was applied by the restore runbook) |
+| FKs | `handover_id` → `handovers` (cascade on purge), `exclusion_id` (composite, §6.0), `scope_source_id` NULL (R8; composite, §6.0, `ON DELETE SET NULL (scope_source_id)`), `actor_profile_id` → `profiles` NULL ON DELETE SET NULL |
+| Fields | `identity_kind text NOT NULL` (R8), `applied_at timestamptz NOT NULL`, `replayed boolean NOT NULL DEFAULT false` (true when it was applied by the restore runbook) |
+| Check | `identity_kind = 'phone'` ⇒ `scope_source_id IS NULL` (phone erasures are handover-wide). A `name` erasure is inserted with `scope_source_id` set; it may later become NULL only through the source purge (§12.8) |
 | RLS | No client access. Written only by `erase_participant` |
+| Soft delete | No |
+
+### 6.22 `rate_limit_counters` (R8, D12)
+
+| | |
+|---|---|
+| Purpose | Fixed-window counters for token and invitation paths (§12.4). Postgres-backed, no new infrastructure (D12) |
+| PK | `(scope, subject)` |
+| Fields | `scope text NOT NULL` (CHECK: one of the eight scopes in §12.4), `subject text NOT NULL CHECK (subject ~ '^[0-9a-f]{64}$')`, `window_start timestamptz NOT NULL`, `hits int NOT NULL CHECK (hits >= 1)` |
+| Subjects | Never raw values. Per client: SHA-256 hex of `baton-rate-limit:client:` + the lower-cased client IP. Per token: SHA-256 hex of the raw token, i.e. the same digest stored as `access_tokens.token_hash` |
+| Writes | Only `consume_rate_limit(scope, subject) returns boolean` (`SECURITY DEFINER`, service role only). Limits and windows live inside that function, not with callers. An unknown scope or malformed subject raises `BTVF0` |
+| Retention | `prune_rate_limit_counters()` (cron, service role) deletes rows whose window started more than 1 day ago |
+| RLS | Enabled, no policies: no client access |
 | Soft delete | No |
 
 ---
@@ -1312,13 +1387,35 @@ outgoing member reviews but cannot publish, invite members or start a revision.
    - `member_role(handover_id)`
    - `clearance(handover_id)`
    - `is_creator(handover_id)`
-2. **Server actions and route handlers.** They check role permissions (§8.2) and lifecycle rules
-   (§9) **before** writing, and they use the **user-scoped** Supabase client so RLS still applies.
+2. **Server-only mutations (R8).** Reads and writes take different paths:
+   - **Reads** use the **user-scoped** client (the session's JWT), so RLS applies to every row.
+     Clients have `SELECT` on RLS-protected tables and `EXECUTE` on the read API and RLS helpers
+     only.
+   - **Every application mutation** runs in server-only code (`lib/actions/**` calling
+     `lib/db/mutations`). The action obtains the actor from a **verified** session:
+     `auth.getUser()`, which asks the Supabase Auth server, never `getSession()` or a decoded cookie.
+     `getVerifiedActor()` in `lib/db/actor.ts` is the only way to create a `VerifiedActor`; nothing
+     turns an arbitrary `{ id }` into one.
+   - The action calls a `SECURITY DEFINER` database function with the **service-role** client and
+     passes `p_actor_profile_id`. Each function independently re-validates that actor (an
+     existing, non-deleted profile and auth user, `_require_actor`) and checks membership,
+     clearance, role and lifecycle itself. The TypeScript checks are a convenience, never the
+     control.
+   - `EXECUTE` on mutation functions is granted to `service_role` only. `anon` and
+     `authenticated` have no `INSERT`, `UPDATE`, `DELETE` or `TRUNCATE` on any table and cannot
+     execute any mutation function, so a browser holding the public key cannot mutate anything
+     through PostgREST. `service_role` has no direct table writes either, so append-only and
+     lifecycle rules cannot be bypassed with the secret key.
+   - The service-role key is server-only (§12.5). Modules that hold it start with
+     `import "server-only"`.
+   - `erase_participant` and `purge_handover` are granted to **no** application role until the
+     recovery manifest exists (§12.8, D27). Even then the TypeScript path refuses to call them
+     without a verified manifest receipt bound to the exact operation (§12.8, receipts).
 3. **UI.** Only hides controls. It is never relied on for security.
 
-The service-role client is used only in:
+Besides application mutations, the service-role client is used only in:
 
-- token redemption;
+- token redemption and the rate-limit counters (§12.4);
 - pipeline workers;
 - retention and purge jobs;
 - the narrowly scoped privacy functions named in §2.
@@ -1497,18 +1594,28 @@ Subsections below are numbered by pipeline step (§10.3 = step 3).
 The raw upload has a strict lifecycle **[D14]**:
 
 1. **Preview (sync, read-only).** The `previewSource` action (main) loads the raw object into memory
-   and calls the parser's `previewSource`. It returns only labels, counts and masked previews.
-   **Nothing is persisted and the raw upload is not deleted.** A preview never changes
-   `sources.state` or the `raw_*` columns, and it can be repeated, for example after choosing a
-   different `dateOrder`.
+   and calls the parser's `previewSource` with the **same rule list as the final parse** (§11.4):
+   handover-wide participant exclusions, including those created by earlier erasures, and the
+   source's own exclusions. It returns only labels, counts and masked previews of **retained**
+   content, plus `parseContext` and any `identityMatches`. **Nothing is persisted and the raw upload
+   is not deleted.** A preview never changes `sources.state` or the `raw_*` columns, and it can be
+   repeated, for example after choosing a different `dateOrder`.
 2. **Review and exclude.** The user reviews the detected participants and conversations and records
-   exclusions (`addExclusion` → `source_exclusions`). Consent (step 2) and this review must both be
-   done before `startProcessing`.
+   exclusions (`addExclusion` → `source_exclusions`). A conversation exclusion stores the
+   preview's `parseContext`. For each identity match the creator answers `confirmIdentityMatch`
+   (§6.8.1). Consent (step 2) and this review must both be done before `startProcessing`.
 3. **Final parse (async `parse` job).** The job loads the raw bytes and calls `parseSource` with the
    current `ExclusionRule[]`. Excluded participants' messages, excluded conversations and excluded
    date ranges are dropped **in memory** and reported only as counts in `ParsedSource.stats`. Masking
-   and normalization follow. Main then persists participants, conversations and messages **in one
-   transaction** and sets `sources.state = 'parsed'`.
+   and normalization follow. Before persisting, main checks the result:
+   - an `exclusion_context_mismatch` failure (for example the timezone, date order or parser
+     version changed since the preview) fails the source with `precondition_failed`. The raw
+     upload is kept, and the user must confirm the exclusion again on a fresh preview;
+   - any `identityMatches` entry fails the source the same way (`precondition_failed`,
+     `error_code = 'identity_confirmation_required'`) until the creator decides (§6.8.1).
+
+   Otherwise main persists participants (with `identity_kind`), conversations and messages **in
+   one transaction** and sets `sources.state = 'parsed'`.
 4. **Raw deletion.** Only **after that transaction commits** does the job delete the storage object,
    set `raw_storage_path = NULL` and `raw_deleted_at`, and audit `source.raw_deleted`. If the delete
    call itself fails, the scheduled retention sweep retries it. The permitted data is already safe.
@@ -1614,8 +1721,8 @@ UI (pages, components)  ──▶  lib/data (facade, main)  ──▶  lib/db (q
 |---|---|---|---|---|---|---|
 | `BatonQueries` (reads) | Interface: main. Real implementation: Supabase agent. Mock implementation: UI agent | Typed params (§11.5) | DTOs (§11.6) | `Result<T>` with `not_found`, `unauthenticated` | Zod-parse params in the implementation. RLS enforces access | Sync (request-time) |
 | Server actions (`lib/actions/*`) | Main | Zod input schemas (§11.5) | `Result<DTO>` | `AppError` | Zod (shape), then role and lifecycle checks, then RLS | Sync. Pipeline actions return quickly and enqueue work |
-| DB mutations (`lib/db/mutations/*`) | Supabase agent | Validated, typed params | Rows mapped to DTOs | Throws `DbError` (`{ code: "conflict" \| "not_found" \| "invalid_transition" \| "internal" }`); actions map it to `AppError` | Constraints, `CHECK`s, RLS, transition functions | Sync |
-| Parser (`lib/parsers`, `lib/privacy`) | Parser agent | `ParseSourceInput`, `PreviewSourceInput`, `MaskTextInput` | `ParsedSource`, `SourcePreview`, `MaskResult` | `Result<T>` with `ParserError` (§11.4) | Validates its own input with Zod. Enforces size and format limits | Async functions (CPU-bound), run inside jobs. Never called from the browser |
+| DB mutations (`lib/db/mutations/*`) | Supabase agent | A `VerifiedActor` plus validated, typed params | Ids or rows mapped to DTOs | Throws `DbError` with a `DbErrorCode` (§3.2), passed through to `AppError.code` unchanged | Constraints, `CHECK`s, `SECURITY DEFINER` functions that re-validate actor, membership, clearance, role and lifecycle (§8.3) | Sync. Server only, service-role client |
+| Parser (`lib/parsers`, `lib/privacy`) | Parser agent | `ParseSourceInput`, `PreviewSourceInput`, `MaskTextInput` | `ParsedSource`, `SourcePreview`, `MaskResult` | `ParserResult<T>` with `ParserFailure` (§11.4); never throws for expected failures | Validates its own input. Enforces size and format limits | Async functions (CPU-bound), run inside jobs. Never called from the browser |
 | Pipeline and AI (`lib/pipeline`, `lib/ai`) | Main | Persisted masked messages | Rows written through `lib/db` | Job error codes | Validates model output with Zod (rejects malformed candidates). Provider-neutral `AiProvider` interface (§11.8) | Async (jobs) |
 | Auth (`proxy.ts`, `app/auth/**`, `lib/supabase/**`) | Supabase agent | Cookies, magic-link callback | Session | Redirect to `/login?error=` | Supabase Auth | Sync |
 | Storage | Supabase agent (bucket, policies, helpers), main (calls) | `{ handoverId, sourceId, mimeType, sizeBytes }` | Signed upload URL, delete | `DbError` | Bucket policy: private bucket, path `raw/{handover_id}/{source_id}`, size cap | Sync |
@@ -1627,26 +1734,27 @@ UI (pages, components)  ──▶  lib/data (facade, main)  ──▶  lib/db (q
 createHandover(input: CreateHandoverInput): Promise<Result<HandoverSummary>>
 startProcessing(input: { handoverId: string }): Promise<Result<{ runId: string }>>
 cancelProcessing(input: { handoverId: string }): Promise<Result<null>>
-publishHandover(input: { handoverId: string; summary?: string }): Promise<Result<PublicationSummary>>
+publishHandover(input: { handoverId: string; summary?: string }): Promise<Result<PublicationSummary>> // §11.6
 startRevision(input: { handoverId: string }): Promise<Result<HandoverSummary>>
 deleteHandover(input: { handoverId: string }): Promise<Result<null>>
 offerCreatorTransfer(input: { handoverId: string; toMemberId: string }): Promise<Result<null>>      // creator only (§12.9)
 respondToCreatorTransfer(input: { handoverId: string; accept: boolean }): Promise<Result<null>>     // offered member only
 
 // lib/actions/privacy.ts
-eraseParticipant(input: { handoverId: string; participantId: string; confirm: true }): Promise<Result<ErasureReport>> // creator only (§12.8); writes the recovery manifest entry first
-// ErasureReport = { messagesDeleted, quotesDeleted, pointsErased, pointsFlaggedForPrivacyReview, publicationsRedacted, acknowledgementsInvalidated: number }
+eraseParticipant(input: { handoverId: string; participantId: string; confirm: true }): Promise<Result<ErasureReport>> // creator only (§12.8); writes the recovery manifest entry first; precondition_failed without a verified receipt
+// ErasureReport = { messagesDeleted, quotesDeleted, pointsErased, pointsFlaggedForPrivacyReview, publicationsRedacted, acknowledgementsInvalidated, sameNameParticipantsElsewhere: number }
 
 // lib/actions/account.ts
 getAccountDeletionBlockers(): Promise<Result<{ createdHandovers: Array<{ id: string; title: string; deleted: boolean }> }>>
-deleteAccount(input: { confirm: true; purgeHandoverIds: string[] }): Promise<Result<null>> // §12.9
+deleteAccount(input: { confirm: "DELETE"; purgeHandoverIds: string[] }): Promise<Result<null>> // §12.9, D25: the typed word, checked on the server
 
 // lib/actions/sources.ts
 createSourceUpload(input: CreateSourceUploadInput): Promise<Result<SourceUploadTicket>>
 confirmSourceUploaded(input: { sourceId: string }): Promise<Result<SourceSummary>>
 previewSource(input: { sourceId: string }): Promise<Result<SourcePreview>>
 recordSourceConsent(input: RecordSourceConsentInput): Promise<Result<SourceSummary>>
-addExclusion(input: AddExclusionInput): Promise<Result<null>>
+addExclusion(input: AddExclusionInput): Promise<Result<{ exclusionId: string }>> // pre-parse only; parsed sources → eraseParticipant
+confirmIdentityMatch(input: ConfirmIdentityMatchInput): Promise<Result<null>> // creator only (§6.8.1)
 removeSource(input: { sourceId: string }): Promise<Result<null>>
 
 // lib/actions/review.ts
@@ -1655,12 +1763,13 @@ createManualPoint(input: CreateManualPointInput): Promise<Result<PointDetail>>
 
 // lib/actions/gaps.ts
 createGapQuestion(input: CreateGapQuestionInput): Promise<Result<GapQuestionSummary>>
-createGapInterviewLink(input: CreateGapLinkInput): Promise<Result<{ url: string; expiresAt: string }>> // raw token shown once
+createGapInterviewLink(input: CreateGapLinkInput): Promise<Result<CreatedLink>> // raw token shown once, inside url
+revokeAccessToken(input: { tokenId: string }): Promise<Result<null>> // creator: any token; other review roles: Gap Interview links
 submitGapAnswers(input: SubmitGapAnswersInput): Promise<Result<{ submitted: number }>> // session OR token; a held question fails as not_found (§5.5)
 reviewGapAnswer(input: { answerId: string; decision: "accept" | "reject"; note?: string }): Promise<Result<null>> // precondition_failed while the answer is held
 
 // lib/actions/members.ts
-inviteMember(input: InviteMemberInput): Promise<Result<{ url: string; expiresAt: string }>>
+inviteMember(input: InviteMemberInput): Promise<Result<CreatedLink>>
 updateMemberClearance(input: { memberId: string; clearance: AccessLevel }): Promise<Result<null>>
 removeMember(input: { memberId: string }): Promise<Result<null>>
 acknowledgePublication(input: { publicationId: string; statementVersion: string }): Promise<Result<null>>
@@ -1668,90 +1777,122 @@ acknowledgePublication(input: { publicationId: string; statementVersion: string 
 
 ### 11.4 Parser contracts (parser agent implements, main defines)
 
+**Canonical file:** `lib/contracts/parser.ts`. Revised in R8; the summary below is normative where the
+file is silent.
+
 ```ts
-// lib/contracts/parser.ts
-export interface ExclusionRule {
-  kind: ExclusionKind;
-  participantIdentityHash?: string;  // hex
-  conversationLocalId?: string;
-  rangeStart?: string;
-  rangeEnd?: string;
-}
+// What positional ids depend on. A conversation exclusion is bound to the context it was chosen in.
+export interface ParseContext { timezone: string; dateOrder: DateOrder | null; parserVersion: string }
+
+export type ExclusionRule =
+  | { kind: "participant"; ruleId?: string; identityKind: IdentityKind; participantIdentityHash: string;
+      identityPepperVersion: IdentityPepperVersion; mode: "apply" | "detect" }
+  | { kind: "conversation"; ruleId?: string; conversationLocalId: string; context: ParseContext }
+  | { kind: "date_range"; ruleId?: string; rangeStart?: string; rangeEnd?: string }; // ISO with offset, inclusive
 
 export interface ParseSourceInput {
-  kind: SourceKind;
-  fileName: string;
-  bytes: Uint8Array;
+  kind: SourceKind; fileName: string; bytes: Uint8Array;
   timezone: string;                  // IANA, e.g. "Asia/Kolkata"
-  dateOrder?: "dmy" | "mdy" | "ymd"; // required if the parser reports date_format_ambiguous
+  dateOrder?: DateOrder;             // required if the parser reports date_format_ambiguous
   exclusions: ExclusionRule[];
   identityPepper: string;            // server secret passed in; the parser never reads env
 }
+export type PreviewSourceInput = ParseSourceInput; // R8: preview receives the same rules
+
+export const EXCLUDED_PARTICIPANT_TOKEN = "[EXCLUDED_PARTICIPANT]";
 
 export interface ParsedParticipant {
-  localId: string;                   // "p_1"…
-  displayLabel: string;              // masked; phone-number senders become "Participant N"
-  identityHash: string;              // hex HMAC
-  messageCount: number;
+  localId: string; displayLabel: string;      // masked; phone-number senders become "Participant N"
+  identityKind: IdentityKind; identityHash: string; identityPepperVersion: IdentityPepperVersion;
+  messageCount: number;                       // retained messages only
 }
-
-export interface ParsedConversation {
-  localId: string;                   // "c_1"…
-  startedAt: string | null;
-  endedAt: string | null;
-  messageCount: number;
-  participantLocalIds: string[];
-  preview: string;                   // masked, ≤ 140 chars
+export interface ParsedConversation {        // retained messages only; omitted when none remain
+  localId: string; startedAt: string | null; endedAt: string | null; messageCount: number;
+  participantLocalIds: string[]; preview: string; // masked, ≤ 140 chars
 }
-
 export interface NormalizedMessage {
-  seq: number;                       // 0-based, dense, in source order (after exclusion)
-  conversationLocalId: string | null;
-  participantLocalId: string | null;
-  sentAt: string | null;             // ISO, converted using timezone; null for documents
-  kind: MessageKind;
-  body: string;                      // masked, NFC; "" for media_omitted/deleted
-  location: { page?: number; heading?: string; lineStart: number; lineEnd: number } | null;
+  seq: number; conversationLocalId: string | null; participantLocalId: string | null;
+  sentAt: string | null; kind: MessageKind;
+  body: string;                               // masked, NFC; may contain EXCLUDED_PARTICIPANT_TOKEN
+  location: MessageLocation | null;
 }
-
-export interface MaskingReport { counts: Record<MaskKind, number> }
+export interface IdentityMatch { ruleId: string | null; participantLocalId: string; identityKind: IdentityKind }
+export interface ParserWarning { code: ParserWarningCode; message: string; line?: number }
 
 export interface ParsedSource {
-  kind: SourceKind;
-  parserVersion: string;             // semver of the parser module
-  participants: ParsedParticipant[];
-  conversations: ParsedConversation[];
-  messages: NormalizedMessage[];
+  kind: SourceKind; parserVersion: string; parseContext: ParseContext;
+  participants: ParsedParticipant[]; conversations: ParsedConversation[]; messages: NormalizedMessage[];
   masking: MaskingReport;
-  stats: {
-    totalLines: number;
-    messagesKept: number;
-    messagesExcluded: number;
-    systemMessages: number;
-    mediaOmitted: number;
-  };
-  firstMessageAt: string | null;
-  lastMessageAt: string | null;
-  warnings: Array<{ code: string; message: string; line?: number }>;
+  stats: { totalLines: number; messagesKept: number; messagesExcluded: number; systemMessages: number; mediaOmitted: number };
+  identityMatches: IdentityMatch[];           // detect-mode rules that matched a retained participant
+  firstMessageAt: string | null; lastMessageAt: string | null;
+  warnings: ParserWarning[];
 }
+export type SourcePreview = Pick<ParsedSource, "kind" | "parserVersion" | "parseContext" | "participants"
+  | "conversations" | "masking" | "stats" | "identityMatches" | "firstMessageAt" | "lastMessageAt" | "warnings">;
 
-export type SourcePreview = Pick<ParsedSource, "kind" | "participants" | "conversations" | "masking" | "stats" | "firstMessageAt" | "lastMessageAt" | "warnings">;
+// File problems → ParserError (unchanged).
+export const PARSER_ERROR_CODES = ["unsupported_format", "empty_source", "encoding_error",
+  "date_format_ambiguous", "too_large", "corrupt_file", "password_protected", "no_text_layer"] as const;
+// Caller and configuration problems → ParserInputFailure (R8).
+export const PARSER_INPUT_ERROR_CODES = ["identity_pepper_invalid", "timezone_invalid", "date_order_invalid",
+  "exclusion_invalid", "exclusion_context_mismatch", "input_invalid"] as const;
+export type ParserFailure = ParserError | ParserInputFailure;
+export type ParserResult<T> = { ok: true; data: T } | { ok: false; error: ParserFailure };
 
-export const PARSER_ERROR_CODES = [
-  "unsupported_format", "empty_source", "encoding_error", "date_format_ambiguous",
-  "too_large", "corrupt_file", "password_protected", "no_text_layer",
-] as const;
-export interface ParserError extends AppError {
-  code: "parse_failed" | "unsupported_file_type" | "payload_too_large";
-  details: { parserCode: (typeof PARSER_ERROR_CODES)[number]; line?: number };
-}
-
-// Exported functions (parser agent)
-parseSource(input: ParseSourceInput): Promise<Result<ParsedSource>>
-previewSource(input: Omit<ParseSourceInput, "exclusions">): Promise<Result<SourcePreview>>
+parseSource(input: ParseSourceInput): Promise<ParserResult<ParsedSource>>
+previewSource(input: PreviewSourceInput): Promise<ParserResult<SourcePreview>>
 maskText(input: { text: string; context?: "chat" | "document" | "user_input" }): MaskResult  // sync, pure
-// MaskResult = { text: string; counts: Record<MaskKind, number> }
 ```
+
+**Failure path (R8).** Every expected failure is **returned**, never thrown:
+
+| Failure | Type | `AppError.code` | `details` |
+|---|---|---|---|
+| Unreadable, unsupported or oversized file | `ParserError` | `parse_failed`, `unsupported_file_type`, `payload_too_large` | `{ parserCode, line? }` |
+| Pepper missing, shorter than 32 characters, or padded with whitespace | `ParserInputFailure` | `processing_failed`, `retryable: true`; operators are alerted (§12.8 point 9) | `{ inputCode: "identity_pepper_invalid", field }` |
+| Invalid timezone, date order, rule or other input | `ParserInputFailure` | `validation_failed` | `{ inputCode, field, ruleId? }` |
+| Conversation rule from another `ParseContext` | `ParserInputFailure` | `precondition_failed`: the user must confirm the exclusion again on a fresh preview | `{ inputCode: "exclusion_context_mismatch", field, ruleId }` |
+
+`isParserInputFailure(error)` distinguishes the two. `field` names an input path such as
+`exclusions[2]`, never a value. Messages never contain content, names, numbers or the pepper. The
+parser throws only on programming defects; the job treats those as `internal`. A malformed rule is
+**never** skipped: ignoring an exclusion would leak content.
+
+**Exclusion semantics.**
+
+- A participant rule matches only when identity kind, hash and pepper version all agree (§12.11).
+  `apply` drops every message of that participant, redacts their names and mentions in kept
+  messages, and omits them from `participants`. `detect` drops nothing and adds an `IdentityMatch`.
+- Main builds the rule list for a source from `source_exclusions`: handover-wide `phone` rules and
+  the source's own rules as `apply`; handover-wide `name` rules as `apply` only with a
+  `same_person` confirmation for this source, omitted with `different_person`, otherwise `detect`
+  (§6.8.1).
+- A conversation rule applies only if `rule.context` equals the parse's own `parseContext`
+  (timezone, effective date order, parser version). Otherwise the whole call fails with
+  `exclusion_context_mismatch`. A stale positional `c_N` is never applied silently.
+- Conversation and participant ids are assigned over **all** messages before exclusions, so they are
+  identical in a preview and a final parse with the same context.
+
+**Preview privacy (R8).** `previewSource` applies the same rules as the final parse. Excluded
+participants never appear in `participants`, in another participant's label (a label naming an
+excluded person becomes "Participant N"), in conversation `preview`, `participantLocalIds` or
+`messageCount`, or in `firstMessageAt`/`lastMessageAt`. Statistics keep only aggregates:
+`stats.messagesExcluded` and the `excluded_mentions_redacted` warning count. Nothing identifies
+which or whose content was excluded.
+
+**`[EXCLUDED_PARTICIPANT]` (R8).** The parser writes this exact token in place of an excluded
+participant's name, @mention or phone number inside messages that are kept. It is **not** a mask
+token: it is not a `MaskKind`, not counted in `masking`, and never numbered. It is stored as written,
+quote verification treats it as literal text, and the AI prompt rules treat it like any masked span
+(§12.10). Detection limits are listed in §12.8 (single-word names without "@", nicknames, other
+scripts). The UI renders it as described in §12.1.
+
+**Warning codes (R8).** `ParserWarning.code` is one of `PARSER_WARNING_CODES`:
+`dst_gap`, `invalid_timestamp`, `orphan_lines`, `non_monotonic_timestamps`,
+`excluded_mentions_redacted`, `pdf_page_limit`, `pdf_stream_skipped`, `pdf_cmap_truncated`,
+`pdf_font_limit`, `pdf_decode_failures`, `pdf_undecodable_text`, and `warnings_truncated` (always
+last, when the per-source cap is reached). New codes need a contract change (§13.3).
 
 **Parser requirements**
 
@@ -1862,6 +2003,19 @@ export const inviteMemberInput = z.object({
 );
 ```
 
+**Added in R8** (canonical text in `lib/contracts/schemas.ts`; summarised here):
+
+| Schema | Shape | Rules |
+|---|---|---|
+| `parseContextSchema` | `{ timezone, dateOrder: DateOrder \| null, parserVersion }` (strict) | Copied from `SourcePreview.parseContext` |
+| `addExclusionInput` | Discriminated by `kind`. `participant`: `{ sourceId, scope, identityKind, participantIdentityHash, identityPepperVersion, reason? }`. `conversation`: `{ sourceId, conversationLocalId, parseContext, reason? }`. `date_range`: `{ sourceId, scope, rangeStart, rangeEnd, reason? }` | Hash is 64 lower-case hex; pepper version `p1`; `c_N` with N ≥ 1; conversations have no `scope` (always the source); instants need an explicit offset; `rangeStart <= rangeEnd`; reason 1–500 characters. The server derives the handover from the source |
+| `confirmIdentityMatchInput` | `{ sourceId, exclusionId, decision: "same_person" \| "different_person" }` | Creator only; source not yet parsed |
+| `createManualPointInput` | `{ handoverId, title, statement, inferenceRationale?, accessOverride?, testimony?: { text, accessLevel = "everyone" } }` **intersected with** `categorizedPointAttributesSchema` (`{ category, attributes }`) | Attributes are validated against the category in the schema and again on the server. A `contact` with a `directContact` needs `accessOverride` `leads_only` or `reviewer_only` (D5). Title 1–120, statement 1–1000, rationale 1–2000, testimony 1–4000 |
+| `createGapQuestionInput` | `{ handoverId, pointId?, category?, question, context?, priority, accessLevel = "everyone", assignedMemberId? }` | Not both `pointId` and `category` (a point question takes the point's category). Question 1–500, context 1–2000. The server raises `accessLevel` to the point's level |
+| `createGapLinkInput` | `{ handoverId, questionIds, maxAccessLevel = "everyone", expiresInDays = 7 }` | 1–50 distinct question ids; expiry 1–30 days; uses are fixed at 20 (§12.4) |
+| `revokeAccessTokenInput` | `{ tokenId }` | See `revokeAccessToken` |
+| `deleteAccountInput` (D25) | `{ confirm: "DELETE", purgeHandoverIds }` | `confirm` is the exact typed word (`ACCOUNT_DELETION_CONFIRMATION`), case-sensitive; previously `true`. `purgeHandoverIds` lists each handover once (§12.9) |
+
 `inviteMember` and `updateMemberClearance` are creator-only. `updateMemberClearance` applies only to
 `lead` and `incoming` members, and fails with `invalid_transition` for review roles (§6.3).
 
@@ -1874,7 +2028,54 @@ export interface HandoverSummary {
   id: string; title: string; teamName: string; roleTitle: string | null;
   state: HandoverState; viewerRole: MemberRole; viewerIsCreator: boolean;
   viewerClearance: AccessLevel; currentPublicationId: string | null;
+  pendingCreatorTransfer: { toMemberId: string; offeredAt: string } | null; // R8; creator and offered member only
   createdAt: string; updatedAt: string;
+}
+
+// R8. Active members; exactly one row has isViewer = true for a member viewer.
+export interface MemberSummary {
+  id: string; displayName: string;            // per-handover label, " #abcd" suffix on duplicates (§12.3)
+  role: MemberRole; clearance: AccessLevel | null; // null unless the viewer is the creator
+  ackRequired: boolean; isCreator: boolean; isViewer: boolean;
+}
+
+// R8. Returned by publishHandover.
+export interface PublicationSummary { publicationId: string; handoverId: string; version: number; publishedAt: string; handoverState: HandoverState }
+
+// R8. Returned once by inviteMember and createGapInterviewLink; url contains the raw token.
+export interface CreatedLink { tokenId: string; url: string; expiresAt: string }
+
+// R8. Review roles: gap_interview tokens. Creator: also member_invite tokens and recipientEmail.
+export interface AccessTokenSummary {
+  id: string; purpose: TokenPurpose; status: AccessTokenStatus; // revoked > expired > exhausted > active
+  grantRole: MemberRole | null; recipientEmail: string | null; maxAccessLevel: AccessLevel;
+  expiresAt: string; maxUses: number; useCount: number; revokedAt: string | null; createdAt: string;
+}
+
+// R8. Offers addressed to the signed-in user (/account).
+export interface CreatorTransferOffer { handoverId: string; handoverTitle: string; offeredByLabel: string; offeredAt: string }
+
+// R8. Review roles, within clearance. The identity hash is never returned.
+export interface SourceParticipantSummary {
+  id: string; sourceId: string; sourceTitle: string; localId: string;
+  displayLabel: string; identityKind: IdentityKind; messageCount: number; excluded: boolean;
+}
+
+// R8. Review roles. Never names the participant.
+export interface ExclusionSummary {
+  id: string; kind: ExclusionKind; scope: ExclusionScope; sourceId: string | null;
+  identityKind: IdentityKind | null; conversationLocalId: string | null;
+  rangeStart: string | null; rangeEnd: string | null; reason: string | null;
+  requestedVia: ExclusionRequestedVia; createdAt: string;
+}
+
+// R8. Messages around a quoted message. Review roles, within clearance; masked; pruned messages absent.
+export interface SourceMessageContext {
+  pointEvidenceId: string; sourceId: string; sourceTitle: string;
+  available: boolean;                         // false once the quoted message was pruned or the source removed
+  messages: Array<{ seq: number; sentAt: string | null; authorLabel: string | null; kind: MessageKind;
+                    body: string; location: MessageLocation | null; isQuoted: boolean }>;
+  hasMoreBefore: boolean; hasMoreAfter: boolean;
 }
 
 export interface SourceSummary {
@@ -1994,14 +2195,22 @@ export interface PublishedHandover {
 export interface BatonQueries {
   listMyHandovers(): Promise<Result<HandoverSummary[]>>;
   getHandover(id: string): Promise<Result<HandoverSummary>>;
-  listMembers(handoverId: string): Promise<Result<Array<{ id: string; displayName: string; role: MemberRole; clearance: AccessLevel | null /* null unless viewer is creator */; ackRequired: boolean }>>>;
+  listMembers(handoverId: string): Promise<Result<MemberSummary[]>>;
   listSources(handoverId: string): Promise<Result<SourceSummary[]>>;
+  listParticipants(handoverId: string, sourceId?: string): Promise<Result<SourceParticipantSummary[]>>; // R8, review roles
+  listExclusions(handoverId: string): Promise<Result<ExclusionSummary[]>>;                            // R8, review roles
   getProcessingStatus(handoverId: string): Promise<Result<ProcessingStatus>>;
   listPoints(handoverId: string, filter?: { category?: PointCategory; status?: EvidenceStatus; reviewState?: ReviewState }): Promise<Result<PointSummary[]>>;
   getPoint(pointId: string): Promise<Result<PointDetail>>;
+  // R8. Review roles within clearance; window clamped to 0–10 each side, default 3; not_found for testimony.
+  getSourceMessageContext(pointEvidenceId: string, window?: { before?: number; after?: number }): Promise<Result<SourceMessageContext>>;
   listGapQuestions(handoverId: string): Promise<Result<GapQuestionSummary[]>>;
   getReadiness(handoverId: string): Promise<Result<ReadinessReport>>;
+  // Any active member at their clearance, by session and membership only; a token never grants it (§12.3).
   getPublishedHandover(handoverId: string): Promise<Result<PublishedHandover>>;
+  // R8. Pending invitations = { purpose: "member_invite", activeOnly: true } (creator only).
+  listAccessTokens(handoverId: string, filter?: { purpose?: TokenPurpose; activeOnly?: boolean }): Promise<Result<AccessTokenSummary[]>>;
+  listMyCreatorTransferOffers(): Promise<Result<CreatorTransferOffer[]>>;                               // R8, /account
   getGapInterview(token: string): Promise<Result<{ handoverTitle: string; questions: Array<Pick<GapQuestionSummary, "id" | "question" | "context" | "priority" | "category">> }>>; // server-only, uses token redemption; only open, non-held questions in the token's scope (§5.5)
 }
 ```
@@ -2011,17 +2220,18 @@ export interface BatonQueries {
 | Route | Page owner | Data |
 |---|---|---|
 | `/` | UI | Static |
+| `/demo` (R8, `(marketing)` group, `routes.demo`) | UI | Public, read-only, synthetic fixtures only. Never reads `lib/data` or a session |
 | `/login` | Supabase agent (form and auth), UI (styling via shared components) | Supabase Auth |
 | `/auth/callback` | Supabase agent | Magic-link exchange |
 | `/dashboard` | UI | `listMyHandovers` |
-| `/account` (new, `(workspace)` group) | UI | `getAccountDeletionBlockers`, `respondToCreatorTransfer`, `deleteAccount` |
+| `/account` (`(workspace)` group, `routes.account`) | UI | `listMyCreatorTransferOffers`, `getAccountDeletionBlockers`, `respondToCreatorTransfer`, `deleteAccount` |
 | `/handover/new` (wizard) | UI | `createHandover`, `createSourceUpload`, `previewSource`, `recordSourceConsent`, `startProcessing` |
 | `/handover/[id]/processing` | UI | `getProcessingStatus` (polling every 3 s **[D10]**) |
 | `/handover/[id]/review` | UI | `listPoints`, `getPoint`, `reviewPoint`, `getReadiness`, `publishHandover` |
 | `/handover/[id]/gaps` | UI | `listGapQuestions`, `createGapQuestion`, `createGapInterviewLink`, `reviewGapAnswer` |
-| `/handover/[id]/settings` | UI | Members, sources, exclusions, delete, `offerCreatorTransfer`, `eraseParticipant` |
+| `/handover/[id]/settings` | UI | `listMembers`, `listSources`, `listParticipants`, `listExclusions`, `listAccessTokens`, `revokeAccessToken`, delete, `offerCreatorTransfer`, `eraseParticipant` |
 | `/g/[token]` | UI | `getGapInterview`, `submitGapAnswers` (token). Privacy-held questions are neither shown nor answerable (§5.5) |
-| `/h/[token]` | UI (landing), Supabase agent (invite redemption → magic link → membership) | `getPublishedHandover`, `acknowledgePublication` |
+| `/h/[token]` | UI (landing), Supabase agent (invite redemption → magic link → membership) | Redeems the invitation only (§12.3). After redemption the member reads the publication by membership, never by token. Where they read it is open question Q3 in the reconciliation log |
 
 All pages follow the README's Cache Components rules: a static shell, with data reads inside
 `<Suspense>`.
@@ -2162,6 +2372,18 @@ The main workspace calls `maskText` for user-entered text.
 - Masking errs toward over-masking. False positives are acceptable; false negatives are bugs.
 - The fixture suite must include adversarial cases (numbers split across lines, Unicode digits,
   `name [at] domain`).
+- **`[EXCLUDED_PARTICIPANT]` is not a mask token (R8).** The parser writes it where an excluded
+  participant was named or mentioned in someone else's kept message (§11.4). The UI renders it
+  differently from mask tokens:
+  - a muted, non-interactive inline chip reading **"excluded participant"** (never the raw token
+    text, never a number);
+  - its tooltip and accessible name say "Someone who asked to be left out was mentioned here. Their
+    name was removed before processing." It never says "masked";
+  - it is never linked, counted in masking statistics, resolved to a person, or offered for
+    editing back to a name.
+
+  Wherever masked text is shown (evidence quotes, source context, published handovers, previews),
+  the same component renders both kinds, and the published view uses the same chip.
 - **Never unmasked.** There is no "reveal" feature. Contact details found in sources stay masked.
   The only exception to masking is `contact.directContact`, typed in by a review role, validated as a
   single phone number or email, stored at `leads_only` or stricter, and published only after a
@@ -2175,9 +2397,16 @@ The main workspace calls `maskText` for user-entered text.
   - masked content is processed by the AI provider **named in the statement**, which is the provider
     actually configured for processing (§11.8) **[D11]**, and
   - members can ask to be excluded.
-- **Participant exclusion:** this is matched by `identity_hash` **and** its pepper version, so an
-  opt-out applies to re-uploads and other sources of the same handover. The pepper is a stable v1
-  secret, which keeps old opt-outs matching (§12.8, point 9).
+- **Participant exclusion:** this is matched by identity **kind**, `identity_hash` **and** pepper
+  version (§12.11). The pepper is a stable v1 secret, which keeps old opt-outs matching (§12.8,
+  point 9).
+  - **Phone identities** are strong. A handover-wide phone opt-out applies automatically to
+    re-uploads and other sources of the same handover.
+  - **Saved-name identities** are best-effort, not a reliable cross-source person identifier
+    (two different people can share a saved name; one person can be saved under different names).
+    A handover-wide name exclusion is **never applied silently to another source**. In other
+    sources it is only *detected*, and the creator must confirm or reject the match per source
+    (§6.8.1) before that source is processed.
 - **Late opt-out** (after processing) is a **participant erasure**, defined in §12.8. It removes the
   participant's messages and evidence, tombstones points derived only from them, redacts every
   publication snapshot, and invalidates affected acknowledgements. It is audited without storing
@@ -2190,15 +2419,35 @@ The main workspace calls `maskText` for user-entered text.
 - Session handling uses `@supabase/ssr` (requested by the Supabase agent, installed by main per
   §13.2.9) and `proxy.ts` to refresh
   sessions. Next.js 16 renamed `middleware.ts` to `proxy.ts`.
+- **Trusted site URL (R8).** Every magic-link and invitation redirect is built only from the
+  server-only `BATON_SITE_URL` (§12.5), never from `Host`, `X-Forwarded-Host` or a caller-supplied
+  origin. The value must be a bare origin: `https://host[:port]`, or `http://` only for
+  `localhost`, `127.0.0.1` or `[::1]`; no credentials, path, query or fragment. A missing or unsafe
+  value fails closed: no link is sent. The Supabase project's redirect allow-list contains exactly
+  `${BATON_SITE_URL}/auth/callback`, with no wildcards.
+- **Redirect validation (R8).** The callback's `next` parameter accepts only a same-origin
+  relative path: it must start with `/`, must not start with `//` or `/\`, and must not contain
+  control characters. Anything else is dropped and the default destination is used.
+- **Display names (R8).** A profile's `display_name` is **never** taken from user-supplied auth
+  metadata. It is derived from the local part of the sign-in email: only `A–Z a–z 0–9 . _ space -`
+  are kept, trimmed, at most 60 characters. If the result is empty, or is a label Baton itself uses
+  ("Former member", "Removed participant", "Member", "Baton", "System", "Admin", or "Participant …"
+  / "Member …"), it becomes `Member <first 4 hex of the profile id>`. Inside one handover, a name
+  shared with another member is shown with a stable ` #<first 4 hex>` suffix, so nobody can pass as
+  someone else. Deleted accounts stay exactly "Former member" (D26). Invitees get their name the
+  same way when they first sign in; an invitation never carries a display name.
 - **Invitation flow** (`/h/[token]`):
   1. Redeem the token on the server (hash compare, expiry, use count).
-  2. If the visitor is not signed in, send a magic link to `recipient_email`.
-  3. After sign-in, check that the session email equals `recipient_email`.
+  2. If the visitor is not signed in, send a magic link to `recipient_email`. The address never
+     reaches the browser, and the response is identical for valid, invalid and rate-limited tokens.
+  3. After sign-in, check that the session email equals `recipient_email` **and is confirmed**.
+     The database reads both from `auth.users` itself; the caller never supplies them.
   4. Create a `handover_members` row with `grant_role` and `grant_clearance` (always
      `reviewer_only` for `outgoing` and `reviewer`).
   5. Mark the token used.
   6. Redirect by role: review roles go to the review workspace, `lead` and `incoming` to the
-     published view.
+     published view. Until that route exists (open question Q3 in the reconciliation log), they go
+     to `/dashboard`. The token never grants read access itself.
 - **Inviting a separate outgoing member.** When the creator chose `creatorRole = "reviewer"`,
   they invite the person leaving with `inviteMember({ role: "outgoing" })`, through the same
   invitation flow. That member gets their own row, reviews alongside the creator, and has no
@@ -2219,6 +2468,25 @@ The main workspace calls `maskText` for user-entered text.
   `(token)` layout).
 - Redemption is rate-limited per IP and per token **[D12]**.
 
+**Rate limits (R8, implemented values).** Counters live in `rate_limit_counters` (§6.22). Each hit is
+consumed in its **own** database call **before** the protected operation, so it is committed even
+when that operation fails: an invalid token still counts. Both the client and the token counter are
+consumed; exceeding either returns `rate_limited` (retryable). If no client IP is known, only the
+token limit applies.
+
+| Action | Scope (per client IP) | Limit | Scope (per token) | Limit |
+|---|---|---|---|---|
+| Open a Gap Interview link | `gap_interview_view_client` | 60 per 10 minutes | `gap_interview_view_token` | 300 per hour |
+| Submit Gap Interview answers | `gap_interview_submit_client` | 10 per 10 minutes | `gap_interview_submit_token` | 30 per hour |
+| Request an invitation magic link | `invite_magic_link_client` | 5 per hour | `invite_magic_link_token` | 3 per hour |
+| Redeem an invitation | `invite_redeem_client` | 10 per 10 minutes | `invite_redeem_token` | 10 per hour |
+
+Windows are fixed: a window restarts on the first hit after it has elapsed. The client IP is taken
+from the first `x-forwarded-for` entry, else `x-real-ip`. Which header is trustworthy depends on the
+hosting platform and is **unverified** (assumption 14). The IP is used for counting only, never for
+security decisions or redirects. D12 also names uploads and AI calls; **neither is rate-limited
+yet** (open question Q5 in the reconciliation log).
+
 ### 12.5 Secrets and server boundaries
 
 | Variable | Exposure | Used by |
@@ -2233,6 +2501,7 @@ The main workspace calls `maskText` for user-entered text.
 | `ERASURE_MANIFEST_ENDPOINT`, `ERASURE_MANIFEST_CREDENTIALS` | **Server only** | `lib/recovery/manifest.ts`: **append-only write** access to the external recovery manifest (§12.8, D27). Read credentials for restore are not in the app; they are held in escrow |
 | `ERASURE_MANIFEST_ACTIVE_KEY_ID`, `ERASURE_MANIFEST_ACTIVE_KEY` | **Server only**. Never stored in the primary database or its backups | The **active** key version only, used to encrypt identity hashes in new entries. Older key versions are never in the application environment; they live only in key escrow (§12.8, point 7) |
 | `CRON_SECRET` | **Server only** | Retention and purge endpoints |
+| `BATON_SITE_URL` (R8) | **Server only** | The trusted public origin for magic-link and invitation redirects (§12.3). Must be a bare `https` origin (`http` only for localhost). Missing or unsafe → links fail closed |
 
 **Rules**
 
@@ -2292,17 +2561,29 @@ confirm: true })` (main, creator-only). Before confirming, the UI shows the limi
 request is identified by the participant row's `identity_hash`. The participant's name is never
 written into the request or the audit trail.
 
-**Scope** for handover H, identity hash h and pepper version v:
+**Scope** for handover H, identity kind k, identity hash h and pepper version v. R8: the scope
+depends on the identity kind (§12.2, §12.11):
 
-- **E (erased evidence):** `evidence_quotes` of H with `kind = 'source_quote'`,
-  `author_identity_hash = h` and `author_identity_pepper_version = v`. The hash is snapshotted on the quote, so E is complete even after
-  message pruning.
+- **Sources S.** For `k = 'phone'`: every source of H. For `k = 'name'`: **only the source of the
+  participant row being erased**. Names are weak identities, so other sources are never erased by
+  name. Participants with the same name identity in other sources are counted in
+  `ErasureReport.sameNameParticipantsElsewhere` and the creator reviews each of them separately (a
+  separate erasure, with its own manifest entry).
+- **E (erased evidence):** `evidence_quotes` of H in sources S with `kind = 'source_quote'`,
+  `author_identity_kind = k`, `author_identity_hash = h` and `author_identity_pepper_version = v`.
+  For a name erasure, quotes are attributed to S by `evidence_quotes.source_id`. Message pruning
+  clears only `source_message_id`, never `source_id`; `source_id` becomes NULL only when its source
+  is purged (§6.10). Quotes of a purged source therefore cannot be attributed to S and are not in E
+  for a name erasure (a documented limitation; a phone erasure still covers them). The hash is
+  snapshotted on the quote, so E is complete even after message pruning.
 - **X (derived only from erased evidence):** points of H with at least one evidence link where
   **every** link (excluded or not) points into E.
 - **P (partly affected):** points with some links into E and some not.
 
-**Function.** `erase_participant(p_erasure_id uuid, p_handover_id uuid, p_identity_hash bytea,
-p_identity_pepper_version text, p_actor_profile_id uuid) returns jsonb`. `p_erasure_id` is the recovery-manifest `eventId` (see
+**Function.** `erase_participant(p_erasure_id uuid, p_handover_id uuid, p_identity_kind text,
+p_identity_hash bytea, p_identity_pepper_version text, p_scope_source_id uuid, p_actor_profile_id
+uuid) returns jsonb` (R8 adds `p_identity_kind` and `p_scope_source_id`; the scope source is required
+for `name` and must be NULL for `phone`). `p_erasure_id` is the recovery-manifest `eventId` (see
 below), and it makes the call idempotent:
 
 - `SECURITY DEFINER`, `SET search_path = ''`, owned by the migration role. `EXECUTE` is revoked from
@@ -2325,12 +2606,23 @@ Steps:
 0. **Idempotency.** If `participant_erasures` already has `p_erasure_id`, the function returns
    without changing anything. Otherwise it inserts that row at the end of this transaction.
 1. **Source data.**
-   - Hard-delete the participant's `source_messages` in every source of H.
-   - Set `excluded = true` on their `source_participants` rows and replace `display_label` with
-     "Removed participant".
-   - Insert a handover-wide `source_exclusions` row (`kind = 'participant'`,
-     `requested_via = 'participant_request'`) so later uploads drop them at parse time. If one
-     already exists, the partial unique index (§6.8) makes this `ON CONFLICT DO NOTHING`.
+   - Hard-delete the participant's `source_messages` in every source of S.
+   - **Conversations (R8).** For every `source_conversations` row of S in which the participant
+     appeared:
+     - set `preview = NULL`, because it may be their own words; the next preview read shows no
+       preview rather than a recomputed one;
+     - remove their `local_id` from `participant_local_ids`;
+     - recompute `message_count`, `started_at` and `ended_at` from the `source_messages` rows that
+       remain. A conversation with no remaining rows gets `0`, `NULL`, `NULL`. After publish-time
+       pruning (§12.6) the recount covers only the retained rows; that undercount is accepted,
+       because a value derived from erased messages must never survive.
+   - Recompute `sources.message_count`, `first_message_at` and `last_message_at` of S the same way.
+   - Set `excluded = true`, `message_count = 0` on their `source_participants` rows and replace
+     `display_label` with "Removed participant".
+   - Insert a handover-wide `source_exclusions` row (`kind = 'participant'`, with the identity
+     kind, `requested_via = 'participant_request'`) so later uploads exclude them at parse time
+     (phone: applied; name: detected and confirmed per source, §6.8.1). If one already exists, the
+     partial unique index (§6.8) makes this `ON CONFLICT DO NOTHING`.
 2. **Evidence.** Hard-delete E. Its `point_evidence` links cascade.
    - `review_actions.point_evidence_id` becomes NULL (§6.0).
    - The `note` and `metadata` of those review actions are cleared, because exclusion reasons can
@@ -2431,6 +2723,7 @@ Erasures and purges are therefore also recorded in an **external, durable recove
    | `kind` | `participant_erasure` or `handover_purge` |
    | `handoverId` | The affected handover |
    | `identityHashCiphertext`, `nonce` | **Erasures only.** AEAD ciphertext of the identity hash (point 3) |
+   | `identityKind`, `scopeSourceId` | **Erasures only (R8).** The identity namespace, and for a `name` erasure the one source it is limited to. Both are bound into the AEAD associated data and the receipt |
    | `keyId` | The key version that encrypted it, for example `mk-0003`. Every encrypted entry names its version, and the restore tooling picks the key by this id (point 7) |
    | `alg` | The AEAD algorithm identifier, so older entries stay readable if the algorithm ever changes |
    | `pepperVersion` | **Erasures only.** The identity-pepper version that produced the hash (`p1`). It is a separate namespace from `keyId` (point 9) |
@@ -2441,6 +2734,20 @@ Erasures and purges are therefore also recorded in an **external, durable recove
 2. **Write-ahead, fail closed.**
    - `eraseParticipant` generates the `eventId`, writes the manifest entry, waits for the store to
      confirm it, and only then calls `erase_participant(…, p_erasure_id)`.
+   - **Receipts (R8).** A confirmed write returns a `ManifestReceipt`: `eventId`, `kind`,
+     `handoverId`, `recordedAt`, an opaque `proof`, and for an erasure the `identityHashHex`,
+     `pepperVersion`, `identityKind` and `scopeSourceId`. `lib/db/recovery-gate.ts` refuses the
+     database call with `precondition_failed` unless the receipt names **exactly** the operation
+     about to run (same event, kind and handover; for an erasure the same identity kind, hash,
+     pepper version and scope source), so a receipt for participant A can never authorise erasing
+     B. A purge receipt never carries an identity.
+   - **Verifier ownership (R8).** The receipt's own fields are not trusted. A verifier registered by
+     `lib/recovery` (main) proves that the receipt came from a confirmed write, for example a MAC
+     over every field with a server-only key, or a read-back from the store. Registration happens
+     **once per process**, at server start-up; a second registration throws and there is no reset
+     path. Only `lib/recovery/**` may call `registerManifestReceiptVerifier`, enforced by a
+     boundary test in `lib/db/__tests__`. With no verifier registered, erasure and purge fail
+     closed.
    - The handover purge job writes its `handover_purge` entry the same way before purging.
    - If the manifest write fails, the erasure or purge does not run, and the user is told to retry.
    - An entry whose database operation then failed is harmless. Replaying it performs the requested
@@ -2450,8 +2757,8 @@ Erasures and purges are therefore also recorded in an **external, durable recove
    - Each hash is encrypted with the **active key version** before it leaves the server, and the
      store also encrypts at rest.
    - The encryption is authenticated (AEAD). The associated data binds `eventId`, `kind`,
-     `handoverId`, `keyId` and `schemaVersion`, so a ciphertext cannot be moved to another entry
-     without failing to decrypt.
+     `handoverId`, `identityKind`, `scopeSourceId`, `keyId` and `schemaVersion`, so a ciphertext
+     cannot be moved to another entry without failing to decrypt.
    - The active key and the write credentials are server-only environment variables (§12.5). They
      are never kept in the primary database or its backups. Every key version is escrowed
      independently (point 7).
@@ -2677,6 +2984,11 @@ Account deletion must never silently cascade through handover history or bypass 
      wait 30 days, the user may explicitly confirm an **immediate purge** of the listed handovers
      (`purgeHandoverIds`). The UI names each handover and states that every member loses it
      permanently. Each purge is audited.
+   - **Typed confirmation (D25, accepted).** `deleteAccount` requires `confirm: "DELETE"`, the word
+     the user typed, matched exactly and case-sensitively (`ACCOUNT_DELETION_CONFIRMATION` in
+     `schemas.ts`). Anything else fails with `validation_failed`, so the check does not depend on the
+     UI. `purgeHandoverIds` lists each handover once; a created handover that is neither transferred
+     nor listed keeps blocking with `precondition_failed`.
 4. **Deletion,** once nothing blocks it, in one server-side operation using the service role:
    - Every active membership gets `removed_at`, which revokes access. The rows are kept, so review
      actions, acknowledgements, gap answers and audit entries still resolve.
@@ -2789,6 +3101,47 @@ reviewer edits. Main owns these rules, `lib/ai/**`, and their tests.
      - the verifier's verdict on injected quotes matches the expected verdict;
      - nothing renders as active HTML.
 
+### 12.11 Participant identity: normalization and hashing (R8)
+
+**Canonical file:** `lib/contracts/identity.ts`. The parser implements it in
+`lib/privacy/identity.ts` and must reproduce `IDENTITY_GOLDEN_VECTORS` exactly.
+
+1. **Derivation.** `identity_hash = lower-case hex( HMAC-SHA256( key = UTF-8 bytes of the
+   IDENTITY_PEPPER string, message = UTF-8 bytes of the normalized identity string ) )`. The pepper
+   is used as written: it must be at least 32 characters, with no leading or trailing whitespace,
+   or parsing fails with `identity_pepper_invalid` (§11.4). Hashes are stored as `bytea` and
+   transported as 64 lower-case hex characters.
+2. **Namespaces.** The normalized string starts with `tel:` (identity kind `phone`) or `name:`
+   (identity kind `name`). The kind is stored next to every hash (§6.6, §6.8, §6.10, §6.21 and the
+   manifest).
+3. **Cleaning.** Remove invisible formatting characters (bidi controls, zero-width characters,
+   word joiner, BOM, soft hyphen), apply NFKC, collapse whitespace to single spaces, trim, and fold
+   Unicode decimal digits to ASCII.
+4. **Phone identities.** A sender is phone-like when it contains only digits, an optional leading
+   `+`, spaces and `( ) . -`, with 7–15 digits.
+   - An explicit international prefix (`+` or `00`) gives E.164: `tel:+<digits>`. `+00…` is read as
+     `00…`.
+   - After an explicit `+91`, a trunk `0` followed by 10 national digits is removed
+     (`+91 0 99999 00001` and `+91 022 1234 5678` → `tel:+919999900001`, `tel:+912212345678`).
+   - **No default region.** A number without a prefix stays as its bare digits (`tel:9999900001`,
+     `tel:09999900001`). India's code is never inferred, so a local number never matches an E.164
+     identity, and numbers from different countries never collide. The cost is under-matching
+     between local and international forms of the same number, accepted in v1.
+5. **Name identities.** Everything else is `name:` + the cleaned string in lower case. Name identities
+   are best-effort (§12.2): they are never used to apply an exclusion or an erasure across sources
+   without an explicit confirmation (§6.8.1, §12.8).
+6. **Matching.** Two records refer to the same participant only when identity kind, hash and pepper
+   version all agree (`sameIdentity`). This applies to parse-time exclusion, cross-source opt-out,
+   erasure scope and restore verification.
+7. **Pepper canary.** The key registry's `identity_pepper` entry for `p1` stores
+   `HMAC(pepper, "baton:identity-pepper-canary:p1")` (`IDENTITY_PEPPER_CANARY_MESSAGE`). The canary
+   message has no namespace prefix, so it can never equal a participant identity. The start-up check
+   (§12.8 point 9) and the restore runbook recompute it and compare; a mismatch fails closed. For
+   the pepper, the canary is also its registry fingerprint.
+8. **Frozen.** These rules and the golden vectors are part of pepper version `p1`. Changing any of
+   them changes stored hashes, exactly like rotating the pepper, and needs a reviewed migration
+   (§13.3).
+
 ---
 
 ## 13. Agent coordination
@@ -2811,7 +3164,8 @@ reviewer edits. Main owns these rules, `lib/ai/**`, and their tests.
 | `lib/parsers/**`, `lib/privacy/**`, `fixtures/parser/**` | **Parser agent** | None |
 | `app/(marketing)/**`, `app/(workspace)/**`, `app/(token)/**`, `app/not-found.tsx`, `app/layout.tsx`, `app/globals.css` | **UI agent** | None |
 | `components/**` (`ui`, `layout`, `shared`, `dashboard`, `handover`, `review`, `wizard`, `auth`) | **UI agent** | None |
-| `lib/mocks/**`, `hooks/**`, `config/navigation.ts`, `config/site.ts`, `lib/routes.ts`, `lib/fonts.ts`, `lib/utils.ts` | **UI agent** | Read only |
+| `lib/routes.ts` | **Main** (R8: route helpers are a shared contract used by actions, auth redirects and UI) | Read only. Request new routes (§13.3) |
+| `lib/mocks/**`, `hooks/**`, `config/navigation.ts`, `config/site.ts`, `lib/fonts.ts`, `lib/utils.ts` | **UI agent** | Read only |
 
 ### 13.2 Mandatory integration rules
 
@@ -2902,7 +3256,7 @@ their own.
 | D9 | When is a handover `acknowledged`: all incoming members, or any? | All members with `ack_required = true`, and no pending incoming invite | Accepted |
 | D10 | Background job runtime | **Database-backed jobs** (`processing_jobs`) with leases, retries and backoff (§9.3), run by a **simple initial worker**: a route handler under `app/api/` that claims due jobs, triggered via `after()` on enqueue and by a cron sweep. It can be replaced later without a schema change | Accepted |
 | D11 | AI provider, models, and the consent disclosure | **Accepted:** the provider-neutral `AiProvider` interface (§11.8), separate extraction and support calls, Zod validation, readable provenance (`ai_config`, `ai_provenance`, `attempt_log`), server-only credentials, consent naming the configured provider, and the prompt-injection rules (§12.10). **Open:** the exact provider and models, and the provider's data-retention and training settings | Partly open |
-| D12 | Rate limiting mechanism (token redemption, uploads, AI calls) | Postgres-backed counters (no new infrastructure) | Accepted |
+| D12 | Rate limiting mechanism (token redemption, uploads, AI calls) | Postgres-backed counters (no new infrastructure). **R8:** implemented as `rate_limit_counters` (§6.22) with eight fixed-window scopes for Gap Interview views and submissions and invitation magic links and redemptions, per client IP digest and per token digest, limits fixed inside `consume_rate_limit` (§12.4). Uploads and AI calls are **not yet** covered (Q5) | Accepted; extended in R8 |
 | D13 | Publication summaries per access level | One summary, generated from `everyone`-level points only | Accepted |
 | D14 | Raw upload retention | **Delete only after a successful final parse and persistence** of the permitted, masked data. Preview never deletes. A failed final parse keeps the upload for retries within the 7-day ceiling. Reprocessing uses persisted messages; re-parsing a deleted upload needs a new upload (§10.3, §12.6) | Accepted |
 | D15 | File size and volume limits; `.zip` support | 25 MB per file, 10 sources per handover, WhatsApp `.zip` allowed (text only) | Accepted |
@@ -2914,10 +3268,24 @@ their own.
 | D21 | Content of the "expected knowledge" checklist that creates `missing` points | Main workspace drafts it during the extraction phase. Reviewed with real club handovers | Accepted |
 | D22 | Are participant display names (saved-contact names) personal data that must be pseudonymized? | Keep names, because they are needed for owners and contacts. Phone-number-only senders become "Participant N". Opt-out via exclusion | Accepted |
 | D23 | Which membership roles may the creator hold? | **`outgoing` or `reviewer` only**, chosen at creation (`createHandover.creatorRole`, required, no default; §6.3) and kept by a trigger. Not `lead` or `incoming`: a creator needs full clearance to review and publish, and an incoming person would otherwise review content they must later acknowledge. Creatorship transfers (§12.9) are limited to members with these roles | Accepted (revision 3) |
-| D24 | Participant erasure vs immutable publications | `erase_participant` (§12.8): deletes the participant's messages and evidence, tombstones points derived only from them, redacts **every** publication snapshot by stable `evidenceId`, clears derived summaries, invalidates affected acknowledgements and requests new ones, and audits counts only. **Partly affected points enter a mandatory privacy review** (§5.5) covering their whole **review set**: the current point text, **the full text of every earlier revision** (one `revision` surface each), review notes, evidence notes, linked gap questions and answers, and testimony shared with other points. Resolutions are **serialised per handover** (a handover row lock, a fixed lock order, revalidation of the set and digest under lock, one atomic transaction, parent-row writers locking `FOR UPDATE` first with no lock upgrades, and concurrency tests T1–T16). Each surface gets keep, redact or remove (the point itself: keep, redact or withdraw). The set is privacy-held from ordinary members, assignees and tokens, which RLS, an insert trigger and the token query enforce, until one atomic, digest-checked resolution. Redacted or removed testimony updates or deletes the evidence copy, redacts it in every snapshot, and puts every other point using it into privacy review. Masking is not treated as proof that names are gone. Append-only exceptions are limited to the functions named in §2. Exported copies and text outside any review set are documented limitations | Specified (revisions 3–7); awaiting sign-off |
-| D25 | Deleting an account that still owns handovers | Blocked until each created handover is transferred or deleted with an explicitly confirmed immediate purge. A transfer must be accepted by an active `outgoing` or `reviewer` member of the same handover who is **not** the current creator; self-transfer is rejected by the action and again inside `transfer_creator`. Accounts are anonymised and the auth user soft-deleted, never cascade-deleted (§12.9) | Specified in revision 3; awaiting sign-off |
+| D24 | Participant erasure vs immutable publications | `erase_participant` (§12.8): deletes the participant's messages and evidence, tombstones points derived only from them, redacts **every** publication snapshot by stable `evidenceId`, clears derived summaries, invalidates affected acknowledgements and requests new ones, and audits counts only. **Partly affected points enter a mandatory privacy review** (§5.5) covering their whole **review set**: the current point text, **the full text of every earlier revision** (one `revision` surface each), review notes, evidence notes, linked gap questions and answers, and testimony shared with other points. Resolutions are **serialised per handover** (a handover row lock, a fixed lock order, revalidation of the set and digest under lock, one atomic transaction, parent-row writers locking `FOR UPDATE` first with no lock upgrades, and concurrency tests T1–T16). Each surface gets keep, redact or remove (the point itself: keep, redact or withdraw). The set is privacy-held from ordinary members, assignees and tokens, which RLS, an insert trigger and the token query enforce, until one atomic, digest-checked resolution. Redacted or removed testimony updates or deletes the evidence copy, redacts it in every snapshot, and puts every other point using it into privacy review. Masking is not treated as proof that names are gone. Append-only exceptions are limited to the functions named in §2. Exported copies and text outside any review set are documented limitations. **R8 extension:** conversation previews are cleared, the participant's local id is removed from `participant_local_ids`, and conversation and source counts and time ranges are recomputed from the remaining messages; a `name` erasure is limited to one source, and same-name participants elsewhere are reported for separate review; the manifest entry and receipt also bind identity kind and scope source | **Accepted** (approved by the human reviewer on 2026-11-12, final scope as specified in revisions 3–8 including the R8 extension) |
+| D25 | Deleting an account that still owns handovers | Blocked until each created handover is transferred or deleted with an explicitly confirmed immediate purge. A transfer must be accepted by an active `outgoing` or `reviewer` member of the same handover who is **not** the current creator; self-transfer is rejected by the action and again inside `transfer_creator`. Accounts are anonymised and the auth user soft-deleted, never cascade-deleted (§12.9). **Final scope (R8):** `deleteAccount` requires the user to type `DELETE` exactly (`deleteAccountInput.confirm`, checked on the server, not only in the UI), and every created handover not transferred must be listed in `purgeHandoverIds`, each explicitly marked for permanent deletion | **Accepted** (approved by the human reviewer on 2026-11-12) |
 | D26 | Name snapshots after account deletion | **Anonymise every account-derived name snapshot as "Former member"**: `gap_answers.answerer_label` (profile answers only), testimony `evidence_quotes.author_label`, and `byLabel` and account-derived `authorLabel` in publication snapshots, through `anonymise_account_snapshots` (§12.9). Contributions and their profile links are kept. Chat participant names are untouched. Audit never stores the original name | Accepted (revision 4) |
 | D27 | Backups vs erasure | **No retention period or backup feature assumed.** Erasures and handover purges are written ahead to an **external, durable, encrypted, append-only recovery manifest** (event id, kind, handover id, AEAD-encrypted identity hash with its `keyId`). Every key version is held in **independent key escrow** with at least two custodians, verified against a non-secret key registry (fingerprint and canary), rotated without interrupting writes, and kept as long as any entry it encrypted. Failures fail closed and entries are never skipped (§12.8, points 7 and 8). The **identity pepper** is separate key material: a stable, non-rotating v1 secret (`p1`), escrowed the same way, with its version stored next to every hash and enforced by `CHECK`. Rotation is prohibited until a tested migration exists, and parsing fails closed without a verified pepper (point 9). Replay runs only as the least-privilege `baton_restore` role, which is enabled only during an isolated restore (point 10). It survives purge and database loss (§12.8). Restores run isolated and replay every entry idempotently (keyed by `participant_erasures.id`) before reconnecting. **Still open:** choosing the store, verifying the selected plan's backup and point-in-time-recovery behaviour, choosing the key-escrow mechanism and custodians, verifying the restore role's Supabase behaviour, fixing the manifest and key retention rules (at least the longest restorable backup plus a margin), and testing the runbook, including key recovery and rotation. Also open: account-deletion anonymisation (§12.9) is not yet in the manifest, so a restore from before an account deletion would bring back the original names until it is re-run | **Open** until all of these are resolved |
+
+**R8 decisions (contract reconciliation, 2026-11-11).** Ratified by the human reviewer; details in
+the cited sections and in `docs/architecture/contract-reconciliation.md`.
+
+| # | Decision | Resolution | Status |
+|---|---|---|---|
+| D28 | Phone identity normalization | Explicit `+`/`00` prefixes → E.164; `+00` read as `00`; a trunk `0` after `+91` is removed; no default region, so unprefixed numbers stay local and never match E.164 identities. Frozen with golden vectors (§12.11) | Accepted (R8) |
+| D29 | Saved-name identity | Separate `name:` namespace; best-effort, not a cross-source person identifier. Identity kind stored next to every hash. Handover-wide name exclusions are only detected in other sources and need an explicit per-source confirmation (§6.8.1); name erasures are limited to one source (§12.8) | Accepted (R8) |
+| D30 | Identity pepper encoding and canary | `p1` stays stable and non-rotating. HMAC key = UTF-8 bytes of the pepper string, message = UTF-8 bytes of the normalized identity, hex output. Matching needs kind, hash and version to agree. Canary = HMAC of `baton:identity-pepper-canary:p1`. Golden vectors in `lib/contracts/identity.ts` (§12.11) | Accepted (R8) |
+| D31 | Excluded participants in kept text | Canonical token `[EXCLUDED_PARTICIPANT]`, rendered as a distinct "excluded participant" chip, not a mask token. Warning codes ratified, including `excluded_mentions_redacted`, `pdf_cmap_truncated` and `pdf_font_limit` (§11.4, §12.1) | Accepted (R8) |
+| D32 | Conversation exclusions | Bound to their `ParseContext` (timezone, effective date order, parser version). A mismatched rule fails the parse with `exclusion_context_mismatch` and must be confirmed again; a stale `c_N` is never applied (§10.3, §11.4) | Accepted (R8) |
+| D33 | Preview exclusions | `PreviewSourceInput` takes the same rules as the final parse. Previews never expose excluded participants through labels, previews or retained-content counts; only aggregate exclusion statistics remain (§10.3, §11.4) | Accepted (R8) |
+| D34 | Parser failure path | Expected invalid input and configuration are returned as typed `ParserInputFailure` values inside `ParserResult`; nothing expected is thrown (§11.4) | Accepted (R8) |
+| D35 | Server-side mutation architecture | Reads are RLS-protected through the user client. Every mutation runs in server-only code with an actor from a verified session (`auth.getUser()`), calls a service-role-only `SECURITY DEFINER` function that re-validates actor, membership, clearance, role and lifecycle, and is never executable by browser roles. Erasure and purge stay disabled without a verified manifest receipt (§8.3, §12.8) | Accepted (R8) |
 
 ---
 
@@ -2957,8 +3325,12 @@ their own.
     the application deployment, with at least two custodians and audited access, will hold every
     manifest key version, the identity pepper, the manifest read credentials and the restore-role
     credentials. Neither product nor their retention is chosen yet.
+12. **Privacy review is a human control.** Reviewers can recognise names and identifying details
+    that masking does not detect (§5.5). Baton offers no automated name detection in v1.
 13. **Restore role on Supabase (D27, unverified).** A custom `baton_restore` login role with
     `EXECUTE`-only grants, `session_user` identification and direct isolated connections (§12.8,
     point 10) is assumed to be possible. The Supabase agent must verify this before implementation.
-12. **Privacy review is a human control.** Reviewers can recognise names and identifying details
-    that masking does not detect (§5.5). Baton offers no automated name detection in v1.
+14. **Client IP for rate limiting (D12, unverified).** The hosting platform sets a trustworthy
+    `x-forwarded-for` or `x-real-ip`. Behind another proxy the first `x-forwarded-for` entry may be
+    client-controlled, which weakens only the per-client limits; per-token limits are unaffected.
+    Verify on the chosen platform before production.
