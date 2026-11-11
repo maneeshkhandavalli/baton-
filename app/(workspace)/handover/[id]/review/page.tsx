@@ -10,7 +10,7 @@ import { ReviewWorkspace } from "@/components/review/review-workspace";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { buttonVariants } from "@/components/ui/button";
-import { getMockQueries, mockReaderLinkFor } from "@/lib/mocks/queries";
+import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Review" };
@@ -27,22 +27,19 @@ export default function ReviewPage({ params }: PageProps<"/handover/[id]/review"
 
 async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const load = await loadReview(getMockQueries(), id);
+  const load = await loadReview(getQueries(), id);
   if (load.kind === "not_found") notFound();
 
   if (load.kind === "not_reviewer") {
-    const link = await mockReaderLinkFor(id);
     return (
       <EmptyState
         icon={<Lock />}
         title="Review is for reviewers"
         description="Only the creator, the outgoing member and reviewers can see the review workspace. You can read the published handover instead."
         action={
-          link ? (
-            <Link href={routes.token.handover(link)} className={buttonVariants()}>
-              Read the handover
-            </Link>
-          ) : undefined
+          <Link href={routes.handover.published(id)} className={buttonVariants()}>
+            Read the handover
+          </Link>
         }
       />
     );
@@ -81,7 +78,6 @@ async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
           : "This handover is published. Only the creator can start a revision."
         : undefined;
 
-  const readerLink = data.handover.currentPublicationId ? await mockReaderLinkFor(id) : null;
 
   return (
     <ReviewWorkspace
@@ -89,7 +85,7 @@ async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
       readOnly={!!readOnlyReason}
       readOnlyReason={readOnlyReason}
       gapsHref={routes.handover.gaps(id)}
-      publishedHref={readerLink ? routes.token.handover(readerLink) : null}
+      publishedHref={data.handover.currentPublicationId ? routes.handover.published(id) : null}
     />
   );
 }

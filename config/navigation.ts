@@ -24,4 +24,5 @@ export const handoverNav: readonly HandoverNavItem[] = [
   { title: "Review", href: routes.handover.review },
   { title: "Gaps", href: routes.handover.gaps },
   { title: "Settings", href: routes.handover.settings },
+  { title: "Published", href: routes.handover.published },
 ];

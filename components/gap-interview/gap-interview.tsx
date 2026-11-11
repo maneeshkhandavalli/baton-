@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MaskedText } from "@/components/shared/masked-text";
 import { useAction } from "@/hooks/use-action";
 import type { GapInterview as GapInterviewData } from "@/lib/contracts/dto";
-import { submitGapAnswers } from "@/lib/mocks/actions";
+import { submitGapAnswers } from "@/lib/actions/gaps";
 import { cn } from "@/lib/utils";
 
 interface Draft {
