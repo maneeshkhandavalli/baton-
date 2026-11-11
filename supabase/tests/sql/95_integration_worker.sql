@@ -220,3 +220,11 @@ select tests.eq(public.list_run_jobs(tests.id('run')) -> 'jobs' -> 0 ->> 'stage'
 select tests.ok(public.list_run_jobs(gen_random_uuid()) is null, 'unknown run is null');
 select tests.as_reader('ann');
 select tests.throws(format('select public.list_run_jobs(%L)', tests.id('run')), '42501', 'browser roles cannot list jobs');
+
+-- ── DB-15: finishable runs ──────────────────────────────────────────────────
+select tests.as_service();
+-- the run has a reaped (failed) job, so it is nominated even though other jobs are still pending
+select tests.ok(public.list_finishable_runs(20) ? tests.id('run')::text, 'a run with a failed job is nominated');
+select tests.throws('select public.list_finishable_runs(0)', 'BTVF0', 'limit is validated');
+select tests.as_reader('ann');
+select tests.throws('select public.list_finishable_runs(20)', '42501', 'browser roles cannot list runs');

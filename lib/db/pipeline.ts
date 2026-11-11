@@ -407,6 +407,11 @@ export async function listRunJobs(adminDb: DbClient, runId: string): Promise<{ r
   return data as { runStatus: string; jobs: RunJobState[] };
 }
 
+/** DB-15: active runs that may need finishing (all jobs terminal, or some job failed). The caller decides. */
+export async function listFinishableRuns(adminDb: DbClient, limit = 20): Promise<string[]> {
+  return ((await callRpc(adminDb, "list_finishable_runs", { p_limit: limit })) ?? []) as string[];
+}
+
 /** DB-10: §10.10 review order, only inside the given active run. Returns the number of points updated. */
 export async function setPointSortKeys(
   adminDb: DbClient,
