@@ -85,15 +85,23 @@ export function collectStrings(value: unknown, path = "$", out: Array<{ path: st
   return out;
 }
 
+/** A string that is exactly a UUID (ids are random and can contain digit groups that look like card numbers). */
+export const UUID_EXACT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
 export function findLeaks(value: unknown, literals: readonly string[] = ALL_LITERALS): Leak[] {
   const leaks: Leak[] = [];
   for (const { path, text } of collectStrings(value)) {
+    if (UUID_EXACT.test(text)) continue; // an id, never content
     const lower = text.toLowerCase();
     for (const lit of literals) {
       if (lower.includes(lit.toLowerCase())) leaks.push({ path, kind: `literal`, match: lit });
     }
+    // the generic (digit) detectors run on UUID-free text, so an embedded id can never trigger them; the UUID
+    // becomes a space so digits on either side are not joined into one run
+    const scrubbed = text.replace(UUID_ANYWHERE, " ");
     for (const { name, re } of PII_PATTERNS) {
-      const m = re.exec(text);
+      const m = re.exec(scrubbed);
       if (m) leaks.push({ path, kind: name, match: m[0].slice(0, 40) });
     }
   }

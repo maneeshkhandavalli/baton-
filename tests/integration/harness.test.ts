@@ -1,6 +1,7 @@
 // Self-tests of the integration harness: the scanner is not vacuous, the Recording* fakes behave like the
 // boundaries they replace, and the platform stubs mint actors only through lib/db/actor's real code.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, it } from "node:test";
 
@@ -44,6 +45,26 @@ describe("sentinel scanner", () => {
       },
       "masked sample",
     );
+  });
+
+  it("regression: random UUIDs never look like PII, alone, as keys or embedded in text", () => {
+    const ids = Array.from({ length: 500 }, () => randomUUID());
+    const sample = {
+      values: ids,
+      keyed: Object.fromEntries(ids.slice(0, 100).map((id) => [id, id])),
+      embedded: ids.map((id, i) => `point ${id} evidence ${ids[(i + 1) % ids.length]} done`),
+      args: ids.slice(0, 100).map((id) => ({ p_handover_id: id, p_actor_profile_id: id.toUpperCase() })),
+    };
+    assert.deepEqual(findLeaks(sample, []), [], "no generic detector fires on ids");
+    // the failing case from the lead's run: Luhn-valid digit groups carved out of an id
+    assert.deepEqual(findLeaks({ p_handover_id: "0b6a1c1e-9428-4369-8931-0038726abcde" }, []), []);
+  });
+
+  it("control: real card numbers and phones are still caught, also next to an id", () => {
+    const id = randomUUID();
+    for (const text of [PLANTED.card, `${id} card ${PLANTED.card}`, `card ${PLANTED.card} for ${id}`, `${id} ${PLANTED.phone}`]) {
+      assert.ok(findLeaks(text, []).length > 0, `not caught: ${text}`);
+    }
   });
 
   it("walks keys, arrays and bytes", () => {
