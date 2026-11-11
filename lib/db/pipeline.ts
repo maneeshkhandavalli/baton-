@@ -32,6 +32,7 @@ export interface ClaimedJob {
   max_attempts: number;
 }
 
+/** @deprecated QA-N1: the SQL function is no longer executable by service_role; use claimReadyJobs. */
 export async function claimJobs(adminDb: DbClient, limit = 5, leaseSeconds = 300): Promise<ClaimedJob[]> {
   return ((await callRpc(adminDb, "claim_processing_jobs", { p_limit: limit, p_lease_seconds: leaseSeconds })) ?? []) as ClaimedJob[];
 }
@@ -40,7 +41,7 @@ export async function claimJobs(adminDb: DbClient, limit = 5, leaseSeconds = 300
 export const setJobProvenance = async (adminDb: DbClient, jobId: string, provenance: Record<string, unknown>) =>
   void (await callRpc(adminDb, "set_job_provenance", { p_job_id: jobId, p_provenance: provenance }));
 
-/** `attempt` is a non-sensitive AiAttemptRecord; `errorMessage` must be structural, never content (§12.7). */
+/** @deprecated QA-N1: no longer executable; use completeJob (fenced). `attempt` is a non-sensitive AiAttemptRecord; `errorMessage` must be structural, never content (§12.7). */
 export const recordJobAttempt = async (
   adminDb: DbClient,
   input: {

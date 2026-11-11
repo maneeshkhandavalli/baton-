@@ -9,7 +9,7 @@ const BODY = "Asha said: “We decided to move the meeting to Friday — final a
 
 describe("normalizeForQuoteMatch (§10.7.1)", () => {
   it("maps curly quotes and dashes to ASCII, collapses whitespace, trims, preserves case", () => {
-    assert.equal(normalizeForQuoteMatch("  “Hello” —\n\t‘World’  "), "\"Hello\" - 'World'");
+    assert.equal(normalizeForQuoteMatch("  “Hello”\u00A0—\n\t‘World’  "), "\"Hello\" - 'World'");
     assert.equal(normalizeForQuoteMatch("CASE Stays"), "CASE Stays");
     for (const dash of ["‐", "‑", "‒", "–", "—", "―", "−", "﹘", "﹣", "－"]) {
       assert.equal(normalizeForQuoteMatch(`a${dash}b`), "a-b");
@@ -17,23 +17,23 @@ describe("normalizeForQuoteMatch (§10.7.1)", () => {
   });
 
   it("applies NFC", () => {
-    assert.equal(normalizeForQuoteMatch("café"), "café");
+    assert.equal(normalizeForQuoteMatch("cafe\u0301"), "café");
   });
 
   it("strips zero-width and bidi format characters but keeps ZWJ and ZWNJ (I1.8)", () => {
-    assert.equal(normalizeForQuoteMatch("pa​ss‎w‏o‪r‬d⁦x⁩﻿­"), "passwordx");
-    assert.equal(normalizeForQuoteMatch("क्‍ष"), "क्‍ष");
-    assert.equal(normalizeForQuoteMatch("a‌b"), "a‌b");
+    assert.equal(normalizeForQuoteMatch("pa\u200Bss\u200Ew\u200Fo\u202Ar\u202Cd\u2066x\u2069\uFEFF\u00AD"), "passwordx");
+    assert.equal(normalizeForQuoteMatch("क\u094D\u200Dष"), "क\u094D\u200Dष");
+    assert.equal(normalizeForQuoteMatch("a\u200Cb"), "a\u200Cb");
     // A format character between a base and its combining mark does not block composition.
-    assert.equal(normalizeForQuoteMatch("e‎́"), "é");
+    assert.equal(normalizeForQuoteMatch("e\u200E\u0301"), "é");
   });
 
   it("collapses whitespace runs that were separated only by format characters", () => {
-    assert.equal(normalizeForQuoteMatch("a ​ b"), "a b");
+    assert.equal(normalizeForQuoteMatch("a \u200B b"), "a b");
   });
 
   it("is idempotent", () => {
-    for (const s of [BODY, "  x—y  ", "café ​ “q”", "🏴‍☠️ flag  test"]) {
+    for (const s of [BODY, "  x—y  ", "cafe\u0301 \u200B “q”", "🏴\u200D☠\uFE0F flag  test"]) {
       const once = normalizeForQuoteMatch(s);
       assert.equal(normalizeForQuoteMatch(once), once);
     }
@@ -98,17 +98,17 @@ describe("checkQuote (§10.7.2–3)", () => {
   });
 
   it("matches across line breaks, NBSP and zero-width characters", () => {
-    const body = "Treasurer:\n  hands over the​ keys\n\nto Ravi on Monday";
+    const body = "Treasurer:\n  hands over\u00A0the\u200B keys\n\nto Ravi on Monday";
     const r = checkQuote(body, "hands over the keys to Ravi");
     assert.equal(r.check, "normalized");
-    assert.equal(body.slice(r.start!, r.end!), "hands over the​ keys\n\nto Ravi");
+    assert.equal(body.slice(r.start!, r.end!), "hands over\u00A0the\u200B keys\n\nto Ravi");
   });
 
   it("matches decomposed body text against a composed quote", () => {
-    const body = "The café booking is confirmed for Sunday";
+    const body = "The cafe\u0301 booking is confirmed for Sunday";
     const r = checkQuote(body, "The café booking is confirmed");
     assert.equal(r.check, "normalized");
-    assert.equal(body.slice(r.start!, r.end!), "The café booking is confirmed");
+    assert.equal(body.slice(r.start!, r.end!), "The cafe\u0301 booking is confirmed");
   });
 
   it("is case-sensitive", () => {
@@ -131,17 +131,17 @@ describe("checkQuote (§10.7.2–3)", () => {
 
   it("never splits a grapheme cluster", () => {
     // Body has e + combining acute; a quote ending in a bare "e" must not match inside it.
-    const body = "Reserve the café for tomorrow";
+    const body = "Reserve the cafe\u0301 for tomorrow";
     assert.equal(checkQuote(body, "Reserve the cafe").check, "not_found");
     // Emoji with ZWJ sequence: the quote cannot end in the middle of it.
-    const emoji = "Team lunch is on us 👩‍👩‍👧 yes";
+    const emoji = "Team lunch is on us 👩\u200D👩\u200D👧 yes";
     assert.equal(checkQuote(emoji, "Team lunch is on us 👩").check, "not_found");
-    assert.equal(checkQuote(emoji, "Team lunch is on us 👩‍👩‍👧").check, "exact");
+    assert.equal(checkQuote(emoji, "Team lunch is on us 👩\u200D👩\u200D👧").check, "exact");
   });
 
   it("handles Devanagari and astral characters with UTF-16 offsets", () => {
-    const body = "📌 नोट: हॉल की चाबी रवि के पास है।";
-    const quote = "हॉल की चाबी रवि के पास";
+    const body = "📌 नोट: हॉल की चाबी रवि क\u0947 पास ह\u0948।";
+    const quote = "हॉल की चाबी रवि क\u0947 पास";
     const r = checkQuote(body, quote);
     assert.equal(r.check, "exact");
     assert.equal(r.start, body.indexOf(quote));
@@ -160,7 +160,7 @@ describe("checkQuote (§10.7.2–3)", () => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
       return seed / 0x7fffffff;
     };
-    const alphabet = ["a", "b", "c", "x", "y", " ", "  ", "\n", " ", "​", "‎", "—", "–", "“", "”", "‘", "’", "é", "é", "क्ष", "😀", "[PHONE_1]", "‍", "."];
+    const alphabet = ["a", "b", "c", "x", "y", " ", "  ", "\n", "\u00A0", "\u200B", "\u200E", "—", "–", "“", "”", "‘", "’", "e\u0301", "é", "क\u094Dष", "😀", "[PHONE_1]", "\u200D", "."];
     let matched = 0;
     for (let n = 0; n < 400; n++) {
       let body = "";

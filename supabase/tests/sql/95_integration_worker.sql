@@ -228,3 +228,13 @@ select tests.ok(public.list_finishable_runs(20) ? tests.id('run')::text, 'a run 
 select tests.throws('select public.list_finishable_runs(0)', 'BTVF0', 'limit is validated');
 select tests.as_reader('ann');
 select tests.throws('select public.list_finishable_runs(20)', '42501', 'browser roles cannot list runs');
+
+-- ── QA-N1 / QA-L8 hardening ─────────────────────────────────────────────────
+select tests.as_service();
+select tests.throws('select * from public.claim_processing_jobs(5, 300)', '42501', 'the legacy claim is not executable');
+select tests.throws(format('select public.record_job_attempt(%L, %L)', tests.id('analyze'), 'succeeded'), '42501',
+                    'the unfenced legacy completion is not executable');
+select tests.throws(format('select public.finish_processing_run(%L, %L, %L, %L)', tests.id('run'), 'failed', 'processing_failed',
+                           'OpenAI said: user Alice +91 98765 43210'), 'BTVF0', 'run error messages are reason tokens only');
+select tests.throws(format('select public.finish_processing_run(%L, %L, %L)', tests.id('run'), 'failed', 'kaboom'), 'BTVF0',
+                    'run error codes are ERROR_CODES only');

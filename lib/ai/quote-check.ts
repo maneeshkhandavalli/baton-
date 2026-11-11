@@ -41,8 +41,8 @@ export const MASK_TOKEN_PATTERN = new RegExp(
 const NOT_FOUND: QuoteCheckResult = { check: "not_found", start: null, end: null };
 
 const FORMAT_CHAR = /^\p{Cf}$/u;
-const ZWNJ = "‌";
-const ZWJ = "‍";
+const ZWNJ = "\u200C";
+const ZWJ = "\u200D";
 const WHITESPACE = /^\s$/u;
 
 const CHAR_MAP: Record<string, string> = {

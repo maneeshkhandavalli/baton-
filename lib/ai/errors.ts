@@ -19,6 +19,7 @@ export const AI_ERROR_REASONS = {
   timedOut: "ai_timed_out",
   aborted: "ai_aborted",
   requestTooLarge: "ai_request_too_large",
+  requestInvalid: "ai_request_invalid",
 } as const;
 export type AiErrorReason = (typeof AI_ERROR_REASONS)[keyof typeof AI_ERROR_REASONS];
 
@@ -75,6 +76,7 @@ const DEFAULT_MESSAGES: Record<AiErrorReason, string> = {
   ai_timed_out: "The AI request timed out.",
   ai_aborted: "The AI request was cancelled.",
   ai_request_too_large: "The AI request was larger than allowed.",
+  ai_request_invalid: "The AI request was not valid.",
 };
 
 /** `precondition_failed`, `details.reason = "provider_not_configured"`, never retryable (D11). */
