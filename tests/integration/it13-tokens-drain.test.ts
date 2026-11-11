@@ -214,7 +214,7 @@ describe("IT-13 / QA-M9: POST /api/pipeline/drain", () => {
     const w = actionWorld(false);
     if (secret === null) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = secret;
-    w.adminDb.returns("claim_ready_processing_jobs", []);
+    w.adminDb.returns("claim_ready_processing_jobs", []).returns("list_finishable_runs", []); // DB-15 read
     return w;
   }
 
@@ -253,7 +253,7 @@ describe("IT-13 / QA-M9: POST /api/pipeline/drain", () => {
     const body = (await response.json()) as Record<string, unknown>;
     assert.ok(Object.values(body).every((v) => typeof v === "number"), JSON.stringify(body));
     assert.equal(body.claimed, 0);
-    assert.deepEqual(w.adminDb.fns(), ["claim_ready_processing_jobs"]);
+    assert.deepEqual(w.adminDb.fns(), ["list_finishable_runs", "claim_ready_processing_jobs"]);
     assert.equal(w.adminDb.last("claim_ready_processing_jobs")?.args.p_limit, 1, "the caller cannot raise the budget");
   });
 
