@@ -1,0 +1,6 @@
+Plain text notes, first paragraph.
+Still the first paragraph.
+
+Second paragraph with a contact: notes.owner@example.com
+
+# Not a heading in plain text mode
