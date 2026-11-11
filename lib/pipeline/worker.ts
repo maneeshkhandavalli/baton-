@@ -2,7 +2,9 @@ import "server-only";
 
 import { after } from "next/server";
 
+import { getAiProviderForRun } from "../ai/config";
 import { serverDb, serverStorage } from "../db";
+import { notWiredAi, type PipelineAi } from "./ai";
 import { createConsoleLogger } from "./log";
 import { getVerifiedPepper } from "./pepper";
 import { createDrainer, type DrainOptions, type DrainReport } from "./runner";
@@ -23,8 +25,19 @@ export function drainJobs(opts?: DrainOptions): Promise<DrainReport> {
     storage: serverStorage(),
     logger: createConsoleLogger(),
     getPepper: getVerifiedPepper,
+    ai: PIPELINE_AI,
   })(opts);
 }
+
+/**
+ * lib/ai bound for the worker. `extractCandidates` / `verifySupport` (A2) are not merged yet: until they
+ * are, those stages fail the run with `stage_not_wired` instead of pretending to have run.
+ */
+const PIPELINE_AI: PipelineAi = {
+  providerForRun: (runConfig) => getAiProviderForRun(runConfig),
+  extractCandidates: notWiredAi,
+  verifySupport: notWiredAi,
+};
 
 /**
  * I2: fire-and-forget drain after the response (`after()`, next/server). Never awaited by actions and never

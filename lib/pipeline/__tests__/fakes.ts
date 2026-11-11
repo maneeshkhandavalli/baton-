@@ -1,9 +1,80 @@
 // Test doubles for the pipeline: a scripted fake DbClient, a fake storage client and synthetic job
 // contexts. Synthetic data only.
 
+import type { AiAttemptRecord, AiProvenance, AiProvider, AiResult, AiRunConfig, ExtractRequest, VerifySupportRequest } from "../../ai/provider";
+import { createFakeProvider, fakeRunConfig } from "../../ai/providers/fake";
+import type { Result } from "../../contracts/api";
 import type { DbClient } from "../../db/client";
 import type { JobContext, RunJobState } from "../../db/pipeline";
 import type { StorageClient } from "../../db/storage";
+import type { ExtractOutcome, PipelineAi, SupportOutcome } from "../ai";
+
+export const RUN_CONFIG: AiRunConfig = fakeRunConfig();
+
+export function attemptRecord(attempt = 1): AiAttemptRecord {
+  return {
+    attempt,
+    startedAt: "2026-11-12T00:00:00.000Z",
+    finishedAt: "2026-11-12T00:00:01.000Z",
+    outcome: "succeeded",
+    errorCode: null,
+    providerErrorType: null,
+    httpStatus: null,
+    providerRequestId: null,
+    reportedModel: "fake-model",
+    latencyMs: 1,
+    inputTokens: null,
+    outputTokens: null,
+  };
+}
+
+export function provenance(stage: "extract" | "verify"): AiProvenance {
+  return {
+    provider: RUN_CONFIG.provider,
+    adapterVersion: RUN_CONFIG.adapterVersion,
+    requestedModel: RUN_CONFIG[stage].model,
+    model: RUN_CONFIG[stage].model,
+    promptVersion: RUN_CONFIG[stage].promptVersion,
+    schemaVersion: RUN_CONFIG[stage].schemaVersion,
+  };
+}
+
+/**
+ * A stand-in for lib/ai's extractCandidates / verifySupport (A2 is not merged yet). The provider itself is
+ * the real fake adapter; only the two A2 functions are scripted, per the amended I1 signatures.
+ */
+export function fakeAi(script: {
+  provider?: Result<AiProvider>;
+  extract?: (req: ExtractRequest, call: number) => AiResult<ExtractOutcome>;
+  verify?: (req: VerifySupportRequest, call: number) => AiResult<SupportOutcome>;
+} = {}) {
+  const calls = { providerForRun: [] as AiRunConfig[], extract: [] as ExtractRequest[], verify: [] as VerifySupportRequest[] };
+  const ai: PipelineAi = {
+    providerForRun: (rc) => {
+      calls.providerForRun.push(rc);
+      return script.provider ?? { ok: true, data: createFakeProvider() };
+    },
+    extractCandidates: async (_p, req) => {
+      calls.extract.push(req);
+      return (
+        script.extract?.(req, calls.extract.length - 1) ?? {
+          ok: true,
+          data: { candidates: [], dropped: {}, provenance: provenance("extract"), attempt: attemptRecord() },
+        }
+      );
+    },
+    verifySupport: async (_p, req) => {
+      calls.verify.push(req);
+      return (
+        script.verify?.(req, calls.verify.length - 1) ?? {
+          ok: true,
+          data: { verdict: "supports", rationale: null, provenance: provenance("verify"), attempt: attemptRecord() },
+        }
+      );
+    },
+  };
+  return { ai, calls };
+}
 
 export const IDS = {
   handover: "5a2b3c4d-6e7f-4a81-9b2c-3d4e5f6a7b8c",
@@ -99,8 +170,8 @@ export function jobContext(
     run: {
       status: overrides.runStatus ?? "running",
       pipelineVersion: "pipeline@1",
-      aiProvider: "fake",
-      aiConfig: {},
+      aiProvider: RUN_CONFIG.provider,
+      aiConfig: { ...RUN_CONFIG },
       sourceIds: [IDS.source],
     },
     handover: { state: "processing", teamName: "Synthetic Robotics Club", roleTitle: null, deleted: overrides.handoverDeleted ?? false },

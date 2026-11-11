@@ -8,7 +8,7 @@ import { createMemoryLogger } from "../log";
 import { runAnalyze, uncoveredChecklistItems } from "../stages/analyze";
 import { pointsNeedingQuestions, questionForPoint, reviewOrder, runPrepareReview } from "../stages/prepare-review";
 import type { StageContext } from "../stage-context";
-import { claimed, fakeDb, fakeStorage, IDS, jobContext, rpcError } from "./fakes";
+import { claimed, fakeAi, fakeDb, fakeStorage, IDS, jobContext, rpcError } from "./fakes";
 
 function point(over: Partial<PipelinePoint>): PipelinePoint {
   return {
@@ -43,6 +43,7 @@ function stageCtx(stage: "analyze" | "prepare_review", db: ReturnType<typeof fak
     deadlineAt: Number.POSITIVE_INFINITY,
     getPepper: () => ({ ok: false, error: { code: "processing_failed", message: "x", retryable: true } }),
     heartbeat: async () => {},
+    ai: fakeAi().ai,
   };
 }
 
