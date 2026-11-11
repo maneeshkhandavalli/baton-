@@ -70,6 +70,7 @@ describe("Tier E: upload → process → review → publish on real Postgres", {
   let handoverId = "";
   let sourceId = "";
   let runId = "";
+  const backoffs: unknown[] = [];
 
   const as = (name: string) => signInAs(users[name], `${name}@example.test`);
 
@@ -110,7 +111,7 @@ describe("Tier E: upload → process → review → publish on real Postgres", {
     assertNoLeaks(source.title, "the masked file name is the source title");
   });
 
-  it("2. starts processing and drains until the run finishes", async () => {
+  it("2. starts processing and drains until the run finishes", async (t) => {
     as("ann");
     runId = ok(await startProcessing({ handoverId }), "startProcessing").runId;
     const drain = createDrainer({
@@ -135,11 +136,25 @@ describe("Tier E: upload → process → review → publish on real Postgres", {
       const { result: report, lines } = await captureConsole(() => drain({ maxJobs: 25, deadlineMs: 120_000 }));
       logs.push(...lines);
       status = (await pg.json<string>(`select to_jsonb(status) from public.processing_runs where id = ${lit(runId)}`))!;
+      t.diagnostic(`pass ${i}: ${JSON.stringify(report)} → run ${status}`);
       if (report.claimed === 0 && (status === "queued" || status === "running")) {
-        // waiting for a backoff: make due jobs claimable now (test clock), never skip a stage
-        await pg.json(`update public.processing_jobs set next_attempt_at = now() where run_id = ${lit(runId)} and status = 'queued' returning null`);
+        // On the happy path nothing may wait for a retry backoff; record what is waiting and stop.
+        const waiting = await pg.json(`select jsonb_agg(jsonb_build_object('stage', stage, 'attempt', attempt, 'code', error_code,
+            'message', error_message, 'dueInS', round(extract(epoch from next_attempt_at - now())))) from public.processing_jobs
+           where run_id = ${lit(runId)} and status = 'queued'`);
+        backoffs.push(waiting);
+        break;
       }
     }
+    const history = await pg.json<Array<{ stage: string; attempt: number; outcomes: string[]; code: string | null; message: string | null }>>(`
+      select jsonb_agg(jsonb_build_object('stage', stage, 'source', source_id is not null, 'status', status, 'attempt', attempt,
+               'outcomes', (select coalesce(jsonb_agg(e ->> 'outcome'), '[]'::jsonb) from jsonb_array_elements(attempt_log) e),
+               'code', error_code, 'message', error_message) order by created_at, id)
+        from public.processing_jobs where run_id = ${lit(runId)}`);
+    t.diagnostic(`jobs: ${JSON.stringify(history)}`);
+    assert.deepEqual(backoffs, [], "no job waited for a retry backoff");
+    assert.ok(history.every((j) => j.attempt === 1 && j.code === null && j.message === null && j.outcomes.every((o) => o === "succeeded")),
+      "happy path: every job succeeded on its first attempt, with no retry, yield or error");
     const jobs = await pg.json(`select jsonb_agg(jsonb_build_object('stage', stage, 'status', status, 'err', error_message) order by created_at)
                                 from public.processing_jobs where run_id = ${lit(runId)}`);
     assert.equal(status, "succeeded", `run status ${status}; jobs ${JSON.stringify(jobs)}`);
