@@ -1,10 +1,27 @@
 // Test doubles for lib/actions/core (no database, no Next.js). Synthetic data only.
 import type { Result } from "../../contracts/api";
+import type { PreviewSourceFn, PreviewSourceInput } from "../../contracts/parser";
 import type { BatonQueries } from "../../contracts/queries";
 import type { VerifiedActor } from "../../db/actor-rules";
 import type { DbClient } from "../../db/client";
 import type { StorageClient } from "../../db/storage";
+import type { AiRunConfig, PlanInput, ProcessingPlan } from "../../pipeline/plan";
 import type { ActionDeps } from "../core/types";
+
+/** Synthetic, not a secret: never valid anywhere (no canary matches it). */
+export const TEST_PEPPER = "synthetic-test-pepper-not-a-secret-0123456789";
+
+export const PROVIDER_NOT_CONFIGURED: Result<never> = {
+  ok: false,
+  error: { code: "precondition_failed", message: "This can't be done yet.", retryable: false, details: { reason: "provider_not_configured" } },
+};
+
+export const FAKE_RUN_CONFIG: AiRunConfig = {
+  provider: "fake",
+  adapterVersion: "fake@1",
+  extract: { model: "fake-extract", promptVersion: "p1", schemaVersion: "s1" },
+  verify: { model: "fake-verify", promptVersion: "p1", schemaVersion: "s1" },
+};
 
 export const H = "11111111-1111-4111-8111-111111111111";
 export const P = "22222222-2222-4222-8222-222222222222";
@@ -58,7 +75,11 @@ export interface FakeOptions {
   rpc?: Record<string, RpcHandler>;
   queries?: Partial<Record<keyof BatonQueries, (...args: unknown[]) => Promise<Result<unknown>>>>;
   siteOrigin?: () => string;
-  consentProvider?: () => Result<string>;
+  aiRunConfig?: () => Result<AiRunConfig>;
+  verifiedPepper?: () => Result<{ pepper: string; version: "p1" }>;
+  previewParser?: PreviewSourceFn;
+  planProcessingRun?: (input: PlanInput) => Result<ProcessingPlan>;
+  scheduleDrainThrows?: boolean;
   storage?: { download?: Blob | null; removeError?: boolean };
   clientIp?: string | null;
 }
@@ -67,12 +88,17 @@ export function fakeDeps(options: FakeOptions = {}) {
   const calls: Call[] = [];
   const queryCalls: Array<{ name: string; args: unknown[] }> = [];
   const storageCalls: StorageCall[] = [];
+  const parserInputs: PreviewSourceInput[] = [];
+  const planInputs: PlanInput[] = [];
+  /** RPC names and "scheduleDrain", in call order. */
+  const events: string[] = [];
   let actorLookups = 0;
   let refreshes = 0;
 
   const client = (kind: "admin" | "user"): DbClient => ({
     rpc: async (fn, args) => {
       calls.push({ fn, args, client: kind });
+      events.push(fn);
       const handler = options.rpc?.[fn];
       const r = typeof handler === "function" ? handler(args) : (handler ?? { data: null });
       return { data: r.data ?? null, error: r.error ?? null };
@@ -121,9 +147,22 @@ export function fakeDeps(options: FakeOptions = {}) {
     adminStorage: () => storage,
     clientIp: async () => (options.clientIp === undefined ? "203.0.113.7" : options.clientIp),
     siteOrigin: options.siteOrigin ?? (() => ORIGIN),
-    consentProvider:
-      options.consentProvider ??
-      (() => ({ ok: false, error: { code: "precondition_failed", message: "x", retryable: false, details: { reason: "provider_not_configured" } } })),
+    aiRunConfig: options.aiRunConfig ?? (() => PROVIDER_NOT_CONFIGURED),
+    verifiedPepper: options.verifiedPepper ?? (() => ({ ok: true, data: { pepper: TEST_PEPPER, version: "p1" } })),
+    previewParser: async (input) => {
+      parserInputs.push(input);
+      if (options.previewParser) return options.previewParser(input);
+      throw new Error("previewParser not expected in this test");
+    },
+    planProcessingRun: (input) => {
+      planInputs.push(input);
+      if (options.planProcessingRun) return options.planProcessingRun(input);
+      throw new Error("planProcessingRun not expected in this test");
+    },
+    scheduleDrain: () => {
+      events.push("scheduleDrain");
+      if (options.scheduleDrainThrows) throw new Error("outside a request");
+    },
     revalidate: () => {
       refreshes++;
     },
@@ -134,6 +173,9 @@ export function fakeDeps(options: FakeOptions = {}) {
     calls,
     queryCalls,
     storageCalls,
+    parserInputs,
+    planInputs,
+    events,
     get actorLookups() {
       return actorLookups;
     },

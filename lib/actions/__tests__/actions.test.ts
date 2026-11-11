@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 
 import type { Result } from "../../contracts/api";
 import type { HandoverSummary, PointDetail } from "../../contracts/dto";
+import type { SourcePreview } from "../../contracts/parser";
 import * as account from "../core/account";
 import * as gaps from "../core/gaps";
 import * as handovers from "../core/handovers";
@@ -15,6 +16,7 @@ import * as review from "../core/review";
 import * as sources from "../core/sources";
 import {
   ACTOR_ID,
+  FAKE_RUN_CONFIG,
   H,
   NEW_ID,
   ORIGIN,
@@ -23,6 +25,7 @@ import {
   S,
   SYNTHETIC_EMAIL,
   SYNTHETIC_PHONE,
+  TEST_PEPPER,
   allStrings,
   fakeDeps,
 } from "./helpers";
@@ -428,7 +431,7 @@ describe("sources", () => {
 
   it("recordSourceConsent records the server's provider, never one from the input, then re-reads the source", async () => {
     const f = fakeDeps({
-      consentProvider: () => ({ ok: true, data: "fake" }),
+      aiRunConfig: () => ({ ok: true, data: FAKE_RUN_CONFIG }),
       rpc: { api_get_source: { data: { id: S } } },
     });
     await sources.recordSourceConsent(f.deps, {
@@ -468,16 +471,233 @@ describe("sources", () => {
     assert.deepEqual(failing.fns(), ["remove_source"], "raw path stays set for the retention sweep");
   });
 
-  it("previewSource and startProcessing fail closed until B3 wires lib/ai and lib/pipeline", async () => {
-    const f = fakeDeps();
-    const p = await sources.previewSource(f.deps, { sourceId: S });
-    const s = await handovers.startProcessing(f.deps, { handoverId: H });
-    assert.equal(!p.ok && p.error.code, "precondition_failed");
-    assert.equal(!s.ok && s.error.code, "precondition_failed");
-    assert.deepEqual(f.calls, []);
+});
+
+// ── B3 ───────────────────────────────────────────────────────────────────────
+
+const RAW_BYTES = new TextEncoder().encode("synthetic chat export");
+const RAW_SHA = createHash("sha256").update(RAW_BYTES).digest("hex");
+const PREVIEW_TARGET = {
+  handover_id: H,
+  raw_storage_path: `raw/${H}/${S}`,
+  size_bytes: RAW_BYTES.byteLength,
+  sha256: RAW_SHA,
+  kind: "whatsapp_export",
+  timezone: "Asia/Kolkata",
+  date_order: "dmy",
+  original_filename: "chat.txt",
+};
+const RULES = [
+  { kind: "participant", ruleId: P, identityKind: "phone", participantIdentityHash: "c".repeat(64), identityPepperVersion: "p1", mode: "apply" },
+];
+const PREVIEW = {
+  kind: "whatsapp_export",
+  parserVersion: "1.0.0",
+  parseContext: { timezone: "Asia/Kolkata", dateOrder: "dmy", parserVersion: "1.0.0" },
+  participants: [{ localId: "p_1", displayLabel: "Participant 1", identityKind: "phone", identityHash: "d".repeat(64), identityPepperVersion: "p1", messageCount: 2 }],
+  conversations: [],
+  masking: { counts: {} },
+  stats: { totalLines: 3, messagesKept: 2, messagesExcluded: 1, systemMessages: 0, mediaOmitted: 0 },
+  identityMatches: [],
+  firstMessageAt: null,
+  lastMessageAt: null,
+  warnings: [],
+} as unknown as SourcePreview;
+
+const previewDeps = (overrides: Parameters<typeof fakeDeps>[0] = {}) =>
+  fakeDeps({
+    storage: { download: new Blob([RAW_BYTES]) },
+    rpc: { source_preview_target: { data: PREVIEW_TARGET }, parse_exclusion_rules: { data: RULES } },
+    previewParser: async () => ({ ok: true, data: PREVIEW }),
+    ...overrides,
+  });
+
+describe("previewSource (§10.3 step 1, D14, D33)", () => {
+  it("checks the actor's raw access first, then reads the rules, and parses with the same rules", async () => {
+    const f = previewDeps();
+    const r = await sources.previewSource(f.deps, { sourceId: S });
+    assert.deepEqual(r, { ok: true, data: PREVIEW }, "the contract shape, hashes included (Q1 open)");
+    assert.deepEqual(f.fns(), ["source_preview_target", "parse_exclusion_rules"]);
+    assert.equal(f.calls[0].args?.p_actor_profile_id, ACTOR_ID);
+    assert.deepEqual(f.parserInputs.length, 1);
+    const input = f.parserInputs[0];
+    assert.deepEqual(input.exclusions, RULES);
+    assert.equal(input.identityPepper, TEST_PEPPER);
+    assert.equal(input.kind, "whatsapp_export");
+    assert.equal(input.fileName, "chat.txt");
+    assert.equal(input.timezone, "Asia/Kolkata");
+    assert.equal(input.dateOrder, "dmy");
+    assert.deepEqual([...input.bytes], [...RAW_BYTES]);
+    assert.equal(f.refreshes, 0, "a read-only preview does not refresh");
+  });
+
+  it("never changes state: no mark_source_parse_failed and no storage remove, even on an integrity mismatch", async () => {
+    const ok1 = previewDeps();
+    await sources.previewSource(ok1.deps, { sourceId: S });
+    const tampered = previewDeps({ storage: { download: new Blob([new TextEncoder().encode("different bytes")]) } });
+    const r = await sources.previewSource(tampered.deps, { sourceId: S });
+    assert.equal(!r.ok && r.error.code, "precondition_failed");
+    for (const f of [ok1, tampered]) {
+      assert.ok(!f.fns().includes("mark_source_parse_failed"));
+      assert.ok(!f.fns().includes("mark_source_raw_deleted"));
+      assert.ok(!f.storageCalls.some((c) => c.op === "remove"));
+    }
+    assert.deepEqual(tampered.fns(), ["source_preview_target"], "rules are not read after a failed raw load");
+    assert.deepEqual(tampered.parserInputs, []);
+  });
+
+  it("a source the actor may not manage is refused before the rules are read", async () => {
+    const f = previewDeps({ rpc: { source_preview_target: { error: { code: "BTFB0", message: "x" } } } });
+    const r = await sources.previewSource(f.deps, { sourceId: S });
+    assert.equal(!r.ok && r.error.code, "forbidden");
+    assert.deepEqual(f.fns(), ["source_preview_target"]);
     assert.deepEqual(f.storageCalls, []);
-    const anon = fakeDeps({ actor: null });
+  });
+
+  it("a missing or unverified pepper fails closed with its error and never parses", async () => {
+    const f = previewDeps({
+      verifiedPepper: () => ({
+        ok: false,
+        error: { code: "processing_failed", message: "Processing failed. Please try again.", retryable: true, details: { reason: "identity_pepper_unverified" } },
+      }),
+    });
+    const r = await sources.previewSource(f.deps, { sourceId: S });
+    assert.equal(!r.ok && r.error.code, "processing_failed");
+    assert.equal(!r.ok && r.error.details?.reason, "identity_pepper_unverified");
+    assert.deepEqual(f.parserInputs, []);
+  });
+
+  it("maps a ParserFailure to its typed code with structural details only", async () => {
+    const f = previewDeps({
+      previewParser: async () => ({
+        ok: false,
+        error: {
+          code: "precondition_failed",
+          message: "parser message",
+          retryable: false,
+          details: { inputCode: "exclusion_context_mismatch", field: "exclusions[0]", ruleId: P, value: "+91 99999 00001" },
+        } as never,
+      }),
+    });
+    const r = await sources.previewSource(f.deps, { sourceId: S });
+    assert.ok(!r.ok);
+    assert.equal(r.error.code, "precondition_failed");
+    assert.deepEqual(r.error.details, { inputCode: "exclusion_context_mismatch", field: "exclusions[0]", ruleId: P });
+    assert.notEqual(r.error.message, "parser message");
+
+    const g = previewDeps({
+      previewParser: async () => ({
+        ok: false,
+        error: { code: "parse_failed", message: "m", retryable: false, details: { parserCode: "date_format_ambiguous", line: 4 } },
+      }),
+    });
+    const r2 = await sources.previewSource(g.deps, { sourceId: S });
+    assert.ok(!r2.ok);
+    assert.deepEqual([r2.error.code, r2.error.details], ["parse_failed", { parserCode: "date_format_ambiguous", line: 4 }]);
+  });
+
+  it("validation and the session come first", async () => {
+    const bad = previewDeps();
+    assert.equal((await sources.previewSource(bad.deps, { sourceId: "x" }) as { error: { code: string } }).error.code, "validation_failed");
+    const anon = previewDeps({ actor: null });
     assert.equal((await sources.previewSource(anon.deps, { sourceId: S }) as { error: { code: string } }).error.code, "unauthenticated");
+    assert.deepEqual([...bad.calls, ...anon.calls], []);
+  });
+});
+
+describe("startProcessing (I3)", () => {
+  const SOURCES = [
+    { id: S, state: "uploaded", rawDeletedAt: null },
+    { id: P, state: "parsed", rawDeletedAt: "2026-11-10T00:00:00.000Z" },
+  ];
+  const JOBS = [
+    { stage: "parse", sourceId: S, inputHashHex: "1".repeat(64) },
+    { stage: "extract", sourceId: S, inputHashHex: "2".repeat(64) },
+    { stage: "verify_support", sourceId: null, inputHashHex: "3".repeat(64) },
+  ] as const;
+
+  const startDeps = (overrides: Parameters<typeof fakeDeps>[0] = {}) =>
+    fakeDeps({
+      queries: { listSources: okResult(SOURCES) },
+      aiRunConfig: () => ({ ok: true, data: FAKE_RUN_CONFIG }),
+      planProcessingRun: (input) => ({ ok: true, data: { pipelineVersion: "pipeline@1", aiConfig: input.aiConfig, jobs: [...JOBS] } }),
+      rpc: { start_processing: { data: NEW_ID } },
+      ...overrides,
+    });
+
+  it("without a configured provider: precondition_failed, provider_not_configured, zero RPCs, no drain", async () => {
+    const f = fakeDeps({ queries: { listSources: okResult(SOURCES) } });
+    const r = await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.equal(!r.ok && r.error.code, "precondition_failed");
+    assert.equal(!r.ok && r.error.details?.reason, "provider_not_configured");
+    assert.deepEqual(f.calls, []);
+    assert.deepEqual(f.events, []);
+    assert.deepEqual(f.planInputs, []);
+  });
+
+  it("plans from the RLS source list and the server run config, and passes the jobs through unchanged", async () => {
+    const f = startDeps();
+    const r = await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.deepEqual(r, { ok: true, data: { runId: NEW_ID } });
+    assert.deepEqual(f.queryCalls, [{ name: "listSources", args: [H] }]);
+    assert.deepEqual(f.planInputs, [
+      {
+        handoverId: H,
+        sources: [
+          { id: S, state: "uploaded", rawAvailable: true },
+          { id: P, state: "parsed", rawAvailable: false },
+        ],
+        aiConfig: FAKE_RUN_CONFIG,
+      },
+    ]);
+    const start = f.calls.find((c) => c.fn === "start_processing")!;
+    assert.equal(start.client, "admin");
+    assert.equal(start.args?.p_actor_profile_id, ACTOR_ID);
+    assert.equal(start.args?.p_handover_id, H);
+    assert.equal(start.args?.p_pipeline_version, "pipeline@1");
+    assert.deepEqual(start.args?.p_ai_config, FAKE_RUN_CONFIG);
+    assert.deepEqual(
+      start.args?.p_jobs,
+      JOBS.map((j) => ({ stage: j.stage, sourceId: j.sourceId, inputHash: j.inputHashHex })),
+      "the planned jobs, unchanged",
+    );
+  });
+
+  it("scheduleDrain runs only after a successful start", async () => {
+    const f = startDeps();
+    await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.deepEqual(f.events, ["start_processing", "scheduleDrain"]);
+
+    const refused = startDeps({ rpc: { start_processing: { error: { code: "BTPF0", message: "x" } } } });
+    const r = await handovers.startProcessing(refused.deps, { handoverId: H });
+    assert.equal(!r.ok && r.error.code, "precondition_failed");
+    assert.deepEqual(refused.events, ["start_processing"], "no drain when the run was not created");
+
+    const badPlan = startDeps({
+      planProcessingRun: () => ({ ok: false, error: { code: "validation_failed", message: "m", retryable: false } }),
+    });
+    const r2 = await handovers.startProcessing(badPlan.deps, { handoverId: H });
+    assert.equal(!r2.ok && r2.error.code, "validation_failed");
+    assert.deepEqual(badPlan.events, []);
+  });
+
+  it("a throwing scheduleDrain never fails a started run", async () => {
+    const f = startDeps({ scheduleDrainThrows: true });
+    assert.deepEqual(await handovers.startProcessing(f.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });
+  });
+
+  it("a handover the viewer cannot see is not_found before the AI config or any write", async () => {
+    const f = startDeps({ queries: {} });
+    const r = await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.equal(!r.ok && r.error.code, "not_found");
+    assert.deepEqual(f.events, []);
+    assert.deepEqual(f.planInputs, []);
+  });
+
+  it("validation and the session come first", async () => {
+    const anon = startDeps({ actor: null });
+    assert.equal((await handovers.startProcessing(anon.deps, { handoverId: H }) as { error: { code: string } }).error.code, "unauthenticated");
+    assert.deepEqual(anon.queryCalls, []);
   });
 });
 
