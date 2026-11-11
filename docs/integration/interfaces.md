@@ -139,3 +139,88 @@ behind `lib/db/recovery-gate` (D27): never register a receipt verifier, never fa
 3. pipeline pushes `plan.ts` + `worker.ts` signatures early; backend wires `startProcessing` after
    lead merges them.
 4. lead lands DB requests, wires `app/**`, `components/**` imports and `app/api/pipeline/drain`.
+
+---
+
+# W0 decisions (lead, 2026-11-12) — these amend I1–I3 above
+
+Base for implementation: `feature/main-integration` @ `7257fae` (adds L5 DB support and AI output caps).
+Every worker runs `git merge feature/main-integration` (no rebase) before implementing.
+
+## Cross-cutting
+- **Offsets** (`quote_start`/`quote_end`, `checkQuote`) are JavaScript UTF-16 code-unit indices into the
+  persisted masked `body`.
+- **Reason tokens.** Job, run and handover `error_message` values are tokens matching `^[a-z0-9_:]{1,64}$`
+  (enforced by `complete_processing_job`); `finish_processing_run` gets the same tokens (QA-L8).
+- **No unmasked model text is persisted** (QA-M6): see I1.
+- **Deferred DB items** (documented gaps, not built tonight): DB-12 run fencing on persist/evidence/gap
+  writers; DB-13 atomic per-chunk extraction insert; QA-L2/L3/L4/L7.
+
+## I1 amendments (ai-engine)
+1. Result-compatible failure branch that still carries records: `{ ok: false; error: AppError; attempt?: AiAttemptRecord; provenance?: AiProvenance }`.
+2. `opts: { signal?: AbortSignal; attempt: number; runConfig: AiRunConfig }` on `extractCandidates` and `verifySupport`.
+3. Add `getAiProviderForRun(runConfig, env?) → Result<AiProvider>`: `provider_not_configured`, or
+   `precondition_failed` with `details.reason = "ai_config_changed"` when the live configuration differs from
+   the run snapshot. Guarantee `runConfig.provider === provider.id`.
+4. Drop reasons (closed union): `schema_invalid`, `unknown_message` (citation), `all_citations_foreign`
+   (candidate dropped even with a rationale, §10.6), `category_not_requested`, `contradictory_citations`,
+   `fabricated` (no exact/normalized citation and no rationale), `unmasked_content`, `over_budget`; duplicate
+   citations are de-duplicated. A candidate whose only verified citations are `contradicts` is **kept**.
+5. **Unmasked model output (QA-M6):** if `maskText` would change any model string (title, statement, string
+   attributes, inferenceRationale), drop the candidate (`unmasked_content`); a `not_found` quote that would
+   change is dropped as a citation. A support rationale that would change becomes `null`
+   (`SupportOutcome.rationale: string | null`). Never re-mask (token numbering would collide).
+6. `CheckedCitation.matchedText: string | null` = `body.slice(start, end)` for exact/normalized, `null` for not_found.
+7. Malformed envelope: retryable on attempt 1; on the final attempt a non-retryable `processing_failed`
+   with `details.reason = "ai_invalid_output"`. Never "ok with zero candidates".
+8. Normalisation extensions approved: the normalized tier also strips zero-width and bidi format characters
+   except ZWJ/ZWNJ; mask tokens and `[EXCLUDED_PARTICIPANT]` do not count towards the 12-character/3-word minimum.
+9. Export `EXTRACT_REQUEST_LIMITS` (max messages and characters per call); oversized requests are
+   `validation_failed`. Caps on output are now in the contract (`EXTRACTION_*_MAX`).
+
+## I2 amendments (pipeline)
+1. Use only the new lib/db worker API: `claimReadyJobs`, `completeJob`, `heartbeatJob`, `getJobContext`,
+   `listExtractionMessages`, `listPointsForPipeline`, `listQuotesForCheck`, `listLinksNeedingSupport`,
+   `listGapQuestionsForPipeline`, `setPointSortKeys`, `downloadVerifiedRawSourceWithMeta`,
+   `deleteParsedRawSource`. Never `claimJobs`, `recordJobAttempt` or `deleteRawSource`.
+2. Plan: per source `parse` (unparsed only) → `extract` → `verify_quotes`; per handover `verify_support` →
+   `analyze` → `prepare_review`. `sourceId` is the content key in `inputHash`.
+3. Dedup and conflict attachment happen in the (serial) extract stage, not in analyze (deviation from §10.9,
+   because points cannot be deleted and links added after verify_support would stay unchecked). Merge only
+   within the same `extraction_access_level`; never merge into or verify privacy-held points; evidence for a
+   rejected point attaches to it and it stays rejected.
+4. **Access isolation (QA-M8):** an extract request contains messages of one source only, and
+   `insertExtractedPoint.extractionAccessLevel` is that source's `access_level`.
+5. Stored quote text: `matchedText` for exact/normalized, the model quote for not_found (already mask-checked).
+   `verify_quotes` records the authoritative check against the persisted body; the DB re-checks plausibility.
+6. **D21:** the checklist creates category-level system gap questions (`pointId: null`), not `missing`
+   points with fabricated AI provenance (deviation, flagged to the user).
+7. Run outcome: failed on `provider_not_configured`, when every extract fails, or when
+   verify_support/analyze/prepare_review exhaust retries; otherwise succeeded. Nothing approves or publishes.
+8. Budgets (engineering defaults, flagged): ≤ 200 extract and ≤ 2000 verify calls per run; drain deadline
+   240 s, lease 300 s with a heartbeat per chunk; the drain route's `maxDuration` is 300 s.
+9. Pepper: env canary for now (flagged under D27); production rejects the golden test canary.
+
+## I3 amendments (backend)
+1. Consent records `runConfig.provider`.
+2. No barrel: the UI imports from the individual `lib/actions/<file>.ts` modules (lead rewires).
+3. **Masking (QA-H1):** one shared helper runs `maskText({ context: "user_input" })` on every persisted
+   free-text field, including handover title, team name, role title and description; attributes are
+   re-validated with `parsePointAttributes` after masking; categories come from a server re-read.
+4. **`deleteAccount` is fully fail-closed** (account erasure, D27): Zod + actor, then `precondition_failed`
+   with `details.reason = "recovery_manifest_unavailable"` before any write. `getAccountDeletionBlockers` works.
+5. **`eraseParticipant`:** Zod + actor, then the same `precondition_failed`; no `erasure_target` call.
+6. `CreatedLink.url` is absolute, built from `getSiteUrl()` (lib/supabase/site-url), checked before the token
+   is created so a misconfiguration leaves no orphan token.
+7. Q1 (identity hashes in `SourcePreview`) is open: return the contract shape; previews are limited to source
+   managers by R2.
+8. Use `getSourceSummary` (R1) and `loadRawSourceForPreview` (R2). `previewSource`/`startProcessing` wait for
+   I1 A1 and I2 P1 to be merged.
+
+## QA decisions
+1. Tier P SQL tests live in `tests/integration/db/*.sql` with their own runner and container name
+   (`baton-pg-it`); they may reuse `supabase/tests/shim`.
+2. The stub set is approved for framework/platform modules only (`server-only`, `next/*`, `@supabase/ssr`).
+   Never stub `lib/db`, `lib/privacy`, `lib/parsers` or `lib/ai` logic.
+3. `todo` marking only for findings still open on `feature/main-integration`. M1–M5, M7 and L1 are fixed by
+   L5 and must be hard tests.
