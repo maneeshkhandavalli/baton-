@@ -83,6 +83,21 @@ export function installBackends(): Backends {
   return backends;
 }
 
+/** Tier E: real backends (PsqlDbClient, PgBackedStorage) behind both Supabase clients. */
+export function installCustomBackends(b: {
+  adminDb: { rpc: RecordingDb["rpc"] };
+  userDb: { rpc: RecordingDb["rpc"] };
+  adminStorage: { from: RecordingStorage["from"] };
+  userStorage: { from: RecordingStorage["from"] };
+}): void {
+  state().backends = { ...b, events: [] } as unknown as Backends;
+}
+
+/** The id the stubbed Auth server currently reports (the RLS subject of the user-scoped client). */
+export function currentUserId(): string | null {
+  return state().user?.id ?? null;
+}
+
 function setNodeEnv(value: string | undefined): void {
   const env = process.env as Record<string, string | undefined>;
   if (value === undefined) delete env.NODE_ENV;

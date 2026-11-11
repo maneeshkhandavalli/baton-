@@ -135,7 +135,8 @@ describe("IT-07 (action side): processing never approves or publishes", () => {
     const w = actionWorld();
     allowFakeAi();
     w.userDb.returns("api_list_sources", [sourceRow(w.ids.source, w.ids.handover, { state: "parsed" })]);
-    w.adminDb.returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", []);
+    w.adminDb.returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", [])
+      .returns("list_finishable_runs", []); // DB-15: read-only sweep the drain starts with
     const result = await handovers.startProcessing({ handoverId: w.ids.handover });
     assert.ok(result.ok, JSON.stringify(result));
     assert.equal(await flushAfter(), 1, "the drain ran after the response");
