@@ -18,7 +18,7 @@ import { maskedTextToPlain } from "@/components/shared/mask-tokens";
 import { useAction } from "@/hooks/use-action";
 import type { CreatedLink, GapQuestionSummary, PointSummary } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel, type GapPriority, type PointCategory } from "@/lib/contracts/enums";
-import { createGapInterviewLink, createGapQuestion, reviewGapAnswer } from "@/lib/mocks/actions";
+import { createGapInterviewLink, createGapQuestion, reviewGapAnswer } from "@/lib/actions/gaps";
 
 import { linkLevelAtLeast, questionLevelAtLeast } from "./gap-access";
 import { routes } from "@/lib/routes";

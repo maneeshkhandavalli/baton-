@@ -14,7 +14,7 @@ import { MaskedText } from "@/components/shared/masked-text";
 import { useAction } from "@/hooks/use-action";
 import type { PublishedHandover, PublishedPointContent } from "@/lib/contracts/dto";
 import type { MemberRole, PointCategory } from "@/lib/contracts/enums";
-import { acknowledgePublication } from "@/lib/mocks/actions";
+import { acknowledgePublication } from "@/lib/actions/members";
 import { cn } from "@/lib/utils";
 
 import { buildFirstWeek } from "./first-week";

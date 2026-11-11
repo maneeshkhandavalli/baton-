@@ -9,7 +9,7 @@ import { formatDate } from "@/components/handover/format";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/hooks/use-action";
 import type { CreatorTransferOffer } from "@/lib/contracts/dto";
-import { respondToCreatorTransfer } from "@/lib/mocks/actions";
+import { respondToCreatorTransfer } from "@/lib/actions/handovers";
 import { routes } from "@/lib/routes";
 
 /** Creatorship offers addressed to the signed-in user (§12.9, `listMyCreatorTransferOffers`). */

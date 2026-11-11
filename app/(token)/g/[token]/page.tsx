@@ -7,7 +7,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { getMockQueries } from "@/lib/mocks/queries";
+import { getQueries } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Gap Interview" };
 
@@ -25,7 +25,7 @@ export default function ContributorGapsPage({ params }: PageProps<"/g/[token]">)
 async function InterviewContent({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   // Server-only token redemption; the token never reaches a URL other than this page (§12.4).
-  const result = await getMockQueries().getGapInterview(token);
+  const result = await getQueries().getGapInterview(token);
   if (!result.ok) {
     return (
       <EmptyState

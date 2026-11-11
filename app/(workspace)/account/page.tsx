@@ -6,8 +6,8 @@ import { CreatorOffers } from "@/components/account/creator-offers";
 import { PageContainer } from "@/components/layout/page-container";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { getAccountDeletionBlockers } from "@/lib/mocks/actions";
-import { getMockQueries } from "@/lib/mocks/queries";
+import { getAccountDeletionBlockers } from "@/lib/actions/account";
+import { getQueries } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -23,7 +23,7 @@ export default function AccountPage() {
 }
 
 async function AccountContent() {
-  const queries = getMockQueries(); // per-request: everything here depends on the signed-in user
+  const queries = getQueries(); // per-request: everything here depends on the signed-in user
   const [offers, handovers] = await Promise.all([queries.listMyCreatorTransferOffers(), queries.listMyHandovers()]);
   const blockers = await getAccountDeletionBlockers();
 

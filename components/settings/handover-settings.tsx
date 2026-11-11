@@ -17,16 +17,9 @@ import { Label } from "@/components/ui/label";
 import { useAction } from "@/hooks/use-action";
 import type { AccessTokenSummary, ExclusionSummary, HandoverSummary, MemberSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, type AccessLevel, type MaskKind, type MemberRole } from "@/lib/contracts/enums";
-import {
-  deleteHandover,
-  inviteMember,
-  offerCreatorTransfer,
-  removeMember,
-  removeSource,
-  respondToCreatorTransfer,
-  startRevision,
-  updateMemberClearance,
-} from "@/lib/mocks/actions";
+import { deleteHandover, offerCreatorTransfer, respondToCreatorTransfer, startRevision } from "@/lib/actions/handovers";
+import { inviteMember, removeMember, updateMemberClearance } from "@/lib/actions/members";
+import { removeSource } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 
 interface HandoverSettingsProps {

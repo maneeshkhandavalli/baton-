@@ -16,18 +16,9 @@ import { useAction } from "@/hooks/use-action";
 import { ACCESS_LEVELS, MASK_KINDS, type AccessLevel, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
-import {
-  addExclusion,
-  confirmIdentityMatch,
-  confirmSourceUploaded,
-  createHandover,
-  createSourceUpload,
-  inviteMember,
-  previewSource,
-  recordSourceConsent,
-  removeSource,
-  startProcessing,
-} from "@/lib/mocks/actions";
+import { createHandover, startProcessing } from "@/lib/actions/handovers";
+import { inviteMember } from "@/lib/actions/members";
+import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent, removeSource } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 

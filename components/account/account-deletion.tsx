@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useAction } from "@/hooks/use-action";
 import type { AccountDeletionBlockers } from "@/lib/contracts/dto";
 import { ACCOUNT_DELETION_CONFIRMATION } from "@/lib/contracts/schemas";
-import { deleteAccount } from "@/lib/mocks/actions";
+import { deleteAccount } from "@/lib/actions/account";
 
 import { accountDeletionRequest } from "./deletion-confirmation";
 import { routes } from "@/lib/routes";

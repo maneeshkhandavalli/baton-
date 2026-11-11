@@ -16,6 +16,8 @@ export const routes = {
     review: (id: string) => `/handover/${encodeURIComponent(id)}/review`,
     gaps: (id: string) => `/handover/${encodeURIComponent(id)}/gaps`,
     settings: (id: string) => `/handover/${encodeURIComponent(id)}/settings`,
+    /** The current publication, read by membership (getPublishedHandover). Reconciliation Q3 proposal. */
+    published: (id: string) => `/handover/${encodeURIComponent(id)}/published`,
   },
   token: {
     /** Contributor link for answering knowledge gaps. */

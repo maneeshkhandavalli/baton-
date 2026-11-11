@@ -1,47 +1,89 @@
 import type { Metadata } from "next";
-import { BookOpen, LinkIcon } from "lucide-react";
+import { LinkIcon, MailCheck, UserCheck } from "lucide-react";
 import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { PublishedHandoverView } from "@/components/published/published-handover-view";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingState } from "@/components/shared/loading-state";
-import { mockRedeemHandoverLink } from "@/lib/mocks/queries";
+import { Button } from "@/components/ui/button";
+import { getSessionUser } from "@/lib/supabase/auth";
 
-export const metadata: Metadata = { title: "Handover" };
+import { acceptInvitation, requestInviteLink } from "./actions";
 
-export default function SharedHandoverPage({ params }: PageProps<"/h/[token]">) {
+export const metadata: Metadata = { title: "Handover invitation" };
+
+/**
+ * Invitation landing (§12.3). The token only redeems the invitation; afterwards the member reads the
+ * publication by membership, never by token (§11.7).
+ */
+export default function InvitationPage({ params, searchParams }: PageProps<"/h/[token]">) {
   return (
     <PageContainer width="default">
-      <Suspense fallback={<LoadingState label="Opening the handover…" className="min-h-96" />}>
-        <HandoverContent params={params} />
+      <Suspense fallback={<LoadingState label="Opening the invitation…" className="min-h-96" />}>
+        <InvitationContent params={params} searchParams={searchParams} />
       </Suspense>
     </PageContainer>
   );
 }
 
-async function HandoverContent({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
-  // Mock stand-in for invite redemption + magic-link session (§12.3, Supabase agent).
-  const session = await mockRedeemHandoverLink(token);
-  if (!session) {
+const ERRORS: Record<string, { title: string; description: string }> = {
+  token_invalid: {
+    title: "This link isn't valid",
+    description:
+      "It may have expired, been revoked or been used already. Ask the person who invited you for a new one. If you signed in with a different email address, sign out and use the invited address.",
+  },
+  conflict: { title: "You're already a member", description: "Open your dashboard to find this handover." },
+  rate_limited: { title: "Too many attempts", description: "Please wait a few minutes and try again." },
+  internal: { title: "Something went wrong", description: "Please try again in a moment." },
+};
+
+async function InvitationContent({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [{ token }, query] = await Promise.all([params, searchParams]);
+  const error = typeof query.error === "string" ? ERRORS[query.error] ?? ERRORS.internal : null;
+  if (error) return <EmptyState icon={<LinkIcon />} title={error.title} description={error.description} />;
+
+  if (query.sent === "1") {
     return (
       <EmptyState
-        icon={<LinkIcon />}
-        title="This link isn't valid"
-        description="It may have expired or been used already. If you were invited, open the sign-in link we emailed you, or ask the person who invited you for a new one."
+        icon={<MailCheck />}
+        title="Check your email"
+        description="If this invitation is valid, we've sent a sign-in link to the invited address. Open it on this device to continue."
       />
     );
   }
-  const [handover, published] = await Promise.all([session.queries.getHandover(session.handoverId), session.queries.getPublishedHandover(session.handoverId)]);
-  if (!handover.ok || !published.ok) {
+
+  const user = await getSessionUser();
+  if (!user) {
     return (
       <EmptyState
-        icon={<BookOpen />}
-        title="Not published yet"
-        description="The team is still reviewing this handover. You'll get an email when it's ready to read."
+        icon={<MailCheck />}
+        title="You've been invited to a handover"
+        description="We'll email a sign-in link to the address this invitation was sent to."
+        action={
+          <form action={requestInviteLink.bind(null, token)}>
+            <Button type="submit">Email me a sign-in link</Button>
+          </form>
+        }
       />
     );
   }
-  return <PublishedHandoverView handover={published.data} viewerLabel={session.viewerLabel} viewerRole={handover.data.viewerRole} />;
+
+  return (
+    <EmptyState
+      icon={<UserCheck />}
+      title="Accept the invitation"
+      description="You're signed in. Accept to join the handover with the role you were invited for."
+      action={
+        <form action={acceptInvitation.bind(null, token)}>
+          <Button type="submit">Accept invitation</Button>
+        </form>
+      }
+    />
+  );
 }
