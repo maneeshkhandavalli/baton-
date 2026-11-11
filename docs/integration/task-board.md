@@ -33,14 +33,14 @@ Previous run archived (not applied): `../baton-first-run-recovery-20261112-03000
 | B2 | `lib/actions/*` (§11.3) except startProcessing/previewSource | backend | W0 | done, merged `14f81af` | lib/actions 70 | — | lead: approved |
 | B3 | previewSource + startProcessing + consent provider | backend | A1, P1, L5 | done, merged `6c15bf5` | lib/actions 81 | — | lead: approved |
 | P1 | plan, pepper, worker skeleton, stage ordering | pipeline | A1, W0 | done, merged `c78d4c2` | pipeline 58 | — (DB-1, DB-14, DB-15) | lead: approved |
-| P2 | extract, verify_quotes, verify_support wiring | pipeline | P1, A2, L5 | in_progress (design approved; wiring real A2) | pipeline 87 with fakes | — | lead: design approved |
+| P2 | extract, verify_quotes, verify_support on the real lib/ai | pipeline | P1, A2, L5 | done, merged `19a15eb` | pipeline 91 | DB-12/13 deferred | lead: approved |
 | Q1 | Read-only security audit of foundations | qa-security | W0 | done (1 high, 9 medium, 8 low) | suites green | — | lead: triaged in interfaces.md |
 | Q2 | Integration acceptance test plan | qa-security | Q1 | done (IT-01..IT-14) | — | — | lead: approved |
-| Q3 | `tests/integration/**` | qa-security | Q2 approved | part 1 merged; part 2 in_progress | Node 75, Tier P 6/6 | E2E after P2 | lead |
+| Q3 | `tests/integration/**` incl. Tier E end-to-end | qa-security | Q2 approved | done, merged `1374837` | integration 214, Tier P 6/6, E2E 4/4 | — | lead: approved |
 | L6 | Worker route `app/api/pipeline/drain` (+ cron secret) | lead | P1 | done | build | — | qa: IT-13 pending |
 | L7 | UI rewiring mocks → `lib/data` + `lib/actions`; `/demo` stays on mocks; real invite flow; `/handover/[id]/published` | lead | B1, B2 | done `a617780` | build | Q3 decision pending (default applied) | qa: IT-07/14 pending |
 | L8 | `.env.example`, test scripts | lead | — | done | `npm test` (all suites) | — | — |
-| L9 | Integrate worker branches; full tests, SQL tests, tsc, lint, build; synthetic E2E | lead | all | todo | all | — | qa |
+| L9 | Integrate worker branches; full tests, SQL tests, tsc, lint, build; synthetic E2E | lead | all | done @ `1374837` | npm test all green; SQL 9/9; Tier P 6/6; E2E 4/4; tsc; lint; build | — | qa: verified |
 
 ## Open decisions (not resolved by agents)
 
