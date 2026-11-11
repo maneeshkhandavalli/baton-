@@ -413,3 +413,18 @@ describe("supportVerdictResponseSchema (§10.8)", () => {
     assert.equal(supportVerdictResponseSchema.safeParse({ verdict: "supports", rationale: "" }).success, false);
   });
 });
+
+describe("AI output caps (§12.10 rule 3)", () => {
+  const MSG = "7c4d5e6f-8091-4ca3-9d4e-5f6a7b8c9d0e";
+  const cand = (over: Record<string, unknown>) => ({
+    category: "risk", title: "Venue deposit", statement: "Deposit may be lost.", attributes: {},
+    citations: [{ messageId: MSG, quote: "the deposit is not refundable", stance: "supports" }], inferenceRationale: null, ...over,
+  });
+  it("caps quote length, citation count, rationale length and candidate count", () => {
+    assert.equal(extractionCandidateSchema.safeParse(cand({})).success, true);
+    assert.equal(extractionCandidateSchema.safeParse(cand({ citations: [{ messageId: MSG, quote: "x".repeat(1001), stance: "supports" }] })).success, false);
+    assert.equal(extractionCandidateSchema.safeParse(cand({ citations: Array(21).fill({ messageId: MSG, quote: "the deposit is not refundable", stance: "supports" }) })).success, false);
+    assert.equal(extractionCandidateSchema.safeParse(cand({ citations: [], inferenceRationale: "y".repeat(1001) })).success, false);
+    assert.equal(extractionResponseSchema.safeParse({ candidates: Array(101).fill({}) }).success, false);
+  });
+});

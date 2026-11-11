@@ -519,12 +519,16 @@ export const acknowledgePublicationInput = z.object({
 /** §10.6 limits. */
 export const EXTRACTION_TITLE_MAX = 120;
 export const EXTRACTION_STATEMENT_MAX = 1_000;
+/** §12.10 rule 3 ("Zod schemas cap lengths"): bounds on untrusted model output. */
+export const EXTRACTION_QUOTE_MAX = 1_000;
+export const EXTRACTION_CITATIONS_MAX = 20;
+export const EXTRACTION_CANDIDATES_MAX = 100;
 
 const extractionCitationSchema = z.strictObject({
   /** source_messages.id the model was shown in this request; anything else is discarded (§10.6). */
   messageId: uuidSchema,
   /** Must be copied verbatim from that message; existence is re-checked deterministically (§10.7). */
-  quote: z.string().min(1),
+  quote: z.string().min(1).max(EXTRACTION_QUOTE_MAX),
   /** The model's claim only; independently re-judged by the support call (§10.8). */
   stance: z.enum(EVIDENCE_STANCES),
 });
@@ -532,8 +536,8 @@ const extractionCitationSchema = z.strictObject({
 const candidateFields = {
   title: z.string().trim().min(1).max(EXTRACTION_TITLE_MAX),
   statement: z.string().trim().min(1).max(EXTRACTION_STATEMENT_MAX),
-  citations: z.array(extractionCitationSchema),
-  inferenceRationale: z.string().trim().min(1).nullable(),
+  citations: z.array(extractionCitationSchema).max(EXTRACTION_CITATIONS_MAX),
+  inferenceRationale: z.string().trim().min(1).max(EXTRACTION_STATEMENT_MAX).nullable(),
 };
 
 function candidateFor<C extends (typeof POINT_CATEGORIES)[number]>(category: C) {
@@ -565,7 +569,7 @@ export const extractionCandidateSchema = z
   });
 
 /** The extract call's envelope. Each element is then parsed on its own with extractionCandidateSchema. */
-export const extractionResponseSchema = z.strictObject({ candidates: z.array(z.unknown()) });
+export const extractionResponseSchema = z.strictObject({ candidates: z.array(z.unknown()).max(EXTRACTION_CANDIDATES_MAX) });
 
 /** The support call's answer for one (current revision, quote) pair (§10.8). Never "unchecked". */
 export const supportVerdictResponseSchema = z.strictObject({
