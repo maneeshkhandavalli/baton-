@@ -90,8 +90,9 @@ begin
   perform tests.ok(not exists (select 1 from public.evidence_quotes where handover_id = tests.id('h')
                                  and source_message_id = tests.msg('s2', 'alice', 1)), 'no cross-handover evidence row');
 
-  -- QA-M1 residual: the database checks that an exact quote occurs in the body, not that the stored offsets
-  -- point at it. Offsets are UTF-16 indices (W0 decision), so SQL can only check this for BMP-only text.
+  -- QA-M1b (accepted by the lead as documented): the database checks that an exact quote occurs in the body,
+  -- not that the stored offsets point at it. Offsets are UTF-16 indices (W0 decision), so SQL checks
+  -- containment only; the offsets are authoritative from lib/ai checkQuote.
   perform it.todo(tests.try(format($q$select public.add_source_quote_evidence(%L, %L, %L, 10, 31, 'exact')$q$,
                                    tests.id('p2'), v_a1, 'Alice message 1 about')) like 'ERR:%',
                   'QA-M1b', 'exact quote stored with offsets that do not point at the quoted text');

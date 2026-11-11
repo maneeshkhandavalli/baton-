@@ -2,9 +2,9 @@
 //
 //   node --import ./tests/integration/support/resolve.mjs --test "tests/integration/**/*.test.ts"
 //
-// - "@/x" resolves to "<repo>/x"; extensionless relative specifiers retry with ".ts" (as resolve-ts.mjs).
+// - "@/x" resolves to "<repo>/x"; extensionless relative specifiers retry with ".ts", then "/index.ts".
 // - Framework and platform modules ONLY are replaced by tiny stubs (QA decision 2, interfaces.md):
-//   "server-only", "next/*" and "@supabase/ssr". Application logic (lib/db, lib/privacy, lib/parsers, lib/ai,
+//   "server-only", "next/*", "@supabase/ssr" and "@supabase/supabase-js". Application logic (lib/db, lib/privacy, lib/parsers, lib/ai,
 //   lib/pipeline, lib/actions) is never stubbed; tests drive it through its injected DbClient / StorageClient /
 //   AiProvider interfaces instead. Stub state lives on globalThis.__batonIt (see platform.ts).
 
@@ -23,6 +23,7 @@ const stubs = {
   "next/cache": stub("next-cache.mjs"),
   "next/navigation": stub("next-navigation.mjs"),
   "@supabase/ssr": stub("supabase-ssr.mjs"),
+  "@supabase/supabase-js": stub("supabase-js.mjs"), // approved by the lead (W1): forwards to Recording* fakes
 };
 
 registerHooks({
@@ -32,10 +33,13 @@ registerHooks({
     if (specifier.startsWith("@/")) target = pathToFileURL(path.join(root, specifier.slice(2))).href;
     const isRelative = target.startsWith("./") || target.startsWith("../") || target.startsWith("file:");
     if (isRelative && !/\.[cm]?[jt]sx?$/.test(target)) {
-      try {
-        return nextResolve(`${target}.ts`, context);
-      } catch {
-        // fall through to the default resolution
+      // bundler resolution: "./x" → "./x.ts", then the directory's "./x/index.ts"
+      for (const candidate of [`${target}.ts`, `${target}/index.ts`]) {
+        try {
+          return nextResolve(candidate, context);
+        } catch {
+          // try the next candidate, then the default resolution
+        }
       }
     }
     return nextResolve(target, context);
