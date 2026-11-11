@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SKIP_ANYWHERE = new Set(["node_modules", ".next", ".git"]);
-const SKIP_AT_ROOT = new Set(["supabase", "docs", "public", "graphify-out"]);
+const SKIP_AT_ROOT = new Set(["supabase", "docs", "public", "graphify-out", ".claude"]); // .claude: nested agent worktrees
 
 function sourceFiles(dir = ROOT): string[] {
   const out: string[] = [];

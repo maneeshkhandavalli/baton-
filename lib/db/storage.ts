@@ -8,6 +8,7 @@
  */
 
 import type { SourceUploadTicket } from "../contracts/dto";
+import type { DateOrder, SourceKind } from "../contracts/enums";
 import type { VerifiedActor } from "./actor-rules";
 import type { DbClient } from "./client";
 import { DbError } from "./errors";
@@ -122,9 +123,25 @@ export async function confirmSourceUpload(
  * A mismatch marks the source failed with `integrity_mismatch` and throws; the bytes are never parsed.
  */
 export async function downloadVerifiedRawSource(db: DbClient, adminStorage: StorageClient, sourceId: string): Promise<Uint8Array> {
-  const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as
-    | { raw_storage_path: string | null; size_bytes: number; sha256: string; state: string }
-    | null;
+  return (await downloadVerifiedRawSourceWithMeta(db, adminStorage, sourceId)).bytes;
+}
+
+/** Parse inputs that travel with the raw bytes (§11.4 ParseSourceInput). */
+export interface RawSourceMeta {
+  rawStoragePath: string;
+  kind: SourceKind;
+  timezone: string;
+  dateOrder: DateOrder | null;
+  originalFilename: string;
+}
+
+/** As downloadVerifiedRawSource, plus the metadata the parse job needs and the path for the later delete. */
+export async function downloadVerifiedRawSourceWithMeta(
+  db: DbClient,
+  adminStorage: StorageClient,
+  sourceId: string,
+): Promise<RawSourceMeta & { bytes: Uint8Array }> {
+  const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as RawSourceRow | null;
   if (!source || !source.raw_storage_path) throw new DbError("not_found");
   const bytes = await download(adminStorage, source.raw_storage_path);
   const measured = await measureBytes(bytes);
@@ -132,13 +149,78 @@ export async function downloadVerifiedRawSource(db: DbClient, adminStorage: Stor
     await callRpc(db, "mark_source_parse_failed", { p_source_id: sourceId, p_error_code: "integrity_mismatch" });
     throw new DbError("validation_failed");
   }
-  return bytes;
+  return { bytes, ...rawMeta(source) };
+}
+
+/**
+ * R2 (integration), previewSource (§10.3 step 1): the actor must manage the source's handover (checked in
+ * SQL), the source must be uploaded or failed with its raw object present and consent recorded. The bytes
+ * are re-measured (M5); a mismatch is precondition_failed and, unlike the parse job, changes NOTHING:
+ * a preview never alters source state.
+ */
+export async function loadRawSourceForPreview(
+  db: DbClient,
+  adminStorage: StorageClient,
+  actor: VerifiedActor,
+  sourceId: string,
+): Promise<RawSourceMeta & { bytes: Uint8Array; handoverId: string }> {
+  const target = (await callRpc(db, "source_preview_target", { p_actor_profile_id: actor.profileId, p_source_id: sourceId })) as
+    | (RawSourceRow & { handover_id: string })
+    | null;
+  if (!target || !target.raw_storage_path) throw new DbError("not_found");
+  let bytes: Uint8Array;
+  try {
+    bytes = await download(adminStorage, target.raw_storage_path);
+  } catch (error) {
+    if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed");
+    throw error;
+  }
+  const measured = await measureBytes(bytes);
+  if (measured.sizeBytes !== Number(target.size_bytes) || measured.sha256 !== target.sha256.toLowerCase()) {
+    throw new DbError("precondition_failed");
+  }
+  return { bytes, handoverId: target.handover_id, ...rawMeta(target) };
+}
+
+interface RawSourceRow {
+  raw_storage_path: string | null;
+  size_bytes: number;
+  sha256: string;
+  kind: SourceKind;
+  timezone: string;
+  date_order: DateOrder | null;
+  original_filename: string;
+}
+
+function rawMeta(row: RawSourceRow): RawSourceMeta {
+  return {
+    rawStoragePath: row.raw_storage_path as string,
+    kind: row.kind,
+    timezone: row.timezone,
+    dateOrder: row.date_order,
+    originalFilename: row.original_filename,
+  };
 }
 
 /**
  * §10.3 step 4: only AFTER the parse transaction committed (or after removeSource). If the storage delete
  * fails, raw_storage_path stays set and the retention sweep retries it.
  */
+/**
+ * The parse job's raw delete (§10.3 step 4, D14, QA-L1). Reads path and state from the database instead of
+ * trusting the caller, and refuses unless the source is `parsed`, so an ordering bug can never delete the
+ * raw upload of an uploaded or failed source that still needs it for a retry.
+ */
+export async function deleteParsedRawSource(db: DbClient, adminStorage: StorageClient, sourceId: string): Promise<void> {
+  const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as
+    | { raw_storage_path: string | null; state: string }
+    | null;
+  if (!source) throw new DbError("not_found");
+  if (source.state !== "parsed") throw new DbError("precondition_failed");
+  if (!source.raw_storage_path) return; // already deleted
+  await deleteRawSource(db, adminStorage, sourceId, source.raw_storage_path);
+}
+
 export async function deleteRawSource(db: DbClient, adminStorage: StorageClient, sourceId: string, path: string): Promise<void> {
   const { error } = await adminStorage.from(SOURCE_BUCKET).remove([path]);
   if (error) throw new DbError("internal");

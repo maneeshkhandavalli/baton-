@@ -216,7 +216,8 @@ begin
        'api_list_my_handovers', 'api_get_handover', 'api_list_members', 'api_list_sources', 'api_get_processing_status',
        'api_list_points', 'api_get_point', 'api_list_gap_questions', 'api_get_readiness', 'api_get_published_handover',
        'api_list_participants', 'api_list_exclusions', 'api_get_source_message_context',
-       'api_list_my_creator_transfer_offers', 'get_account_deletion_blockers', 'list_access_tokens');
+       'api_list_my_creator_transfer_offers', 'get_account_deletion_blockers', 'list_access_tokens',
+       'api_get_source'); -- R1 (integration): one source under RLS, SECURITY INVOKER
   perform tests.ok(v_unexpected is null, 'authenticated executes only reads and RLS helpers; unexpected: ' || coalesce(v_unexpected, ''));
   perform tests.ok(not has_function_privilege('anon', 'public.api_list_my_handovers()', 'EXECUTE'), 'anon executes nothing');
 
