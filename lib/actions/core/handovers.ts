@@ -37,13 +37,36 @@ export async function createHandover(deps: ActionDeps, input: CreateHandoverInpu
 }
 
 /**
- * B3: wired to lib/ai (getAiConfiguration) and lib/pipeline (planProcessingRun, scheduleDrain) once those are
- * merged. Until then it fails closed: no AI provider is configured (D11 open), so nothing is enqueued.
+ * I3: listSources (RLS) → the server's AI run config (never from the request; without a provider nothing is
+ * written) → planProcessingRun → start_processing, which re-checks role, lifecycle, consent provider and
+ * the included sources in SQL → scheduleDrain only after the run exists. The jobs are passed through as
+ * planned. The drain is fire-and-forget and never awaited.
  */
 export async function startProcessing(deps: ActionDeps, input: { handoverId: string }): Promise<Result<{ runId: string }>> {
-  return action(deps, handoverIdInput, input, async () =>
-    failWith("precondition_failed", { details: { reason: "provider_not_configured" } }),
-  );
+  return action(deps, handoverIdInput, input, async (actor, v) => {
+    const sources = await deps.queries.listSources(v.handoverId);
+    if (!sources.ok) return sources;
+    const ai = deps.aiRunConfig();
+    if (!ai.ok) return ai;
+    const plan = deps.planProcessingRun({
+      handoverId: v.handoverId,
+      sources: sources.data.map((s) => ({ id: s.id, state: s.state, rawAvailable: s.rawDeletedAt === null })),
+      aiConfig: ai.data,
+    });
+    if (!plan.ok) return plan;
+    const { runId } = await mutations.startProcessing(deps.adminDb(), actor, {
+      handoverId: v.handoverId,
+      pipelineVersion: plan.data.pipelineVersion,
+      aiConfig: { ...plan.data.aiConfig },
+      jobs: plan.data.jobs,
+    });
+    try {
+      deps.scheduleDrain();
+    } catch {
+      // never fails the action: the cron sweep picks the queued jobs up
+    }
+    return ok({ runId });
+  });
 }
 
 export async function cancelProcessing(deps: ActionDeps, input: { handoverId: string }): Promise<Result<null>> {

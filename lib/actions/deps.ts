@@ -8,8 +8,13 @@ import "server-only";
 
 import { refresh } from "next/cache";
 
+import { getAiConfiguration } from "../ai/config";
 import type { Result } from "../contracts/api";
 import { dbQueries, serverDb, serverStorage, userDb, userStorage } from "../db";
+import { previewSource } from "../parsers/parse-source";
+import { getVerifiedPepper } from "../pipeline/pepper";
+import { planProcessingRun, type AiRunConfig } from "../pipeline/plan";
+import { scheduleDrain } from "../pipeline/worker";
 import { requireVerifiedActor } from "../supabase/auth";
 import { requestClientIp } from "../supabase/request-ip";
 import { getSiteUrl } from "../supabase/site-url";
@@ -17,11 +22,13 @@ import { failWith } from "./core/run";
 import type { ActionDeps } from "./core/types";
 
 /**
- * B3 wires this to lib/ai `getAiConfiguration()` (`runConfig.provider`). Until lib/ai is merged no provider
- * is configured (D11 open), so consent fails closed and nothing is written.
+ * The server's AI run configuration (lib/ai, the only reader of the AI environment). D11 is open, so outside
+ * an explicitly allowed fake adapter this is provider_not_configured and nothing is written.
  */
-function consentProvider(): Result<string> {
-  return failWith("precondition_failed", { details: { reason: "provider_not_configured" } });
+function aiRunConfig(): Result<AiRunConfig> {
+  const config = getAiConfiguration();
+  if (!config.ok) return failWith("precondition_failed", { details: { reason: "provider_not_configured" } });
+  return { ok: true, data: config.runConfig };
 }
 
 const DEPS: ActionDeps = Object.freeze({
@@ -33,7 +40,11 @@ const DEPS: ActionDeps = Object.freeze({
   adminStorage: serverStorage,
   clientIp: requestClientIp,
   siteOrigin: getSiteUrl,
-  consentProvider,
+  aiRunConfig,
+  verifiedPepper: getVerifiedPepper,
+  previewParser: previewSource,
+  planProcessingRun,
+  scheduleDrain,
   revalidate: () => refresh(),
 });
 

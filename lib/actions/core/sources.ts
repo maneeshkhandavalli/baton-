@@ -2,7 +2,7 @@
 
 import type { Result } from "../../contracts/api";
 import type { SourceSummary, SourceUploadTicket } from "../../contracts/dto";
-import type { SourcePreview } from "../../contracts/parser";
+import type { ParserFailure, SourcePreview } from "../../contracts/parser";
 import {
   addExclusionInput,
   confirmIdentityMatchInput,
@@ -17,10 +17,16 @@ import type {
   RecordSourceConsentInput,
 } from "../../contracts/schemas";
 import * as mutations from "../../db/mutations";
+import { getParseExclusions } from "../../db/pipeline";
 import { getSourceSummary } from "../../db/queries";
-import { confirmSourceUpload, createSourceUpload as createSignedSourceUpload, deleteRawSource } from "../../db/storage";
+import {
+  confirmSourceUpload,
+  createSourceUpload as createSignedSourceUpload,
+  deleteRawSource,
+  loadRawSourceForPreview,
+} from "../../db/storage";
 import { createInputMasker } from "./mask";
-import { action, failWith, ok, parseInput } from "./run";
+import { action, failWith, ok, parseInput, type Failure } from "./run";
 import type { ActionDeps } from "./types";
 
 /**
@@ -44,14 +50,50 @@ export async function confirmSourceUploaded(deps: ActionDeps, input: { sourceId:
   });
 }
 
+/** Only these structural parser details reach the client; never content, names or values (§11.4). */
+const PARSER_DETAIL_KEYS = ["parserCode", "inputCode", "field", "ruleId", "line"] as const;
+
+/** ParserFailure → AppError with the same typed code, a fixed safe message and structural details only. */
+function parserFailure(error: ParserFailure): Failure {
+  const details: Record<string, string | number | boolean> = {};
+  const source = error.details as Record<string, unknown>;
+  for (const key of PARSER_DETAIL_KEYS) {
+    const value = source[key];
+    if (typeof value === "string" || typeof value === "number") details[key] = value;
+  }
+  return failWith(error.code, { details, retryable: error.retryable === true });
+}
+
 /**
- * B3: wired to lib/db loadRawSourceForPreview, getParseExclusions, lib/pipeline getVerifiedPepper and the
- * parser once lib/pipeline is merged. Until then it fails closed: without a verified identity pepper no
- * source may be parsed (D27/D30), so no preview is produced and nothing is read.
+ * Read-only preview (§10.3 step 1, D14, D33). The actor-checked raw load (R2: creator or outgoing member,
+ * uploaded or failed source, raw present, consent recorded) runs FIRST; only then are the exclusion rules
+ * read with the service role. The parser gets the same rules as the final parse. Nothing is persisted, the
+ * source state and the raw upload are never changed, and the contract SourcePreview is returned as is
+ * (Q1 open).
  */
 export async function previewSource(deps: ActionDeps, input: { sourceId: string }): Promise<Result<SourcePreview>> {
-  return action(deps, sourceIdInput, input, async () =>
-    failWith("precondition_failed", { details: { reason: "identity_pepper_unavailable" } }),
+  return action(
+    deps,
+    sourceIdInput,
+    input,
+    async (actor, v) => {
+      const db = deps.adminDb();
+      const raw = await loadRawSourceForPreview(db, deps.adminStorage(), actor, v.sourceId);
+      const exclusions = await getParseExclusions(db, v.sourceId);
+      const pepper = deps.verifiedPepper();
+      if (!pepper.ok) return pepper;
+      const preview = await deps.previewParser({
+        kind: raw.kind,
+        fileName: raw.originalFilename,
+        bytes: raw.bytes,
+        timezone: raw.timezone,
+        ...(raw.dateOrder ? { dateOrder: raw.dateOrder } : {}),
+        exclusions,
+        identityPepper: pepper.data.pepper,
+      });
+      return preview.ok ? ok(preview.data) : parserFailure(preview.error);
+    },
+    { refresh: false },
   );
 }
 
@@ -61,12 +103,12 @@ export async function previewSource(deps: ActionDeps, input: { sourceId: string 
  */
 export async function recordSourceConsent(deps: ActionDeps, input: RecordSourceConsentInput): Promise<Result<SourceSummary>> {
   return action(deps, recordSourceConsentInput, input, async (actor, v) => {
-    const provider = deps.consentProvider();
-    if (!provider.ok) return provider;
+    const ai = deps.aiRunConfig();
+    if (!ai.ok) return ai;
     await mutations.recordSourceConsent(deps.adminDb(), actor, {
       sourceId: v.sourceId,
       consentStatementVersion: v.consentStatementVersion,
-      aiProvider: provider.data,
+      aiProvider: ai.data.provider,
       accessLevel: v.accessLevel,
       timezone: v.timezone,
       dateOrder: v.dateOrder,
