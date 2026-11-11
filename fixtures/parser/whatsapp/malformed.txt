@@ -1,0 +1,9 @@
+This line came before any message header.
+So did this one.
+20/02/2024, 08:00 - Asha Rao: First real message
+40/02/2024, 08:01 - Ravi Kumar: impossible date kept as continuation text
+20/02/2024, 08:02 - Ravi Kumar: Second real message
+
+with a blank line inside
+
+20/02/2024, 08:03 - Asha Rao: Last message
