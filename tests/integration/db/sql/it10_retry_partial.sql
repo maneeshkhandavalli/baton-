@@ -165,19 +165,18 @@ select tests.put('jb', (select id from public.processing_jobs where run_id = tes
 select tests.eq(public.get_processing_job_context(tests.id('jb')) ->> 'priorSucceeded', 'true',
                 'idempotency: the same stage, source and input hash already succeeded in an earlier run');
 
--- QA-L8: finish_processing_run should accept reason tokens only (W0 cross-cutting rule).
-do $$
-declare
-  v text;
-begin
-  perform tests.as_service();
-  v := tests.try(format('select public.finish_processing_run(%L, %L, %L, %L)', tests.id('rb'), 'failed', 'processing_failed',
-                        'Asha Rao said the PIN is 4321'));
-  perform it.todo(v like 'ERR:%', 'QA-L8', 'finish_processing_run stores free-text error messages (readable by every member via handovers.last_error_message)');
-  if v like 'ERR:%' then
-    perform public.finish_processing_run(tests.id('rb'), 'failed', 'processing_failed', 'all_extracts_failed');
-  end if;
-end $$;
+-- QA-L8 (fixed in 20261112000400): finish_processing_run accepts ERROR_CODES and reason tokens only, because
+-- the message is copied to handovers.last_error_message, which every member can read.
+select tests.as_service();
+select tests.throws(format('select public.finish_processing_run(%L, %L, %L, %L)', tests.id('rb'), 'failed', 'processing_failed',
+                           'Asha Rao said the PIN is 4321'), 'BTVF0', 'QA-L8: free-text run error messages are refused');
+select tests.throws(format('select public.finish_processing_run(%L, %L, %L, %L)', tests.id('rb'), 'failed', 'provider said 500',
+                           'stage_exhausted'), 'BTVF0', 'QA-L8: error codes must be ERROR_CODES');
+select tests.eq((select status from public.processing_runs where id = tests.id('rb')), 'queued', 'the refused calls changed nothing');
+select public.finish_processing_run(tests.id('rb'), 'failed', 'processing_failed', 'all_extracts_failed');
+select tests.as_owner();
+select tests.eq((select last_error_message from public.handovers where id = tests.id('h2')), 'all_extracts_failed',
+                'members only ever see the reason token');
 select tests.as_owner();
 select tests.eq((select state from public.handovers where id = tests.id('h2')), 'in_review', 'a failed later run returns to in_review');
 select tests.ok((select erased_at is null and review_state = 'pending' from public.handover_points where id = tests.id('pa')),

@@ -2,8 +2,8 @@
 //   * auth.getUser() returns the user set with signInAs() (platform.ts), as the Supabase Auth server would
 //     after validating the session, so lib/db/actor.getVerifiedActor() mints actors through its real code;
 //   * auth.signInWithOtp() / exchangeCodeForSession() / verifyOtp() / signOut() are recorded, never sent.
-// Data access (rpc, from, storage) is deliberately NOT emulated here: lib/db is driven through its injected
-// DbClient / StorageClient interfaces (RecordingDb, RecordingStorage), never through this client.
+// The user-scoped (RLS) client's `rpc` and `storage` forward to the user RecordingDb / RecordingStorage
+// installed with installBackends() (platform.ts); without them they throw. `from` is never emulated.
 
 function state() {
   globalThis.__batonIt ??= {};
@@ -45,9 +45,19 @@ function client(kind) {
         return { error: null };
       },
     },
-    rpc: unsupported("rpc"),
+    rpc(fn, args) {
+      const b = state().backends;
+      if (!b) return unsupported("rpc (call installBackends first)")();
+      return b.userDb.rpc(fn, args);
+    },
     from: unsupported("from"),
-    storage: { from: unsupported("storage") },
+    storage: {
+      from(bucket) {
+        const b = state().backends;
+        if (!b) return unsupported("storage (call installBackends first)")();
+        return b.userStorage.from(bucket);
+      },
+    },
   };
 }
 

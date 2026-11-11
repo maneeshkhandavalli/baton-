@@ -111,11 +111,20 @@ select tests.ok(not has_function_privilege('authenticated', 'public.claim_ready_
 select tests.ok(has_function_privilege('service_role', 'public.complete_processing_job(uuid,integer,text,jsonb,text,text,timestamp with time zone,integer,integer)', 'EXECUTE'),
                 'control: the fenced worker API is granted to service_role');
 
--- QA-N1 (new, open): the pre-integration worker functions are still granted to service_role. They bypass the
--- reaper, stage ordering and fencing (M3–M5); interfaces.md I2 says pipeline must not use them, but only a
--- revoke makes that a control.
-select it.todo(not has_function_privilege('service_role', 'public.claim_processing_jobs(integer,integer)', 'EXECUTE'),
-               'QA-N1', 'legacy claim_processing_jobs is still executable by service_role');
-select it.todo(not has_function_privilege('service_role',
-                 'public.record_job_attempt(uuid,text,jsonb,text,text,timestamp with time zone,integer,integer)', 'EXECUTE'),
-               'QA-N1', 'legacy unfenced record_job_attempt is still executable by service_role');
+-- QA-N1 (fixed in 20261112000400): the pre-integration worker functions bypass the reaper, stage ordering
+-- and fencing (M3–M5); no API role may execute them.
+do $$
+declare
+  v_role text;
+begin
+  foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
+    perform tests.ok(not has_function_privilege(v_role, 'public.claim_processing_jobs(integer,integer)', 'EXECUTE'),
+                     'QA-N1: ' || v_role || ' cannot run the legacy unordered claim');
+    perform tests.ok(not has_function_privilege(v_role,
+                       'public.record_job_attempt(uuid,text,jsonb,text,text,timestamp with time zone,integer,integer)', 'EXECUTE'),
+                     'QA-N1: ' || v_role || ' cannot run the legacy unfenced completion');
+  end loop;
+end $$;
+select tests.as_service();
+select tests.throws('select * from public.claim_processing_jobs(5, 300)', '42501', 'QA-N1: the legacy claim is refused at call time');
+select tests.as_owner();
