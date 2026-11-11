@@ -40,7 +40,19 @@ function importSpecifiers(text: string): string[] {
 describe("lib/ai boundaries", () => {
   it("found the lib/ai sources", () => {
     const names = files.map((f) => f.rel);
-    for (const expected of ["provider.ts", "config.ts", "quote-check.ts", "providers/fake.ts", "prompts/versions.ts"]) {
+    for (const expected of [
+      "provider.ts",
+      "config.ts",
+      "quote-check.ts",
+      "providers/fake.ts",
+      "prompts/versions.ts",
+      "prompts/payload.ts",
+      "prompts/extract.ts",
+      "prompts/support.ts",
+      "extract.ts",
+      "verify-support.ts",
+      "stage.ts",
+    ]) {
       assert.ok(names.includes(expected), `missing ${expected}`);
     }
   });
@@ -96,5 +108,31 @@ describe("lib/ai boundaries", () => {
 
   it("no hard-coded credentials", () => {
     for (const f of files) assert.doesNotMatch(code(f.text), /\b(sk-[A-Za-z0-9]{8,}|sk_live_|AKIA[0-9A-Z]{8,}|AIza[0-9A-Za-z_-]{10,}|ghp_[A-Za-z0-9]{10,})/, f.rel);
+  });
+
+  it("declares no tools or function calling (§12.10 rule 2)", () => {
+    for (const f of files) assert.doesNotMatch(code(f.text), /\b(tools|tool_choice|functions|function_call)\s*:/, `${f.rel} declares tools`);
+  });
+});
+
+describe("fixtures/ai synthetic data", () => {
+  const FIXTURES = path.resolve(AI_ROOT, "../../fixtures/ai");
+  const all = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? all(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+
+  it("uses only synthetic phone numbers and example domains", () => {
+    for (const file of all(FIXTURES)) {
+      const text = readFileSync(file, "utf8").replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<uuid>");
+      for (const m of text.matchAll(/\+?\d[\d\s-]{8,}\d/g)) {
+        const digits = m[0].replace(/\D/g, "");
+        if (digits.length >= 10) assert.match(digits, /^(91)?999990000\d$/, `${file}: non-synthetic number ${m[0]}`);
+      }
+      for (const m of text.matchAll(/[\w.+-]+@([\w-]+(?:\.[\w-]+)+)/g)) {
+        assert.match(m[1], /^example\.(org|com)$/, `${file}: non-example email domain ${m[1]}`);
+      }
+      for (const m of text.matchAll(/https?:\/\/([^/\s"?]+)/g)) {
+        assert.match(m[1], /^example\.(org|com)$/, `${file}: non-example URL host ${m[1]}`);
+      }
+    }
   });
 });

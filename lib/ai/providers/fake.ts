@@ -21,6 +21,9 @@ import type { AppError, Result } from "../../contracts/api";
 import type { PointCategory } from "../../contracts/enums";
 import { EXTRACTION_CANDIDATES_MAX, EXTRACTION_QUOTE_MAX, EXTRACTION_STATEMENT_MAX, EXTRACTION_TITLE_MAX } from "../../contracts/schemas";
 import { abortedError, aiError, AI_ERROR_REASONS, toolCallRejectedError } from "../errors";
+import { buildExtractPrompt } from "../prompts/extract";
+import type { AiPrompt } from "../prompts/payload";
+import { buildSupportPrompt } from "../prompts/support";
 import { EXTRACT_PROMPT_VERSION, EXTRACT_SCHEMA_VERSION, SUPPORT_PROMPT_VERSION, SUPPORT_SCHEMA_VERSION } from "../prompts/versions";
 import type { AiCallMeta, AiCallResult, AiProvenance, AiProvider, AiRunConfig, ExtractRequest, VerifySupportRequest } from "../provider";
 
@@ -74,14 +77,27 @@ export interface FakeProviderScript {
 }
 
 export interface FakeProvider extends AiProvider {
-  /** In-memory record of the requests this instance received (test assertions only; never persisted). */
-  readonly calls: { readonly extract: ExtractRequest[]; readonly verifySupport: VerifySupportRequest[] };
+  /**
+   * In-memory record of the requests this instance received and the prompts a real adapter would send for
+   * them (built with the same lib/ai/prompts builders). Test assertions only; never persisted or logged.
+   */
+  readonly calls: {
+    readonly extract: ExtractRequest[];
+    readonly verifySupport: VerifySupportRequest[];
+    readonly extractPrompts: AiPrompt[];
+    readonly verifySupportPrompts: AiPrompt[];
+  };
 }
 
 // ── Adapter ──────────────────────────────────────────────────────────────────
 
 export function createFakeProvider(script: FakeProviderScript = {}): FakeProvider {
-  const calls = { extract: [] as ExtractRequest[], verifySupport: [] as VerifySupportRequest[] };
+  const calls = {
+    extract: [] as ExtractRequest[],
+    verifySupport: [] as VerifySupportRequest[],
+    extractPrompts: [] as AiPrompt[],
+    verifySupportPrompts: [] as AiPrompt[],
+  };
   const runConfig = fakeRunConfig();
 
   const extractBase: AiProvenance = {
@@ -108,12 +124,14 @@ export function createFakeProvider(script: FakeProviderScript = {}): FakeProvide
     async extract(req, opts) {
       const index = calls.extract.length;
       calls.extract.push(structuredClone(req));
+      calls.extractPrompts.push(buildExtractPrompt(req));
       const step = nextStep(script.extract, req, index);
       return runStep(step, opts?.signal, extractBase, () => defaultExtract(req));
     },
     async verifySupport(req, opts) {
       const index = calls.verifySupport.length;
       calls.verifySupport.push(structuredClone(req));
+      calls.verifySupportPrompts.push(buildSupportPrompt(req));
       const step = nextStep(script.verifySupport, req, index);
       return runStep(step, opts?.signal, verifyBase, () => defaultVerify(req));
     },
