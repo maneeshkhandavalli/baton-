@@ -1,25 +1,42 @@
 import type { Metadata } from "next";
-import { CircleHelp } from "lucide-react";
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
+import { GapsManager } from "@/components/gaps/gaps-manager";
 import { PageContainer } from "@/components/layout/page-container";
-import { EmptyState } from "@/components/shared/empty-state";
-import { PageHeader } from "@/components/shared/page-header";
+import { LoadingState } from "@/components/shared/loading-state";
+import { SectionHeading } from "@/components/shared/section-heading";
+import { getMockQueries } from "@/lib/mocks/queries";
 
 export const metadata: Metadata = { title: "Knowledge gaps" };
 
-export default function GapsPage() {
+export default function GapsPage({ params }: PageProps<"/handover/[id]/gaps">) {
   return (
-    <PageContainer width="wide" className="space-y-8">
-      <PageHeader
-        eyebrow="Handover"
-        title="Knowledge gaps"
-        description="Questions no source answers yet. Ask the people who know to fill them in."
+    <PageContainer className="space-y-8 lg:py-8">
+      <SectionHeading
+        variant="serif"
+        title="Gap Interview"
+        description="Questions no source answers. Send them to the outgoing member (or anyone who knows) through a private link; no account needed."
       />
-      <EmptyState
-        icon={<CircleHelp />}
-        title="No gaps identified yet"
-        description="Missing and conflicting knowledge will be listed here after processing."
-      />
+      <Suspense fallback={<LoadingState label="Loading questions…" />}>
+        <GapsContent params={params} />
+      </Suspense>
     </PageContainer>
+  );
+}
+
+async function GapsContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const queries = getMockQueries();
+  const [handover, questions, points] = await Promise.all([queries.getHandover(id), queries.listGapQuestions(id), queries.listPoints(id)]);
+  if (!handover.ok) notFound();
+  const review = handover.data.viewerRole === "outgoing" || handover.data.viewerRole === "reviewer";
+  return (
+    <GapsManager
+      handoverId={id}
+      questions={questions.ok ? questions.data : []}
+      points={points.ok ? points.data : []}
+      canManage={review && handover.data.state !== "approved" && handover.data.state !== "acknowledged"}
+    />
   );
 }
