@@ -1,26 +1,164 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Baton design tokens
+ * -------------------
+ * All colours are defined once as CSS custom properties on :root and exposed
+ * to Tailwind through @theme. Components must reference tokens (e.g.
+ * `bg-card`, `text-status-sourced-fg`) — never raw hex values.
+ *
+ * Dark mode: add a `.dark { ... }` block that redefines the same custom
+ * properties. Components need no changes.
+ */
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Typography — variables are injected by next/font in app/layout.tsx */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-heading: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Core surfaces */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Evidence status — base (marks, dots, logo), fg (text), soft (tints) */
+  --color-status-sourced: var(--status-sourced);
+  --color-status-sourced-fg: var(--status-sourced-fg);
+  --color-status-sourced-soft: var(--status-sourced-soft);
+  --color-status-inferred: var(--status-inferred);
+  --color-status-inferred-fg: var(--status-inferred-fg);
+  --color-status-inferred-soft: var(--status-inferred-soft);
+  --color-status-conflicting: var(--status-conflicting);
+  --color-status-conflicting-fg: var(--status-conflicting-fg);
+  --color-status-conflicting-soft: var(--status-conflicting-soft);
+  --color-status-missing: var(--status-missing);
+  --color-status-missing-fg: var(--status-missing-fg);
+  --color-status-missing-soft: var(--status-missing-soft);
+
+  /* Charts (shadcn compatibility) */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Radii — Baton uses 10–12px for most surfaces */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.2);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Elevation — soft, warm-tinted shadows */
+  --shadow-soft: 0 1px 2px 0 rgb(18 27 51 / 0.04), 0 1px 3px 0 rgb(18 27 51 / 0.03);
+  --shadow-raised: 0 2px 4px -1px rgb(18 27 51 / 0.05), 0 8px 24px -6px rgb(18 27 51 / 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  color-scheme: light;
+  --radius: 0.625rem; /* 10px; xl = 12px */
+
+  /* Brand palette */
+  --background: #f7f3ec;
+  --foreground: #16203d;
+  --card: #ffffff;
+  --card-foreground: #16203d;
+  --popover: #ffffff;
+  --popover-foreground: #16203d;
+  --primary: #3550e0;
+  --primary-foreground: #ffffff;
+  --secondary: #efe9df;
+  --secondary-foreground: #16203d;
+  --muted: #efe9df;
+  --muted-foreground: #5a6279;
+  --accent: #ebe5da;
+  --accent-foreground: #16203d;
+  --destructive: #c8384f;
+  --border: #e7e1d6;
+  --input: #ddd5c7;
+  --ring: #3550e0;
+
+  /* Sidebar */
+  --sidebar: #121b33;
+  --sidebar-foreground: #e8ebf4;
+  --sidebar-muted-foreground: #9aa3bd;
+  --sidebar-primary: #3550e0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(255 255 255 / 0.07);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: #7d8ff0;
+
+  /* Evidence status */
+  --status-sourced: #0e8a62;
+  --status-sourced-fg: #0a6b4c;
+  --status-sourced-soft: #e4f3ec;
+  --status-inferred: #b8780c;
+  --status-inferred-fg: #865606;
+  --status-inferred-soft: #f8eedb;
+  --status-conflicting: #c8384f;
+  --status-conflicting-fg: #a32a3f;
+  --status-conflicting-soft: #f9e5e8;
+  --status-missing: #6b7590;
+  --status-missing-fg: #4f586f;
+  --status-missing-soft: #eceef3;
+
+  /* Charts */
+  --chart-1: #3550e0;
+  --chart-2: #0e8a62;
+  --chart-3: #b8780c;
+  --chart-4: #c8384f;
+  --chart-5: #6b7590;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+  }
 }

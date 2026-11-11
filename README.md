@@ -1,36 +1,130 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Baton
 
-## Getting Started
+Source-backed knowledge handovers for student clubs, project teams and volunteer organisations.
 
-First, run the development server:
+## Stack
+
+Next.js 16 (App Router, Turbopack, Cache Components) · React 19 · TypeScript (strict) · Tailwind CSS v4 · shadcn/ui (Base UI primitives) · Framer Motion · Lucide · Zod · React Hook Form · Sonner
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000
+npm run lint
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+app/
+  (marketing)/        /                       public site (SiteHeader + SiteFooter)
+  (auth)/login        /login                  centred auth card
+  (workspace)/        /dashboard, /handover/* AppShell (dark sidebar)
+    handover/[id]/    processing · review · gaps · settings (shared HandoverNav)
+  (token)/            /g/[token], /h/[token]  SharedLinkShell, noindex
+components/
+  ui/                 shadcn/ui primitives (generated; edit sparingly)
+  layout/             AppShell, AppSidebar, MobileHeader, PageContainer, SiteHeader…
+  shared/             BatonLogo, PageHeader, SectionHeading, StatusBadge, LoadingState,
+                      EmptyState, ConfirmDialog, ProgressIndicator, FadeIn
+  dashboard/ handover/ review/   feature components, one folder per feature
+config/               site metadata, navigation, evidence-status metadata
+lib/                  fonts, routes (path helpers), utils (cn)
+types/                shared domain types (EvidenceStatus)
+hooks/                shared client hooks
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Conventions
 
-## Learn More
+- **Design tokens** live in `app/globals.css` (`:root` + `@theme`). Use token classes
+  (`bg-card`, `border-border`, `text-status-missing-fg`, `shadow-soft`), never raw hex.
+  Dark mode = add a `.dark {}` block redefining the same variables.
+- **Evidence statuses** (`sourced`, `inferred`, `conflicting`, `missing`) are defined in
+  `types/status.ts`; labels and classes in `config/status.ts`.
+  Use the `-fg` colour for text — the base colours are for marks and dots.
+- **Fonts:** `font-serif` (Instrument Serif) for page titles, `font-sans` (Inter) for UI,
+  `font-mono` (JetBrains Mono) for source quotes and evidence.
+- **Routes:** build paths with `routes` from `lib/routes.ts`.
+- Server components by default; add `"use client"` only for interactivity.
+- Import components directly from their files (no barrel files).
 
-To learn more about Next.js, take a look at the following resources:
+## Next.js 16.4: Cache Components and Suspense
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Cache Components (with Partial Prerendering) is **on by default**. Every route must produce
+a static shell at build time, and `npm run build` **fails** if runtime data is read outside
+a `<Suspense>` boundary. `npm run dev` only shows a warning in the overlay, so run
+`npm run build` before you merge.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Runtime data**: anything that is only known when the request arrives:
 
-## Deploy on Vercel
+| Source | Where it shows up |
+| --- | --- |
+| `params` for dynamic segments (`[id]`, `[token]`) without `generateStaticParams` | pages, layouts, `generateMetadata` |
+| `searchParams`, `cookies()`, `headers()`, `connection()` | server components |
+| `usePathname()`, `useParams()`, `useSearchParams()` under a dynamic segment | client components |
+| uncached `fetch`, database or AI calls | server components |
+| `new Date()`, `Math.random()`, `crypto.randomUUID()` during render | anywhere |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Rules**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Keep layouts and page shells synchronous. Don't `await params` at the top of a layout,
+   because that turns the whole subtree dynamic.
+2. Push runtime reads into small async child components and wrap them in
+   `<Suspense fallback={...}>`. Give the fallback the same size as the content
+   (skeleton, `LoadingState`) so the layout doesn't shift.
+3. Client components that use navigation hooks render inside `<Suspense>` with a static
+   fallback. Reference implementations:
+   - `components/layout/workspace-navigation.tsx`: static nav list fallback, active state fills in at request time.
+   - `app/(workspace)/handover/[id]/layout.tsx`: `HandoverNav` reads `useParams()` inside Suspense.
+4. For data that can be shared between requests, use `"use cache"` (with `cacheLife` /
+   `cacheTag`) rather than leaving it uncached.
+5. `export const instant = false` opts a route out of the static shell (blocking render).
+   It's a last resort; note why in a comment if you use it.
+6. Type pages and layouts with the global helpers `PageProps<"/handover/[id]">` and
+   `LayoutProps<"/handover/[id]">`. They're generated by `next dev`, `next build` or
+   `npx next typegen`. If `tsc` reports stale route types, delete `.next/` and rebuild.
+
+Pattern for a page that needs the handover id:
+
+```tsx
+import { Suspense } from "react";
+
+export default function ReviewPage({ params }: PageProps<"/handover/[id]/review">) {
+  return (
+    <PageContainer>
+      <PageHeader title="Review" />            {/* static: part of the shell */}
+      <Suspense fallback={<LoadingState />}>
+        <ReviewContent params={params} />      {/* pass the promise, await inside */}
+      </Suspense>
+    </PageContainer>
+  );
+}
+
+async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  // fetch handover data here
+}
+```
+
+The bundled docs for this exact version are in `node_modules/next/dist/docs/` (see `AGENTS.md`).
+Read them before using an unfamiliar API, because they differ from older Next.js releases.
+
+## shadcn/ui notes
+
+- This project uses the `base-nova` style, built on **Base UI** rather than Radix. To render a
+  component as another element, use the `render` prop (e.g. `<DialogTrigger render={<Button />} />`),
+  not `asChild`.
+- To style a `next/link` as a button, use `className={buttonVariants({ ... })}`.
+- Add components with `npx shadcn@latest add <name>`. Generated files in `components/ui/` import
+  `cn` from the `cn` package; app code imports it from `@/lib/utils`. Both are the same function.
+- `components/ui/card.tsx` and `components/ui/sonner.tsx` have small Baton changes (warm border,
+  light-only toasts). Running `shadcn add --overwrite` would undo them.
+
+## Working in parallel (worktrees)
+
+- Each feature lives in its own folder (`components/<feature>/`, its own routes). Edit
+  `components/shared`, `components/layout`, `config/`, `app/globals.css` and `lib/` only when
+  your feature really needs it, and say so in your PR, because those files affect every other branch.
+- Run `npm install` in each new worktree, because `node_modules` is not shared.
+- Use a different dev port per worktree: `npm run dev -- -p 3001`.
+- Before merging, run `npm run lint` and `npm run build`.
