@@ -1,0 +1,13 @@
+# Local development only (supabase CLI). No production project is configured or assumed (§13.2.12).
+project_id = "baton-dev"
+
+[db]
+# §2: migrations rely on UNIQUE NULLS NOT DISTINCT and ON DELETE SET NULL (column_list).
+major_version = 15
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+[auth.email]
+enable_signup = true
