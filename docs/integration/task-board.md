@@ -25,21 +25,21 @@ Previous run archived (not applied): `../baton-first-run-recovery-20261112-03000
 | L3 | AI output schemas + caps in contracts (§11.8 rule 2, §12.10) | lead | L2 | done (`1f2b635`, `7257fae`) | contract 103/103, tsc | — | self |
 | L4 | Interface agreements I1–I3 | lead | L3 | done | — | — | — |
 | W0 | Isolation + model check, recon, DB requests | all workers | L4 | done | — | — | lead: approved |
-| A1 | provider types, config (`provider_not_configured`), quote-check, fake adapter | ai-engine | W0 | todo | unit | — | lead |
-| A2 | extract + verify-support with Zod + quote verification | ai-engine | A1 | todo | unit | — | lead, qa |
-| A3 | prompt-injection fixtures + suite (`fixtures/ai/**`) | ai-engine | A2 | todo | suite | — | qa |
-| L5 | DB requests DB-1..11, R1, R2 + QA-M1..M5/M7/L1 fixes (migration 20261112000100, `lib/db`) | lead | W0 | done (`e642dbf`) | SQL 9/9, lib/db 105/105 | DB-12/13 deferred | qa: pending |
-| B1 | `lib/data` real facade | backend | W0 | todo | unit | — | lead |
-| B2 | `lib/actions/*` (§11.3) except startProcessing/previewSource | backend | W0 | todo | unit | — | lead, qa |
-| B3 | previewSource + startProcessing + consent provider | backend | A1, P1, L5 | todo | unit | — | lead, qa |
-| P1 | plan, pepper, worker skeleton, stage ordering | pipeline | A1, W0 | todo | unit | stage ordering vs `max_attempts` | lead |
-| P2 | parse, extract, verify_quotes, verify_support, analyze, prepare_review | pipeline | P1, A2, L5 | todo | unit + synthetic run | — | lead, qa |
+| A1 | provider types, config (`provider_not_configured`), quote-check, fake adapter | ai-engine | W0 | done, merged `005438d` | lib/ai 78 | — | lead: approved |
+| A2 | extract + verify-support with Zod + quote verification | ai-engine | A1 | done, merged `e2454cc` | lib/ai 153 | PI-11 needs the live suite (D11) | lead: approved |
+| A3 | prompt-injection fixtures + suite (`fixtures/ai/**`) | ai-engine | A2 | done, merged `e2454cc` | 15 cases; live suite gated on D11 | — | lead: approved |
+| L5 | DB-1..15, R1, R2 + QA-M1..M5/M7/L1/N1/L8 (migrations 20261112000100–0400, `lib/db`) | lead | W0 | done (`e642dbf`, `e3c685d`, `d4ca286`, `332be88`) | SQL 9/9, Tier P 6/6, lib/db 105 | DB-12/13 deferred | qa: verified (NOW HOLDS) |
+| B1 | `lib/data` real facade | backend | W0 | done, merged `14f81af` | lib/actions 70 | — | lead: approved |
+| B2 | `lib/actions/*` (§11.3) except startProcessing/previewSource | backend | W0 | done, merged `14f81af` | lib/actions 70 | — | lead: approved |
+| B3 | previewSource + startProcessing + consent provider | backend | A1, P1, L5 | done, merged `6c15bf5` | lib/actions 81 | — | lead: approved |
+| P1 | plan, pepper, worker skeleton, stage ordering | pipeline | A1, W0 | done, merged `c78d4c2` | pipeline 58 | — (DB-1, DB-14, DB-15) | lead: approved |
+| P2 | extract, verify_quotes, verify_support wiring | pipeline | P1, A2, L5 | in_progress (design approved; wiring real A2) | pipeline 87 with fakes | — | lead: design approved |
 | Q1 | Read-only security audit of foundations | qa-security | W0 | done (1 high, 9 medium, 8 low) | suites green | — | lead: triaged in interfaces.md |
 | Q2 | Integration acceptance test plan | qa-security | Q1 | done (IT-01..IT-14) | — | — | lead: approved |
-| Q3 | `tests/integration/**` | qa-security | Q2 approved | todo | integration | — | lead |
-| L6 | Worker route `app/api/pipeline/drain` (+ cron secret) | lead | P1 | todo | — | — | qa |
-| L7 | UI rewiring mocks → `lib/data` + `lib/actions`; `/demo` stays on mocks | lead | B1, B2 | todo | build | Q3 (published route) | qa |
-| L8 | `.env.example`, test scripts | lead | — | env done (`a1557d4`); scripts todo | — | — | — |
+| Q3 | `tests/integration/**` | qa-security | Q2 approved | part 1 merged; part 2 in_progress | Node 75, Tier P 6/6 | E2E after P2 | lead |
+| L6 | Worker route `app/api/pipeline/drain` (+ cron secret) | lead | P1 | done | build | — | qa: IT-13 pending |
+| L7 | UI rewiring mocks → `lib/data` + `lib/actions`; `/demo` stays on mocks; real invite flow; `/handover/[id]/published` | lead | B1, B2 | done `a617780` | build | Q3 decision pending (default applied) | qa: IT-07/14 pending |
+| L8 | `.env.example`, test scripts | lead | — | done | `npm test` (all suites) | — | — |
 | L9 | Integrate worker branches; full tests, SQL tests, tsc, lint, build; synthetic E2E | lead | all | todo | all | — | qa |
 
 ## Open decisions (not resolved by agents)
@@ -51,6 +51,10 @@ Previous run archived (not applied): `../baton-first-run-recovery-20261112-03000
 - **Q5** rate limits for uploads and AI calls.
 
 ## QA findings not fixed tonight (for the user)
+
+- **PI-11** a verifier model that obeys an injected quote can mark it `supports`; only the live injection suite (after D11) can test this. Pre-production gate.
+- **M1b** SQL checks that an exact quote occurs in the body, not that UTF-16 offsets point at it.
+- **DB-12/13** run fencing on writers and atomic chunk inserts are deferred.
 
 - **L2** `erase_participant`/`purge_handover` lack `_require_actor`: fix before D27 grants them.
 - **L3** the DB accepts provider `fake`: only TypeScript config guards production.
