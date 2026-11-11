@@ -18,7 +18,8 @@
     "test:actions": "node --import ./lib/contracts/__tests__/resolve-ts.mjs --test \"lib/actions/__tests__/*.test.ts\"",
     "test:pipeline": "node --import ./lib/ai/__tests__/resolve-ai.mjs --test \"lib/pipeline/__tests__/*.test.ts\"",
     "test:integration": "node --import ./tests/integration/support/resolve.mjs --test \"tests/integration/**/*.test.ts\"",
-    "test:integration:sql": "bash tests/integration/db/run.sh"
+    "test:integration:sql": "bash tests/integration/db/run.sh",
+    "test:e2e": "node --import ./tests/integration/support/resolve.mjs --test tests/integration/e2e-pipeline.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
