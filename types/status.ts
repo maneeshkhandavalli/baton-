@@ -4,7 +4,8 @@
  * - inferred:    reasonably derived from sources, but not stated outright
  * - conflicting: sources disagree
  * - missing:     knowledge the handover needs but no source covers
+ *
+ * Canonical definition: lib/contracts/enums.ts. Re-exported here so Phase 01 imports keep working.
  */
-export const EVIDENCE_STATUSES = ["sourced", "inferred", "conflicting", "missing"] as const;
-
-export type EvidenceStatus = (typeof EVIDENCE_STATUSES)[number];
+export { EVIDENCE_STATUSES } from "@/lib/contracts/enums";
+export type { EvidenceStatus } from "@/lib/contracts/enums";

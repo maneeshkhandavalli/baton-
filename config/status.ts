@@ -1,4 +1,4 @@
-import type { EvidenceStatus } from "@/types/status";
+import type { EvidenceStatus } from "@/lib/contracts/enums";
 
 interface StatusMeta {
   label: string;
