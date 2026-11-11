@@ -211,3 +211,12 @@ select tests.throws(format('select public.source_preview_target(%L, %L)', tests.
 select tests.throws(format('select public.source_preview_target(%L, %L)', tests.id('ann'), tests.id('parsed2')), 'BTIT0',
                     'a parsed source has no raw upload to preview');
 select tests.eq((select state from public.sources where id = tests.id('up')), 'uploaded', 'preview never changes state');
+
+-- ── DB-14: job states of a run ──────────────────────────────────────────────
+select tests.as_service();
+select tests.eq(public.list_run_jobs(tests.id('run')) ->> 'runStatus', 'running', 'run status');
+select tests.eq(jsonb_array_length(public.list_run_jobs(tests.id('run')) -> 'jobs'), 7, 'every job of the run');
+select tests.eq(public.list_run_jobs(tests.id('run')) -> 'jobs' -> 0 ->> 'stage', 'extract', 'ordered by stage rank');
+select tests.ok(public.list_run_jobs(gen_random_uuid()) is null, 'unknown run is null');
+select tests.as_reader('ann');
+select tests.throws(format('select public.list_run_jobs(%L)', tests.id('run')), '42501', 'browser roles cannot list jobs');

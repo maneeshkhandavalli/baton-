@@ -388,6 +388,25 @@ export async function listGapQuestionsForPipeline(adminDb: DbClient, handoverId:
   return ((await callRpc(adminDb, "list_gap_questions_for_pipeline", { p_handover_id: handoverId })) ?? []) as PipelineGapQuestion[];
 }
 
+export interface RunJobState {
+  id: string;
+  stage: PipelineStage;
+  sourceId: string | null;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  attempt: number;
+  maxAttempts: number;
+  errorCode: string | null;
+  /** reason token only */
+  errorMessage: string | null;
+}
+
+/** DB-14: the run's status and every job's state, ordered by stage (§9.3 run outcome). */
+export async function listRunJobs(adminDb: DbClient, runId: string): Promise<{ runStatus: string; jobs: RunJobState[] }> {
+  const data = await callRpc(adminDb, "list_run_jobs", { p_run_id: runId });
+  if (!data) throw new DbError("not_found");
+  return data as { runStatus: string; jobs: RunJobState[] };
+}
+
 /** DB-10: §10.10 review order, only inside the given active run. Returns the number of points updated. */
 export async function setPointSortKeys(
   adminDb: DbClient,
