@@ -8,7 +8,7 @@ import { createMemoryLogger } from "../log";
 import { classifyError, createDrainer } from "../runner";
 import type { StageHandler } from "../stage-context";
 import { LeaseLostError, type StageOutcome } from "../types";
-import { notWiredAi } from "../ai";
+import { providerNotConfiguredError } from "../../ai/errors";
 import { claimed, fakeAi, fakeDb, fakeStorage, IDS, jobContext, rpcError, runJob } from "./fakes";
 
 const NOW = Date.UTC(2026, 10, 12, 1, 0, 0);
@@ -156,7 +156,7 @@ describe("drain loop", () => {
     assert.equal(completion(db)[0].p_outcome, "succeeded");
   });
 
-  it("an AI stage without the A2 functions fails the run (stage_not_wired), never fakes success", async () => {
+  it("provider_not_configured fails the job and the run at once, without an AI call", async () => {
     const db = fakeDb({
       claim_ready_processing_jobs: (() => {
         let n = 1;
@@ -169,16 +169,19 @@ describe("drain loop", () => {
           : { accessLevel: "everyone", messages: [] },
       list_points_for_pipeline: [],
       complete_processing_job: "failed",
-      list_run_jobs: { runStatus: "running", jobs: [runJob("extract", "failed", "stage_not_wired"), runJob("verify_support", "queued")] },
+      list_run_jobs: { runStatus: "running", jobs: [runJob("extract", "failed", "provider_not_configured"), runJob("verify_support", "queued")] },
     });
-    const ai = { providerForRun: fakeAi().ai.providerForRun, extractCandidates: notWiredAi, verifySupport: notWiredAi };
+    const { ai, calls } = fakeAi({ provider: { ok: false, error: providerNotConfiguredError() } });
     const logger = createMemoryLogger();
     await createDrainer({ db: db.client, storage: fakeStorage(null).storage, logger, ai, getPepper: () => ({ ok: true, data: { pepper: "x".repeat(32), version: "p1" } }) })({});
     assert.equal(completion(db)[0].p_outcome, "failed");
-    assert.equal(completion(db)[0].p_error_message, "stage_not_wired");
+    assert.equal(completion(db)[0].p_error_message, "provider_not_configured");
+    assert.equal(completion(db)[0].p_error_code, "precondition_failed");
+    assert.equal(calls.extract.length, 0);
     const finish = db.called("finish_processing_run")[0].args;
     assert.equal(finish.p_status, "failed");
-    assert.equal(finish.p_error_message, "stage_not_wired");
+    assert.equal(finish.p_error_code, "precondition_failed");
+    assert.equal(finish.p_error_message, "provider_not_configured");
   });
 
   it("yield requeues with progress and counts as deferred", async () => {

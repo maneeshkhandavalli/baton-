@@ -1,10 +1,11 @@
 // extract, verify_quotes and verify_support against the amended I1 signatures, with the real fake adapter
-// as provider and scripted extractCandidates / verifySupport (A2 not merged yet). Synthetic data only.
+// as provider and scripted extractCandidates / verifySupport, to drive stage edge cases precisely. The real
+// A2 functions run in e2e-ai.test.ts. Synthetic data only.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { aiConfigChangedError, providerNotConfiguredError } from "../../ai/errors";
-import { EXTRACT_REQUEST_LIMITS } from "../../ai/limits";
+import { emptyDropCounts, EXTRACT_REQUEST_LIMITS, type ExtractDropReason } from "../../ai/extract";
 import type { ExtractionMessage, JobContext, LinkNeedingSupport, PipelinePoint } from "../../db/pipeline";
 import type { CheckedCandidate, ExtractOutcome } from "../ai";
 import { planChunks } from "../chunk";
@@ -72,8 +73,8 @@ function withProgress(job: JobContext, progressDone: number, sourceCount = 1): J
   };
 }
 
-function outcome(candidates: CheckedCandidate[], dropped: Record<string, number> = {}): { ok: true; data: ExtractOutcome } {
-  return { ok: true, data: { candidates, dropped, provenance: provenance("extract"), attempt: attemptRecord() } };
+function outcome(candidates: CheckedCandidate[], dropped: Partial<Record<ExtractDropReason, number>> = {}): { ok: true; data: ExtractOutcome } {
+  return { ok: true, data: { candidates, dropped: { ...emptyDropCounts(), ...dropped }, provenance: provenance("extract"), attempt: attemptRecord() } };
 }
 
 function ownerCandidate(statement: string, citations: CheckedCandidate["citations"], responsibility = "Reimbursements"): CheckedCandidate {

@@ -1,53 +1,17 @@
 /**
- * The pipeline's view of lib/ai (I1 as amended by the W0 decisions). The stages depend on this interface,
- * so they run in tests with the fake adapter and a stubbed extract/verify, and `worker.ts` binds the real
- * functions.
- *
- * `ExtractOutcome`, `CheckedCandidate` and `SupportOutcome` mirror the amended I1 signatures of
- * `lib/ai/extract.ts` and `lib/ai/verify-support.ts` (A2). When A2 merges, `worker.ts` passes those
- * functions here; their types must stay assignable to these.
+ * The pipeline's view of lib/ai (I1 as amended by the W0 decisions). Stages depend on this interface so
+ * they can run against the fake adapter in tests; `worker.ts` binds the real `getAiProviderForRun`,
+ * `extractCandidates` and `verifySupport`.
  */
 
-import type {
-  AiAttemptRecord,
-  AiProvenance,
-  AiProvider,
-  AiResult,
-  AiRunConfig,
-  AiStageOptions,
-  ExtractRequest,
-  VerifySupportRequest,
-} from "../ai/provider";
+import type { ExtractOutcome } from "../ai/extract";
+import type { AiProvenance, AiProvider, AiResult, AiRunConfig, AiStageOptions, ExtractRequest, VerifySupportRequest } from "../ai/provider";
+import type { SupportOutcome } from "../ai/verify-support";
 import type { AppError, Result } from "../contracts/api";
-import type { SupportVerdict } from "../contracts/enums";
-import type { ExtractionCandidate, ExtractionCitation } from "../contracts/schemas";
-import { failure, type FailureReason, type PipelineFailure } from "./types";
+import { failure, RUN_FATAL_REASONS, type FailureReason, type PipelineFailure } from "./types";
 
-export interface CheckedCitation extends ExtractionCitation {
-  quoteCheck: "exact" | "normalized" | "not_found";
-  quoteStart: number | null;
-  quoteEnd: number | null;
-  /** `body.slice(quoteStart, quoteEnd)` for exact/normalized, null for not_found (I1 amendment 6). */
-  matchedText: string | null;
-}
-
-type WithCheckedCitations<C> = C extends unknown ? Omit<C, "citations"> & { citations: CheckedCitation[] } : never;
-export type CheckedCandidate = WithCheckedCitations<ExtractionCandidate>;
-
-export interface ExtractOutcome {
-  candidates: CheckedCandidate[];
-  /** Counts by drop reason only, never content. */
-  dropped: Record<string, number>;
-  provenance: AiProvenance;
-  attempt: AiAttemptRecord;
-}
-
-export interface SupportOutcome {
-  verdict: Exclude<SupportVerdict, "unchecked">;
-  rationale: string | null;
-  provenance: AiProvenance;
-  attempt: AiAttemptRecord;
-}
+export type { CheckedCandidate, CheckedCitation, ExtractOutcome } from "../ai/extract";
+export type { SupportOutcome } from "../ai/verify-support";
 
 export interface PipelineAi {
   /** `getAiProviderForRun`: provider_not_configured, or ai_config_changed against the run snapshot. */
@@ -65,13 +29,17 @@ const AI_REASONS: ReadonlySet<string> = new Set<FailureReason>([
   "ai_timed_out",
   "ai_aborted",
   "ai_request_too_large",
-  "stage_not_wired",
+  "ai_request_invalid",
 ]);
 
 /** A lib/ai failure as a pipeline failure: the reason token is kept when known, the code always. */
 export function mapAiFailure(error: AppError): PipelineFailure {
   const reason = error.details?.reason;
-  if (typeof reason === "string" && AI_REASONS.has(reason)) return failure(error.code, reason as FailureReason, error.retryable);
+  if (typeof reason === "string" && AI_REASONS.has(reason)) {
+    // A configuration problem never heals by retrying (I1: ai_config_changed is not retryable).
+    const retryable = error.retryable && !RUN_FATAL_REASONS.has(reason);
+    return failure(error.code, reason as FailureReason, retryable);
+  }
   return failure(error.code, error.retryable ? "ai_transient" : "ai_provider_error", error.retryable);
 }
 
@@ -105,9 +73,3 @@ export function provenanceBeforeCall(rc: AiRunConfig, stage: "extract" | "verify
     schemaVersion: rc[stage].schemaVersion,
   };
 }
-
-/** Until A2 merges: an AI stage fails the run loudly instead of pretending to have run. */
-export const notWiredAi = async (): Promise<AiResult<never>> => ({
-  ok: false,
-  error: { code: "internal", message: "This processing stage is not available yet.", retryable: false, details: { reason: "stage_not_wired" } },
-});

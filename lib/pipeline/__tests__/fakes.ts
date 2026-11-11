@@ -1,6 +1,7 @@
 // Test doubles for the pipeline: a scripted fake DbClient, a fake storage client and synthetic job
 // contexts. Synthetic data only.
 
+import { emptyDropCounts } from "../../ai/extract";
 import type { AiAttemptRecord, AiProvenance, AiProvider, AiResult, AiRunConfig, ExtractRequest, VerifySupportRequest } from "../../ai/provider";
 import { createFakeProvider, fakeRunConfig } from "../../ai/providers/fake";
 import type { Result } from "../../contracts/api";
@@ -40,7 +41,7 @@ export function provenance(stage: "extract" | "verify"): AiProvenance {
 }
 
 /**
- * A stand-in for lib/ai's extractCandidates / verifySupport (A2 is not merged yet). The provider itself is
+ * A scripted stand-in for lib/ai's extractCandidates / verifySupport, for stage edge cases. The provider is
  * the real fake adapter; only the two A2 functions are scripted, per the amended I1 signatures.
  */
 export function fakeAi(script: {
@@ -59,7 +60,7 @@ export function fakeAi(script: {
       return (
         script.extract?.(req, calls.extract.length - 1) ?? {
           ok: true,
-          data: { candidates: [], dropped: {}, provenance: provenance("extract"), attempt: attemptRecord() },
+          data: { candidates: [], dropped: emptyDropCounts(), provenance: provenance("extract"), attempt: attemptRecord() },
         }
       );
     },

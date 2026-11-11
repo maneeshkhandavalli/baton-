@@ -36,7 +36,7 @@ export type FailureReason =
   | "source_unavailable"
   | "handover_unavailable"
   | "run_inactive"
-  | "stage_not_wired"
+  | "ai_request_invalid"
   | "db_transient"
   | "db_rejected"
   | "internal";
@@ -45,7 +45,6 @@ export type FailureReason =
 export const RUN_FATAL_REASONS: ReadonlySet<string> = new Set<FailureReason>([
   "provider_not_configured",
   "ai_config_changed",
-  "stage_not_wired",
 ]);
 
 export interface PipelineFailure {
