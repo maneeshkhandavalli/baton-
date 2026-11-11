@@ -13,24 +13,14 @@
 
 import { createHash } from "node:crypto";
 
+import type { AiRunConfig } from "../ai/provider";
 import type { AppError, Result } from "../contracts/api";
 import type { PipelineStage, SourceState } from "../contracts/enums";
 
 export const PIPELINE_VERSION = "pipeline@1";
 
-interface StageModelConfig {
-  model: string;
-  promptVersion: string;
-  schemaVersion: string;
-}
-
-/** Structural mirror of §11.8 `AiRunConfig` (lib/ai/provider.ts), typed here until I1 lands. */
-export interface AiRunConfig {
-  provider: string;
-  adapterVersion: string;
-  extract: StageModelConfig;
-  verify: StageModelConfig;
-}
+export type { AiRunConfig };
+type StageModelConfig = AiRunConfig["extract"];
 
 export interface PlannedJob {
   stage: PipelineStage;
