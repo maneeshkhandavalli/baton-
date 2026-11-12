@@ -155,3 +155,53 @@ describe("unauthorised access is refused with typed errors on every handover-sco
     assert.deepEqual(f.calls, []);
   });
 });
+
+describe("createGapQuestion never fails after the question is committed (R3)", () => {
+  const NEW_Q = "77777777-7777-4777-8777-777777777777";
+  const base = { handoverId: H, question: "  Who holds the keys?  ", context: " The office ", priority: "optional", accessLevel: "everyone" } as const;
+
+  it("the RLS list includes the question: it is returned as read", async () => {
+    const listed = { id: NEW_Q, pointId: null, category: "owner", question: "Who holds the keys?", context: "The office", priority: "optional", status: "open", privacyHeld: false, answers: [] } as const;
+    const f = fakeDeps({ rpc: { create_gap_question: { data: NEW_Q } }, queries: { listGapQuestions: async () => ({ ok: true, data: [listed] }) } });
+    assert.deepEqual(await gaps.createGapQuestion(f.deps, { ...base, category: "owner" }), { ok: true, data: listed });
+  });
+
+  it("the re-read misses it or fails: ok with the committed summary, not not_found", async () => {
+    for (const listGapQuestions of [
+      async () => ({ ok: true as const, data: [] }),
+      async () => ({ ok: false as const, error: { code: "internal" as const, message: "x", retryable: false } }),
+      async () => { throw new Error("network"); },
+    ]) {
+      const f = fakeDeps({ rpc: { create_gap_question: { data: NEW_Q } }, queries: { listGapQuestions } });
+      const r = await gaps.createGapQuestion(f.deps, { ...base, category: "owner" });
+      assert.deepEqual(r, {
+        ok: true,
+        data: { id: NEW_Q, pointId: null, category: "owner", question: "Who holds the keys?", context: "The office", priority: "optional",
+          status: "open", privacyHeld: false, answers: [] },
+      });
+      assert.equal(f.refreshes, 1);
+    }
+  });
+
+  it("a point question in the fallback takes the point's category and privacy hold", async () => {
+    const f = fakeDeps({
+      rpc: { create_gap_question: { data: NEW_Q } },
+      queries: {
+        listGapQuestions: async () => ({ ok: true, data: [] }),
+        getPoint: async () => ({ ok: true, data: { id: P, category: "contact", privacyReview: "required" } }),
+      },
+    });
+    const r = await gaps.createGapQuestion(f.deps, { ...base, pointId: P });
+    assert.ok(r.ok);
+    assert.equal(r.data.pointId, P);
+    assert.equal(r.data.category, "contact");
+    assert.equal(r.data.privacyHeld, true);
+  });
+
+  it("a refusal before the commit is still the typed error", async () => {
+    const f = fakeDeps({ rpc: { create_gap_question: dbError("BTFB0") } });
+    const r = await gaps.createGapQuestion(f.deps, { ...base, category: "owner" });
+    assert.equal(!r.ok && r.error.code, "forbidden");
+    assert.deepEqual(f.queryCalls, []);
+  });
+});
