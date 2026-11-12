@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, CircleDashed, FileText, Loader2, MessageCircle, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, Loader2, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AccessBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
+import { runReasonText, stageStatusMeta } from "@/components/shared/run-status";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyConsent } from "@/components/wizard/consent";
@@ -108,7 +109,10 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
 
         {r?.status === "failed" && (
           <Alert tone="danger" title="This run stopped before it finished">
-            {r.error?.message ?? "Something went wrong while reading your sources."}
+            {runReasonText(r.error?.message).text}
+            {runReasonText(r.error?.message).reference && (
+              <span className="ml-1 font-mono text-2xs opacity-80">(ref: {runReasonText(r.error?.message).reference})</span>
+            )}
             {canStart ? " Try again below." : " Ask the creator or outgoing member to try again."}
           </Alert>
         )}
@@ -130,24 +134,44 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         {r && (
           <ol className="space-y-1" aria-label="Pipeline stages">
             {stages.map((s) => {
-              const Icon = s.status === "succeeded" ? Check : s.status === "running" ? Loader2 : s.status === "failed" ? AlertTriangle : CircleDashed;
+              const meta = stageStatusMeta(s.status);
+              const Icon =
+                s.status === "succeeded" ? Check : s.status === "running" ? Loader2 : s.status === "partial" ? CircleAlert : s.status === "failed" ? AlertTriangle : CircleDashed;
               return (
-                <li key={s.stage} aria-current={s.status === "running" ? "step" : undefined} className={cn("flex items-start gap-3 rounded-lg px-2 py-2.5", s.status === "running" && "bg-primary-soft/50")}>
+                <li
+                  key={s.stage}
+                  aria-current={s.status === "running" ? "step" : undefined}
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg border border-transparent px-2 py-2.5",
+                    s.status === "running" && "bg-primary-soft/50",
+                    s.status === "partial" && "border-warning/30 bg-warning-soft/50",
+                    s.status === "failed" && "border-destructive/25 bg-destructive-soft/40",
+                  )}
+                >
                   <span
                     aria-hidden="true"
                     className={cn(
                       "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border",
-                      s.status === "succeeded" && "border-primary bg-primary text-primary-foreground",
-                      s.status === "running" && "border-primary text-primary",
-                      (s.status === "queued" || s.status === "cancelled") && "border-border-strong text-muted-foreground",
-                      s.status === "failed" && "border-destructive text-destructive-fg",
+                      meta.tone === "done" && "border-primary bg-primary text-primary-foreground",
+                      meta.tone === "active" && "border-primary text-primary",
+                      meta.tone === "idle" && "border-border-strong text-muted-foreground",
+                      meta.tone === "warning" && "border-warning bg-warning-soft text-warning-fg",
+                      meta.tone === "danger" && "border-destructive text-destructive-fg",
                     )}
                   >
                     <Icon className={cn("size-3.5", s.status === "running" && "animate-spin")} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={cn("text-sm", s.status === "queued" ? "text-muted-foreground" : "font-medium")}>{stageLabel[s.stage].label}</p>
-                    <p className="text-xs text-muted-foreground">{stageLabel[s.stage].description}</p>
+                    <p className={cn("text-sm", s.status === "queued" ? "text-muted-foreground" : "font-medium")}>
+                      {stageLabel[s.stage].label}
+                      <span className="sr-only">: {meta.label}</span>
+                    </p>
+                    <p className="text-caption text-muted-foreground">{stageLabel[s.stage].description}</p>
+                    {(s.status === "partial" || s.status === "failed") && (
+                      <p aria-hidden="true" className={cn("mt-1 text-caption font-medium", s.status === "partial" ? "text-warning-fg" : "text-destructive-fg")}>
+                        {meta.label}
+                      </p>
+                    )}
                   </div>
                   <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
                     {s.done}/{s.total}
