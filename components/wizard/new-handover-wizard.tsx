@@ -30,7 +30,7 @@ import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSource
 import { routes } from "@/lib/routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-import { blankSource, fromSummary, maxStepFor, phaseOf, signedTarget, type DraftSource } from "./draft-state";
+import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTarget, TOO_LARGE_MESSAGE, type DraftSource } from "./draft-state";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
 import type { DetailsValues } from "./details-save";
 import { ScopeStep } from "./scope-step";
@@ -381,7 +381,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   // ── Step 3: real signed upload → server verification → consent → preview ─
   async function uploadSource(localId: string, entry: { name: string; size: number; kind: SourceKind; file: File }) {
     if (!handoverId) return;
-    if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", errorPhase: "too_large", error: "Files can be up to 25 MB. Export the chat without media, or split the document." });
+    if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", errorPhase: "too_large", error: TOO_LARGE_MESSAGE });
     if (entry.size === 0) return update(localId, { status: "error", errorPhase: "empty", error: "This file is empty." });
     update(localId, { status: "hashing", error: undefined, errorPhase: undefined });
     let sha: string;
@@ -431,24 +431,18 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
       }
       if (confirmed.ok || !(confirmed.error.retryable || confirmed.error.code === "internal")) break;
     }
-    if (confirmed && !confirmed.ok && confirmed.error.code === "validation_failed") {
-      // The server checked the bytes and they aren't this kind of file (e.g. a PDF renamed .docx).
-      const hint = isTxt(entry.name) ? " If it's a plain text document, switch it to Plain text." : "";
-      return cleanUp(localId, sourceId, `This file isn't a valid ${KIND_NOUN[entry.kind]}. Choose the right file.${hint}`, "unsupported");
-    }
     if (!confirmed?.ok) {
-      const transient = !!confirmed && (confirmed.error.retryable || confirmed.error.code === "internal");
-      return cleanUp(
-        localId,
-        sourceId,
-        transient ? "Baton couldn't confirm the upload. Check your connection and retry." : "The uploaded file didn't match what was sent. Retry the upload.",
-      );
+      // validation_failed is told apart by details.reason: wrong kind (e.g. a PDF renamed .docx), a damaged
+      // upload (size or SHA-256 mismatch: Retry), or over the size limit (QA-R3-16).
+      const hint = isTxt(entry.name) ? " If it's a plain text document, switch it to Plain text." : "";
+      const failure = confirmFailure(confirmed ? confirmed.error : null, { kindNoun: KIND_NOUN[entry.kind], textHint: hint });
+      return cleanUp(localId, sourceId, failure.message, failure.phase);
     }
     await consentAndPreview(localId, sourceId, "everyone");
   }
 
   /** A failed upload removes its pending source; if that fails too, the row says so and keeps the id for Remove. */
-  async function cleanUp(localId: string, sourceId: string, message: string, phase: "failed" | "unsupported" = "failed") {
+  async function cleanUp(localId: string, sourceId: string, message: string, phase: "failed" | "unsupported" | "too_large" = "failed") {
     let removed = false;
     try {
       removed = (await removeSource({ sourceId })).ok;

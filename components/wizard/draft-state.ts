@@ -91,3 +91,30 @@ export function phaseOf(s: Pick<DraftSource, "status" | "errorPhase" | "needsDat
   if (s.needsDateOrder) return "needs_input";
   return s.errorPhase ?? "failed";
 }
+
+/** Size message shared by the local check and the server's `too_large` verdict. */
+export const TOO_LARGE_MESSAGE = "Files can be up to 25 MB. Export the chat without media, or split the document.";
+
+/**
+ * What a failed `confirmSourceUploaded` means for the row (QA-R3-16). `validation_failed` covers
+ * several server checks, told apart by `details.reason`: only `kind_mismatch` says the bytes aren't this
+ * kind of file; `integrity_mismatch` (size or SHA-256 differs) is a damaged upload worth retrying;
+ * `too_large` is the size limit. An unknown reason never blames the file type.
+ */
+export function confirmFailure(
+  error: { code: string; retryable?: boolean; details?: Record<string, unknown> } | null,
+  file: { kindNoun: string; textHint?: string },
+): { message: string; phase: "failed" | "unsupported" | "too_large" } {
+  if (error?.code === "validation_failed") {
+    const reason = typeof error.details?.reason === "string" ? error.details.reason : undefined;
+    if (reason === "kind_mismatch") return { phase: "unsupported", message: `This file isn't a valid ${file.kindNoun}. Choose the right file.${file.textHint ?? ""}` };
+    if (reason === "too_large") return { phase: "too_large", message: TOO_LARGE_MESSAGE };
+    if (reason === "integrity_mismatch") return { phase: "failed", message: "The upload didn't arrive intact. Retry the upload." };
+    return { phase: "failed", message: "Baton couldn't verify this upload. Retry the upload." };
+  }
+  const transient = !error || !!error.retryable || error.code === "internal";
+  return {
+    phase: "failed",
+    message: transient ? "Baton couldn't confirm the upload. Check your connection and retry." : "The uploaded file didn't match what was sent. Retry the upload.",
+  };
+}
