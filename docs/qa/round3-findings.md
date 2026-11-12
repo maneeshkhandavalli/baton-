@@ -78,6 +78,15 @@ after it, and restrict the actor-less purge to callers without a JWT subject.
 | QA-R3-08 | P3 | Agent 1 | `new-handover-wizard.tsx:137,153` | Consent ticks are remembered only once a source has consent recorded; refreshing on Sources before the first upload sends the user back to re-tick consent. Fine for privacy, surprising for "obvious draft resume" (A2). | `r3-draft-resume.test.ts`; BS-01 step 5 |
 | QA-R3-10 | P3 | Agent 4 | `lib/db/pipeline.ts:37` | Dead code: a wrapper for the legacy `claim_processing_jobs` (revoked from every role by QA-N1) is still exported; remove it with the DB-12 wiring. | review |
 | QA-R3-09 | P3 | Agent 4 | `lib/pipeline/stages/verify-support.ts:60,79` | Observation: verify_support reads its first page of links before resolving the provider (lazy prelude). No call or write happens; the run still fails closed when links exist. | `r3-production-refusal.test.ts` |
+| QA-R3-11 | P3 — **FIXED** (88357ef → `c1acd4c`) | Agent 1 | `components/review/point-card.tsx:96-100` | `<h3>` inside `<button>`; now the heading wraps the button. Reviewed. | review |
+| QA-R3-12 | P2 — **FIXED** (8057e21 → `07d8897`; hard) | Agent 1 | `components/shared/key-facts.ts:33-52`, `components/handover/attributes.ts:69-71` | Invalid ISO-shaped dates threw `RangeError` / rolled over. `validIsoDay` round-trips through `Date.UTC`; `formatDayOrRaw` never throws. | `r3-key-facts.test.ts` (6 hard) |
+| QA-R3-12-R1 | P3 (defence in depth) | Agent 1 | `components/published/first-week.ts:47` → `components/handover/format.ts:20-23` | The first-week checklist formats a task's `dueDate` with `formatDate`, which lets V8 roll an impossible day over (`2026-02-30` → "Due 2 Mar 2026") and reads bare words as 2001 dates (`March 5` → "Due 5 Mar 2001"; `1` → "1 Jan 2001"). `dueDate` is `z.iso.date()` when written, but `mapPublishedHandover` does not re-validate attributes on read. Use `formatDayOrRaw`. Real published route and `/demo` incoming tab. | `r3-key-facts.test.ts` (2 pending) |
+| QA-R3-15 | P3 — **FIXED** (e3ca083 → `f76439e`) | Agent 1 | `app/global-error.tsx`, `app/(auth)/error.tsx` | Reviewed: own `<html>/<body>`, tokens loaded, never renders `error.message` (digest only), plain `<a href="/">` because the router may be what failed; `(auth)` uses `RouteError`. | review |
+| QA-R3-16 | P3 | Agent 1 (UI mapping) + Agent 3 (error detail) | `components/wizard/new-handover-wizard.tsx:434-437`; `lib/db/storage.ts:287,294,304`; `confirm_source_uploaded` (`20261111000600_sources_members_tokens.sql:118-123`, BTVF0) | The new wrong-type message keys on `validation_failed` alone, but confirm also returns `validation_failed` when the measured size/SHA-256 differ from what was declared (file changed after hashing, truncated transfer) and for an oversized object. Those users now read "This file isn't a valid PDF. Choose the right file." and get the `unsupported` phase (no Retry) for a file that is fine. Have confirm return a distinguishing detail (e.g. `details.reason: "wrong_kind"`) and show the type message only for it. | review |
+| QA-R3-17 | P2 (dev-only route; Agent 1 fixing) | Agent 1 | `app/(preview)/preview/wizard/page.tsx:38-40,83` | `minutesAgo()` calls `Date.now()` after only `await searchParams`; with `partialPrefetching: true` that does not end prerendering → Next error on every `/preview/wizard?step=n`. Fix: `await connection()` first, or compute "saved" on the client. **Real `/handover/new` is not affected**: its server code calls no clock before `await connection()` (`app/(workspace)/handover/new/page.tsx:47`), and `SaveIndicator` reads the clock only in client state inside the Suspense boundary, with `suppressHydrationWarning` on the relative time. | lead browser report `verification/browser-preview/report.json` |
+| QA-R3-18 | P2 until the cause is known (Agent 1 fixing) | Agent 1 | `/preview/dashboard` client: "Element type is invalid … got: undefined" | The only client tree that `/preview/dashboard` has and the passing `/preview/dashboard?empty=1` and `/preview/review` lack is `DraftRow → DiscardDraftButton → ConfirmDialog → AlertDialog` (`components/dashboard/handover-card.tsx:137`), and the **real `/dashboard` renders exactly that tree for every draft the viewer created** (only `disabled` differs). By code it is sound: every import resolves (all 8 `AlertDialogPrimitive.*` members exist in @base-ui/react 1.9.0), and the real tree renders under React SSR (`r3-render-determinism.test.ts`). So the failure is in the Next/Turbopack client graph (stale dev-server module state after the cherry-picks changed this file is the likeliest), not in shared code — but the real `/dashboard` with a draft has never been loaded in a browser this round. **Lead: restart the dev server, reload `/preview/dashboard`; then BS-01 on the real `/dashboard` with a draft.** | lead browser report; `r3-render-determinism.test.ts` |
+| QA-R3-19 | P2 until the cause is known (Agent 1 fixing) | Agent 1 | `/preview/published`: "Hydration failed…" | The shared `PublishedHandoverView` renders byte-identical markup in UTC, Asia/Kolkata, America/Los_Angeles and Pacific/Kiritimati, with the real-route props, the preview props (`ackDisabledReason`) and the demo props; no block element inside `<p>`; every date uses a fixed locale and `Asia/Kolkata`; first-week ticks load in `useEffect`; no `Date.now`/random/storage in render. Nothing in the shared component explains a mismatch. The preview page differs from the real route in being fully static (no request data, mock data) — the real route awaits `params` and `connection()` before reading. **`/demo` incoming tab cannot hit a hydration mismatch**: Base UI `TabsPanel` does not mount the inactive panel, so it is first rendered on the client. Real `/handover/[id]/published` is unlikely to be affected but is unverified until BS-04. | `r3-render-determinism.test.ts` |
+| QA-R3-20 | P3 (test gap) | Agent 5 | `components/shared/__tests__/preview-guard.test.ts` | The guard test checks text, noindex and DIRECT imports of `page.tsx`/`layout.tsx` only: a `route.ts` (bypasses the layout) or a `page.ts` would not be scanned, and imports through components are not followed. Covered by QA `r3-preview-guard.test.ts` (allow-list of file names; behavioural 404 under NODE_ENV production/test/unset; transitive graph never reaches `lib/data`, `lib/db` or server/admin Supabase; actions only through `"use client"` modules). All hold today. | `r3-preview-guard.test.ts` (15 hard) |
 
 ## Tier E (real Postgres) — `tests/integration/r3-e2e-multisource.test.ts`
 
@@ -176,10 +185,50 @@ BS-01…08 (`docs/qa/browser-scripts.md`): **not run yet** — the Claude in Chr
   value` → the review card and the **incoming member's published view** fall into the route error boundary;
   `2026-02-31` is silently shown as "3 Mar 2026". Validate the day (round-trip check) and fall back to the raw
   text. Repro: `tests/integration/r3-key-facts.test.ts` (4 pending).
-- **QA-R3-11 still open** (`components/review/point-card.tsx:93-97`, `<h3>` inside `<button>`).
+- **QA-R3-11 still open** at that batch (`components/review/point-card.tsx:93-97`, `<h3>` inside `<button>`).
+  QA-R3-11, -12 and -15 are fixed since: see the third batch below.
 - **QA-R3-15 (P3, Agent 1)**: no `app/global-error.tsx` and no `error.tsx` in `app/(auth)`; an error in the
   root layout or on `/login` falls back to Next's default page (no design system, no retry/home link).
 - IT-04 regex fix (`013c870`, lead) reviewed: **sound**. React's static markup always double-quotes attribute
   values and escapes `"` inside them (and in text) as `&quot;`, so blanking `="[^"]*"` removes exactly the
   values; a real handler is an attribute NAME and is still caught; the `javascript:` URL check still runs on
   the unmodified HTML.
+
+### `feature/r3-uiux` third batch (d628306…70eff0d → integration `2f6c9b3`…`95423e9`; reviewed at `4bb8fef`)
+- **Processing partial + run reasons** (`components/shared/run-status.ts`, `processing-view.tsx:112-175`): the
+  `partial` stage status has its own icon, tone and an sr-only status; `db_schema_outdated`, `no_jobs`,
+  `provider_not_configured`, `ai_config_changed` map to plain language with the token as a reference; any other
+  token gets a generic line. A message that is not token-shaped is still shown as written (`run-status.ts:50`),
+  as before this batch — safe while run errors stay reason tokens (it18). OK.
+- **PI-11 guard notice** (`components/shared/support-guard.ts`, `point-detail-panel.tsx:68-95`): recognised by
+  `supportVerdict === "irrelevant"` + the fixed `GUARD_RATIONALE` prefix; the UI test reads the server source so
+  the two cannot drift. A model rationale that imitates the prefix can only produce the same "not counted"
+  notice on an already-irrelevant verdict (no upgrade path); rationale renders as text. Agent 4's
+  `guarded`/`modelVerdict` DTO flag will remove the string coupling. OK.
+- **Wrong-type upload** (`new-handover-wizard.tsx:434-437`): see QA-R3-16 (size/SHA mismatch also reads as
+  "isn't a valid PDF").
+- **DEMO-SCROLL** (`review-workspace.tsx:87-99`): scrolls only after a user-driven selection; `matchMedia` is
+  read inside the effect only. OK.
+- **QA-R3-11, QA-R3-12, QA-R3-15: VERIFIED FIXED** (table above). QA-R3-12 cases in `r3-key-facts.test.ts` are
+  now hard (6); residual QA-R3-12-R1 pending (2).
+- **Dev-only previews** (`app/(preview)/**`, `components/preview/**`): every layout/page's default export
+  starts with `if (process.env.NODE_ENV !== "development") notFound();`, exports `robots: { index: false }`,
+  and imports nothing from `lib/actions`, `lib/supabase` or `lib/data` directly. Transitively the previews do
+  reach server-action modules through the real client components (`new-handover-wizard.tsx`,
+  `published-handover-view.tsx`, `discard-draft-button.tsx`, `review-workspace`), plus the browser Supabase
+  client via the wizard — action references only, never called (preview/disabled/no-op handlers), and the
+  action endpoints exist anyway for the real routes and enforce the session. **Airtight for production**:
+  NODE_ENV is inlined at build time, so the prerender hits `notFound()` and `next start` serves 404 (lead:
+  `tests/browser/run.mjs … --expect-404` against `next start` confirms it end to end). QA-R3-20 for the test.
+- **Runtime errors on the previews and the real routes** (QA-R3-17/18/19): `/handover/new` — not affected
+  (by code). `/dashboard` — shares the failing client tree; shared code is sound, cause most likely the dev
+  server; needs a browser check with a draft. `/handover/[id]/published` — shared component is deterministic;
+  unlikely, unverified until BS-04. `/demo` incoming tab — cannot hydrate-mismatch (client-mounted panel).
+- **Browser harness** (`tests/browser/run.mjs`): the lead's 38f0e98 (ignore the `nextjs-portal` focus stop;
+  too-wide elements fail only with overflowPx > 0) is preserved. QA additions on top: `--expect-404` (every
+  route must answer 404; for `/preview` against `next start`), HTTP status from the navigation entry (any
+  ≥ 400 fails otherwise), and too-wide elements fail again when `<html>`/`<body>` clip `overflow-x` (then
+  overflowPx is always 0 and would hide real off-screen content; `app/globals.css` sets no such clip today, so
+  decorative layers still pass).
+- Integration 322 pass + 7 todo (PI-11-R1…R5, QA-R3-12-R1 ×2), 0 fail; tsc: only Next's generated
+  `PageProps`/`LayoutProps` (needs `next typegen`, not run in worker clones).

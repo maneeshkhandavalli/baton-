@@ -2,7 +2,8 @@
 // Baton headless browser checks (Round 3, QA). NOT part of `npm test`: the lead runs it against the local dev
 // server. No dependencies beyond Node 22+ (global fetch + WebSocket) and an installed Chrome.
 //
-//   node tests/browser/run.mjs <outDir> <baseUrl> name:/path [name:/path ...] [--widths=1440,1024,390] [--no-keyboard]
+//   node tests/browser/run.mjs <outDir> <baseUrl> name:/path [name:/path ...] [--widths=1440,1024,390] [--no-keyboard] [--expect-404]
+//   --expect-404: every route must answer HTTP 404 (use it for the dev-only /preview routes against `next start`).
 //   e.g. node tests/browser/run.mjs ./out/browser http://localhost:3000 home:/ login:/login demo:/demo
 //
 // For every route × width (1440x900, 1024x768, 390x844 mobile dpr 2) it records: final URL, horizontal overflow
@@ -32,7 +33,7 @@ const TAB_STOPS = 15;
 
 function usage(msg) {
   if (msg) console.error(`error: ${msg}`);
-  console.error("usage: node tests/browser/run.mjs <outDir> <baseUrl> name:/path [...] [--widths=1440,1024,390] [--no-keyboard]");
+  console.error("usage: node tests/browser/run.mjs <outDir> <baseUrl> name:/path [...] [--widths=1440,1024,390] [--no-keyboard] [--expect-404]");
   process.exit(2);
 }
 
@@ -68,6 +69,7 @@ const widths = (widthsFlag ? widthsFlag.slice(9).split(",") : ["1440", "1024", "
   return DEVICES[w];
 });
 const keyboard = !flags.includes("--no-keyboard");
+const expect404 = flags.includes("--expect-404");
 const CHROME = process.env.BATON_CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 if (!existsSync(CHROME)) usage(`Chrome not found at ${CHROME} (set BATON_CHROME)`);
 const outDir = resolve(outArg);
@@ -141,7 +143,9 @@ const LAYOUT_PROBE = `(() => {
     if (!r.width || getComputedStyle(el).position === 'fixed') return false;
     return r.right > innerWidth + 1 || r.left < -1;
   }).slice(0, 10).map((el) => ({ el: describe(el), right: Math.round(el.getBoundingClientRect().right) }));
-  return { href: location.href, title: document.title, scrollWidth: de.scrollWidth, innerWidth, h1: document.querySelectorAll('h1').length, wide };
+  const clipsX = [de, document.body].some((e) => e && /^(hidden|clip)$/.test(getComputedStyle(e).overflowX));
+  const nav = performance.getEntriesByType('navigation')[0];
+  return { status: nav && 'responseStatus' in nav ? nav.responseStatus : null, href: location.href, title: document.title, scrollWidth: de.scrollWidth, innerWidth, h1: document.querySelectorAll('h1').length, wide, clipsX };
 })()`;
 
 const FOCUS_STYLE = `(el) => {
@@ -245,22 +249,28 @@ try {
       writeFileSync(file, Buffer.from(shot.data, "base64"));
       const stops = keyboard ? await keyboardCheck() : [];
       const result = {
-        route: route.name, url: route.url, width: d.w, height: d.h, mobile: d.mobile, loadFired,
+        route: route.name, url: route.url, width: d.w, height: d.h, mobile: d.mobile, loadFired, httpStatus: layout.status,
         finalUrl: layout.href, finalUrlLocal: isLocal(layout.href), title: layout.title,
-        overflowPx: layout.scrollWidth - layout.innerWidth, h1: layout.h1, wide: layout.wide,
+        overflowPx: layout.scrollWidth - layout.innerWidth, h1: layout.h1, wide: layout.wide, rootClipsX: layout.clipsX,
         consoleErrors, blockedRequests: blocked, screenshot: file,
         keyboard: keyboard ? { stops: stops.length, missingIndicator: stops.filter((s) => !s.indicator && s.tag !== "nextjs-portal") /* Next.js dev overlay, not app UI */, detail: stops } : null,
       };
       result.problems = [
         !loadFired && "load event did not fire",
+        // --expect-404 (e.g. the dev-only /preview routes against a production build): any other status fails.
+        expect404 && layout.status !== 404 && `HTTP ${layout.status} (expected 404)`,
+        !expect404 && layout.status !== null && layout.status >= 400 && `HTTP ${layout.status}`,
         !result.finalUrlLocal && "ended on a non-localhost URL",
         result.overflowPx > 0 && `horizontal overflow ${result.overflowPx}px`,
-        result.h1 !== 1 && `${result.h1} <h1> elements (expected 1)`,
+        !expect404 && result.h1 !== 1 && `${result.h1} <h1> elements (expected 1)`,
         // A too-wide element only matters when it actually makes the page scroll sideways (decorative backdrops are clipped).
         result.overflowPx > 0 && result.wide.length > 0 && `${result.wide.length} element(s) wider than the viewport`,
+        // QA review of 38f0e98: if <html>/<body> clip horizontally, overflowPx is always 0 and real content that
+        // runs off-screen would be invisible to the check above, so too-wide elements fail again in that case.
+        result.overflowPx <= 0 && layout.clipsX && result.wide.length > 0 && `${result.wide.length} element(s) wider than the viewport, hidden by overflow-x clipping on html/body`,
         consoleErrors.length > 0 && `${consoleErrors.length} console error(s)`,
         blocked.length > 0 && `${blocked.length} non-localhost request(s) blocked`,
-        keyboard && stops.length === 0 && "no keyboard-focusable element reached",
+        keyboard && !expect404 && stops.length === 0 && "no keyboard-focusable element reached",
         keyboard && result.keyboard.missingIndicator.length > 0 && `${result.keyboard.missingIndicator.length} focus stop(s) without a visible indicator`,
       ].filter(Boolean);
       if (result.problems.length) failures++;

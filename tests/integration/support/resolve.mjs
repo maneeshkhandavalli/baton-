@@ -26,6 +26,7 @@ const stubs = {
   "next/headers": stub("next-headers.mjs"),
   "next/cache": stub("next-cache.mjs"),
   "next/navigation": stub("next-navigation.mjs"),
+  "next/link": stub("next-link.mjs"), // render tests (r3-preview-guard, r3-render-determinism)
   "@supabase/ssr": stub("supabase-ssr.mjs"),
   "@supabase/supabase-js": stub("supabase-js.mjs"), // approved by the lead (W1): forwards to Recording* fakes
 };

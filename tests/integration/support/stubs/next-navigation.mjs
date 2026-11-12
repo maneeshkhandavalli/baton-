@@ -14,3 +14,16 @@ export function redirect(url) {
 export function notFound() {
   throw new Error("notFound");
 }
+
+// Client hooks, for rendering client components to static markup (render tests only; no routing happens).
+export function useRouter() {
+  return { refresh() {}, push() {}, replace() {}, prefetch() {}, back() {}, forward() {} };
+}
+
+export function usePathname() {
+  return globalThis.__batonIt?.pathname ?? "/";
+}
+
+export function useSearchParams() {
+  return new URLSearchParams();
+}
