@@ -92,11 +92,12 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
         )}
       </header>
 
-      <button type="button" onClick={stop(onSelect)} className="mt-3 block rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
-        <h3 id={`point-${point.id}-title`} className={cn("type-heading text-foreground [overflow-wrap:anywhere]", rejected && "text-muted-foreground line-through decoration-1")}>
+      {/* Heading outside, button inside (QA-R3-11): headings must not live in interactive content. */}
+      <h3 id={`point-${point.id}-title`} className={cn("mt-3 type-heading text-foreground [overflow-wrap:anywhere]", rejected && "text-muted-foreground line-through decoration-1")}>
+        <button type="button" onClick={stop(onSelect)} className="rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
           <MaskedText text={point.title} />
-        </h3>
-      </button>
+        </button>
+      </h3>
       <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
         <MaskedText text={point.statement} />
       </p>
