@@ -11,7 +11,7 @@ select tests.source('h2', 's2');
 select tests.as_user('ann');
 select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x')))));
 
-select tests.as_service();
+select tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
 select tests.put('p1', public.insert_extracted_point(tests.id('h'), tests.id('run'), 'decision', 'T1', 'S1', '{}', null, 'everyone', '{"provider":"fake"}'));
 select tests.put('p2', public.insert_extracted_point(tests.id('h'), tests.id('run'), 'decision', 'T2', 'S2', '{}', null, 'everyone', '{"provider":"fake"}'));
 select tests.put('p3', public.insert_extracted_point(tests.id('h'), tests.id('run'), 'decision', 'T3', 'S3', '{}', null, 'everyone', '{"provider":"fake"}'));
@@ -23,7 +23,7 @@ declare
   v_body text;
   v_n int;
 begin
-  perform tests.as_service();
+  perform tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
   select body into v_body from public.source_messages where id = v_a1;
   perform tests.ok(v_body = 'Alice message 1 about the bank account handover', 'fixture body');
 
@@ -113,7 +113,7 @@ declare
   v_rev uuid;
   v_text text;
 begin
-  perform tests.as_service();
+  perform tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
   select current_revision_id into v_rev from public.handover_points where id = tests.id('p3');
   select q.quote_text into v_text from public.point_evidence pe join public.evidence_quotes q on q.id = pe.evidence_id
    where pe.id = tests.id('pe_nf2');

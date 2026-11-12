@@ -151,7 +151,9 @@ declare
 begin
   select id into v_link from public.point_evidence where evidence_id = tests.id('t6T') and point_id = tests.id('t6B');
   select current_revision_id into v_rev from public.handover_points where id = tests.id('t6B');
-  perform tests.c_open('c1', 'service'); perform tests.c_open('c2', 'service');
+  -- c2 is the worker: record_support_verdict is no longer granted to service_role (DB-12-LEGACY,
+  -- 20261113300500); the owner session exercises the same function body and lock order.
+  perform tests.c_open('c1', 'service'); perform tests.c_open('c2');
   perform tests.c_exec('c1', 'begin');
   perform tests.ok(tests.c_try('c1', tests.resolve_sql('t6A', 't6A')) like 'OK:%', 'T6: resolution runs');
   -- the worker verified the OLD text

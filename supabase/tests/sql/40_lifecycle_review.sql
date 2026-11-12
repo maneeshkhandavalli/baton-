@@ -31,9 +31,10 @@ begin
   perform tests.throws(format($q$select public.start_processing(tests.actor(), %L, '1', '{"provider":"fake"}', '[]')$q$, tests.id('h')),
                        'BTPF0', 'no source ready');
   v_s := public.create_source(tests.actor(), tests.id('h'), 'text', 'notes.txt', 'text/plain', 100, repeat('b', 64));
-  -- R3 C5: retrying the actor's own unfinished upload reuses the row (a confirmed duplicate is still BTCF0, 96_*).
-  perform tests.eq(public.create_source(tests.actor(), tests.id('h'), 'text', 'notes.txt', 'text/plain', 100, repeat('b', 64)), v_s,
-                   'retrying an unfinished upload reuses the pending source');
+  -- R3 C5: the uploader's retry of an unfinished upload (no object yet) reuses its row; other duplicates stay
+  -- BTCF0 (supabase/tests/sql/96_create_source_upload_retry.sql, tests/integration/db/sql/it15_role_matrix.sql).
+  perform tests.eq(public.create_source(tests.actor(), tests.id('h'), 'text', 'again.txt', 'text/plain', 100, repeat('b', 64)), v_s,
+                   'retrying an unfinished upload of the same file reuses its row');
   perform tests.throws(format('select public.confirm_source_uploaded(tests.actor(), %L, 100, %L)', v_s, repeat('b', 64)),
                        'BTPF0', 'upload must have arrived');
   perform tests.eq(public.source_upload_target(tests.actor(), v_s) ->> 'raw_storage_path', 'raw/' || tests.id('h') || '/' || v_s,
@@ -93,7 +94,9 @@ declare
   v_old_run uuid;
 begin
   -- N3: no active run (the first run failed) → workers cannot write.
-  perform tests.as_service();
+  -- DB-12-LEGACY (20261113300500): the unfenced writers are no longer granted to service_role, so their N3
+  -- guards are exercised as the owner (same function bodies); the fenced pipeline_* twins are 98_*.
+  perform tests.as_owner();
   perform tests.throws(format($q$select public.persist_parsed_source(%L, '{}', 'p1')$q$, tests.id('src')), 'BTIT0',
                        'N3: parse persistence needs an active run');
   select id into v_old_run from public.processing_runs where handover_id = tests.id('h') and status = 'failed';
@@ -101,7 +104,7 @@ begin
                               tests.id('h'), v_old_run), 'BTIT0', 'N3: extraction cannot write against a finished run');
   perform tests.as_user('oli');
   v_run := public.start_processing(tests.actor(), tests.id('h'), '1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x'))));
-  perform tests.as_service();
+  perform tests.as_owner(); -- DB-12-LEGACY: see above
   perform tests.throws(format($q$select public.insert_extracted_point(%L, %L, 'decision', 't', 's', '{}', null, 'everyone', '{"p":1}')$q$,
                               tests.id('h'), v_old_run), 'BTIT0', 'N3: extraction cannot write against another (old) run');
   perform tests.put('extracted', public.insert_extracted_point(tests.id('h'), v_run, 'decision', 'Extracted', 'Statement', '{}', null,

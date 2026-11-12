@@ -131,6 +131,7 @@ select tests.ok(jsonb_array_length(public.list_links_needing_support(tests.id('h
 select tests.ok(not (public.list_links_needing_support(tests.id('h'), 100) -> 0 ? 'stance'), 'the verifier never sees a stance');
 
 -- DB-11: two different not_found quotes on one message keep separate rows
+select tests.as_owner(); -- DB-12-LEGACY (20261113300500): the unfenced writers are no longer granted to service_role; their bodies are tested as the owner
 select public.add_source_quote_evidence(tests.id('P'), tests.msg('s1', 'bob', 2), 'first mis-cited quote here', null, null, 'pending');
 select public.add_source_quote_evidence(tests.id('P'), tests.msg('s1', 'bob', 2), 'second different mis-cited quote', null, null, 'pending');
 select tests.eq((select count(*)::int from public.evidence_quotes where source_message_id = tests.msg('s1', 'bob', 2)), 2,
@@ -153,6 +154,9 @@ select tests.eq((select quote_check from public.evidence_quotes where source_mes
 select tests.throws(format('select public.record_quote_check(%L, %L)',
                            (select id from public.evidence_quotes where quote_text = 'first mis-cited quote here'), 'exact'),
                     'BTVF0', 'a not-found quote cannot be promoted to exact');
+select tests.as_service();
+select tests.throws(format('select public.add_source_quote_evidence(%L, %L, %L, null, null, %L)', tests.id('P'),
+                           tests.msg('s1', 'bob', 2), 'any quote', 'pending'), '42501', 'DB-12-LEGACY: service_role cannot call the unfenced writer');
 
 select tests.eq(jsonb_array_length(public.list_quotes_for_check(tests.id('s1'))), 2, 'pending quotes for verify_quotes');
 select tests.ok((public.list_quotes_for_check(tests.id('s1')) -> 0 ->> 'messageBody') is not null, 'with the message body');
@@ -175,11 +179,13 @@ select tests.eq(jsonb_array_length(public.list_links_needing_support(tests.id('h
 
 -- ── DB-9/10 ─────────────────────────────────────────────────────────────────
 select tests.eq(jsonb_array_length(public.list_gap_questions_for_pipeline(tests.id('h'))), 0, 'no questions yet');
+select tests.as_owner(); -- DB-12-LEGACY (20261113300500): the unfenced writers are no longer granted to service_role; their bodies are tested as the owner
 select tests.eq(public.set_point_sort_keys(tests.id('h'), tests.id('run'),
                   jsonb_build_array(jsonb_build_object('pointId', tests.id('P'), 'sortKey', 42))), 1, 'sort key set');
 select tests.eq((select sort_key from public.handover_points where id = tests.id('P')), 42::double precision, 'sort key stored');
 select tests.throws(format('select public.set_point_sort_keys(%L, %L, %L)', tests.id('h'), gen_random_uuid(), '[]'),
                     'BTIT0', 'sort keys only inside the active run');
+select tests.as_service();
 
 -- ── R1/R2 on a second, draft handover ───────────────────────────────────────
 select tests.as_owner();
@@ -240,7 +246,7 @@ select tests.throws(format('select public.finish_processing_run(%L, %L, %L)', te
                     'run error codes are ERROR_CODES only');
 
 -- ── QA-M1b: exact quotes must sit at their stored offsets (all-BMP bodies) ──
-select tests.as_service();
+select tests.as_owner(); -- DB-12-LEGACY (20261113300500): the unfenced writers are no longer granted to service_role; their bodies are tested as the owner
 select tests.throws(format('select public.add_source_quote_evidence(%L, %L, %L, 10, 31, %L)', tests.id('P'),
                            tests.msg('s1', 'carol', 2), 'Carol message 2 about', 'exact'),
                     'BTVF0', 'an exact quote whose offsets point elsewhere is refused');
