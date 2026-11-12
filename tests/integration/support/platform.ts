@@ -110,7 +110,8 @@ export function setAiEnv(env: { AI_PROVIDER?: string; BATON_ALLOW_FAKE_AI?: stri
   if (env.AI_PROVIDER !== undefined) process.env.AI_PROVIDER = env.AI_PROVIDER;
   if (env.BATON_ALLOW_FAKE_AI !== undefined) process.env.BATON_ALLOW_FAKE_AI = env.BATON_ALLOW_FAKE_AI;
   if (env.AI_API_KEY !== undefined) process.env.AI_API_KEY = env.AI_API_KEY;
-  setNodeEnv(env.NODE_ENV ?? ORIGINAL_NODE_ENV);
+  // an explicit `NODE_ENV: undefined` removes it (an unset NODE_ENV must refuse the fake, QA-L3)
+  setNodeEnv("NODE_ENV" in env ? env.NODE_ENV : ORIGINAL_NODE_ENV);
 }
 
 /** The locally allowed fake adapter (never in production). */
