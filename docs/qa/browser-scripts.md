@@ -46,6 +46,29 @@ Expected everywhere: `horizontalScroll: false`, `offenders: []`.
 
 ---
 
+## Headless harness (no extension needed): `tests/browser/run.mjs`
+
+For the signed-out routes and the layout/keyboard parts of BS-07, the lead can run the headless harness
+instead of a live browser. It uses the installed Chrome with a throwaway profile, no cookies and no sign-in,
+and it refuses or blocks every non-localhost URL. It is not part of `npm test`.
+
+```
+node tests/browser/run.mjs <outDir> http://localhost:3000 home:/ login:/login demo:/demo [--widths=1440,1024,390] [--no-keyboard]
+```
+
+For each route at 1440×900, 1024×768 and 390×844 (mobile, dpr 2) it records into `<outDir>/report.json`
+(plus one PNG per route and width):
+- the final URL;
+- horizontal overflow;
+- the `<h1>` count;
+- elements wider than the viewport;
+- console errors and uncaught exceptions;
+- blocked non-localhost requests;
+- a keyboard check: the first 15 Tab stops must each show a visible focus indicator.
+
+It exits with 1 if any check fails. QA self-tested it against a throwaway local page; it has not been run
+against the dev server.
+
 ## BS-01 Draft resume after refresh at every wizard step (B4, A2) — priority
 
 Account A. Start at `http://localhost:3000/handover/new`.
