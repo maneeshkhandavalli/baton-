@@ -34,7 +34,10 @@ function assertInert(html: string, label: string) {
   // (<svg> elements are legitimate here: the icons. A hostile one would carry onload, checked below.)
   assert.doesNotMatch(html, /<(img|script|iframe)\b/i, `${label}: a hostile element was rendered`);
   // inside a real start tag (escaped text contains "onerror=" too, but never a literal "<" before it)
-  assert.doesNotMatch(html, /<[a-z][^>]*\son[a-z]+\s*=/i, `${label}: an event-handler attribute was rendered`);
+  // Quoted attribute VALUES are escaped text (e.g. title="&lt;svg onload=…&gt;") and can't create a handler;
+  // blank them so only real attribute NAMES are checked.
+  const tags = html.replace(/="[^"]*"/g, '=""');
+  assert.doesNotMatch(tags, /<[a-z][^>]*\son[a-z]+\s*=/i, `${label}: an event-handler attribute was rendered`);
   assert.doesNotMatch(html, /<[a-z][^>]*\s(href|src)\s*=\s*["']?\s*javascript:/i, `${label}: a javascript: URL was rendered`);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;|&lt;script&gt;/, `${label}: the text is shown, escaped`);
 }
