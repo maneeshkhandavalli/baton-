@@ -7,6 +7,9 @@ import type { AiRunConfig } from "../provider";
 
 const FAKE_OK = { AI_PROVIDER: "fake", BATON_ALLOW_FAKE_AI: "1", NODE_ENV: "development" };
 
+/** NODE_ENV values that must refuse the fake adapter even with AI_PROVIDER=fake and the allow flag (QA-L3). */
+const REFUSED_NODE_ENVS: ReadonlyArray<string | undefined> = [undefined, "", "production", "staging", "Development", " test"];
+
 function assertNotConfigured(result: { ok: boolean; error?: unknown }) {
   assert.equal(result.ok, false);
   assert.deepEqual(result.error, {
@@ -39,12 +42,26 @@ describe("getAiConfiguration (D11)", () => {
     });
   }
 
-  it("fake is accepted with NODE_ENV unset or test", () => {
-    for (const NODE_ENV of [undefined, "test", "development"]) {
-      const config = getAiConfiguration({ ...FAKE_OK, NODE_ENV });
-      assert.equal(config.ok, true);
+  it("fake is accepted only for NODE_ENV exactly \"test\" or \"development\" (QA-L3)", () => {
+    for (const NODE_ENV of ["test", "development"]) {
+      const env = { ...FAKE_OK, NODE_ENV };
+      const config = getAiConfiguration(env);
+      assert.equal(config.ok, true, NODE_ENV);
+      assert.ok(config.ok && config.mode === "fake");
+      const provider = getAiProvider(env);
+      assert.ok(provider.ok);
+      assert.equal(provider.data.id, "fake");
     }
   });
+
+  for (const NODE_ENV of REFUSED_NODE_ENVS) {
+    it(`fake is refused for NODE_ENV ${JSON.stringify(NODE_ENV)} (QA-L3)`, () => {
+      const env = { ...FAKE_OK, NODE_ENV };
+      if (NODE_ENV === undefined) delete (env as Record<string, string | undefined>).NODE_ENV;
+      assert.deepEqual(getAiConfiguration(env), { ok: false, reason: "provider_not_configured" });
+      assertNotConfigured(getAiProvider(env));
+    });
+  }
 
   it("fake configuration is labelled as a test adapter everywhere", () => {
     const config = getAiConfiguration(FAKE_OK);
@@ -96,6 +113,22 @@ describe("getAiProviderForRun", () => {
   it("provider_not_configured takes precedence", () => {
     assertNotConfigured(getAiProviderForRun(snapshot(), {}));
   });
+
+  it("accepts a fake run only for NODE_ENV exactly \"test\" or \"development\" (QA-L3)", () => {
+    for (const NODE_ENV of ["test", "development"]) {
+      const r = getAiProviderForRun(snapshot(), { ...FAKE_OK, NODE_ENV });
+      assert.ok(r.ok, NODE_ENV);
+      assert.equal(r.data.id, "fake");
+    }
+  });
+
+  for (const NODE_ENV of REFUSED_NODE_ENVS) {
+    it(`refuses a fake run for NODE_ENV ${JSON.stringify(NODE_ENV)} with provider_not_configured (QA-L3)`, () => {
+      const env: Record<string, string | undefined> = { ...FAKE_OK, NODE_ENV };
+      if (NODE_ENV === undefined) delete env.NODE_ENV;
+      assertNotConfigured(getAiProviderForRun(snapshot(), env));
+    });
+  }
 
   const mutations: Array<[string, (c: AiRunConfig) => void]> = [
     ["provider", (c) => (c.provider = "other")],

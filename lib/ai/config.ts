@@ -5,7 +5,9 @@ import "server-only";
  *
  * D11 is open: no production provider or model has been chosen, so there is no production adapter.
  * - `AI_PROVIDER` unset, empty, or anything other than exactly "fake" → `provider_not_configured`.
- * - "fake" is accepted only when `NODE_ENV !== "production"` AND `BATON_ALLOW_FAKE_AI === "1"`.
+ * - "fake" is accepted only when `NODE_ENV` is exactly "development" or "test" AND
+ *   `BATON_ALLOW_FAKE_AI === "1"` (QA-L3). An unset, empty, "production" or any other `NODE_ENV`
+ *   (e.g. a custom server or script started without it) refuses the fake: fail closed.
  * `AI_API_KEY`, `AI_MODEL_EXTRACT` and `AI_MODEL_VERIFY` are reserved for a future adapter and are not
  * read today: the fake adapter needs no credentials and always reports its own fake model ids.
  * No AI variable has a `NEXT_PUBLIC_` prefix.
@@ -22,8 +24,11 @@ export type AiConfiguration =
   | { ok: true; mode: "production" | "fake"; provider: { id: string; displayName: string }; runConfig: AiRunConfig }
   | { ok: false; reason: "provider_not_configured" };
 
+/** NODE_ENV values under which the test adapter may run. Exact match: no trimming, case-sensitive. */
+const FAKE_NODE_ENVS: ReadonlySet<string> = new Set(["development", "test"]);
+
 function fakeAllowed(env: AiEnv): boolean {
-  return env.NODE_ENV !== "production" && env.BATON_ALLOW_FAKE_AI === "1";
+  return env.NODE_ENV !== undefined && FAKE_NODE_ENVS.has(env.NODE_ENV) && env.BATON_ALLOW_FAKE_AI === "1";
 }
 
 export function getAiConfiguration(env: AiEnv = process.env): AiConfiguration {

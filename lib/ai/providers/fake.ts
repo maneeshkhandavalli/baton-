@@ -5,7 +5,7 @@ import "server-only";
  * makes no network calls and reads no credentials. Its id "fake" flows into `AiRunConfig.provider` and
  * every `AiProvenance`, so its output can never pass for production extraction.
  *
- * It is selected only through lib/ai/config.ts (AI_PROVIDER=fake, BATON_ALLOW_FAKE_AI=1, not production).
+ * It is selected only through lib/ai/config.ts (AI_PROVIDER=fake, BATON_ALLOW_FAKE_AI=1, NODE_ENV development or test).
  * Tests may also construct it directly with a script.
  *
  * Scripting model: `script.extract` / `script.verifySupport` is either a queue of steps (one consumed per
