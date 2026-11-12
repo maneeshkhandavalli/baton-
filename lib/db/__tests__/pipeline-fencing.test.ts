@@ -90,6 +90,28 @@ describe("DB-12: every job-scoped writer is fenced", () => {
   }
 });
 
+describe("claim generation (migration 20261113300800)", () => {
+  it("is sent as p_claim_generation by every fenced writer when the claim carries it", async () => {
+    for (const w of WRITERS) {
+      const { client, calls } = fakeClient(w.data ?? null);
+      // The writers above close over CLAIM: give it a generation for this call only.
+      Object.assign(CLAIM, { generation: 5 });
+      try {
+        await w.call(client);
+      } finally {
+        delete (CLAIM as { generation?: number }).generation;
+      }
+      assert.equal(calls[0].args.p_claim_generation, 5, w.name);
+      assert.equal(calls[0].args.p_attempt, CLAIM.attempt, w.name);
+    }
+  });
+  it("is omitted without a generation (older databases: the attempt-only fence)", async () => {
+    const { client, calls } = fakeClient(null);
+    await setJobProvenance(client, { jobId: CLAIM.jobId, attempt: 1 }, {});
+    assert.ok(!("p_claim_generation" in calls[0].args));
+  });
+});
+
 describe("DB-13: storeExtractChunk", () => {
   it("sends new points and merges in the SQL shape", async () => {
     const { client, calls } = fakeClient({ alreadyCommitted: false, entries: [{}, {}] });

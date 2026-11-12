@@ -29,10 +29,16 @@ import { DbError } from "./errors";
 import { callRpc } from "./rpc";
 import { hexToBytea, sha256Hex } from "./tokens";
 
-/** The worker's claim on one job: the fencing token every job-scoped writer takes (DB-12). */
+/**
+ * The worker's claim on one job: the fencing token every job-scoped writer takes (DB-12). `generation`
+ * (migration 20261113300800) identifies the claim exactly: `attempt` repeats after a checkpointing yield,
+ * the generation never does. When present it is sent and checked; without it the database accepts the
+ * claim only while (job, attempt) is unambiguous.
+ */
 export interface JobClaim {
   jobId: string;
   attempt: number;
+  generation?: number;
 }
 
 /** SQLSTATE the fenced writers raise when the claim is no longer current (lost lease, reclaimed, reaped, finished, run ended). */
@@ -67,7 +73,8 @@ export class PipelineSchemaError extends Error {
 
 async function fencedRpc(adminDb: DbClient, fn: string, claim: JobClaim, args: Record<string, unknown>): Promise<unknown> {
   try {
-    return await callRpc(adminDb, fn, { p_job_id: claim.jobId, p_attempt: claim.attempt, ...args });
+    const generation = typeof claim.generation === "number" ? { p_claim_generation: claim.generation } : {};
+    return await callRpc(adminDb, fn, { p_job_id: claim.jobId, p_attempt: claim.attempt, ...generation, ...args });
   } catch (e) {
     if (e instanceof DbError && e.sqlState === CLAIM_LOST_SQLSTATE) throw new ClaimLostError();
     if (e instanceof DbError && e.sqlState !== undefined && MISSING_FUNCTION_STATES.has(e.sqlState)) throw new PipelineSchemaError(fn);
@@ -83,6 +90,8 @@ export interface ClaimedJob {
   stage: string;
   attempt: number;
   max_attempts: number;
+  /** Increments with every claim, never decreases (migration 20261113300800); absent on older databases. */
+  claim_generation?: number | string;
 }
 
 /** Write AiProvenance when the job is claimed, BEFORE calling the provider (§11.8 rule 3). Fenced (DB-12). */

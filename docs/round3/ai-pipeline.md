@@ -20,10 +20,13 @@ development/test only (production refusal: `lib/ai/__tests__/config.test.ts`,
 | 5 | `20261113300500_revoke_unfenced_pipeline_writers.sql` | DB-12-LEGACY: revokes the 8 unfenced writers from `public`, `anon`, `authenticated` and `service_role`. `mark_source_parse_failed` stays granted because `lib/db/storage.ts` still calls it. | 1 (the fenced twins call the revoked functions as their owner); the fixture updates in the lead SQL and IT-SQL suites |
 | 6 | `20261113300600_revoke_mark_source_parse_failed.sql` | DB-12-LEGACY part 2: revokes `mark_source_parse_failed`. Since d4f4d46 (Agent 3) and 0d222b3, the parse job writes an integrity mismatch through the fenced `pipeline_mark_source_parse_failed`. | 1; fixture updates (it10:113, it18:41) |
 | 7 | `20261113300700_processing_status_partial.sql` | E4 (lead-approved): `api_get_processing_status` (same signature, grants and shape) reports per-stage `partial`, and open jobs report `queued`/`running` instead of `failed`. | — (the read model in `lib/db/mappers.ts` accepts `partial` since the same commit) |
+| 8 | `20261113300800_claim_generation.sql` | DB-12 follow-up: adds `processing_jobs.claim_generation` (backfilled from `attempt`, incremented by every claim, never lowered), so a claim is identified exactly even after a yield reuses its attempt number. New overloads `pipeline_*(p_job_id, p_attempt, p_claim_generation, …)` check the exact generation. The attempt-only originals stay granted, but now accept a claim only while `claim_generation = attempt` (no yield since). `heartbeat_processing_job` (same signature) no longer renews an expired lease: it returns `lost`. | 1, 2 |
 
 **Code dependency.** The worker code since `ab96beb` (`lib/db/pipeline.ts`) calls only the
 `pipeline_*` functions. Any database the worker runs against (including hosted dev) therefore needs
-migrations **1–3** first. Without them, every run fails at once with `precondition_failed` /
+migrations **1–3** first. Migration **8** is used automatically once applied: the claim row then
+carries `claim_generation` and the worker sends it. Without migration 8 the worker falls back to the
+attempt-only fence, which is ambiguous only after a yield. Without them, every run fails at once with `precondition_failed` /
 `db_schema_outdated`, visible in run state and never retried. There is no fallback to the unfenced
 writers: a fallback would defeat DB-12. Migration 4 does not affect the worker. Apply migration 5 only
 together with the fixture updates.
@@ -35,7 +38,8 @@ database locks the handover (FOR SHARE) and then the job row, and refuses the wr
 hold: the job is running at that attempt, its lease has not expired, its run is still active, the job's
 stage may perform this write, and the target row belongs to the job's handover (and, for per-source
 stages, to its source). Completion, reclaim and reaping all lock the same job row, so a write and a
-claim change never interleave. Extraction stores each chunk's points, evidence and `progress_done`
+claim change never interleave. The claim generation (migration 8) makes the token unique even after a
+yield, and a heartbeat on an expired lease reports `lost` instead of renewing it, so the worker stops. Extraction stores each chunk's points, evidence and `progress_done`
 checkpoint in one transaction. A retry resumes after the last committed chunk, and a repeated chunk is
 a no-op. Tests: `supabase/tests/sql/98_pipeline_fencing.sql`, `lib/db/__tests__/pipeline-fencing.test.ts`,
 `lib/pipeline/__tests__/{ai-stages,runner,recovery}.test.ts`.

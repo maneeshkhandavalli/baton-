@@ -451,3 +451,57 @@ update public.processing_runs set status = 'succeeded' where id = tests.id('run5
 select tests.as_reader('ann');
 select tests.eq(tests.stage_status('extract'), 'partial', 'failed jobs in a succeeded run: partial');
 select tests.eq((public.api_get_processing_status(tests.id('h5')) #>> '{run,status}'), 'succeeded', 'the run status itself is unchanged');
+
+-- ── claim generation and heartbeat on an expired lease (migration 20261113300800) ──
+select tests.as_owner();
+select tests.handover('h6', 'ann', 'outgoing');
+select tests.source('h6', 's6');
+select tests.as_user('ann');
+select tests.put('run6', public.start_processing(tests.actor(), tests.id('h6'), 'pv', '{"provider":"fake"}'::jsonb,
+  jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('s6'), 'inputHash', md5('6')))));
+select tests.as_owner();
+-- other runs' leftover queued jobs must not be claimed by the checks below
+update public.processing_jobs set status = 'cancelled' where run_id <> tests.id('run6') and status in ('queued', 'running');
+create function tests.gen_chunk_sql(p_attempt int, p_generation bigint, p_index int, p_total int)
+returns text language sql as $$
+  select format('select public.pipeline_store_extract_chunk(%L, %s, %s::bigint, %s, %s, %L, %L, %L)::text', tests.id('ex6'), p_attempt,
+                coalesce(p_generation::text, 'null'), p_index, p_total, 'everyone', '{"provider":"fake"}', '[]')
+$$;
+grant execute on function tests.gen_chunk_sql(int, bigint, int, int) to service_role;
+select tests.as_service();
+truncate claimed;
+insert into claimed select * from public.claim_ready_processing_jobs(10, 300);
+select tests.put('ex6', (select id from claimed where run_id = tests.id('run6')));
+select tests.eq((select claim_generation from claimed where id = tests.id('ex6')), 1::bigint, 'the first claim is generation 1');
+select tests.ok(tests.try(tests.gen_chunk_sql(1, 1, 0, 3)) like 'OK:%', 'the current generation writes chunk 0');
+select tests.throws(tests.gen_chunk_sql(1, 7, 1, 3), 'BTLL0', 'a wrong generation is refused');
+select tests.throws(tests.gen_chunk_sql(1, null, 1, 3), 'BTVF0', 'a generation is required by the overload');
+-- yield, then reclaim: the attempt number repeats, the generation does not
+select tests.eq(public.complete_processing_job(tests.id('ex6'), 1, 'yield', null, null, null, null, 1, 3), 'queued', 'yield');
+truncate claimed;
+insert into claimed select * from public.claim_ready_processing_jobs(10, 300);
+select tests.eq((select attempt from claimed where id = tests.id('ex6')), 1, 'the reclaim reuses attempt 1');
+select tests.eq((select claim_generation from claimed where id = tests.id('ex6')), 2::bigint, 'but it is generation 2');
+select tests.throws(tests.gen_chunk_sql(1, 1, 1, 3), 'BTLL0', 'the yielded claim (attempt 1, generation 1) is refused');
+select tests.throws(format('select public.pipeline_store_extract_chunk(%L, 1, 1, 3, %L, %L, %L)', tests.id('ex6'), 'everyone',
+                           '{"provider":"fake"}', '[]'),
+                    'BTLL0', 'the attempt-only overload refuses an ambiguous (yielded) attempt');
+select tests.throws(format('select public.pipeline_set_job_provenance(%L, 1, %L)', tests.id('ex6'), '{"provider":"fake"}'),
+                    'BTLL0', 'every attempt-only writer refuses it');
+select tests.ok(tests.try(tests.gen_chunk_sql(1, 2, 1, 3)) like 'OK:%', 'the current generation resumes at chunk 1');
+select public.pipeline_set_job_provenance(tests.id('ex6'), 1, 2::bigint, '{"provider":"fake"}');
+select tests.eq((select current_setting('baton.claim_generation', true)), '', 'the generation setting does not outlive the call');
+select tests.eq((select progress_done from public.processing_jobs where id = tests.id('ex6')), 2, 'checkpoint after two chunks');
+
+-- heartbeat: an expired lease is not renewed (it reports lost), a valid one is
+select tests.eq(public.heartbeat_processing_job(tests.id('ex6'), 1, 300), 'running', 'a valid lease is renewed');
+select tests.as_owner();
+update public.processing_jobs set lease_expires_at = now() - interval '1 second' where id = tests.id('ex6');
+select tests.as_service();
+select tests.eq(public.heartbeat_processing_job(tests.id('ex6'), 1, 300), 'lost', 'an expired lease is not revived');
+select tests.ok((select lease_expires_at <= now() from public.processing_jobs where id = tests.id('ex6')), 'the lease stays expired');
+select tests.throws(tests.gen_chunk_sql(1, 2, 2, 3), 'BTLL0', 'and the expired claim cannot write');
+
+-- a job claimed normally (no yield) keeps claim_generation = attempt, so attempt-only callers still work
+select tests.ok((select claim_generation >= attempt from public.processing_jobs where id = tests.id('ex6')),
+                'the generation never falls behind the attempt of a claimed job');

@@ -138,8 +138,8 @@ export function fakeStorage(bytes: Uint8Array | null, log: string[] = [], remove
   return { storage, removed };
 }
 
-export function claimed(stage: string, attempt = 1, sourceId: string | null = IDS.source) {
-  return { id: IDS.job, handover_id: IDS.handover, run_id: IDS.run, source_id: sourceId, stage, attempt, max_attempts: 3 };
+export function claimed(stage: string, attempt = 1, sourceId: string | null = IDS.source, claimGeneration: number = attempt) {
+  return { id: IDS.job, handover_id: IDS.handover, run_id: IDS.run, source_id: sourceId, stage, attempt, max_attempts: 3, claim_generation: claimGeneration };
 }
 
 export function jobContext(

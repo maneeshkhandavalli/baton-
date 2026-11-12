@@ -317,3 +317,24 @@ describe("run finishing over listRunJobs (DB-14)", () => {
     assert.equal(f.p_error_message, "no_source_succeeded");
   });
 });
+
+describe("claim generation reaches the fenced writers (DB-12 follow-up)", () => {
+  it("claimOf carries the claim generation (number or numeric string) and omits a missing or invalid one", () => {
+    const at = (g: unknown) => claimOf({ claimed: { ...claimed("analyze", 1), claim_generation: g as number } });
+    assert.deepEqual(at(3), { jobId: IDS.job, attempt: 1, generation: 3 });
+    assert.deepEqual(at("4"), { jobId: IDS.job, attempt: 1, generation: 4 });
+    for (const g of [undefined, null, 0, "x", 1.5]) assert.deepEqual(at(g), { jobId: IDS.job, attempt: 1 }, String(g));
+  });
+
+  it("a stage's fenced write sends the claim's generation, so a yielded-and-reclaimed attempt cannot be impersonated", async () => {
+    const handler: StageHandler = async (ctx) => {
+      await setPointSortKeys(ctx.db, claimOf(ctx), []);
+      return { kind: "succeeded" };
+    };
+    const { db, run } = drain({ stage: "prepare_review", handler });
+    await run();
+    const call = db.called("pipeline_set_point_sort_keys")[0].args;
+    assert.equal(call.p_attempt, 1);
+    assert.equal(call.p_claim_generation, 1);
+  });
+});
