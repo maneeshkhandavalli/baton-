@@ -9,7 +9,7 @@ import { MaskedText } from "@/components/shared/masked-text";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/hooks/use-action";
 import type { ExclusionSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
-import { eraseParticipant } from "@/lib/mocks/actions";
+import { eraseParticipant } from "@/lib/actions/privacy";
 
 interface ParticipantsPanelProps {
   handoverId: string;

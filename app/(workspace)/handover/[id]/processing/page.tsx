@@ -7,7 +7,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { ProcessingView } from "@/components/processing/processing-view";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingState } from "@/components/shared/loading-state";
-import { getMockQueries } from "@/lib/mocks/queries";
+import { getQueries } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Processing" };
 
@@ -23,7 +23,7 @@ export default function ProcessingPage({ params }: PageProps<"/handover/[id]/pro
 
 async function ProcessingContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const queries = getMockQueries();
+  const queries = getQueries();
   const handover = await queries.getHandover(id);
   if (!handover.ok) notFound();
   const h = handover.data;

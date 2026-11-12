@@ -13,7 +13,8 @@ import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyCons
 import { useAction } from "@/hooks/use-action";
 import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
 import type { MaskKind } from "@/lib/contracts/enums";
-import { cancelProcessing, recordSourceConsent, startProcessing } from "@/lib/mocks/actions";
+import { cancelProcessing, startProcessing } from "@/lib/actions/handovers";
+import { recordSourceConsent } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 

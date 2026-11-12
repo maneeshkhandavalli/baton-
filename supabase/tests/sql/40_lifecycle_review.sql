@@ -78,7 +78,7 @@ begin
 
   -- Worker: run fails with no earlier success → back to draft.
   perform tests.as_service();
-  perform public.finish_processing_run(v_run, 'failed', 'processing_failed', 'stage failed');
+  perform public.finish_processing_run(v_run, 'failed', 'processing_failed', 'stage_failed');
   perform tests.as_user('ann');
   perform tests.eq((tests.read(format('select public.api_get_handover(%L)', tests.id('h'))) ->> 'state'), 'draft', 'failed first run → draft');
   perform tests.put('src', v_s);

@@ -6,7 +6,7 @@ import { GapsManager } from "@/components/gaps/gaps-manager";
 import { PageContainer } from "@/components/layout/page-container";
 import { LoadingState } from "@/components/shared/loading-state";
 import { SectionHeading } from "@/components/shared/section-heading";
-import { getMockQueries } from "@/lib/mocks/queries";
+import { getQueries } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Knowledge gaps" };
 
@@ -27,7 +27,7 @@ export default function GapsPage({ params }: PageProps<"/handover/[id]/gaps">) {
 
 async function GapsContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const queries = getMockQueries();
+  const queries = getQueries();
   const [handover, questions, points] = await Promise.all([queries.getHandover(id), queries.listGapQuestions(id), queries.listPoints(id)]);
   if (!handover.ok) notFound();
   const review = handover.data.viewerRole === "outgoing" || handover.data.viewerRole === "reviewer";

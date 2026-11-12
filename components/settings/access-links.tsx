@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/hooks/use-action";
 import type { AccessTokenSummary } from "@/lib/contracts/dto";
-import { revokeAccessToken } from "@/lib/mocks/actions";
+import { revokeAccessToken } from "@/lib/actions/gaps";
 import { cn } from "@/lib/utils";
 
 /** Exactly the canonical derived status; nothing else is inferred from the token. */

@@ -362,3 +362,69 @@ describe("deleteAccountInput (D25, §12.9)", () => {
     assert.equal(deleteAccountInput.safeParse({ confirm: "DELETE", purgeHandoverIds: ["not-a-uuid"] }).success, false);
   });
 });
+
+// ── AI output schemas (§10.6, §10.8, §11.8 rule 2) ───────────────────────────
+import { extractionCandidateSchema, extractionResponseSchema, supportVerdictResponseSchema } from "../schemas";
+
+describe("extractionCandidateSchema (§10.6)", () => {
+  const MSG = "7c4d5e6f-8091-4ca3-9d4e-5f6a7b8c9d0e";
+  const base = {
+    category: "owner",
+    title: "Treasurer owns the UPI account",
+    statement: "[NAME_1] manages the club UPI account.",
+    attributes: { responsibility: "UPI account", ownerLabel: null, since: null },
+    citations: [{ messageId: MSG, quote: "I will keep handling the UPI account", stance: "supports" }],
+    inferenceRationale: null,
+  };
+
+  it("accepts a well-formed candidate", () => {
+    assert.equal(extractionCandidateSchema.safeParse(base).success, true);
+  });
+  it("rejects attributes of another category", () => {
+    assert.equal(extractionCandidateSchema.safeParse({ ...base, attributes: { system: "UPI" } }).success, false);
+  });
+  it("rejects contact.directContact from extraction (D5)", () => {
+    const contact = {
+      ...base,
+      category: "contact",
+      attributes: { nameLabel: "Faculty advisor", directContact: { channel: "email", value: "a@b.co" } },
+    };
+    assert.equal(extractionCandidateSchema.safeParse(contact).success, false);
+  });
+  it("requires inferenceRationale when there are no citations", () => {
+    assert.equal(extractionCandidateSchema.safeParse({ ...base, citations: [] }).success, false);
+    assert.equal(extractionCandidateSchema.safeParse({ ...base, citations: [], inferenceRationale: "Implied by schedule" }).success, true);
+  });
+  it("rejects unknown keys, a non-uuid messageId and an over-long title", () => {
+    assert.equal(extractionCandidateSchema.safeParse({ ...base, confidence: 0.9 }).success, false);
+    assert.equal(extractionCandidateSchema.safeParse({ ...base, citations: [{ ...base.citations[0], messageId: "m1" }] }).success, false);
+    assert.equal(extractionCandidateSchema.safeParse({ ...base, title: "x".repeat(121) }).success, false);
+  });
+  it("envelope is strict", () => {
+    assert.equal(extractionResponseSchema.safeParse({ candidates: [] }).success, true);
+    assert.equal(extractionResponseSchema.safeParse({ candidates: [], note: "hi" }).success, false);
+  });
+});
+
+describe("supportVerdictResponseSchema (§10.8)", () => {
+  it("accepts a verdict with a rationale and never 'unchecked'", () => {
+    assert.equal(supportVerdictResponseSchema.safeParse({ verdict: "supports", rationale: "Directly states it." }).success, true);
+    assert.equal(supportVerdictResponseSchema.safeParse({ verdict: "unchecked", rationale: "x" }).success, false);
+    assert.equal(supportVerdictResponseSchema.safeParse({ verdict: "supports", rationale: "" }).success, false);
+  });
+});
+
+describe("AI output caps (§12.10 rule 3)", () => {
+  const MSG = "7c4d5e6f-8091-4ca3-9d4e-5f6a7b8c9d0e";
+  const cand = (over: Record<string, unknown>) => ({
+    category: "risk", title: "Venue deposit", statement: "Deposit may be lost.", attributes: {},
+    citations: [{ messageId: MSG, quote: "the deposit is not refundable", stance: "supports" }], inferenceRationale: null, ...over,
+  });
+  it("caps quote length, citation count, rationale length and candidate count", () => {
+    assert.equal(extractionCandidateSchema.safeParse(cand({})).success, true);
+    assert.equal(extractionCandidateSchema.safeParse(cand({ citations: [{ messageId: MSG, quote: "x".repeat(1001), stance: "supports" }] })).success, false);
+    assert.equal(extractionCandidateSchema.safeParse(cand({ citations: Array(21).fill({ messageId: MSG, quote: "the deposit is not refundable", stance: "supports" }) })).success, false);
+    assert.equal(extractionCandidateSchema.safeParse(cand({ citations: [], inferenceRationale: "y".repeat(1001) })).success, false);
+    assert.equal(extractionResponseSchema.safeParse({ candidates: Array(101).fill({}) }).success, false);
+  });
+});

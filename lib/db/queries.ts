@@ -7,6 +7,7 @@
  */
 
 import type { ErrorCode, Result } from "../contracts/api";
+import type { SourceSummary } from "../contracts/dto";
 import type { AccessTokenFilter, BatonQueries, MessageContextWindow, PointListFilter } from "../contracts/queries";
 import { MESSAGE_CONTEXT_DEFAULT, MESSAGE_CONTEXT_MAX } from "../contracts/queries";
 import { EVIDENCE_STATUSES, POINT_CATEGORIES, REVIEW_STATES, TOKEN_PURPOSES } from "../contracts/enums";
@@ -192,4 +193,17 @@ export function createDbQueries(clients: DbClientFactories): BatonQueries {
       );
     },
   };
+}
+
+/**
+ * R1 (integration): one source under the caller's RLS, for actions that return a `SourceSummary` after a
+ * mutation (confirmSourceUploaded, recordSourceConsent). Not part of BatonQueries; invisible, deleted and
+ * unknown sources are all `not_found` (§8.5).
+ */
+export async function getSourceSummary(userDb: DbClientFactories["user"], sourceId: string): Promise<Result<SourceSummary>> {
+  if (!UUID.test(sourceId)) return fail("not_found");
+  return run(
+    async () => mapSourceSummary(requireFound(await callRpc(await userDb(), "api_get_source", { p_source_id: sourceId.toLowerCase() }))),
+    readError,
+  );
 }

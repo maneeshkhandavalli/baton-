@@ -17,7 +17,9 @@ import { useHotkeys } from "@/hooks/use-hotkeys";
 import type { GapQuestionSummary, HandoverSummary, PointDetail, ReadinessReport, SourceSummary } from "@/lib/contracts/dto";
 import { EVIDENCE_STATUSES, type EvidenceStatus, type PointCategory, type ReviewState } from "@/lib/contracts/enums";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
-import { createGapQuestion, publishHandover, reviewPoint } from "@/lib/mocks/actions";
+import { createGapQuestion } from "@/lib/actions/gaps";
+import { publishHandover } from "@/lib/actions/handovers";
+import { reviewPoint } from "@/lib/actions/review";
 import { cn } from "@/lib/utils";
 
 import { PointCard, type PointAction } from "./point-card";

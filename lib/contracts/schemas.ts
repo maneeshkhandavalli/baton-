@@ -14,6 +14,7 @@ import {
   CREATOR_ROLES,
   DATE_ORDERS,
   DEPENDENCY_TYPES,
+  EVIDENCE_STANCES,
   EXCLUSION_SCOPES,
   GAP_ANSWER_DECISIONS,
   GAP_PRIORITIES,
@@ -27,6 +28,7 @@ import {
   RELATED_PRIVACY_SURFACE_KINDS,
   RISK_LEVELS,
   SOURCE_KINDS,
+  SUPPORT_VERDICTS,
 } from "./enums";
 import { IDENTITY_HASH_PATTERN } from "./identity";
 
@@ -509,6 +511,75 @@ export const acknowledgePublicationInput = z.object({
   publicationId: uuidSchema,
   statementVersion: z.string().min(1),
 });
+
+// ── AI output (§10.6, §10.8, §11.8 rule 2) ────────────────────────────────────
+// Model output is untrusted (§12.10). lib/ai parses the provider's `raw` with these schemas; a
+// candidate that fails is dropped (after one retry of the call) and only counted, never logged.
+
+/** §10.6 limits. */
+export const EXTRACTION_TITLE_MAX = 120;
+export const EXTRACTION_STATEMENT_MAX = 1_000;
+/** §12.10 rule 3 ("Zod schemas cap lengths"): bounds on untrusted model output. */
+export const EXTRACTION_QUOTE_MAX = 1_000;
+export const EXTRACTION_CITATIONS_MAX = 20;
+export const EXTRACTION_CANDIDATES_MAX = 100;
+
+const extractionCitationSchema = z.strictObject({
+  /** source_messages.id the model was shown in this request; anything else is discarded (§10.6). */
+  messageId: uuidSchema,
+  /** Must be copied verbatim from that message; existence is re-checked deterministically (§10.7). */
+  quote: z.string().min(1).max(EXTRACTION_QUOTE_MAX),
+  /** The model's claim only; independently re-judged by the support call (§10.8). */
+  stance: z.enum(EVIDENCE_STANCES),
+});
+
+const candidateFields = {
+  title: z.string().trim().min(1).max(EXTRACTION_TITLE_MAX),
+  statement: z.string().trim().min(1).max(EXTRACTION_STATEMENT_MAX),
+  citations: z.array(extractionCitationSchema).max(EXTRACTION_CITATIONS_MAX),
+  inferenceRationale: z.string().trim().min(1).max(EXTRACTION_STATEMENT_MAX).nullable(),
+};
+
+function candidateFor<C extends (typeof POINT_CATEGORIES)[number]>(category: C) {
+  return z.strictObject({ category: z.literal(category), attributes: extractedPointAttributesSchemas[category], ...candidateFields });
+}
+
+/**
+ * One extraction candidate (§10.6). Attributes are checked against the candidate's own category with
+ * the extraction variants, so `contact.directContact` is rejected (§3.1, D5). `inferenceRationale` is
+ * required when there are no citations.
+ */
+export const extractionCandidateSchema = z
+  .discriminatedUnion("category", [
+    candidateFor("decision"),
+    candidateFor("owner"),
+    candidateFor("open_task"),
+    candidateFor("blocker"),
+    candidateFor("risk"),
+    candidateFor("dependency"),
+    candidateFor("recurring_problem"),
+    candidateFor("contact"),
+    candidateFor("next_action"),
+    candidateFor("account_access"),
+  ])
+  .superRefine((candidate, ctx) => {
+    if (candidate.citations.length === 0 && candidate.inferenceRationale === null) {
+      ctx.addIssue({ code: "custom", path: ["inferenceRationale"], message: "required when there are no citations" });
+    }
+  });
+
+/** The extract call's envelope. Each element is then parsed on its own with extractionCandidateSchema. */
+export const extractionResponseSchema = z.strictObject({ candidates: z.array(z.unknown()).max(EXTRACTION_CANDIDATES_MAX) });
+
+/** The support call's answer for one (current revision, quote) pair (§10.8). Never "unchecked". */
+export const supportVerdictResponseSchema = z.strictObject({
+  verdict: z.enum(SUPPORT_VERDICTS).exclude(["unchecked"]),
+  rationale: z.string().trim().min(1).max(EXTRACTION_STATEMENT_MAX),
+});
+
+export type ExtractionCandidate = z.output<typeof extractionCandidateSchema>;
+export type ExtractionCitation = z.output<typeof extractionCitationSchema>;
+export type SupportVerdictResponse = z.output<typeof supportVerdictResponseSchema>;
 
 // ── Input types ──────────────────────────────────────────────────────────────
 // `…Input` is what callers send (z.input); `…Values` is what the server works with after

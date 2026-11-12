@@ -477,7 +477,7 @@ begin
   -- (a) a worker claims jobs and holds its transaction; closing the run waits, then completes.
   perform tests.c_open('c1', 'service'); perform tests.c_open('c2', 'service');
   perform tests.c_exec('c1', 'begin');
-  perform tests.ok(tests.c_try('c1', 'select count(*)::text from public.claim_processing_jobs(10, 60)') like 'OK:%', 'M4a: claim runs');
+  perform tests.ok(tests.c_try('c1', 'select count(*)::text from public.claim_ready_processing_jobs(10, 60)') like 'OK:%', 'M4a: claim runs');
   perform tests.c_send('c2', format($q$select public.finish_processing_run(%L, 'failed', 'processing_failed', 'x')::text$q$, tests.id('m4arun')));
   perform tests.ok(tests.c_blocked('c2'), 'M4a: closing waits for the claim');
   perform tests.c_exec('c1', 'commit');
@@ -491,7 +491,7 @@ begin
   perform tests.c_exec('c1', 'begin');
   perform tests.ok(tests.c_try('c1', format($q$select public.finish_processing_run(%L, 'failed', 'processing_failed', 'x')::text$q$,
                                             tests.id('m4brun'))) like 'OK:%', 'M4b: close runs');
-  perform tests.c_send('c2', 'select count(*)::text from public.claim_processing_jobs(10, 60)');
+  perform tests.c_send('c2', 'select count(*)::text from public.claim_ready_processing_jobs(10, 60)');
   perform pg_sleep(0.3);
   perform tests.c_exec('c1', 'commit');
   r := tests.c_result('c2');

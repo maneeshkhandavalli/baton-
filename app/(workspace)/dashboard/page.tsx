@@ -9,8 +9,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import type { HandoverSummary } from "@/lib/contracts/dto";
-import { CODECELL_ID } from "@/lib/mocks/fixtures/codecell";
-import { getMockQueries, mockReaderLinkFor } from "@/lib/mocks/queries";
+import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -49,11 +48,11 @@ export default function DashboardPage() {
 const isReview = (h: HandoverSummary) => h.viewerRole === "outgoing" || h.viewerRole === "reviewer";
 
 async function cardFor(h: HandoverSummary): Promise<HandoverCardData> {
-  const queries = getMockQueries();
-  const isDemo = h.id === CODECELL_ID;
+  const queries = getQueries();
+  const isDemo = false; // real data only; the synthetic CodeCell demo lives at /demo
   if (!isReview(h)) {
-    const link = await mockReaderLinkFor(h.id);
-    return { handover: h, readiness: null, href: link ? routes.token.handover(link) : routes.handover.settings(h.id), cta: "Read handover", isDemo };
+    // Lead and incoming members read the publication by membership (reconciliation Q3 proposal).
+    return { handover: h, readiness: null, href: routes.handover.published(h.id), cta: "Read handover", isDemo };
   }
   const readiness = await queries.getReadiness(h.id);
   const target =
@@ -68,7 +67,7 @@ async function cardFor(h: HandoverSummary): Promise<HandoverCardData> {
 }
 
 async function HandoverList({ newHandoverLink }: { newHandoverLink: React.ReactNode }) {
-  const result = await getMockQueries().listMyHandovers();
+  const result = await getQueries().listMyHandovers();
   if (!result.ok) {
     return <EmptyState icon={<Inbox />} title="We couldn't load your handovers" description={result.error.message} />;
   }

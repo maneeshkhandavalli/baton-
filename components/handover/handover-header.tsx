@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { getMockQueries } from "@/lib/mocks/queries";
+import { getQueries } from "@/lib/data";
 
 import { HandoverStateBadge } from "./badges";
 import { memberRoleLabel } from "./labels";
@@ -8,7 +8,7 @@ import { memberRoleLabel } from "./labels";
 /** Title row for /handover/[id]/*. Reads the handover at request time, so render inside <Suspense>. */
 export async function HandoverHeader({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const result = await getMockQueries().getHandover(id);
+  const result = await getQueries().getHandover(id);
   if (!result.ok) notFound();
   const h = result.data;
 
