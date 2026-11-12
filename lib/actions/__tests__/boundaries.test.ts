@@ -49,8 +49,7 @@ describe("lib/actions Server Function modules", () => {
     const mock = new Set(asyncFunctionExports(read("lib/mocks/actions.ts")));
     const real = new Set(Object.values(EXPECTED).flat());
     assert.deepEqual([...mock].filter((n) => !real.has(n)), [], "every mock export exists under the same name");
-    // R3: updateHandoverDetails may be missing from lib/mocks (lead-owned) until its mock lands.
-    const missing = [...real].filter((n) => !mock.has(n) && n !== "updateHandoverDetails");
+    const missing = [...real].filter((n) => !mock.has(n));
     assert.deepEqual(missing, ["createManualPoint"]);
   });
 

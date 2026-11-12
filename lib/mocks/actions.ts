@@ -32,6 +32,7 @@ import {
   createGapLinkInput,
   createGapQuestionInput,
   createHandoverInput,
+  updateHandoverDetailsInput,
   createSourceUploadInput,
   deleteAccountInput,
   eraseParticipantInput,
@@ -57,6 +58,7 @@ import type {
   CreateGapLinkInput,
   CreateGapQuestionInput,
   CreateHandoverInput,
+  UpdateHandoverDetailsInput,
   CreateSourceUploadInput,
   DeleteAccountInput,
   EraseParticipantInput,
@@ -186,6 +188,32 @@ export async function createHandover(input: CreateHandoverInput): Promise<Result
     removedAt: null,
   });
   return done(ok(toHandoverSummary(store, store.handovers.at(-1)!, me.id)));
+}
+
+/** R3 C1 mock: same rules as update_handover_details (creator/outgoing, draft only, optimistic concurrency). */
+export async function updateHandoverDetails(input: UpdateHandoverDetailsInput): Promise<Result<HandoverSummary>> {
+  await sleep(250);
+  const v = parse(updateHandoverDetailsInput, input);
+  if (!v.ok) return v;
+  const store = getStore();
+  const c = context(store, v.data.handoverId);
+  if (!c) return notFound();
+  if (!c.isCreator && c.member.role !== "outgoing") return forbidden("Only the creator or the outgoing member can edit the details.");
+  if (c.h.state !== "draft") return fail("invalid_transition", "Details can be edited only while the handover is a draft.");
+  const next = {
+    title: v.data.title,
+    teamName: v.data.teamName,
+    roleTitle: v.data.roleTitle === undefined ? c.h.roleTitle : v.data.roleTitle || null,
+    description: v.data.description === undefined ? c.h.description : v.data.description || null,
+  };
+  const changed = (Object.keys(next) as (keyof typeof next)[]).some((k) => next[k] !== c.h[k]);
+  if (!changed) return ok(toHandoverSummary(store, c.h, store.viewerId)); // idempotent retry
+  if (c.h.updatedAt.slice(0, 23) !== new Date(v.data.expectedUpdatedAt).toISOString().slice(0, 23)) {
+    return fail("conflict", "This draft was changed somewhere else. Reload it to see the latest details.", { details: { reason: "stale_draft" } });
+  }
+  Object.assign(c.h, next);
+  touch(store, c.h.id);
+  return done(ok(toHandoverSummary(store, c.h, store.viewerId)));
 }
 
 export async function startProcessing(input: { handoverId: string }): Promise<Result<{ runId: string }>> {
