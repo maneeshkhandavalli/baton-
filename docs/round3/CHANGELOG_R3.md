@@ -78,12 +78,16 @@ worker commit it was cherry-picked from (`lead` = lead commit). Verification is 
 | 65 | `307554a` | `4ee390b` | feat(r3-ingestion): confirm refuses a renamed or wrong-type upload early (request #4) | lib/db, supabase/migrations, supabase/tests |
 | 66 | `643b302` | `lead` | test(round3): fixtures follow the mark_source_parse_failed revoke (300600) | supabase/tests, tests/integration |
 | 67 | `498818d` | `961278f` | docs+test(r3-backend): C8 hosted-apply readiness for every Round 3 migration | docs/round3, supabase/tests |
+| 68 | `b5d3480` | `f8b31b7` | refactor(r3-ingestion): parse-job raw download requires its claim; drop the unfenced writer (DB-12) | |
+| 69 | `e3d83dd` | `fc6743d` | docs(r3-ingestion): retention proposal — decision summary for the product owner | |
+| 70 | `a2b44a1` | `lead` | test(round3): security + IT-11 pass the job claim to downloadVerifiedRawSource (f8b31b7) | |
 
 ## Verification (latest full run on the integration HEAD at the time of writing)
 - `npm test`: contracts 104, db 216, parsers+privacy 581, ui 100, ai 200, actions 152, pipeline 116, integration 294 (0 fail)
 - SQL (Docker): PG17 19/19, PG15 19/19 · integration SQL 10/10 · Tier E real-Postgres E2E 4/4 · multi-source 5/5
 - `tsc --noEmit` 0 errors · `eslint .` clean · `next build` passed (at 470a736; re-run at the end)
 - Upgrade-path test (populated DB, every R3 migration in order): PG17 + PG15 pass (Agent 2, C8)
+- Headless device-emulated screenshots (public routes, 1440/1024/390): 0px horizontal overflow, one h1 per route
 
 ## Implemented, not integrated
 (none at the time of writing; see the latest status update)
