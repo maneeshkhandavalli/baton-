@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { phaseOf, type DraftSource } from "./draft-state";
 
 const CHAT_ACCEPT = ".txt,.zip";
-const DOC_ACCEPT = ".pdf,.docx,.md,.markdown";
+const DOC_ACCEPT = ".pdf,.docx,.md,.markdown,.txt";
 
 interface SourcesStepProps {
   sources: DraftSource[];
@@ -21,10 +21,12 @@ interface SourcesStepProps {
   onRemove: (s: DraftSource) => void;
   onRetry: (s: DraftSource) => void;
   onDateOrder: (s: DraftSource, o: DateOrder) => void;
+  /** Read a .txt as a chat export or as plain text. */
+  onSwitchKind: (s: DraftSource, kind: "whatsapp_export" | "text") => void;
   full: boolean;
 }
 
-export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, full }: SourcesStepProps) {
+export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, onSwitchKind, full }: SourcesStepProps) {
   const uid = useId();
   const readyCount = sources.filter((s) => s.status === "ready").length;
   const problems = sources.filter((s) => s.status === "error").length;
@@ -43,7 +45,7 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
         <DropZone
           id={`${uid}-doc`}
           title="Documents"
-          description="PDF, DOCX or Markdown"
+          description="PDF, DOCX, Markdown or plain text"
           accept={DOC_ACCEPT}
           icon={<FileText />}
           onFiles={(f) => onFiles(f, "doc")}
@@ -63,7 +65,7 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
           </div>
           <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft" aria-label="Added files">
             {sources.map((s) => (
-              <FileRow key={s.localId} s={s} onRemove={onRemove} onRetry={onRetry} onDateOrder={onDateOrder} />
+              <FileRow key={s.localId} s={s} onRemove={onRemove} onRetry={onRetry} onDateOrder={onDateOrder} onSwitchKind={onSwitchKind} />
             ))}
           </ul>
         </section>
@@ -88,7 +90,13 @@ const TONE_ICON: Record<UploadPhase, { icon: React.ReactNode; className: string 
   unsupported: { icon: <AlertCircle />, className: "bg-destructive-soft text-destructive-fg" },
 };
 
-function FileRow({ s, onRemove, onRetry, onDateOrder }: { s: DraftSource; onRemove: SourcesStepProps["onRemove"]; onRetry: SourcesStepProps["onRetry"]; onDateOrder: SourcesStepProps["onDateOrder"] }) {
+function FileRow({
+  s,
+  onRemove,
+  onRetry,
+  onDateOrder,
+  onSwitchKind,
+}: Pick<SourcesStepProps, "onRemove" | "onRetry" | "onDateOrder" | "onSwitchKind"> & { s: DraftSource }) {
   const phase = phaseOf(s);
   const meta = uploadPhaseMeta[phase];
   const progress = uploadProgress(phase);
@@ -151,7 +159,30 @@ function FileRow({ s, onRemove, onRetry, onDateOrder }: { s: DraftSource; onRemo
             </Button>
           </span>
         )}
-        {phase === "failed" && s.file && s.kind !== "text" && (
+        {s.file && s.name.toLowerCase().endsWith(".txt") && !meta.busy && (
+          <span className="inline-flex rounded-md border border-border bg-muted p-0.5" role="group" aria-label={`Read ${s.name} as`}>
+            {(
+              [
+                ["whatsapp_export", "Chat export"],
+                ["text", "Plain text"],
+              ] as const
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={s.kind === kind}
+                onClick={() => onSwitchKind(s, kind)}
+                className={cn(
+                  "h-7 rounded-sm px-2 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+                  s.kind === kind ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
+        {phase === "failed" && s.file && (
           <Button size="sm" variant="outline" onClick={() => onRetry(s)}>
             <RotateCcw aria-hidden="true" data-icon="inline-start" />
             Retry

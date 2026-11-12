@@ -74,7 +74,9 @@ export interface WizardInitial {
 
 function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
-  if (group === "chat") return ext === "txt" || ext === "zip" ? "whatsapp_export" : null;
+  // A .txt is decided by its contents (looksLikeChatExport); this is only the starting guess.
+  if (ext === "txt") return group === "chat" ? "whatsapp_export" : "text";
+  if (group === "chat") return ext === "zip" ? "whatsapp_export" : null;
   if (ext === "pdf") return "pdf";
   if (ext === "docx") return "docx";
   if (ext === "md" || ext === "markdown") return "markdown";
@@ -88,6 +90,21 @@ const MIME: Record<SourceKind, string> = {
   markdown: "text/markdown",
   text: "text/plain",
 };
+
+/** WhatsApp exports start lines with a date + time stamp ("12/03/24, 9:41 pm - …" or "[12/03/24, 09:41:07] …"). */
+const CHAT_LINE = /^\u200e?\[?\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4},?\s+\d{1,2}[:.]\d{2}/m;
+
+async function looksLikeChatExport(file: File): Promise<boolean> {
+  try {
+    return CHAT_LINE.test(await file.slice(0, 8192).text());
+  } catch {
+    return true; // can't tell: keep the chat default; the user can switch it on the row
+  }
+}
+
+const isTxt = (name: string) => name.toLowerCase().endsWith(".txt");
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function sha256Hex(data: ArrayBuffer) {
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -383,18 +400,58 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
         uploadError = true;
       }
     }
-    if (uploadError) {
-      await removeSource({ sourceId }); // don't leave a pending row behind; retry starts a fresh upload
-      return update(localId, { status: "error", errorPhase: "failed", error: "The upload didn't go through. Check your connection and retry.", sourceId: undefined });
-    }
+    if (uploadError) return cleanUp(localId, sourceId, "The upload didn't go through. Check your connection and retry.");
 
+    // confirmSourceUploaded is idempotent: a lost response or a transient error is retried with a short
+    // backoff before the upload is given up, so a good upload is never deleted because of the network.
     update(localId, { status: "verifying" });
-    const confirmed = await saving(() => confirmSourceUploaded({ sourceId }));
-    if (!confirmed.ok) {
-      await removeSource({ sourceId });
-      return update(localId, { status: "error", errorPhase: "failed", error: "The uploaded file didn't match what was sent. Retry the upload.", sourceId: undefined });
+    let confirmed: Awaited<ReturnType<typeof confirmSourceUploaded>> | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await pause(500 * attempt);
+      try {
+        confirmed = await saving(() => confirmSourceUploaded({ sourceId }));
+      } catch {
+        confirmed = { ok: false, error: { code: "internal", message: "Couldn't reach Baton.", retryable: true } };
+      }
+      if (confirmed.ok || !(confirmed.error.retryable || confirmed.error.code === "internal")) break;
+    }
+    if (!confirmed?.ok) {
+      const transient = !!confirmed && (confirmed.error.retryable || confirmed.error.code === "internal");
+      return cleanUp(
+        localId,
+        sourceId,
+        transient ? "Baton couldn't confirm the upload. Check your connection and retry." : "The uploaded file didn't match what was sent. Retry the upload.",
+      );
     }
     await consentAndPreview(localId, sourceId, "everyone");
+  }
+
+  /** A failed upload removes its pending source; if that fails too, the row says so and keeps the id for Remove. */
+  async function cleanUp(localId: string, sourceId: string, message: string) {
+    let removed = false;
+    try {
+      removed = (await removeSource({ sourceId })).ok;
+    } catch {
+      removed = false;
+    }
+    if (removed) return update(localId, { status: "error", errorPhase: "failed", error: message, sourceId: undefined });
+    update(localId, {
+      status: "error",
+      errorPhase: "failed",
+      error: `${message} Baton also couldn't clean up this upload: remove it before adding the file again.`,
+      sourceId,
+    });
+  }
+
+  /** Read a .txt as a WhatsApp chat export or as a plain text document (re-uploads with the other kind). */
+  async function switchKind(s: DraftSource, kind: "whatsapp_export" | "text") {
+    if (!s.file || s.kind === kind) return;
+    if (s.sourceId) {
+      const r = await saving(() => run(() => removeSource({ sourceId: s.sourceId! })));
+      if (!r.ok) return;
+    }
+    update(s.localId, { kind, sourceId: undefined, preview: undefined, error: undefined, errorPhase: undefined, needsDateOrder: false, dateOrder: undefined });
+    void uploadSource(s.localId, { name: s.name, size: s.size, kind, file: s.file });
   }
 
   function onFiles(files: FileList | null, group: "chat" | "doc") {
@@ -425,6 +482,14 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
         continue;
       }
       setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
+      if (isTxt(file.name)) {
+        void (async () => {
+          const detected: SourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
+          if (detected !== kind) update(localId, { kind: detected });
+          await uploadSource(localId, { name: file.name, size: file.size, kind: detected, file });
+        })();
+        continue;
+      }
       void uploadSource(localId, { name: file.name, size: file.size, kind, file });
     }
     setSkipped(over);
@@ -436,7 +501,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   }
 
   function retry(s: DraftSource) {
-    if (!s.file || s.kind === "text" || phaseOf(s) !== "failed") return;
+    if (!s.file || phaseOf(s) !== "failed" || (s.kind === "text" && !isTxt(s.name))) return;
     void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
   }
 
@@ -664,7 +729,15 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
                   A handover holds up to {MAX_SOURCES} files. Remove one to add another.
                 </Alert>
               )}
-              <SourcesStep sources={sources} onFiles={onFiles} onRemove={remove} onRetry={retry} onDateOrder={chooseDateOrder} full={sources.length >= MAX_SOURCES} />
+              <SourcesStep
+                sources={sources}
+                onFiles={onFiles}
+                onRemove={remove}
+                onRetry={retry}
+                onDateOrder={chooseDateOrder}
+                onSwitchKind={(s, k) => void switchKind(s, k)}
+                full={sources.length >= MAX_SOURCES}
+              />
             </div>
           )}
           {shownStep === 3 && (
