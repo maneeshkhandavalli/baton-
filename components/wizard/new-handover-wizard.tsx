@@ -40,7 +40,7 @@ import { useDetailsAutosave } from "./use-details-autosave";
 // Consent comes before any upload: the database refuses a preview until consent is recorded for the
 // source (§10 steps 2–3; source_preview_target), so each upload records consent right after the server
 // has verified the bytes, and only then asks for the preview.
-const STEPS = [
+export const STEPS = [
   { id: "details", label: "Details" },
   { id: "privacy", label: "Privacy & consent" },
   { id: "sources", label: "Sources" },
@@ -50,7 +50,7 @@ const LAST_STEP = STEPS.length - 1;
 
 const MAX_SOURCES = 10; // D15
 
-interface Details {
+export interface Details {
   title: string;
   teamName: string;
   roleTitle: string;
@@ -148,7 +148,7 @@ function zonedInstant(date: string, time: string, timeZone: string): string {
 }
 
 /** An identity match waiting for the creator's answer (§6.8.1). */
-interface PendingMatch {
+export interface PendingMatch {
   sourceLocalId: string;
   sourceId: string;
   sourceName: string;
@@ -808,7 +808,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
 /** Set when the step changes; the next StepHeading to mount takes focus (then clears it). */
 const focusNextStep = { current: false };
 
-function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
+export function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
   return (
     <header className="space-y-2">
       <p className="type-eyebrow text-muted-foreground">
@@ -833,7 +833,7 @@ function StepHeading({ index, title, description }: { index: number; title: stri
 
 // ── Steps ────────────────────────────────────────────────────────────────────
 
-function DetailsStep({
+export function DetailsStep({
   details,
   setDetail,
   errors,
@@ -1016,7 +1016,7 @@ function DetailsStep({
   );
 }
 
-function MatchesSection({
+export function MatchesSection({
   matches,
   decisions,
   onAnswer,

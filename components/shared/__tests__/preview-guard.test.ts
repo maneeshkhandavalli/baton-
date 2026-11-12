@@ -22,8 +22,8 @@ const GUARD = 'if (process.env.NODE_ENV !== "development") notFound();';
 describe("dev-only preview routes", () => {
   const all = files(previewDir);
 
-  it("exist (layout, index and the previews)", () => {
-    assert.ok(all.length >= 4, `found ${all.length}`);
+  it("exist (layout, index and the five previews)", () => {
+    assert.ok(all.length >= 7, `found ${all.length}`);
   });
 
   for (const file of all) {
