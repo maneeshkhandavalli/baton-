@@ -176,9 +176,13 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_outcome, "failed");
     assert.equal(completion?.p_error_message, "integrity_mismatch");
     assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
-    // lib/db/storage.ts (Agent 3) fails the source itself on an integrity mismatch, through the unfenced writer;
-    // a fenced variant is a cross-owner request in the Round 3 report.
-    assert.equal(db.called("mark_source_parse_failed")[0].args.p_error_code, "integrity_mismatch");
+    // DB-12: the mismatch is written through the fenced writer under this job's claim, never the unfenced one.
+    const marked = db.called("pipeline_mark_source_parse_failed");
+    assert.equal(marked.length, 1);
+    assert.equal(marked[0].args.p_error_code, "integrity_mismatch");
+    assert.equal(marked[0].args.p_job_id, IDS.job);
+    assert.equal(marked[0].args.p_attempt, 1);
+    assert.equal(db.called("mark_source_parse_failed").length, 0);
   });
 
   it("retries when the raw object cannot be downloaded, without failing the source", async () => {

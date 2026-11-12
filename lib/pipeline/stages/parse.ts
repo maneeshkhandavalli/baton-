@@ -70,7 +70,7 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
 
   let raw;
   try {
-    raw = await downloadVerifiedRawSourceWithMeta(ctx.db, ctx.storage, sourceId);
+    raw = await downloadVerifiedRawSourceWithMeta(ctx.db, ctx.storage, sourceId, claimOf(ctx)); // DB-12: the mismatch is written under the claim
   } catch (e) {
     if (e instanceof DbError && e.code === "validation_failed") return failed("validation_failed", "integrity_mismatch"); // already marked failed
     if (e instanceof DbError && e.code === "not_found") return failed("processing_failed", "raw_unavailable", true); // raw kept; retry
