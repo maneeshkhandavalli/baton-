@@ -10,16 +10,100 @@ them: a draft that is never processed keeps them indefinitely, and before Round 
 draft. Unfinished uploads (`pending_upload` rows) are never cleaned up either. No user can see these
 files, but keeping them contradicts the retention we promise (§12.6: "7-day ceiling").
 
-**Please approve or change these defaults:**
+**Please approve or change these defaults.** The details, alternatives and consequences for each choice follow the table.
 
-| # | Choice | Recommended default | Alternative |
+| # | Choice | Recommended default | Alternatives |
 |---|---|---|---|
-| 1 | How long an unfinished upload (`pending_upload`) may stay before it is cleared | **24 hours** (minimum 2 h, the upload link's lifetime) | 2–6 h (stricter) |
-| 2 | Raw file of an uploaded-but-never-processed source | **Deleted 7 days after upload** (§12.6); the user re-uploads to process | 3 or 14 days |
-| 3 | Raw file whose automatic delete after a successful parse failed | **Retried after 24 hours**, then hourly | Retry immediately |
-| 4 | Raw files of a discarded draft | **Deleted immediately on discard** (already built, R3-D5); the sweep retries any failure | Keep for the 30-day purge window (not recommended: unmasked data) |
-| 5 | Database rows of a discarded draft (messages, points, sources) | **Unchanged**: they stay until the 30-day purge, which remains blocked until D27 (backup and recovery) is decided | none until D27 |
-| 6 | How the sweep is first switched on | **Dry run for one week** (counts only), then live | Live immediately |
+| 1 | How long an unfinished upload (`pending_upload`) may stay before it is cleared | **24 hours** | 2–6 hours; 7 days |
+| 2 | Raw file of an uploaded-but-never-processed source | **Deleted 7 days after upload** (§12.6) | 3 days; 14–30 days |
+| 3 | Raw file whose automatic delete after a successful parse (or a source removal) failed | **Retried after 24 hours**, then every hourly run | 1 hour; at the next run regardless of age |
+| 4 | Raw files of a discarded draft | **Deleted immediately on discard** (built in R3-D5); the sweep retries failures | Keep until the 30-day purge |
+| 5 | Database rows of a discarded draft (sources, masked messages, points) | **Unchanged** until the 30-day purge, which stays blocked on D27 | Hard-delete or blank the messages now (a purge in all but name) |
+| 6 | How the sweep is first switched on | **One-week dry run** (counts only), then live with a per-run cap | Live immediately; leave it off |
+
+Nothing in this section has been run. Every option refers to the sweep design in §7, which is not built.
+
+### Choice 1 — unfinished uploads (`pending_upload` rows)
+
+What exists: the row holds no accepted content, only the masked file name, size, checksum and MIME type,
+and usually there is no object. The exception is an upload that finished but whose confirm was lost: it
+leaves a complete, unconfirmed, **unmasked** object at the path (the detector reports
+`rawObjectPresent`). After the signed URL expires (2 h) the row can never be completed. All it does is
+occupy one of the 10 source slots and block that file's checksum. Agent 2's retry reuse removes the
+checksum friction for the same user.
+
+| Option | Privacy exposure | User impact | Ops / cost | Reversible? | D27 / purge | Monitoring |
+|---|---|---|---|---|---|---|
+| **24 h (recommended)** | A lost-confirm object lives for at most 24 h plus one sweep interval | None: an expired row already shows as "upload didn't finish, add the file again" | Negligible: a few rows a day | The row, yes (soft removal to `removed`). The object, no, but it was never accepted | No interaction: soft removal only, no hard delete | `pending_upload_expired` per run, and the share with `rawObjectPresent = true` (a rising share points to a client confirm bug) |
+| 2–6 h | Shortest window | A very slow 25 MB upload over a bad connection, near the 2 h URL limit, could be cleared while the user is still waiting; they choose the file again | Same | Same | None | Same, plus a count of "confirm after expiry" errors |
+| 7 days | Lost-confirm objects live for a week | Dead rows occupy slots for a week (10-source limit) | Same | Same | None | Same |
+
+**If you choose nothing:** unfinished rows, and any lost-confirm unmasked objects, stay forever.
+
+### Choice 2 — raw file of a source that was uploaded but never processed
+
+This is the **largest exposure**: the full, unmasked chat or document. It is kept only so the creator
+can preview and process it.
+
+| Option | Privacy exposure | User impact | Ops / cost | Reversible? | D27 / purge | Monitoring |
+|---|---|---|---|---|---|---|
+| **7 days (recommended, §12.6)** | Unmasked raw kept for at most 7 days | A draft resumed after 7 days shows the source as failed (`raw_expired`) and the user uploads it again. Conversation exclusions (source-scoped) must be chosen again; participant and date-range exclusions (handover-wide) still apply | Small storage saving; one delete and one row update per source | **No**: the object is gone and the user must re-upload | Raw objects are not database content. Deleting one is the same operation as after every parse (D14), not a purge, so no manifest entry is needed. After a database restore, rows point at deleted objects; the sweep is idempotent and the source shows "upload again" | `raw_ceiling` deletions per day, and the age of the oldest raw object (alert if older than the ceiling plus one day, which means the sweep is not running) |
+| 3 days | Less exposure | More re-uploads for drafts that sit over a long weekend | Same | No | Same | Same |
+| 14–30 days | Two to four times the exposure; contradicts §12.6 and the consent wording | Fewer re-uploads | Same | No | Same | Same |
+
+Recommended alongside: tell the user in the wizard ("uploads are kept for 7 days until you start
+processing"). A reminder email before expiry would need Resend, an external dependency that is not built.
+
+**If you choose nothing:** unmasked uploads of abandoned drafts stay indefinitely, contradicting §12.6
+and the consent statement.
+
+### Choice 3 — retrying a raw delete that failed after a parse or a source removal
+
+By this point the masked data is committed (parsed) or the source is removed, so the raw object is a
+redundant, unmasked copy. A failure here means Storage was unavailable or refused the delete.
+
+| Option | Privacy exposure | User impact | Ops / cost | Reversible? | D27 / purge | Monitoring |
+|---|---|---|---|---|---|---|
+| **24 h, then hourly (recommended)** | The redundant copy lives about 24 h after a failure | None: the user never needs it again | Negligible | No, but the copy is redundant | None: the same operation as the post-parse delete (D14) | `parsed_raw_pending` and `removed_raw_pending` should stay near 0; alert when they grow (Storage outage or permission change) |
+| 1 hour | Shorter | None | Same; needs a separate grace parameter for parsed rows in the detector (today one `p_grace` covers both parsed and pending rows) | No | None | Same |
+| Next run, any age | Shortest | None. A very small race with the parse job's own delete; both deletes are idempotent | Same | No | None | Same |
+
+**If you choose nothing:** every failed delete leaves an unmasked duplicate forever, because today
+nothing retries it.
+
+### Choice 4 — raw files of a discarded draft
+
+Already built (R3-D5): `deleteHandover` deletes the raw objects right after `delete_handover` commits,
+and a failed delete keeps its path for the sweep. The product has **no "undo discard"**.
+
+| Option | Privacy exposure | User impact | Ops / cost | Reversible? | D27 / purge | Monitoring |
+|---|---|---|---|---|---|---|
+| **Immediate (recommended, built)** | Files are gone at discard; failures last at most one sweep interval once the sweep runs | An accidental discard can't be undone in the product anyway; any manual, support-assisted restore would also need the files uploaded again | One delete per source at discard | No | Not a purge: the database rows stay under the 30-day purge (choice 5) | The `failed` count from `deleteHandoverRawObjects` in the logs; `handover_deleted` candidates with `rawObjectPresent = true` should be 0 |
+| Keep until the 30-day purge | Unmasked files of discarded drafts are kept for at least 30 days, and **indefinitely while D27 blocks the purge** | Would allow a manual restore later, but no restore feature exists | Storage held longer | Yes, until the purge | Ties raw deletion to the blocked purge, so nothing is ever deleted | The purge backlog (see choice 5) |
+
+**If you choose nothing:** the built immediate deletion keeps running. Only its failures linger, because
+the sweep that would retry them is not approved.
+
+### Choice 5 — database rows of a discarded draft
+
+This covers the masked messages, points, evidence and source rows of a discarded draft.
+
+| Option | Privacy exposure | User impact | Ops / cost | Reversible? | D27 / purge | Monitoring |
+|---|---|---|---|---|---|---|
+| **Keep until the 30-day purge (recommended)** | Masked data stays while D27 is open: no raw files, and no unmasked PII under §12.1. Users can't see it (RLS, deleted handover) | None | Grows slowly with discarded drafts | Yes (soft-deleted) | **Respects D27**: the purge stays fail-closed until the recovery manifest exists | Purge backlog: a read-only count of soft-deleted handovers older than 30 days |
+| Hard-delete or blank the message bodies now | Lower | None | A new destructive job | **No** | **Violates D27**: removing database content without the manifest is exactly what the gate forbids, and a backup restore would bring the data back with no record that it was removed | Would need its own audit |
+
+**If you choose nothing:** same as the recommendation (the status quo).
+
+### Choice 6 — switching the sweep on
+
+| Option | Privacy exposure | User impact | Ops / cost | Reversible? | D27 / purge | Monitoring |
+|---|---|---|---|---|---|---|
+| **One-week dry run, then live with a per-run cap (e.g. 100) and an environment kill switch (recommended)** | One more week at today's exposure | None during the dry run | One hourly cron route; `CRON_SECRET` | The dry run is fully reversible; live deletions are not | The sweep never calls `purge_handover` or `erase_participant` and never hard-deletes rows | Per-reason counts per run, deletions and failures per run, and run duration. Alert when a run hits the cap, or when failures occur in 3 runs in a row |
+| Live immediately | Shortest | A misconfigured grace period or clock could cause a surprise mass deletion that cannot be undone | Same | No | Same | Same |
+| Leave it off | Choices 1–3 have no effect | None | None | n/a | n/a | The read-only detector can still report the backlog |
+
+**If you choose nothing:** the sweep stays off and choices 1–3 have no effect.
 
 **Already done without a decision:** detection (`list_orphan_upload_candidates`, read-only); raw cleanup
 on discard (R3-D5); refusing to record a raw delete for a source that still needs it (QA-L1); early
