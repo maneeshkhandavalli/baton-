@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, CircleDashed, CircleSlash, History, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, CircleAlert, CircleDashed, CircleSlash, History, RotateCcw, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 
 import { AccessBadge } from "@/components/handover/badges";
 import { attributeRows } from "@/components/handover/attributes";
@@ -8,6 +8,7 @@ import { formatDate, formatDateRange, formatDateTime, formatCount } from "@/comp
 import { accessLevelMeta, categoryLabel, maskKindLabel, quoteCheckLabel, sourceKindLabel, supportVerdictLabel } from "@/components/handover/labels";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
+import { isGuardedVerdict } from "@/components/shared/support-guard";
 import { MaskedText } from "@/components/shared/masked-text";
 import { statusConfig } from "@/config/status";
 import type { EvidenceItem, PointDetail, SourceSummary } from "@/lib/contracts/dto";
@@ -63,8 +64,35 @@ function CheckRow({ ok, warn, children }: { ok: boolean; warn?: boolean; childre
   );
 }
 
+/** PI-11: the guard overrode the automated check. Read-only; the reviewer decides from the quote itself. */
+function GuardNotice({ rationale }: { rationale: string }) {
+  return (
+    <div role="note" className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2.5 text-caption text-warning-fg">
+      <ShieldAlert aria-hidden="true" className="mt-px size-4 shrink-0" />
+      <div className="space-y-0.5">
+        <p className="font-semibold">Possible instructions to an automated checker</p>
+        <p className="text-foreground/80">{rationale}</p>
+      </div>
+    </div>
+  );
+}
+
 function Verification({ e }: { e: EvidenceItem }) {
   const quoteOk = e.quoteCheck === "exact" || e.quoteCheck === "normalized";
+  if (isGuardedVerdict(e)) {
+    return (
+      <div className="space-y-2">
+        <GuardNotice rationale={e.verdictRationale!} />
+        {e.kind !== "testimony" && (
+          <ul className="space-y-1.5" aria-label="Verification">
+            <CheckRow ok={quoteOk} warn={e.quoteCheck === "pending"}>
+              {quoteCheckLabel[e.quoteCheck]}
+            </CheckRow>
+          </ul>
+        )}
+      </div>
+    );
+  }
   return (
     <ul className="space-y-1.5" aria-label="Verification">
       {e.kind === "testimony" ? (

@@ -163,14 +163,16 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                 </Badge>
                 {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
               </div>
-              <h2 ref={focusOnArrival} tabIndex={-1} className="type-section-title outline-none"><MaskedText text={q.question} /></h2>
-              {q.context && <p className="text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}
+              <h2 id={`q-${q.id}`} className="type-section-title"><MaskedText text={q.question} /></h2>
+              {q.context && <p id={`qc-${q.id}`} className="text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}
               <Label htmlFor={`a-${q.id}`} className="sr-only">
                 Your answer
               </Label>
               <Textarea
                 id={`a-${q.id}`}
+                // Arriving on a question focuses the answer box; the question and its context describe it.
                 autoFocus
+                aria-describedby={q.context ? `q-${q.id} qc-${q.id}` : `q-${q.id}`}
                 rows={5}
                 maxLength={4000}
                 value={draft.answers[q.id] ?? ""}
