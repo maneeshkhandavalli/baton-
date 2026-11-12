@@ -110,6 +110,8 @@ const handoverRow = z.object({
   title: text,
   team_name: text,
   role_title: nullableText,
+  // R3 (migration 20261113100400): absent from older rows/fixtures → null
+  description: nullableText.optional(),
   state: z.enum(HANDOVER_STATES),
   viewer_role: z.enum(MEMBER_ROLES),
   viewer_is_creator: z.boolean(),
@@ -128,6 +130,7 @@ export function mapHandoverSummary(raw: unknown): HandoverSummary {
     title: r.title,
     teamName: r.team_name,
     roleTitle: r.role_title,
+    description: r.description ?? null,
     state: r.state,
     viewerRole: r.viewer_role,
     viewerIsCreator: r.viewer_is_creator,

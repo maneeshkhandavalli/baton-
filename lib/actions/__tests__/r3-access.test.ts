@@ -19,6 +19,7 @@ const summary = (over: Partial<HandoverSummary> = {}): HandoverSummary => ({
   title: "Treasurer handover",
   teamName: "Robotics Club",
   roleTitle: null,
+  description: null,
   state: "draft",
   viewerRole: "outgoing",
   viewerIsCreator: true,

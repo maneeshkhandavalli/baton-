@@ -46,6 +46,8 @@ export interface HandoverSummary {
   title: string;
   teamName: string;
   roleTitle: string | null;
+  /** R3: the draft's free-text description (masked), so the wizard can show and edit it. */
+  description: string | null;
   state: HandoverState;
   viewerRole: MemberRole;
   viewerIsCreator: boolean;

@@ -58,3 +58,19 @@ describe("updateHandoverDetails (R3 C1)", () => {
       (e: unknown) => e instanceof DbError && e.code === "internal");
   });
 });
+
+describe("mapHandoverSummary description (R3)", () => {
+  const row = {
+    id: H, title: "Treasurer", team_name: "Robotics", role_title: null, state: "draft", viewer_role: "outgoing",
+    viewer_is_creator: true, viewer_clearance: "reviewer_only", current_publication_id: null,
+    created_at: "2026-11-11T10:00:00.123456+00:00", updated_at: "2026-11-11T10:00:00+05:30",
+  };
+
+  it("maps description, and an absent or null description to null", async () => {
+    const { mapHandoverSummary } = await import("../mappers");
+    assert.equal(mapHandoverSummary({ ...row, description: "Bank and dues" }).description, "Bank and dues");
+    assert.equal(mapHandoverSummary({ ...row, description: null }).description, null);
+    assert.equal(mapHandoverSummary(row).description, null);
+    assert.throws(() => mapHandoverSummary({ ...row, description: 42 }), (e: unknown) => e instanceof DbError && e.code === "internal");
+  });
+});

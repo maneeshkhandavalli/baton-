@@ -35,6 +35,7 @@ const handoverSummary = (state: HandoverSummary["state"] = "draft"): HandoverSum
   title: "Synthetic handover",
   teamName: "Synthetic team",
   roleTitle: null,
+  description: null,
   state,
   viewerRole: "outgoing",
   viewerIsCreator: true,
