@@ -753,7 +753,7 @@ describe("pass-through mutations use the verified actor and the parsed ids only"
     cases.push([name, () => run(f), fn, args, f]);
   };
   add("cancelProcessing", "cancel_processing", { p_handover_id: H }, (f) => handovers.cancelProcessing(f.deps, { handoverId: H }));
-  add("deleteHandover", "delete_handover", { p_handover_id: H }, (f) => handovers.deleteHandover(f.deps, { handoverId: H }));
+  // deleteHandover also cleans up raw uploads after the commit (R3-C6): see r3-access.test.ts.
   add("offerCreatorTransfer", "offer_creator_transfer", { p_handover_id: H, p_to_member_id: P }, (f) =>
     handovers.offerCreatorTransfer(f.deps, { handoverId: H, toMemberId: P }));
   add("respondToCreatorTransfer", "respond_to_creator_transfer", { p_handover_id: H, p_accept: true }, (f) =>

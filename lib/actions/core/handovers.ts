@@ -19,6 +19,7 @@ import type {
 } from "../../contracts/schemas";
 import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
+import { deleteHandoverRawObjects } from "../../db/storage";
 import { createInputMasker } from "./mask";
 import { action, failWith, ok, parseInput } from "./run";
 import type { ActionDeps } from "./types";
@@ -146,9 +147,20 @@ export async function startRevision(deps: ActionDeps, input: { handoverId: strin
   });
 }
 
+/**
+ * Soft-deletes the handover, then (only after that commit) removes its raw uploads best-effort (R3-C6), so
+ * a discarded draft does not keep raw, unmasked chat exports in Storage. Cleanup failures never fail the
+ * action: failed objects keep their raw path and the retention sweep retries them (same as removeSource).
+ */
 export async function deleteHandover(deps: ActionDeps, input: { handoverId: string }): Promise<Result<null>> {
   return action(deps, handoverIdInput, input, async (actor, v) => {
-    await mutations.deleteHandover(deps.adminDb(), actor, v.handoverId);
+    const db = deps.adminDb();
+    await mutations.deleteHandover(db, actor, v.handoverId);
+    try {
+      await deleteHandoverRawObjects(db, deps.adminStorage(), actor, v.handoverId);
+    } catch {
+      // retried by the retention sweep (docs/proposals/retention.md)
+    }
     return ok(null);
   });
 }

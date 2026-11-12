@@ -205,3 +205,54 @@ describe("createGapQuestion never fails after the question is committed (R3)", (
     assert.deepEqual(f.queryCalls, []);
   });
 });
+
+describe("deleteHandover removes the discarded handover's raw uploads after the commit (R3-C6)", () => {
+  const S2 = "88888888-8888-4888-8888-888888888888";
+  const paths = [
+    { sourceId: S, rawStoragePath: `raw/${H}/${S}` },
+    { sourceId: S2, rawStoragePath: `raw/${H}/${S2}` },
+  ];
+
+  it("delete_handover first, then the listing, Storage removal and marking, with the session actor", async () => {
+    const f = fakeDeps({ rpc: { list_deleted_handover_raw_paths: { data: paths } } });
+    assert.deepEqual(await handovers.deleteHandover(f.deps, { handoverId: H }), { ok: true, data: null });
+    assert.deepEqual(f.fns(), ["delete_handover", "list_deleted_handover_raw_paths", "mark_source_raw_deleted", "mark_source_raw_deleted"]);
+    assert.ok(f.calls.every((c) => c.client === "admin"));
+    assert.deepEqual(f.calls[0].args, { p_actor_profile_id: ACTOR_ID, p_handover_id: H });
+    assert.deepEqual(f.calls[1].args, { p_actor_profile_id: ACTOR_ID, p_handover_id: H });
+    assert.deepEqual(f.storageCalls, [
+      { op: "remove", path: [`raw/${H}/${S}`] },
+      { op: "remove", path: [`raw/${H}/${S2}`] },
+    ]);
+    assert.equal(f.refreshes, 1);
+  });
+
+  it("a refused delete_handover touches no Storage and lists nothing", async () => {
+    const f = fakeDeps({ rpc: { delete_handover: dbError("BTFB0"), list_deleted_handover_raw_paths: { data: paths } } });
+    const r = await handovers.deleteHandover(f.deps, { handoverId: H });
+    assert.equal(!r.ok && r.error.code, "forbidden");
+    assert.deepEqual(f.fns(), ["delete_handover"]);
+    assert.deepEqual(f.storageCalls, []);
+  });
+
+  it("cleanup failures never fail the committed delete (Storage error, listing refused, foreign path)", async () => {
+    const storageDown = fakeDeps({ rpc: { list_deleted_handover_raw_paths: { data: paths } }, storage: { removeError: true } });
+    assert.deepEqual(await handovers.deleteHandover(storageDown.deps, { handoverId: H }), { ok: true, data: null });
+    assert.ok(!storageDown.fns().includes("mark_source_raw_deleted"), "nothing is marked deleted when Storage failed");
+
+    const listingRefused = fakeDeps({ rpc: { list_deleted_handover_raw_paths: dbError("BTPF0") } });
+    assert.deepEqual(await handovers.deleteHandover(listingRefused.deps, { handoverId: H }), { ok: true, data: null });
+    assert.deepEqual(listingRefused.storageCalls, []);
+
+    const foreign = fakeDeps({ rpc: { list_deleted_handover_raw_paths: { data: [{ sourceId: S, rawStoragePath: `raw/${P}/${S}` }] } } });
+    assert.deepEqual(await handovers.deleteHandover(foreign.deps, { handoverId: H }), { ok: true, data: null });
+    assert.deepEqual(foreign.storageCalls, [], "a path outside this handover is never removed");
+  });
+
+  it("a deleted handover with no raw uploads is a plain delete", async () => {
+    const f = fakeDeps({ rpc: { list_deleted_handover_raw_paths: { data: [] } } });
+    assert.deepEqual(await handovers.deleteHandover(f.deps, { handoverId: H }), { ok: true, data: null });
+    assert.deepEqual(f.fns(), ["delete_handover", "list_deleted_handover_raw_paths"]);
+    assert.deepEqual(f.storageCalls, []);
+  });
+});
