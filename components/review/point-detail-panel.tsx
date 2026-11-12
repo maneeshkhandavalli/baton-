@@ -44,7 +44,7 @@ const reviewActionLabel: Record<string, string> = {
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
     <section className={cn("space-y-3 border-t border-border px-5 py-4", className)}>
-      <h3 className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{title}</h3>
+      <h3 className="type-eyebrow text-muted-foreground">{title}</h3>
       {children}
     </section>
   );
@@ -104,7 +104,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
           <span className="text-xs text-muted-foreground">{categoryLabel[point.category]}</span>
           <span className="text-xs text-muted-foreground">· Revision {point.revisionNumber}</span>
         </div>
-        <h2 className="font-serif text-2xl leading-tight tracking-tight"><MaskedText text={point.title} /></h2>
+        <h2 className="type-title"><MaskedText text={point.title} /></h2>
         <p className="text-sm leading-relaxed text-muted-foreground"><MaskedText text={point.statement} /></p>
         <p className="text-xs text-muted-foreground">{statusConfig[point.evidenceStatus].description}</p>
       </div>
@@ -192,7 +192,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
             {relatedSources.map((s) => {
               const masked = Object.entries(s.maskingCounts ?? {}).filter(([, n]) => (n ?? 0) > 0) as Array<[MaskKind, number]>;
               return (
-                <li key={s.id} className="rounded-lg border border-border bg-background/60 p-3">
+                <li key={s.id} className="rounded-lg border border-border bg-muted/40 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium">{s.title}</p>
                     <AccessBadge level={s.accessLevel} />
@@ -212,7 +212,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                     <dd>{s.rawDeletedAt ? `Deleted ${formatDate(s.rawDeletedAt)}` : "Kept until processed"}</dd>
                   </dl>
                   {masked.length > 0 && (
-                    <p className="mt-2 flex flex-wrap gap-1 text-[0.6875rem] text-muted-foreground">
+                    <p className="mt-2 flex flex-wrap gap-1 text-2xs text-muted-foreground">
                       <ShieldCheck aria-hidden="true" className="size-3.5 text-status-sourced" />
                       Masked:
                       {masked.map(([k, n]) => (

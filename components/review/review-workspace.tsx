@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Keyboard, ListFilter, SearchX } from "lucide-react";
+import { Keyboard, ListFilter, Lock, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS } from "@/components/handover/labels";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
@@ -74,6 +76,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   }, [points, section, status, review]);
 
   const selected = visible.find((p) => p.id === selectedId) ?? visible[0] ?? null;
+  const toReview = points.filter((p) => p.reviewState === "pending").length;
 
   useEffect(() => {
     if (selected) cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -228,14 +231,20 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       {/* Centre: evidence cards */}
       <section aria-label="Points" className="min-w-0 space-y-4">
         {(readOnly && readOnlyReason) || publishedHref ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card/70 px-4 py-2.5 text-sm">
-            {readOnly && readOnlyReason && <span className="text-muted-foreground">{readOnlyReason}</span>}
-            {publishedHref && (
-              <Link href={publishedHref} className="font-medium text-primary hover:underline">
-                Open the incoming view
-              </Link>
-            )}
-          </div>
+          <Alert
+            tone={readOnly ? "neutral" : "info"}
+            live="none"
+            icon={readOnly ? <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : undefined}
+            action={
+              publishedHref && (
+                <Link href={publishedHref} className={buttonVariants({ size: "sm", variant: "outline" })}>
+                  Open the incoming view
+                </Link>
+              )
+            }
+          >
+            {readOnly && readOnlyReason ? readOnlyReason : "This handover has a published version."}
+          </Alert>
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -263,8 +272,9 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="text-caption text-muted-foreground" aria-live="polite">
           Showing {visible.length} of {points.length} points
+          {toReview > 0 ? ` · ${toReview} still to review` : " · all reviewed"}
         </p>
 
         {visible.length === 0 ? (
@@ -377,7 +387,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
             ].map(([k, v]) => (
               <div key={k} className="contents">
                 <dt>
-                  <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">{k}</kbd>
+                  <Kbd>{k}</Kbd>
                 </dt>
                 <dd className="text-muted-foreground">{v}</dd>
               </div>
@@ -396,8 +406,8 @@ function FilterChip({ active, className, ...props }: React.ComponentProps<"butto
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-        active ? "border-foreground/20 bg-foreground/[0.06] text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground",
+        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+        active ? "border-foreground/25 bg-card text-foreground shadow-xs ring-1 ring-foreground/10" : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}
       {...props}

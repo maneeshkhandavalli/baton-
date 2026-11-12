@@ -38,7 +38,7 @@ export function EvidenceQuote({
   return (
     <figure
       className={cn(
-        "rounded-lg border-l-2 bg-background/70 py-2.5 pr-3 pl-3",
+        "rounded-r-lg border-l-2 bg-muted/45 py-2.5 pr-3 pl-3.5",
         tone === "default" && "border-l-primary/40",
         tone === "supports" && "border-l-status-sourced",
         tone === "contradicts" && "border-l-status-conflicting",
@@ -46,16 +46,21 @@ export function EvidenceQuote({
         className,
       )}
     >
-      <blockquote className={cn("font-mono text-[0.8125rem] leading-relaxed text-foreground", clamp && "line-clamp-3")}>
+      <blockquote className={cn("text-sm leading-relaxed text-foreground", clamp && "line-clamp-3")}>
+        <span aria-hidden="true" className="mr-0.5 font-display text-base leading-none text-muted-foreground">“</span>
         <MaskedText text={quote} />
       </blockquote>
-      <figcaption className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
         <SourceIcon aria-hidden="true" className="size-3.5 shrink-0" />
         {authorLabel && <span className="font-medium text-foreground/80">{authorLabel}</span>}
         {kind === "testimony" && <span>Gap Interview answer</span>}
-        {sourceTitle && <span className="truncate">{sourceTitle}</span>}
+        {sourceTitle && (
+          <span className="max-w-full truncate" title={sourceTitle}>
+            {sourceTitle}
+          </span>
+        )}
         {sentAt && <time dateTime={sentAt}>{kind === "testimony" ? formatDate(sentAt) : formatDateTime(sentAt)}</time>}
-        {where && <span className="font-mono text-[0.6875rem]">{where}</span>}
+        {where && <span className="font-mono text-2xs">{where}</span>}
       </figcaption>
     </figure>
   );
