@@ -282,3 +282,60 @@ describe("QA-L5: credentials with whitespace and other separators", () => {
     assert.equal(masker.totals().password, 2);
   });
 });
+
+// QA-L5 residuals (R1–R6), found by QA after E0 and fixed in Round 3 by Agent 3 (mask.ts ownership moved).
+describe("maskText: QA-L5 residual credential forms (over-mask preferred)", () => {
+  const cases: Array<{ id: string; text: string; secrets: string[] }> = [
+    { id: "R1 cvv bare", text: "card cvv 123 and CVV: 456", secrets: ["123", "456"] },
+    { id: "R1 cvc / csc / card security code", text: "cvc2 913, csc 207, card security code 778", secrets: ["913", "207", "778"] },
+    { id: "R2 pin no:", text: "locker pin no: 4821", secrets: ["4821"] },
+    { id: "R2 pin number =", text: "pin number = 4821", secrets: ["4821"] },
+    { id: "R3 pass code", text: "the pass code 4821 opens it", secrets: ["4821"] },
+    { id: "R3 pass phrase:", text: "pass phrase: Blue Kite 77", secrets: ["Blue", "Kite", "77"] },
+    { id: "R4 qualifier before value", text: "the pin for the locker 4821", secrets: ["4821"] },
+    { id: "R4 password for the router", text: "password for the router Hunter2", secrets: ["Hunter2"] },
+    { id: "R5 spaced otp", text: "OTP 556 677 and password Hunter 2", secrets: ["556", "677", "Hunter", " 2"] },
+    { id: "R5 one digit per group", text: "pin 4 8 2 1 for the door", secrets: ["4 8 2 1"] },
+    { id: "R6 passphrase after strong keyword", text: "password: correct horse battery staple", secrets: ["correct", "horse battery staple"] },
+    { id: "R6 passphrase with is", text: "the wifi password is purple monkey dishwasher", secrets: ["purple", "monkey", "dishwasher"] },
+  ];
+  for (const c of cases) {
+    it(c.id, () => {
+      const r = m(c.text);
+      for (const s of c.secrets) assert.ok(!r.text.includes(s), `${JSON.stringify(s)} survived: ${r.text}`);
+      assert.ok(r.counts.password >= 1, r.text);
+    });
+  }
+
+  it("createMasker gives the same result per message", () => {
+    const masker = createMasker();
+    for (const c of cases) {
+      const out = masker.mask(c.text).text;
+      for (const s of c.secrets) assert.ok(!out.includes(s), `${s} survived: ${out}`);
+    }
+  });
+
+  it("over-masking stays bounded: the passphrase stops at a clause word or punctuation", () => {
+    assert.equal(m("password: Hunter2 for the lab wifi").text, "password: [PASSWORD] for the lab wifi");
+    assert.equal(m("We decided the lab wifi password Hunter2 stays until March").text, "We decided the lab wifi password [PASSWORD] stays until March");
+    assert.equal(m("wifi password: Robo@2024! is retired").text, "wifi password: [PASSWORD] is retired");
+    assert.equal(m("password: blue kite, then log in").text, "password: [PASSWORD] then log in");
+    assert.equal(m("pwd = \"two words\" ok").text, "pwd = [PASSWORD] ok");
+  });
+
+  it("prose with the new keywords is untouched", () => {
+    for (const text of [
+      "The pin for the team photo went missing",
+      "pin for 2 hours",
+      "pass code reset tomorrow",
+      "We decided to pass the budget on Friday",
+      "The pin badge order is pending",
+      "Login page redesign is next step",
+      "the card was declined twice",
+      "Call me on 9999900001 before 5",
+    ]) {
+      const r = m(text);
+      assert.equal(r.counts.password, 0, `${text} → ${r.text}`);
+    }
+  });
+});

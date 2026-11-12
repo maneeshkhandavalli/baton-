@@ -381,6 +381,9 @@ function secretDetector(view: string): Span[] {
 //   non-stopword; weak keywords (also common in prose: "pin", "pass", "otp", "wifi") need a value
 //   that looks like a credential (a digit, an inner symbol or inner capital).
 // Masking errs toward over-masking: false positives are acceptable, false negatives are bugs.
+// Round 3 residuals (QA-L5-R1…R6): card security codes (cvv/cvc/csc), "pin no: x", "pass code x",
+// a qualifier before a digit value ("pin for the locker 4821"), spaced digit groups ("otp 556 677",
+// "Hunter 2") and multi-word passphrases after a strong keyword with an explicit separator.
 
 /** Keywords whose bare form ("password Hunter2") masks any non-stopword next token. */
 const STRONG_PASSWORD_KEYWORDS = [
@@ -388,7 +391,11 @@ const STRONG_PASSWORD_KEYWORDS = [
   "one[ \\t\\-]time[ \\t]+(?:passwords?|passcodes?|codes?|pins?)",
   "(?:access|door|gate|lock|locker|alarm|safe|security|entry|entrance|verification|login|2fa|mfa|auth|unlock|admin|master|router|network)[ \\t]+(?:codes?|pins?|passwords?|keys?)",
   "pass(?:words?|wd|codes?|phrases?)",
-  "pass[ \\t]words?",
+  "pass[ \\t]+(?:words?|codes?|phrases?|keys?)",
+  // QA-L5-R1: card security codes ("cvv 123", "CVV: 456", "card security code 789").
+  "cv[vc]2?",
+  "csc",
+  "card[ \\t]+(?:security[ \\t]+|verification[ \\t]+)?codes?",
   "pwds?",
   "pword",
   "pw",
@@ -424,8 +431,10 @@ const EXPLICIT_SEPARATOR = [
 const QUALIFIER =
   "(?:[ \\t]+(?:for|of|to|on|at)(?:[ \\t]+[A-Za-z0-9'\\u2019_.\\-]+){1,3}?(?=[ \\t]*(?:[:=]|->|=>|\\u2192|(?:is|was|are)(?![A-Za-z]))))?";
 /** "pin no. 4821", "pin number 4821", "pin #4821". */
-const FILLER = "(?:(?:no|nos|num|number)(?![A-Za-z])\\.?[ \\t]*|#[ \\t]*)?";
-const VALUE = "(\"[^\"\\n]{1,200}\"|'[^'\\n]{1,200}'|`[^`\\n]{1,200}`|[^\\s\\uE000]+)";
+const FILLER = "(?:(?:no|nos|num|number)(?![A-Za-z])\\.?[ \\t]*(?:[:=#][ \\t]*)?|#[ \\t]*)?"; // QA-L5-R2: "pin no: 4821"
+/** QA-L5-R5: digits split by spaces ("otp 556 677", "pin 4 8 2 1") are one value. */
+const SPACED_DIGITS = "\\d{1,8}(?:[ \\t]+\\d{1,8}){1,7}(?=$|[\\s.,;:!?)\\]\"'])";
+const VALUE = `("[^"\\n]{1,200}"|'[^'\\n]{1,200}'|\`[^\`\\n]{1,200}\`|${SPACED_DIGITS}|[^\\s\\uE000]+)`;
 
 function credentialRe(keywords: string[]): RegExp {
   return new RegExp(
@@ -501,6 +510,62 @@ function proseSafeCredential(raw: string): boolean {
   return v.length >= 3 && !PROSE_WORDS.has(v.toLowerCase()) && credentialLike(v);
 }
 
+/** Words that end a passphrase continuation (clause starters) besides the prose stopwords. */
+const PASSPHRASE_STOP = new Set(["but", "because", "until", "since", "after", "before", "while", "unless", "though", "although", "stays", "works"]);
+const MAX_PASSPHRASE_EXTRA_WORDS = 5;
+
+/**
+ * Over-masks the tail of an accepted password value (QA-L5-R5/R6):
+ * - short digit groups that follow it ("password Hunter 2", "otp 556 677" already joined by VALUE);
+ * - for a STRONG keyword with an explicit separator ("password: correct horse battery staple"), up to
+ *   five further words of a passphrase, stopping at clause punctuation, a stopword or a clause starter.
+ * Quoted values are already whole.
+ */
+function extendPasswordValue(view: string, end: number, value: string, strength: Strength, explicit: boolean): number {
+  if (isQuoted(value)) return end;
+  let pos = end;
+  const digitGroup = /^[ \t]+\d{1,6}(?=$|[\s.,;:!?)\]"'])/;
+  for (let m = digitGroup.exec(view.slice(pos)); m; m = digitGroup.exec(view.slice(pos))) pos += m[0].length;
+  if (strength !== "strong" || !explicit || /[,;.!?]$/.test(value)) return pos;
+  const word = /^[ \t]+([^\s]+)/;
+  for (let i = 0; i < MAX_PASSPHRASE_EXTRA_WORDS; i++) {
+    const m = word.exec(view.slice(pos));
+    if (!m) break;
+    const bare = stripPunctuation(m[1]).toLowerCase();
+    if (bare === "" || PROSE_WORDS.has(bare) || PASSPHRASE_STOP.has(bare) || /^[^A-Za-z0-9]/.test(m[1])) break;
+    pos += m[0].length;
+    if (/[,;.!?]$/.test(m[1])) break;
+  }
+  return pos;
+}
+
+/**
+ * QA-L5-R4: a short qualifier before a bare value ("the pin for the locker 4821", "password for the
+ * router Hunter2"). Only a value containing a digit (or quoted) is masked, so prose like "pin for the
+ * team photo" is untouched.
+ */
+function qualifiedCredentialRe(keywords: string[]): RegExp {
+  return new RegExp(
+    `(^|[^A-Za-z0-9])(${keywords.join("|")})(?![A-Za-z])[ \\t]+(?:for|of|to|on|at)(?:[ \\t]+[A-Za-z][A-Za-z'\\u2019_.\\-]*){1,3}[ \\t]+` +
+      `("[^"\\n]{1,200}"|'[^'\\n]{1,200}'|${SPACED_DIGITS}|[^\\s\\uE000]*\\d[^\\s\\uE000]*)`,
+    "gi",
+  );
+}
+const QUALIFIED_PASSWORD_RE = qualifiedCredentialRe([...STRONG_PASSWORD_KEYWORDS, ...WEAK_PASSWORD_KEYWORDS]);
+
+function qualifiedCredentialSpans(view: string): Span[] {
+  const spans: Span[] = [];
+  QUALIFIED_PASSWORD_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = QUALIFIED_PASSWORD_RE.exec(view))) {
+    const value = m[3];
+    const start = m.index + m[0].length - value.length;
+    if (isQuoted(value) || stripPunctuation(value).length >= 3) spans.push({ start, end: start + value.length, kind: "password", value });
+    QUALIFIED_PASSWORD_RE.lastIndex = m.index + m[1].length + 1;
+  }
+  return spans;
+}
+
 function credentialSpans(view: string, re: RegExp, strength: Strength, kindFor: (keyword: string) => MaskKind): Span[] {
   const spans: Span[] = [];
   re.lastIndex = 0;
@@ -536,7 +601,9 @@ function credentialSpans(view: string, re: RegExp, strength: Strength, kindFor: 
       accept = true;
     }
     if (accept) {
-      spans.push({ start: valueStart, end: valueStart + value.length, kind: kindFor(keyword), value });
+      const kind = kindFor(keyword);
+      const end = kind === "password" ? extendPasswordValue(view, valueStart + value.length, value, strength, explicit !== undefined) : valueStart + value.length;
+      spans.push({ start: valueStart, end, kind, value: view.slice(valueStart, end) });
     } else {
       // Rejected: rescan right after the keyword so "wifi password Hunter2" still finds "password".
       re.lastIndex = m.index + m[1].length + 1;
@@ -589,6 +656,7 @@ function credentialPairSpans(view: string): Span[] {
 function passwordDetector(view: string): Span[] {
   return [
     ...credentialPairSpans(view),
+    ...qualifiedCredentialSpans(view),
     ...credentialSpans(view, STRONG_PASSWORD_RE, "strong", () => "password"),
     ...credentialSpans(view, WEAK_PASSWORD_RE, "weak", () => "password"),
     ...credentialSpans(view, API_KEYWORD_RE, "api", (k) => (/secret|private/i.test(k) ? "secret" : "api_key")),
