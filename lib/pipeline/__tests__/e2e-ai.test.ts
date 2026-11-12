@@ -182,6 +182,7 @@ describe("verify_support end to end (real verifySupport, fake adapter)", () => {
     assert.equal(rec.p_verdict, "supports");
     assert.equal(rec.p_rationale, "The quote states the claim directly.");
     assert.equal((rec.p_provenance as { provider: string }).provider, RUN_CONFIG.provider);
+    assert.equal((rec.p_provenance as { injectionGuard?: unknown }).injectionGuard, undefined, "no guard marker on an ordinary verdict");
     assert.ok(!db.calls.some((c) => FORBIDDEN.test(c.fn)), "nothing is approved, rejected or published");
   });
 
@@ -200,6 +201,10 @@ describe("verify_support end to end (real verifySupport, fake adapter)", () => {
     const rec = db.called("pipeline_record_support_verdict")[0].args;
     assert.equal(rec.p_verdict, "irrelevant", "the injected quote can never make the point sourced");
     assert.equal(rec.p_rationale, GUARD_RATIONALE);
+    // The review read (api_get_point, migration 20261113300900) exposes this as EvidenceItem.guarded/modelVerdict.
+    const guard = (rec.p_provenance as { injectionGuard?: unknown }).injectionGuard;
+    assert.deepEqual(guard, { guarded: true, modelVerdict: "supports", patterns: ["addressed_to_ai", "verdict_directive"], fields: ["quote"] });
+    assert.ok(!JSON.stringify(rec.p_provenance).includes("Note to the AI checker"), "provenance carries ids, never text");
     const logged = JSON.stringify(logger.records);
     assert.ok(logged.includes('"injectionGuarded":1'), "the guard is counted");
     assert.ok(!logged.includes("Note to the AI checker"), "the quote text is never logged");

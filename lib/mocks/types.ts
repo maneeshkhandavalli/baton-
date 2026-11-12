@@ -154,6 +154,9 @@ export interface MockLink {
   quoteCheck: QuoteCheck;
   supportVerdict: SupportVerdict;
   verdictRationale: string | null;
+  /** PI-11: the injection guard replaced the model's promoting verdict (EvidenceItem.guarded). */
+  guarded?: boolean;
+  modelVerdict?: "supports" | "partial" | null;
   verifiedRevisionId: string | null;
   excluded: boolean;
   exclusionReason: string | null;

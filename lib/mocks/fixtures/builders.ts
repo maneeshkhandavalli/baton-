@@ -28,6 +28,8 @@ export interface SeedEvidence {
   verdict: SupportVerdict;
   check?: QuoteCheck;
   why?: string;
+  /** PI-11: the injection guard replaced this promoting model verdict (`verdict` must then be "irrelevant"). */
+  guardedFrom?: "supports" | "partial";
   /** Verdict was made against an earlier revision (stale, §4.2). */
   stale?: boolean;
   /** Exclusion reason, if a reviewer excluded this link. */
@@ -121,6 +123,7 @@ export function buildPoint(handoverId: string, base: number, seed: SeedPoint): M
     quoteCheck: e.check ?? "exact",
     supportVerdict: e.verdict,
     verdictRationale: e.why ?? null,
+    ...(e.guardedFrom ? { guarded: true, modelVerdict: e.guardedFrom } : {}),
     verifiedRevisionId: e.verdict === "unchecked" ? null : e.stale ? previous : current,
     excluded: !!e.excluded,
     exclusionReason: e.excluded ?? null,

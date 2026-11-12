@@ -472,6 +472,9 @@ const pointDetailRow = z.object({
       quote_check: z.enum(QUOTE_CHECKS),
       support_verdict: z.enum(SUPPORT_VERDICTS),
       verdict_rationale: nullableText,
+      // PI-11 (migration 20261113300900): optional so a database without that migration still parses.
+      guarded: z.boolean().optional(),
+      model_verdict: z.enum(["supports", "partial"]).nullable().optional(),
       is_current_revision_verdict: z.boolean(),
       excluded: z.boolean(),
       exclusion_reason: nullableText,
@@ -531,6 +534,8 @@ export function mapPointDetail(raw: unknown): PointDetail {
       quoteCheck: e.quote_check,
       supportVerdict: e.support_verdict,
       verdictRationale: e.verdict_rationale,
+      guarded: e.guarded === true,
+      modelVerdict: e.guarded === true ? (e.model_verdict ?? null) : null,
       isCurrentRevisionVerdict: e.is_current_revision_verdict,
       excluded: e.excluded,
       exclusionReason: e.exclusion_reason,

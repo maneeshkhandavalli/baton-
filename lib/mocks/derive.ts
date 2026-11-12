@@ -142,6 +142,9 @@ export function toEvidenceItem(store: MockStore, p: MockPoint, l: MockLink): Evi
     quoteCheck: l.quoteCheck,
     supportVerdict: l.supportVerdict,
     verdictRationale: l.verdictRationale,
+    // PI-11: only while the stored verdict is still the guard's `irrelevant` (a later reset clears it).
+    guarded: l.guarded === true && l.supportVerdict === "irrelevant",
+    modelVerdict: l.guarded === true && l.supportVerdict === "irrelevant" ? (l.modelVerdict ?? null) : null,
     isCurrentRevisionVerdict: l.verifiedRevisionId === currentRevision(p).id,
     excluded: l.excluded,
     exclusionReason: l.exclusionReason,

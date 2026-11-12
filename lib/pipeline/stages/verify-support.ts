@@ -102,7 +102,7 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
           revisionId: link.revisionId,
           verdict: result.data.verdict,
           rationale: result.data.rationale,
-          provenance: { ...result.data.provenance },
+          provenance: verdictProvenance(result.data),
           verifiedQuoteText: link.quote.text,
         });
         counts.verdicts += 1;
@@ -118,6 +118,24 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
 
   log(ctx, calls, counts);
   return { kind: "succeeded", progress: { done: calls, total: calls }, ...withAttempt() };
+}
+
+/**
+ * The stored `verifier_provenance`. PI-11: when the guard replaced the model's verdict, it also carries
+ * `injectionGuard` (the model's verdict and the pattern/field ids, never text); `api_get_point`
+ * (migration 20261113300900) exposes it as `EvidenceItem.guarded` / `modelVerdict`.
+ */
+export function verdictProvenance(data: {
+  provenance: object;
+  modelVerdict?: string;
+  injection?: { guarded: boolean; patterns: readonly string[]; fields: readonly string[] };
+}): Record<string, unknown> {
+  const base: Record<string, unknown> = { ...data.provenance };
+  if (!data.injection?.guarded) return base;
+  return {
+    ...base,
+    injectionGuard: { guarded: true, modelVerdict: data.modelVerdict ?? null, patterns: [...data.injection.patterns], fields: [...data.injection.fields] },
+  };
 }
 
 function log(ctx: StageContext, calls: number, c: { verdicts: number; tooLarge: number; discarded: number }) {

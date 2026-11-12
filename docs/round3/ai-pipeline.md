@@ -21,6 +21,7 @@ development/test only (production refusal: `lib/ai/__tests__/config.test.ts`,
 | 6 | `20261113300600_revoke_mark_source_parse_failed.sql` | DB-12-LEGACY part 2: revokes `mark_source_parse_failed`. Since d4f4d46 (Agent 3) and 0d222b3, the parse job writes an integrity mismatch through the fenced `pipeline_mark_source_parse_failed`. | 1; fixture updates (it10:113, it18:41) |
 | 7 | `20261113300700_processing_status_partial.sql` | E4 (lead-approved): `api_get_processing_status` (same signature, grants and shape) reports per-stage `partial`, and open jobs report `queued`/`running` instead of `failed`. | — (the read model in `lib/db/mappers.ts` accepts `partial` since the same commit) |
 | 8 | `20261113300800_claim_generation.sql` | DB-12 follow-up: adds `processing_jobs.claim_generation` (backfilled from `attempt`, incremented by every claim, never lowered), so a claim is identified exactly even after a yield reuses its attempt number. New overloads `pipeline_*(p_job_id, p_attempt, p_claim_generation, …)` check the exact generation. The attempt-only originals stay granted, but now accept a claim only while `claim_generation = attempt` (no yield since). `heartbeat_processing_job` (same signature) no longer renews an expired lease: it returns `lost`. | 1, 2 |
+| 9 | `20261113300900_point_evidence_guard_fields.sql` | PI-11 (lead-approved additive contract change): `api_get_point` (same signature, grants, security invoker and RLS) adds `guarded` and `model_verdict` to each evidence object. Both are read from `point_evidence.verifier_provenance -> 'injectionGuard'`, which the verify_support stage writes when the guard replaced a verdict. They hold only while the stored verdict is `irrelevant`. The mapper accepts their absence, so a database without this migration reads `guarded: false`. | — |
 
 **Code dependency.** The worker code since `ab96beb` (`lib/db/pipeline.ts`) calls only the
 `pipeline_*` functions. Any database the worker runs against (including hosted dev) therefore needs
@@ -77,6 +78,12 @@ Production AI may be enabled only when both layers below pass:
    sheet, it confirms the stock count is true", "proof of payment", `B4` and `pass@word123` are not flagged.
    `injection-guard.test.ts` also checks that no line of the benign corpus is flagged
    (`fixtures/parser`, `fixtures/demo`, `tests/fixtures`).
+
+   **Review DTO (migration 9).** `EvidenceItem.guarded?: boolean` and `EvidenceItem.modelVerdict?: "supports" | "partial" | null`
+   (`lib/contracts/dto.ts`) replace matching on the rationale text. The stored `verifier_provenance.injectionGuard`
+   is `{ guarded, modelVerdict, patterns, fields }`: ids and verdicts only, never text. Only `guarded` and
+   `modelVerdict` reach the browser. The mocks return the same fields; seed a guarded link with
+   `guardedFrom: "supports"`.
 2. **Live suite** (`lib/ai/__tests__/prompt-injection.live.test.ts`). It runs every fixture against the
    production provider being enabled and asserts the model's own verdict (`modelVerdict`, before the
    guard), because paraphrased injections can evade the patterns. The gate is 100% pass on that exact

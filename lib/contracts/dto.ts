@@ -197,11 +197,22 @@ export interface EvidenceItem {
   quoteCheck: QuoteCheck;
   supportVerdict: SupportVerdict;
   verdictRationale: string | null;
+  /**
+   * PI-11 (additive): true when the deterministic injection guard replaced the verifier's promoting verdict
+   * with `irrelevant` (the evidence contains instructions addressed to an automated checker). Use this
+   * instead of matching the rationale text. Absent from older readers; treat absent as false.
+   */
+  guarded?: boolean;
+  /** PI-11 (additive): the verdict the model returned before the guard; non-null only when `guarded`. */
+  modelVerdict?: GuardedModelVerdict | null;
   isCurrentRevisionVerdict: boolean;
   excluded: boolean;
   exclusionReason: string | null;
   accessLevel: AccessLevel;
 }
+
+/** The promoting verdicts the PI-11 guard replaces (lib/ai/injection-guard.ts#PROMOTING_VERDICTS). */
+export type GuardedModelVerdict = Extract<SupportVerdict, "supports" | "partial">;
 
 export interface PointSummary {
   id: string;
