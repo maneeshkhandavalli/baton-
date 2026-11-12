@@ -98,7 +98,7 @@ const DRAFT_STEPS = ["Details", "Consent and sources", "Finish uploads", "Scope 
  * A draft the viewer can resume: what is saved, the next step and an explicit Continue button.
  * Rows (not cards) so unfinished work reads as a to-do list above the finished handovers.
  */
-export function DraftRow({ data }: { data: HandoverCardData }) {
+export function DraftRow({ data, preview = false }: { data: HandoverCardData; preview?: boolean }) {
   const { handover: h, href, draft } = data;
   if (!draft) return null;
   const nextIndex = Math.max(1, DRAFT_STEPS.indexOf(draft.next as (typeof DRAFT_STEPS)[number]));
@@ -134,7 +134,7 @@ export function DraftRow({ data }: { data: HandoverCardData }) {
           Next: <span className="font-medium text-foreground">{draft.next}</span>
         </p>
         <div className="ml-auto flex items-center gap-1">
-          {h.viewerIsCreator && <DiscardDraftButton handoverId={h.id} title={h.title} />}
+          {h.viewerIsCreator && <DiscardDraftButton handoverId={h.id} title={h.title} disabled={preview} />}
           <Link href={href} className={buttonVariants()}>
             Continue
             <ArrowRight aria-hidden="true" data-icon="inline-end" />

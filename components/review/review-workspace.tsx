@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Keyboard, ListFilter, Lock, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS } from "@/components/handover/labels";
@@ -40,13 +41,18 @@ interface ReviewWorkspaceProps {
   readOnlyReason?: string;
   gapsHref: string | null;
   publishedHref: string | null;
+  /**
+   * Dev-only design preview (/preview/review): every action button is rendered as in a live review,
+   * but nothing calls a server action; a toast says so instead.
+   */
+  preview?: boolean;
 }
 
 type ReviewFilter = "all" | ReviewState;
 
 const REQUIRED_GAP_CATEGORIES: PointCategory[] = ["owner", "account_access", "open_task", "blocker"];
 
-export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sources, readOnly, readOnlyReason, gapsHref, publishedHref }: ReviewWorkspaceProps) {
+export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sources, readOnly, readOnlyReason, gapsHref, publishedHref, preview = false }: ReviewWorkspaceProps) {
   const [section, setSection] = useState<SectionFilter>("all");
   const [status, setStatus] = useState<EvidenceStatus | "all">("all");
   const [review, setReview] = useState<ReviewFilter>("all");
@@ -133,6 +139,10 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   function act(point: PointDetail, action: PointAction) {
     if (readOnly && action !== "details") return;
     select(point.id);
+    if (preview && action !== "details") {
+      toast.info("Preview only: actions are turned off and nothing is saved.");
+      return;
+    }
     switch (action) {
       case "approve": {
         const needsInput =
@@ -220,7 +230,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       onBlocker={onBlocker}
       gapsHref={gapsHref}
       canPublish={!!readiness?.canPublish}
-      onPublish={canPublishNow ? () => setPublishOpen(true) : null}
+      onPublish={canPublishNow ? () => (preview ? toast.info("Preview only: publishing is turned off.") : setPublishOpen(true)) : null}
     />
   );
 

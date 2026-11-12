@@ -30,6 +30,8 @@ interface PublishedHandoverViewProps {
   viewerRole: MemberRole;
   /** Turns off acknowledgement (e.g. the public demo or a reviewer preview). */
   preview?: boolean;
+  /** Dev-only design preview: show the incoming member's real acknowledgement form, with the button disabled. */
+  ackDisabledReason?: string;
 }
 
 type Point = { id: string; content: PublishedPointContent; category: PointCategory };
@@ -42,7 +44,7 @@ type Point = { id: string; content: PublishedPointContent; category: PointCatego
  * first, then the first-week checklist (what to do), then the sections (what to know), open
  * questions (what nobody knew) and the acknowledgement.
  */
-export function PublishedHandoverView({ handover, viewerLabel, viewerRole, preview = false }: PublishedHandoverViewProps) {
+export function PublishedHandoverView({ handover, viewerLabel, viewerRole, preview = false, ackDisabledReason }: PublishedHandoverViewProps) {
   const points: Point[] = handover.sections.flatMap((s) => s.points.map((p) => ({ ...p, category: s.category })));
   const facts = points.filter((p) => !p.content.isKnownGap);
   const gaps = points.filter((p) => p.content.isKnownGap);
@@ -188,7 +190,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
           </section>
         )}
 
-        <Acknowledge handover={handover} viewerRole={viewerRole} preview={preview} />
+        <Acknowledge handover={handover} viewerRole={viewerRole} preview={preview} disabledReason={ackDisabledReason} />
       </article>
     </div>
   );
@@ -380,7 +382,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
   );
 }
 
-function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHandover; viewerRole: MemberRole; preview: boolean }) {
+function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handover: PublishedHandover; viewerRole: MemberRole; preview: boolean; disabledReason?: string }) {
   const { run, isPending } = useAction();
   const [agreed, setAgreed] = useState(false);
   const acked = handover.viewerAcknowledgedAt;
@@ -421,7 +423,7 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
           <Button
             size="lg"
             className="bg-inverse-foreground text-inverse hover:bg-inverse-foreground/90 focus-visible:ring-inverse-foreground/40"
-            disabled={!agreed || isPending}
+            disabled={!agreed || isPending || !!disabledReason}
             aria-busy={isPending}
             onClick={() =>
               run(() => acknowledgePublication({ publicationId: handover.publicationId, statementVersion: ACK_STATEMENT_VERSION }), {
@@ -431,6 +433,7 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
           >
             {isPending ? "Saving…" : "Acknowledge handover"}
           </Button>
+          {disabledReason && <p className="text-caption text-inverse-muted">{disabledReason}</p>}
         </div>
       )}
     </section>

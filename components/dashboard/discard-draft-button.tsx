@@ -9,13 +9,13 @@ import { useAction } from "@/hooks/use-action";
 import { deleteHandover } from "@/lib/actions/handovers";
 
 /** Discards a draft through the creator-only deleteHandover action (soft delete; D27 keeps purge disabled). */
-export function DiscardDraftButton({ handoverId, title }: { handoverId: string; title: string }) {
+export function DiscardDraftButton({ handoverId, title, disabled = false }: { handoverId: string; title: string; disabled?: boolean }) {
   const router = useRouter();
   const { run, isPending } = useAction();
   return (
     <ConfirmDialog
       trigger={
-        <Button size="icon" variant="destructive-ghost" aria-label={`Discard draft “${title}”`} title="Discard draft" disabled={isPending}>
+        <Button size="icon" variant="destructive-ghost" aria-label={`Discard draft “${title}”`} title="Discard draft" disabled={isPending || disabled}>
           <Trash2 aria-hidden="true" />
         </Button>
       }
