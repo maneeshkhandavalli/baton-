@@ -7,6 +7,8 @@ export const routes = {
   /** Public, read-only demo with synthetic data. */
   demo: "/demo",
   login: "/login",
+  /** POST-only route handler (app/auth/signout): ends the session. */
+  signOut: "/auth/signout",
   dashboard: "/dashboard",
   /** Account settings: creatorship offers and account deletion (§12.9). */
   account: "/account",
