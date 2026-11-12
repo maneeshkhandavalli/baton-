@@ -2,10 +2,11 @@
 // reach evidence. Real lib/parsers + lib/privacy + lib/ai (extractCandidates on the deterministic fake
 // adapter, whose default rules quote one verbatim sentence per keyword hit), synthetic data only.
 //
-// QA-L5 (open at baseline 24320e1, owner Agent 4 / E0): credentials written with a WHITESPACE separator
-// ("password Hunter2", "pin 4821", "otp 556677", "login … / secret") are not masked. Those checks run as
-// PENDING: a failing check marks the test TODO (reported, not red); a passing one prints
-// "NOW HOLDS QA-L5" so it can be flipped to a hard assertion (replace pendingUntilFixed with a direct call).
+// QA-L5 (open at baseline 24320e1; fixed by Agent 4 / E0 in 61552db, integrated as 25b34b1): credentials
+// written with a WHITESPACE separator ("password Hunter2", "pin 4821", "otp 556677", "login … / secret")
+// are now masked — those checks are HARD. Residual forms found by QA after the fix (QA-L5-R1…R6, see
+// docs/qa/round3-findings.md) run as PENDING: a failing check marks the test TODO (reported, not red); a
+// passing one prints "NOW HOLDS" so it can be flipped to a hard assertion.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it, type TestContext } from "node:test";
@@ -54,7 +55,17 @@ const MASKED_TODAY: ReadonlyArray<{ text: string; secret: string }> = [
   { text: "passcode = 7788 for the cupboard", secret: "7788" },
 ];
 
-describe("QA-L5: credentials with whitespace separators are masked (pending until E0 lands)", () => {
+// Residual forms after the E0 fix (owner Agent 4). Each maps to a finding id in docs/qa/round3-findings.md.
+const L5_RESIDUAL: ReadonlyArray<{ id: string; text: string; secrets: string[] }> = [
+  { id: "QA-L5-R1", text: "card cvv 123 and CVV: 456", secrets: ["123", "456"] },
+  { id: "QA-L5-R2", text: "locker pin no: 4821", secrets: ["4821"] },
+  { id: "QA-L5-R3", text: "the pass code 4821 opens it", secrets: ["4821"] },
+  { id: "QA-L5-R4", text: "the pin for the locker 4821", secrets: ["4821"] },
+  { id: "QA-L5-R5", text: "OTP 556 677 and password Hunter 2", secrets: ["677", " 2"] },
+  { id: "QA-L5-R6", text: "password: correct horse battery staple", secrets: ["horse battery staple"] },
+];
+
+describe("QA-L5: credentials with whitespace separators are masked (fixed in E0; hard)", () => {
   for (const { text, secret } of MASKED_TODAY) {
     it(`control (hard): ${JSON.stringify(text)}`, () => {
       const out = maskText({ text }).text;
@@ -62,18 +73,22 @@ describe("QA-L5: credentials with whitespace separators are masked (pending unti
     });
   }
   for (const { text, secret } of L5_FORMS) {
-    it(`maskText: ${JSON.stringify(text)}`, (t) => {
+    it(`maskText: ${JSON.stringify(text)}`, () => {
       const out = maskText({ text }).text;
-      pendingUntilFixed(t, "QA-L5", () => assert.ok(!out.includes(secret), `${secret} survived masking: ${out}`));
+      assert.ok(!out.includes(secret), `${secret} survived masking: ${out}`);
     });
   }
-  it("createMasker (per-source) behaves like maskText for every L5 form", (t) => {
+  it("createMasker (per-source) behaves like maskText for every L5 form", () => {
     const masker = createMasker();
     const outs = L5_FORMS.map(({ text }) => masker.mask(text).text);
-    pendingUntilFixed(t, "QA-L5", () =>
-      L5_FORMS.forEach(({ secret }, i) => assert.ok(!outs[i].includes(secret), `${secret} survived: ${outs[i]}`)),
-    );
+    L5_FORMS.forEach(({ secret }, i) => assert.ok(!outs[i].includes(secret), `${secret} survived: ${outs[i]}`));
   });
+  for (const { id, text, secrets } of L5_RESIDUAL) {
+    it(`residual ${id} (pending): ${JSON.stringify(text)}`, (t) => {
+      const out = maskText({ text }).text;
+      pendingUntilFixed(t, id, () => secrets.forEach((x) => assert.ok(!out.includes(x), `${JSON.stringify(x)} survived masking: ${out}`)));
+    });
+  }
   it("over-masking stays bounded: ordinary sentences keep their words (§12.1 errs to over-mask, not to erase)", () => {
     for (const text of ["We decided to pass the budget on Friday", "The pin badge order is pending", "Login page redesign is next step"]) {
       const out = maskText({ text }).text;
@@ -147,14 +162,12 @@ describe("privacy chain: masked text is all that becomes evidence; excluded peop
     assertNoLeaks({ quotes }, "evidence quotes (generic PII patterns)");
   });
 
-  it("evidence quotes never carry whitespace-separated credentials (QA-L5, pending)", async (t) => {
+  it("evidence quotes never carry whitespace-separated credentials (QA-L5, hard since E0)", async () => {
     const parsed = await parsedChat();
     const out = await extractCandidates(createFakeProvider(), requestFrom(parsed), OPTS);
     assert.ok(out.ok);
     const persisted = parsed.messages.map((m) => m.body);
     const quotes = out.data.candidates.flatMap((c) => c.citations.map((x) => x.quote));
-    pendingUntilFixed(t, "QA-L5", () =>
-      assertAbsent({ persisted, quotes }, "persisted bodies and evidence quotes", ["Hunter2", "4821", "556677"]),
-    );
+    assertAbsent({ persisted, quotes }, "persisted bodies and evidence quotes", ["Hunter2", "4821", "556677"]);
   });
 });
