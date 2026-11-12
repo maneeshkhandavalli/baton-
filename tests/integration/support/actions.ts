@@ -35,7 +35,7 @@ export function allCalls(w: Backends) {
 }
 
 export const WRITE_RPCS = [
-  "create_handover", "start_processing", "cancel_processing", "publish_handover", "start_revision", "delete_handover",
+  "create_handover", "update_handover_details", "start_processing", "cancel_processing", "publish_handover", "start_revision", "delete_handover",
   "offer_creator_transfer", "respond_to_creator_transfer", "acknowledge_publication", "approve_point", "reject_point",
   "reopen_point", "edit_point", "confirm_inferred", "resolve_conflict", "exclude_evidence", "restore_evidence",
   "change_point_access", "create_manual_point", "create_gap_question", "submit_gap_answers", "review_gap_answer",

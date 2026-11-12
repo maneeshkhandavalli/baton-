@@ -85,6 +85,8 @@ select tests.as_user('ann');
 select it.hidden_like_missing(format('select public.start_processing(%L, %%L, %L, %L, %L)', tests.actor(), 'it', '{"provider":"fake"}', '[]'),
                               tests.id('h2'), 'BTNF0', 'startProcessing');
 select it.hidden_like_missing(format('select public.cancel_processing(%L, %%L)', tests.actor()), tests.id('h2'), 'BTNF0', 'cancelProcessing');
+select it.hidden_like_missing(format($q$select public.update_handover_details(%L, %%L, now(), 'Renamed title', 'Renamed team')$q$, tests.actor()),
+                              tests.id('h2'), 'BTNF0', 'updateHandoverDetails (R3 C1)');
 select it.hidden_like_missing(format('select public.publish_handover(%L, %%L, null)', tests.actor()), tests.id('h2'), 'BTNF0', 'publishHandover');
 select it.hidden_like_missing(format('select public.start_revision(%L, %%L)', tests.actor()), tests.id('h2'), 'BTNF0', 'startRevision');
 select it.hidden_like_missing(format('select public.delete_handover(%L, %%L)', tests.actor()), tests.id('h2'), 'BTNF0', 'deleteHandover');

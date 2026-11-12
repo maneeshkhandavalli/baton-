@@ -16,7 +16,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { extractCandidates, type CheckedCandidate } from "../../lib/ai/extract";
-import type { AiStageOptions, ExtractRequest } from "../../lib/ai/provider";
+import type { AiStageOptions, ExtractRequest, VerifySupportRequest } from "../../lib/ai/provider";
 import { createFakeProvider, fakeRunConfig } from "../../lib/ai/providers/fake";
 import { verifySupport } from "../../lib/ai/verify-support";
 import { POINT_CATEGORIES } from "../../lib/contracts/enums";
@@ -83,7 +83,7 @@ describe("B2: round3-conflict fixture yields `contradicts` with the fake adapter
       const claim = banking[1].claim;
       const verdict = async (quote: string) => {
         const r = await verifySupport(createFakeProvider(), {
-          claim: { category: claim.category, title: claim.title, statement: claim.statement, attributes: claim.attributes },
+          claim: { category: claim.category, title: claim.title, statement: claim.statement, attributes: claim.attributes as VerifySupportRequest["claim"]["attributes"] },
           quote: { text: quote, authorLabel: null, sentAt: null },
           context: [],
         }, OPTS);

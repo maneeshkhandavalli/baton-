@@ -26,6 +26,8 @@ type Call = (w: ActionWorld) => Promise<Result<unknown>>;
 /** Every exported Server Function, with a VALID input. */
 const ACTIONS: Record<string, Call> = {
   createHandover: () => handovers.createHandover({ title: "Robotics handover", teamName: "Robotics", creatorRole: "outgoing" }),
+  updateHandoverDetails: (w) => handovers.updateHandoverDetails({ handoverId: w.ids.handover, title: "Robotics handover v2", teamName: "Robotics",
+    expectedUpdatedAt: "2026-11-12T10:00:00.000Z" }),
   startProcessing: (w) => handovers.startProcessing({ handoverId: w.ids.handover }),
   cancelProcessing: (w) => handovers.cancelProcessing({ handoverId: w.ids.handover }),
   publishHandover: (w) => handovers.publishHandover({ handoverId: w.ids.handover, summary: "Summary" }),

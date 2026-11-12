@@ -120,6 +120,8 @@ begin
       ('add_exclusion', format('select public.add_exclusion(p_actor_profile_id => tests.actor(), p_source_id => %L, p_kind => %L, p_conversation_local_id => %L)',
          tests.id('r1'), 'conversation', 'c_1'), managers, 'gate'),
       ('remove_source', format('select public.remove_source(tests.actor(), %L)', tests.id('r1')), managers, 'ok'),
+      ('update_handover_details (R3 C1; h is in review, so allowed roles stop at BTIT0)',
+         format($q$select public.update_handover_details(tests.actor(), %L, now(), 'Renamed title', 'Renamed team')$q$, tests.id('h')), managers, 'gate'),
       ('start_processing', format($q$select public.start_processing(tests.actor(), %L, 'pipeline@1', '{"provider":"fake"}', '[]')$q$,
          tests.id('h')), managers, 'gate'),
       -- the incoming member's own acts
