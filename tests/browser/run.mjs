@@ -249,14 +249,15 @@ try {
         finalUrl: layout.href, finalUrlLocal: isLocal(layout.href), title: layout.title,
         overflowPx: layout.scrollWidth - layout.innerWidth, h1: layout.h1, wide: layout.wide,
         consoleErrors, blockedRequests: blocked, screenshot: file,
-        keyboard: keyboard ? { stops: stops.length, missingIndicator: stops.filter((s) => !s.indicator), detail: stops } : null,
+        keyboard: keyboard ? { stops: stops.length, missingIndicator: stops.filter((s) => !s.indicator && s.tag !== "nextjs-portal") /* Next.js dev overlay, not app UI */, detail: stops } : null,
       };
       result.problems = [
         !loadFired && "load event did not fire",
         !result.finalUrlLocal && "ended on a non-localhost URL",
         result.overflowPx > 0 && `horizontal overflow ${result.overflowPx}px`,
         result.h1 !== 1 && `${result.h1} <h1> elements (expected 1)`,
-        result.wide.length > 0 && `${result.wide.length} element(s) wider than the viewport`,
+        // A too-wide element only matters when it actually makes the page scroll sideways (decorative backdrops are clipped).
+        result.overflowPx > 0 && result.wide.length > 0 && `${result.wide.length} element(s) wider than the viewport`,
         consoleErrors.length > 0 && `${consoleErrors.length} console error(s)`,
         blocked.length > 0 && `${blocked.length} non-localhost request(s) blocked`,
         keyboard && stops.length === 0 && "no keyboard-focusable element reached",
