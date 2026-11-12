@@ -26,6 +26,7 @@ const USER = "44444444-4444-4444-8444-444444444444";
 const H = "11111111-1111-4111-8111-111111111111";
 const EVENT = "55555555-5555-4555-8555-555555555555";
 const S = "66666666-6666-4666-8666-666666666666";
+const CLAIM = { jobId: "77777777-7777-4777-8777-777777777777", attempt: 1 };
 const HASH = "ab".repeat(32);
 
 type Responses = Record<string, { data?: unknown; error?: { code?: string; message: string } }>;
@@ -270,8 +271,8 @@ describe("M5: uploads are measured, never trusted", () => {
     const { db, calls } = fakeDb({
       raw_source_for_processing: { data: { raw_storage_path: `raw/${H}/${S}`, size_bytes: bytes.byteLength, sha256: "ff".repeat(32), state: "uploaded" } },
     });
-    await assert.rejects(downloadVerifiedRawSource(db, fakeStorage(bytes).storage, S), isCode("validation_failed"));
-    assert.deepEqual(calls[1], { fn: "mark_source_parse_failed", args: { p_source_id: S, p_error_code: "integrity_mismatch" } });
+    await assert.rejects(downloadVerifiedRawSource(db, fakeStorage(bytes).storage, S, CLAIM), isCode("validation_failed"));
+    assert.deepEqual(calls[1], { fn: "pipeline_mark_source_parse_failed", args: { p_job_id: CLAIM.jobId, p_attempt: CLAIM.attempt, p_error_code: "integrity_mismatch" } });
   });
 
   it("the parse job returns verified bytes", async () => {
@@ -279,6 +280,6 @@ describe("M5: uploads are measured, never trusted", () => {
     const { db } = fakeDb({
       raw_source_for_processing: { data: { raw_storage_path: `raw/${H}/${S}`, size_bytes: m.sizeBytes, sha256: m.sha256, state: "uploaded" } },
     });
-    assert.deepEqual(await downloadVerifiedRawSource(db, fakeStorage(bytes).storage, S), bytes);
+    assert.deepEqual(await downloadVerifiedRawSource(db, fakeStorage(bytes).storage, S, CLAIM), bytes);
   });
 });
