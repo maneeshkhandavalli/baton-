@@ -4,12 +4,13 @@ import { connection } from "next/server";
 import { FilePlus2, Inbox } from "lucide-react";
 import { Suspense } from "react";
 
-import { DiscardDraftButton } from "@/components/dashboard/discard-draft-button";
-import { HandoverCard, HandoverCardSkeleton, type HandoverCardData } from "@/components/dashboard/handover-card";
+import { DraftRow, HandoverCard, HandoverCardSkeleton, type HandoverCardData } from "@/components/dashboard/handover-card";
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { SectionHeading } from "@/components/shared/section-heading";
 import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { HandoverSummary } from "@/lib/contracts/dto";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
@@ -25,25 +26,32 @@ export default function DashboardPage() {
   );
 
   return (
-    <PageContainer className="space-y-8">
+    <PageContainer className="space-y-10 lg:space-y-12">
       <PageHeader
         eyebrow="Workspace"
         title="Your handovers"
-        description="Every handover you are preparing, reviewing or receiving."
+        description="Pick up a draft where you left it, keep reviews moving, and read what was handed over to you."
         actions={newHandoverLink}
       />
-      <Suspense
-        fallback={
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <HandoverCardSkeleton />
-            <HandoverCardSkeleton />
-            <HandoverCardSkeleton />
-          </div>
-        }
-      >
+      <Suspense fallback={<DashboardSkeleton />}>
         <HandoverList newHandoverLink={newHandoverLink} />
       </Suspense>
     </PageContainer>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-10" aria-busy="true" aria-label="Loading your handovers">
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-40" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <HandoverCardSkeleton />
+          <HandoverCardSkeleton />
+          <HandoverCardSkeleton />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -89,7 +97,14 @@ async function HandoverList({ newHandoverLink }: { newHandoverLink: React.ReactN
   await connection();
   const result = await getQueries().listMyHandovers();
   if (!result.ok) {
-    return <EmptyState icon={<Inbox />} title="We couldn't load your handovers" description={result.error.message} />;
+    return (
+      <EmptyState
+        tone="error"
+        icon={<Inbox />}
+        title="We couldn’t load your handovers"
+        description={`${result.error.message} Refresh the page to try again.`}
+      />
+    );
   }
   if (result.data.length === 0) {
     return (
@@ -110,31 +125,40 @@ async function HandoverList({ newHandoverLink }: { newHandoverLink: React.ReactN
   }
 
   const cards = await Promise.all(result.data.map(cardFor));
-  // The demo first, then most recently updated.
-  cards.sort((a, b) => Number(b.isDemo) - Number(a.isDemo));
-  const preparing = cards.filter((c) => isReview(c.handover));
+  const drafts = cards.filter((c) => c.draft && isReview(c.handover));
+  // Work that needs the viewer first: offers to them, reviews in progress, then the rest.
+  const rank = (c: HandoverCardData) =>
+    c.handover.pendingCreatorTransfer && !c.handover.viewerIsCreator ? 0 : c.handover.state === "in_review" ? 1 : c.handover.state === "processing" ? 2 : 3;
+  const preparing = cards.filter((c) => !c.draft && isReview(c.handover)).sort((a, b) => rank(a) - rank(b));
   const receiving = cards.filter((c) => !isReview(c.handover));
 
   return (
-    <div className="space-y-10">
-      <section aria-labelledby="preparing" className="space-y-4">
-        <h2 id="preparing" className="text-sm font-semibold">
-          Preparing and reviewing <span className="font-normal text-muted-foreground">· {preparing.length}</span>
-        </h2>
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {preparing.map((c) => (
-            <li key={c.handover.id} className="flex flex-col gap-1">
-              <HandoverCard data={c} />
-              {c.draft && c.handover.viewerIsCreator && <DiscardDraftButton handoverId={c.handover.id} title={c.handover.title} />}
-            </li>
-          ))}
-        </ul>
-      </section>
+    <div className="space-y-12">
+      {drafts.length > 0 && (
+        <section aria-labelledby="drafts" className="space-y-4">
+          <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} description="Saved as you go. Continue from the step you reached." />
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+            {drafts.map((c) => (
+              <DraftRow key={c.handover.id} data={c} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {preparing.length > 0 && (
+        <section aria-labelledby="preparing" className="space-y-4">
+          <SectionHeading id="preparing" title="Preparing and reviewing" count={preparing.length} />
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {preparing.map((c) => (
+              <li key={c.handover.id}>
+                <HandoverCard data={c} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {receiving.length > 0 && (
         <section aria-labelledby="receiving" className="space-y-4">
-          <h2 id="receiving" className="text-sm font-semibold">
-            Handed over to you <span className="font-normal text-muted-foreground">· {receiving.length}</span>
-          </h2>
+          <SectionHeading id="receiving" title="Handed over to you" count={receiving.length} description="Read the handover, work through the first week, and acknowledge it." />
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {receiving.map((c) => (
               <li key={c.handover.id}>

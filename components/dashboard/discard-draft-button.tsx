@@ -15,9 +15,8 @@ export function DiscardDraftButton({ handoverId, title }: { handoverId: string; 
   return (
     <ConfirmDialog
       trigger={
-        <Button size="sm" variant="ghost" className="self-end text-muted-foreground" disabled={isPending}>
-          <Trash2 aria-hidden="true" data-icon="inline-start" />
-          Discard draft
+        <Button size="icon" variant="destructive-ghost" aria-label={`Discard draft “${title}”`} title="Discard draft" disabled={isPending}>
+          <Trash2 aria-hidden="true" />
         </Button>
       }
       title={`Discard “${title}”?`}
