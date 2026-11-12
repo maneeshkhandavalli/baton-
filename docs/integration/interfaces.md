@@ -71,7 +71,7 @@ export function createFakeProvider(script?: FakeProviderScript): AiProvider; // 
 
 Agreed rules:
 - **D11 open.** No real adapter. `AI_PROVIDER` unset or any value other than `fake` →
-  `provider_not_configured`. `fake` is accepted only when `NODE_ENV !== "production"` **and**
+  `provider_not_configured`. `fake` is accepted only when `NODE_ENV` is exactly `development` or `test` (QA-L3) **and**
   `BATON_ALLOW_FAKE_AI=1`; its `displayName` must say it is a test adapter, and `mode: "fake"` is
   carried into `AiRunConfig.provider = "fake"` so provenance can never pass for real extraction.
 - Extraction drops: a citation whose `messageId` was not in the request; a candidate failing
