@@ -8,7 +8,7 @@ import { formatDate, formatDateRange, formatDateTime, formatCount } from "@/comp
 import { accessLevelMeta, categoryLabel, maskKindLabel, quoteCheckLabel, sourceKindLabel, supportVerdictLabel } from "@/components/handover/labels";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import { isGuardedVerdict } from "@/components/shared/support-guard";
+import { GUARD_RATIONALE_PREFIX, isGuardedVerdict } from "@/components/shared/support-guard";
 import { MaskedText } from "@/components/shared/masked-text";
 import { statusConfig } from "@/config/status";
 import type { EvidenceItem, PointDetail, SourceSummary } from "@/lib/contracts/dto";
@@ -82,7 +82,7 @@ function Verification({ e }: { e: EvidenceItem }) {
   if (isGuardedVerdict(e)) {
     return (
       <div className="space-y-2">
-        <GuardNotice rationale={e.verdictRationale!} />
+        <GuardNotice rationale={e.verdictRationale ?? GUARD_RATIONALE_PREFIX} />
         {e.kind !== "testimony" && (
           <ul className="space-y-1.5" aria-label="Verification">
             <CheckRow ok={quoteOk} warn={e.quoteCheck === "pending"}>
