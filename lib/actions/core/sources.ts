@@ -16,6 +16,7 @@ import type {
   CreateSourceUploadInput,
   RecordSourceConsentInput,
 } from "../../contracts/schemas";
+import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { getParseExclusions } from "../../db/pipeline";
 import { getSourceSummary } from "../../db/queries";
@@ -38,9 +39,25 @@ export async function createSourceUpload(deps: ActionDeps, input: CreateSourceUp
   return action(deps, createSourceUploadInput, input, async (actor, v) => {
     const masked = parseInput(createSourceUploadInput, { ...v, fileName: createInputMasker().text(v.fileName) });
     if (!masked.ok) return masked;
-    return ok(await createSignedSourceUpload(deps.adminDb(), actor, await deps.userStorage(), masked.data));
+    try {
+      return ok(await createSignedSourceUpload(deps.adminDb(), actor, await deps.userStorage(), masked.data));
+    } catch (error) {
+      // R3 C3: create_source's only non-retryable conflict is the (handover_id, sha256) duplicate of a live source.
+      if (isDbError(error) && error.code === "conflict" && !error.retryable) {
+        return failWith("conflict", { message: DUPLICATE_SOURCE_MESSAGE, details: { reason: DUPLICATE_SOURCE_REASON } });
+      }
+      throw error;
+    }
   });
 }
+
+/**
+ * R3 C3: the same file (same SHA-256) is already a live source of this handover, possibly one whose upload
+ * was interrupted (`pending_upload`). Removing that source frees the file to be uploaded again.
+ */
+export const DUPLICATE_SOURCE_MESSAGE =
+  "This file is already in this handover. If an earlier upload of it did not finish, remove that one and try again.";
+export const DUPLICATE_SOURCE_REASON = "duplicate_source";
 
 /** M5: the server measures the uploaded object; the database compares it with the declared values. */
 export async function confirmSourceUploaded(deps: ActionDeps, input: { sourceId: string }): Promise<Result<SourceSummary>> {
