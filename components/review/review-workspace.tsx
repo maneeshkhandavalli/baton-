@@ -78,23 +78,32 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   const selected = visible.find((p) => p.id === selectedId) ?? visible[0] ?? null;
   const toReview = points.filter((p) => p.reviewState === "pending").length;
 
+  // Scroll only when the user moved the selection (J/K, click, after approve/reject) — never on
+  // mount or filter changes, so the page opens at its header (DEMO-SCROLL).
+  const userMoved = useRef(false);
   useEffect(() => {
-    const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (selected) cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+    if (!userMoved.current || !selected) return;
+    userMoved.current = false;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
   }, [selected]);
+  const select = (id: string) => {
+    userMoved.current = true;
+    setSelectedId(id);
+  };
 
   function move(delta: number) {
     if (visible.length === 0) return;
     const i = selected ? visible.findIndex((p) => p.id === selected.id) : -1;
     const next = visible[Math.max(0, Math.min(visible.length - 1, i + delta))];
-    setSelectedId(next.id);
+    select(next.id);
   }
 
   function advanceFrom(id: string) {
     const i = visible.findIndex((p) => p.id === id);
     const next = visible.slice(i + 1).find((p) => p.reviewState === "pending") ?? visible.find((p) => p.reviewState === "pending" && p.id !== id);
     if (next) {
-      setSelectedId(next.id);
+      select(next.id);
       // Keyboard and screen-reader users continue on the next point instead of a stale control.
       requestAnimationFrame(() => cardRefs.current.get(next.id)?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true }));
     }
@@ -123,7 +132,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
 
   function act(point: PointDetail, action: PointAction) {
     if (readOnly && action !== "details") return;
-    setSelectedId(point.id);
+    select(point.id);
     switch (action) {
       case "approve": {
         const needsInput =
@@ -314,7 +323,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
                   readOnly={readOnly}
                   gapQuestion={gapByPoint.get(p.id)}
                   pending={isPending}
-                  onSelect={() => setSelectedId(p.id)}
+                  onSelect={() => select(p.id)}
                   onAction={(a) => act(p, a)}
                 />
               </li>
