@@ -238,3 +238,20 @@ select tests.throws(format('select public.finish_processing_run(%L, %L, %L, %L)'
                            'OpenAI said: user Alice +91 98765 43210'), 'BTVF0', 'run error messages are reason tokens only');
 select tests.throws(format('select public.finish_processing_run(%L, %L, %L)', tests.id('run'), 'failed', 'kaboom'), 'BTVF0',
                     'run error codes are ERROR_CODES only');
+
+-- ── QA-M1b: exact quotes must sit at their stored offsets (all-BMP bodies) ──
+select tests.as_service();
+select tests.throws(format('select public.add_source_quote_evidence(%L, %L, %L, 10, 31, %L)', tests.id('P'),
+                           tests.msg('s1', 'carol', 2), 'Carol message 2 about', 'exact'),
+                    'BTVF0', 'an exact quote whose offsets point elsewhere is refused');
+select tests.throws(format('select public.add_source_quote_evidence(%L, %L, %L, 0, 500, %L)', tests.id('P'),
+                           tests.msg('s1', 'carol', 2), 'Carol message 2 about the bank', 'normalized'),
+                    'BTVF0', 'verified offsets must lie inside an all-BMP body');
+select public.add_source_quote_evidence(tests.id('P'), tests.msg('s1', 'carol', 2), 'Carol message 2 about', 0, 21, 'exact');
+select tests.eq((select quote_check from public.evidence_quotes where source_message_id = tests.msg('s1', 'carol', 2)), 'exact',
+                'an exact quote at its offsets is stored');
+select tests.as_owner();
+select tests.ok(public._quote_check_plausible('exact', 'party at 7 🎉 sharp tonight', 9, 30, 'The party at 7 🎉 sharp tonight!'),
+                'astral bodies keep the containment rule (UTF-16 offsets differ from characters)');
+select tests.as_service();
+select tests.throws($$select public._quote_check_plausible('exact', 'x', 0, 1, 'x')$$, '42501', 'the helper is not callable by API roles');
