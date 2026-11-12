@@ -202,8 +202,8 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     onSaved: (h: HandoverSummary, sent) => {
       // The server masks free text: show what was stored if it differs and nothing newer was typed.
       setDetails((d) =>
-        d.title === sent.title && d.teamName === sent.teamName && d.roleTitle === sent.roleTitle
-          ? { ...d, title: h.title, teamName: h.teamName, roleTitle: h.roleTitle ?? "" }
+        d.title === sent.title && d.teamName === sent.teamName && d.roleTitle === sent.roleTitle && d.description === sent.description
+          ? { ...d, title: h.title, teamName: h.teamName, roleTitle: h.roleTitle ?? "", description: sent.description === undefined ? d.description : (h.description ?? "") }
           : d,
       );
     },

@@ -13,13 +13,6 @@ import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "New handover" };
 
-/** `description` lands on HandoverSummary in R3; read it defensively until the DTO has it. */
-function descriptionOf(h: object): string | undefined {
-  if (!("description" in h)) return undefined;
-  const d = (h as { description?: unknown }).description;
-  return typeof d === "string" ? d : "";
-}
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function NewHandoverPage({ searchParams }: PageProps<"/handover/new">) {
@@ -69,8 +62,7 @@ async function WizardLoader({ searchParams }: { searchParams: Promise<Record<str
       title: h.title,
       teamName: h.teamName,
       roleTitle: h.roleTitle ?? "",
-      // Shown and saved only once HandoverSummary carries it; until then it is never sent (kept as stored).
-      description: descriptionOf(h),
+      description: h.description ?? "",
       creatorRole: viewer?.role === "outgoing" || viewer?.role === "reviewer" ? viewer.role : "",
     },
     sources: live,

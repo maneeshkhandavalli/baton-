@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 
-import { accountNav, SIGN_OUT_PATH, workspaceNav, type NavItem } from "@/config/navigation";
+import { accountNav, workspaceNav, type NavItem } from "@/config/navigation";
+import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 export interface WorkspaceNavListProps {
@@ -54,7 +55,8 @@ export function WorkspaceNavList({ pathname, className }: WorkspaceNavListProps)
       <NavLinks items={workspaceNav} pathname={pathname} />
       <div className="mt-auto space-y-0.5 border-t border-sidebar-border pt-3">
         <NavLinks items={accountNav} pathname={pathname} />
-        <form action={SIGN_OUT_PATH} method="post">
+        {/* POST-only route: a link or prefetch can never sign someone out. */}
+        <form action={routes.signOut} method="post">
           <button type="submit" className={cn(itemClass, "text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
             <LogOut aria-hidden="true" className="size-4 shrink-0" />
             Sign out

@@ -17,12 +17,6 @@ export const workspaceNav: readonly NavItem[] = [
 /** Personal destinations (bottom of the sidebar, above sign-out). */
 export const accountNav: readonly NavItem[] = [{ title: "Account", href: routes.account, icon: CircleUserRound }];
 
-/**
- * POST-only sign-out route handler (app/auth/signout/route.ts). Rendered as a <form method="post">
- * so a link or prefetch can never sign someone out. TODO(lead): move to `routes.signOut`.
- */
-export const SIGN_OUT_PATH = "/auth/signout";
-
 export interface HandoverNavItem {
   title: string;
   href: (id: string) => string;
