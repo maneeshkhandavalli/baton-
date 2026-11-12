@@ -13,17 +13,26 @@ import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "New handover" };
 
+/** `description` lands on HandoverSummary in R3; read it defensively until the DTO has it. */
+function descriptionOf(h: object): string | undefined {
+  if (!("description" in h)) return undefined;
+  const d = (h as { description?: unknown }).description;
+  return typeof d === "string" ? d : "";
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function NewHandoverPage({ searchParams }: PageProps<"/handover/new">) {
   return (
-    <PageContainer width="narrow" className="space-y-8">
+    <PageContainer width="narrow" className="space-y-8 pb-0 lg:pb-0">
       <PageHeader
+        back={{ href: routes.dashboard, label: "Dashboard" }}
         eyebrow="New handover"
         title="Start a handover"
-        description="Four short steps: who is involved, consent for how Baton may read the files, the chats and documents that hold the knowledge, and what Baton may read."
+        description="Who is involved, consent, the chats and documents that hold the knowledge, and what Baton may read. Your draft saves as you go."
+        divider={false}
       />
-      <Suspense fallback={<LoadingState label="Opening the draft…" className="min-h-64" />}>
+      <Suspense fallback={<LoadingState label="Opening your draft…" className="min-h-64" />}>
         <WizardLoader searchParams={searchParams} />
       </Suspense>
     </PageContainer>
@@ -55,10 +64,13 @@ async function WizardLoader({ searchParams }: { searchParams: Promise<Record<str
   const viewer = members.ok ? members.data.find((m) => m.isViewer) : undefined;
   const initial: WizardInitial = {
     handoverId: h.id,
+    updatedAt: h.updatedAt,
     details: {
       title: h.title,
       teamName: h.teamName,
       roleTitle: h.roleTitle ?? "",
+      // Shown and saved only once HandoverSummary carries it; until then it is never sent (kept as stored).
+      description: descriptionOf(h),
       creatorRole: viewer?.role === "outgoing" || viewer?.role === "reviewer" ? viewer.role : "",
     },
     sources: live,

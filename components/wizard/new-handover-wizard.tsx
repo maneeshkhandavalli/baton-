@@ -2,20 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, CloudCheck, FileText, Loader2, MessageCircle, RotateCcw, Trash2, Upload, UserCheck, UserX } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Link2, Lock, Trash2, UserCheck, UserX } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
-import { formatBytes, formatCount, formatDate } from "@/components/handover/format";
-import { accessLevelMeta, identityKindLabel, sourceKindLabel } from "@/components/handover/labels";
+import { identityKindLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { MaskedText } from "@/components/shared/masked-text";
+import { SaveIndicator } from "@/components/shared/save-indicator";
+import type { SaveState } from "@/components/shared/save-state";
+import { Stepper } from "@/components/shared/stepper";
+import { phaseForError } from "@/components/shared/upload-status";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { Field, FieldGroup, fieldDescribedBy } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
-import { ACCESS_LEVELS, MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
-import type { SourceSummary } from "@/lib/contracts/dto";
+import { MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import type { HandoverSummary, SourceSummary } from "@/lib/contracts/dto";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
 import { createHandover, deleteHandover, startProcessing } from "@/lib/actions/handovers";
@@ -23,10 +29,13 @@ import { inviteMember } from "@/lib/actions/members";
 import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent, removeSource } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 
-import { blankSource, fromSummary, maxStepFor, signedTarget, type DraftSource } from "./draft-state";
+import { blankSource, fromSummary, maxStepFor, phaseOf, signedTarget, type DraftSource } from "./draft-state";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import type { DetailsValues } from "./details-save";
+import { ScopeStep } from "./scope-step";
+import { SourcesStep } from "./sources-step";
+import { useDetailsAutosave } from "./use-details-autosave";
 
 // Consent comes before any upload: the database refuses a preview until consent is recorded for the
 // source (§10 steps 2–3; source_preview_target), so each upload records consent right after the server
@@ -45,24 +54,23 @@ interface Details {
   title: string;
   teamName: string;
   roleTitle: string;
+  /** `undefined` while the stored description isn't known (resumed draft on an older summary). */
+  description?: string;
   creatorRole: "outgoing" | "reviewer" | "";
   outgoingEmail: string;
   incomingEmail: string;
   incomingRole: "incoming" | "lead";
 }
 
-
-
-/** A draft reopened from the server (dashboard "Continue editing" or a refresh). */
+/** A draft reopened from the server (dashboard "Continue", a refresh, or a reload after a conflict). */
 export interface WizardInitial {
   handoverId: string;
-  details: Pick<Details, "title" | "teamName" | "roleTitle" | "creatorRole">;
+  /** HandoverSummary.updatedAt — the version the details editor starts from. */
+  updatedAt: string;
+  details: Pick<Details, "title" | "teamName" | "roleTitle" | "description" | "creatorRole">;
   sources: SourceSummary[];
   step: number;
 }
-
-const CHAT_ACCEPT = ".txt,.zip";
-const DOC_ACCEPT = ".pdf,.docx,.md,.markdown";
 
 function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
@@ -95,7 +103,6 @@ function browserTimeZone(): string {
   }
 }
 
-
 const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
 
 /** `YYYY-MM-DD` + wall-clock time in `timeZone` → ISO 8601 with that zone's offset (date ranges need an explicit offset). */
@@ -125,9 +132,12 @@ interface PendingMatch {
   kind: SourcePreview["participants"][number]["identityKind"];
 }
 
-
-
-type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: Date } | { kind: "error" };
+const valuesOf = (d: Pick<Details, "title" | "teamName" | "roleTitle" | "description">): DetailsValues => ({
+  title: d.title,
+  teamName: d.teamName,
+  roleTitle: d.roleTitle,
+  ...(d.description !== undefined ? { description: d.description } : {}),
+});
 
 export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const router = useRouter();
@@ -140,6 +150,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     title: initial?.details.title ?? "",
     teamName: initial?.details.teamName ?? "",
     roleTitle: initial?.details.roleTitle ?? "",
+    description: initial ? initial.details.description : "",
     creatorRole: initial?.details.creatorRole ?? "",
     outgoingEmail: "",
     incomingEmail: "",
@@ -153,14 +164,56 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const [consent, setConsent] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
   const [submitting, setSubmitting] = useState(false);
   const [savingScope, setSavingScope] = useState(false);
-  const [save, setSave] = useState<SaveState>({ kind: "idle" });
+  const [save, setSave] = useState<SaveState>(() => (initial ? { kind: "saved", at: initial.updatedAt } : { kind: "unsaved" }));
+  const [skipped, setSkipped] = useState(0);
   /** Identity decisions recorded with confirmIdentityMatch in this session (§6.8.1). */
   const [decisions, setDecisions] = useState<Array<PendingMatch & { decision: IdentityMatchDecision }>>([]);
   const timeZone = useRef(browserTimeZone()).current;
 
+  // Server version of the details: from the reopened draft, the create result, or a reload.
+  const [server, setServer] = useState<{ updatedAt: string; values: DetailsValues } | null>(() =>
+    initial ? { updatedAt: initial.updatedAt, values: valuesOf(initial.details) } : null,
+  );
+  const reloadPending = useRef(false);
+
+  const autosave = useDetailsAutosave({
+    handoverId,
+    serverUpdatedAt: server?.updatedAt ?? null,
+    savedValues: server?.values ?? null,
+    onState: setSave,
+    onFieldErrors: (e) => setErrors((prev) => ({ ...Object.fromEntries(Object.entries(prev).filter(([k]) => !["title", "teamName", "roleTitle", "description"].includes(k))), ...e })),
+    onSaved: (h: HandoverSummary, sent) => {
+      // The server masks free text: show what was stored if it differs and nothing newer was typed.
+      setDetails((d) =>
+        d.title === sent.title && d.teamName === sent.teamName && d.roleTitle === sent.roleTitle
+          ? { ...d, title: h.title, teamName: h.teamName, roleTitle: h.roleTitle ?? "" }
+          : d,
+      );
+    },
+    onStale: () => {
+      reloadPending.current = true;
+      router.refresh();
+    },
+    onNotDraft: () => {
+      if (handoverId) router.push(routes.handover.processing(handoverId));
+    },
+  });
+
+  // A reload (after a conflict, or on returning to Details) brings a newer server version.
+  useEffect(() => {
+    if (!initial || (server && initial.updatedAt <= server.updatedAt)) return;
+    const values = valuesOf(initial.details);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- adopting a newer server version of the draft
+    setServer({ updatedAt: initial.updatedAt, values });
+    if (reloadPending.current) {
+      reloadPending.current = false;
+      setDetails((d) => ({ ...d, ...values, description: initial.details.description }));
+    }
+  }, [initial, server]);
+
   const update = useCallback((id: string, patch: Partial<DraftSource>) => setSources((list) => list.map((s) => (s.localId === id ? { ...s, ...patch } : s))), []);
 
-  /** Wraps a server write so the "Saving… / Saved / Couldn't save" line is truthful. */
+  /** Wraps a server write so the save indicator is truthful. */
   const saving = useCallback(async <R extends { ok: boolean }>(work: () => Promise<R>): Promise<R> => {
     setSave({ kind: "saving" });
     const r = await work();
@@ -180,12 +233,13 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const applyPreview = useCallback(
     (localId: string, preview: Awaited<ReturnType<typeof previewSource>>) => {
       if (!preview.ok) {
-        if (preview.error.details?.parserCode === "date_format_ambiguous") {
-          return update(localId, { status: "error", needsDateOrder: true, error: "Baton can't tell whether these dates are day/month or month/day. Which is it?" });
+        const parserCode = typeof preview.error.details?.parserCode === "string" ? preview.error.details.parserCode : undefined;
+        if (parserCode === "date_format_ambiguous") {
+          return update(localId, { status: "error", needsDateOrder: true, errorPhase: "needs_input", error: "Baton can't tell whether these dates are day/month or month/day. Which is it?" });
         }
-        return update(localId, { status: "error", error: preview.error.message });
+        return update(localId, { status: "error", errorPhase: phaseForError({ code: preview.error.code, parserCode }), error: preview.error.message });
       }
-      update(localId, { status: "ready", needsDateOrder: false, preview: preview.data, rangeFrom: dateOnly(preview.data.firstMessageAt), rangeTo: dateOnly(preview.data.lastMessageAt) });
+      update(localId, { status: "ready", needsDateOrder: false, errorPhase: undefined, preview: preview.data, rangeFrom: dateOnly(preview.data.firstMessageAt), rangeTo: dateOnly(preview.data.lastMessageAt) });
     },
     [update],
   );
@@ -193,11 +247,11 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   // ── Consent + preview for one confirmed source ─────────────
   const consentAndPreview = useCallback(
     async (localId: string, sourceId: string, accessLevel: AccessLevel, dateOrder?: DateOrder) => {
-      update(localId, { status: "consent", error: undefined, needsDateOrder: false });
+      update(localId, { status: "consent", error: undefined, errorPhase: undefined, needsDateOrder: false });
       const c = await saving(() =>
         recordSourceConsent({ sourceId, consentStatementVersion: CONSENT_STATEMENT_VERSION, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
       );
-      if (!c.ok) return update(localId, { status: "error", error: c.error.message });
+      if (!c.ok) return update(localId, { status: "error", errorPhase: "failed", error: c.error.message });
       update(localId, { status: "previewing", dateOrder });
       applyPreview(localId, await previewSource({ sourceId }));
     },
@@ -205,7 +259,8 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   );
 
   // Reopened draft: preview sources that are uploaded (recording consent first where it is missing).
-  const resumedOnce = useRef(false);
+  // A draft created in this session never runs this, even when a reload later supplies `initial`.
+  const resumedOnce = useRef(!initial);
   useEffect(() => {
     if (resumedOnce.current || !initial) return;
     resumedOnce.current = true;
@@ -222,32 +277,61 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     }
   }, [initial, initialConsented, consentAndPreview, applyPreview]);
 
+  // Returning to Details on an existing draft: fetch the latest version so autosave starts from it.
+  const prevStep = useRef(step);
+  useEffect(() => {
+    if (step === 0 && prevStep.current !== 0 && handoverId) router.refresh();
+    prevStep.current = step;
+  }, [step, handoverId, router]);
+
   // ── Step 1 ────────────────────────────────────────────────
+  function setDetail<K extends keyof Details>(k: K, v: Details[K]) {
+    const next = { ...details, [k]: v };
+    setDetails(next);
+    if (handoverId && (k === "title" || k === "teamName" || k === "roleTitle" || k === "description")) autosave.schedule(valuesOf(next));
+  }
+
   async function submitDetails() {
-    if (handoverId) return setStep(1);
+    if (handoverId) {
+      if (await autosave.flush(valuesOf(details))) setStep(1);
+      return;
+    }
     const next: Record<string, string> = {};
     const parsed = createHandoverInput.safeParse({
       title: details.title,
       teamName: details.teamName,
       roleTitle: details.roleTitle || undefined,
+      description: details.description || undefined,
       creatorRole: details.creatorRole || undefined,
     });
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const key = String(issue.path[0]);
         next[key] ??=
-          key === "title" ? "Give the handover a title (at least 3 characters)." : key === "teamName" ? "Add the team or club name." : key === "creatorRole" ? "Choose who is leaving the role." : issue.message;
+          key === "title"
+            ? "Give the handover a title (at least 3 characters)."
+            : key === "teamName"
+              ? "Add the team or club name."
+              : key === "creatorRole"
+                ? "Choose who is leaving the role."
+                : issue.message;
       }
     }
     if (details.creatorRole === "reviewer" && details.outgoingEmail && !z.email().safeParse(details.outgoingEmail).success) next.outgoingEmail = "Enter a valid email.";
     if (details.incomingEmail && !z.email().safeParse(details.incomingEmail).success) next.incomingEmail = "Enter a valid email.";
     setErrors(next);
-    if (Object.keys(next).length > 0 || !parsed.success) return;
+    if (Object.keys(next).length > 0 || !parsed.success) {
+      const first = Object.keys(next)[0];
+      const target: Record<string, string> = { title: "title", teamName: "team", creatorRole: "creator-outgoing", outgoingEmail: "outgoing", incomingEmail: "incoming" };
+      if (first && target[first]) document.getElementById(target[first])?.focus();
+      return;
+    }
 
     const created = await saving(() => run(() => createHandover(parsed.data)));
     if (!created.ok) return;
     const id = created.data.id;
     setHandoverId(id); // the URL now carries the draft, so a retry or refresh reopens it instead of creating another
+    setServer({ updatedAt: created.data.updatedAt, values: valuesOf(details) });
     const made: Array<{ label: string; url: string }> = [];
     if (details.incomingEmail) {
       const r = await run(() => inviteMember({ handoverId: id, email: details.incomingEmail, role: details.incomingRole }));
@@ -264,20 +348,23 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   // ── Step 3: real signed upload → server verification → consent → preview ─
   async function uploadSource(localId: string, entry: { name: string; size: number; kind: SourceKind; file: File }) {
     if (!handoverId) return;
-    if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", error: "Files can be up to 25 MB." });
-    if (entry.size === 0) return update(localId, { status: "error", error: "This file is empty." });
-    update(localId, { status: "hashing", error: undefined });
+    if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", errorPhase: "too_large", error: "Files can be up to 25 MB. Export the chat without media, or split the document." });
+    if (entry.size === 0) return update(localId, { status: "error", errorPhase: "empty", error: "This file is empty." });
+    update(localId, { status: "hashing", error: undefined, errorPhase: undefined });
     let sha: string;
     try {
       sha = await sha256Hex(await entry.file.arrayBuffer());
     } catch {
-      return update(localId, { status: "error", error: "Couldn't read this file. Choose it again." });
+      return update(localId, { status: "error", errorPhase: "failed", error: "Couldn't read this file. Choose it again." });
     }
     update(localId, { status: "uploading" });
     const ticket = await saving(() =>
       createSourceUpload({ handoverId, kind: entry.kind, fileName: entry.name, mimeType: entry.file.type || MIME[entry.kind], sizeBytes: entry.size, sha256: sha }),
     );
-    if (!ticket.ok) return update(localId, { status: "error", error: ticket.error.message });
+    if (!ticket.ok) {
+      const reason = typeof ticket.error.details?.reason === "string" ? ticket.error.details.reason : undefined;
+      return update(localId, { status: "error", errorPhase: phaseForError({ code: ticket.error.code, reason }), error: ticket.error.message });
+    }
     const { sourceId, signedUploadUrl, token } = ticket.data;
     update(localId, { sourceId });
 
@@ -298,14 +385,14 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     }
     if (uploadError) {
       await removeSource({ sourceId }); // don't leave a pending row behind; retry starts a fresh upload
-      return update(localId, { status: "error", error: "The upload didn't go through. Check your connection and retry.", sourceId: undefined });
+      return update(localId, { status: "error", errorPhase: "failed", error: "The upload didn't go through. Check your connection and retry.", sourceId: undefined });
     }
 
     update(localId, { status: "verifying" });
     const confirmed = await saving(() => confirmSourceUploaded({ sourceId }));
     if (!confirmed.ok) {
       await removeSource({ sourceId });
-      return update(localId, { status: "error", error: "The uploaded file didn't match what was sent. Retry the upload.", sourceId: undefined });
+      return update(localId, { status: "error", errorPhase: "failed", error: "The uploaded file didn't match what was sent. Retry the upload.", sourceId: undefined });
     }
     await consentAndPreview(localId, sourceId, "everyone");
   }
@@ -313,21 +400,34 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   function onFiles(files: FileList | null, group: "chat" | "doc") {
     if (!files) return;
     let count = sources.length;
+    let over = 0;
     for (const file of Array.from(files)) {
-      if (count >= MAX_SOURCES) break;
+      if (count >= MAX_SOURCES) {
+        over += 1;
+        continue;
+      }
       count += 1;
       const localId = crypto.randomUUID();
       const kind = kindFor(file.name, group);
       if (!kind) {
         setSources((list) => [
           ...list,
-          blankSource({ localId, name: file.name, size: file.size, kind: "text", status: "error", error: group === "chat" ? "Use a WhatsApp export (.txt or .zip)." : "Use a PDF, DOCX or Markdown file." }),
+          blankSource({
+            localId,
+            name: file.name,
+            size: file.size,
+            kind: "text",
+            status: "error",
+            errorPhase: "unsupported",
+            error: group === "chat" ? "Use a WhatsApp export (.txt or .zip)." : "Use a PDF, DOCX or Markdown file.",
+          }),
         ]);
         continue;
       }
       setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
       void uploadSource(localId, { name: file.name, size: file.size, kind, file });
     }
+    setSkipped(over);
   }
 
   function chooseDateOrder(s: DraftSource, order: DateOrder) {
@@ -336,16 +436,17 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   }
 
   function retry(s: DraftSource) {
-    if (!s.file || s.kind === "text") return;
+    if (!s.file || s.kind === "text" || phaseOf(s) !== "failed") return;
     void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
   }
 
   async function remove(s: DraftSource) {
     if (s.sourceId) {
-      const r = await saving(() => run(() => removeSource({ sourceId: s.sourceId! })));
+      const r = await saving(() => run(() => removeSource({ sourceId: s.sourceId! }), { success: `Removed ${s.name}` }));
       if (!r.ok) return;
     }
     setSources((list) => list.filter((x) => x.localId !== s.localId));
+    setSkipped(0);
   }
 
   async function discard() {
@@ -404,7 +505,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
       current.map(async (s) => {
         const r = await previewSource({ sourceId: s.sourceId! });
         if (r.ok) update(s.localId, { preview: r.data });
-        else update(s.localId, { status: "error", error: r.error.message });
+        else update(s.localId, { status: "error", errorPhase: "failed", error: r.error.message });
       }),
     );
   }
@@ -486,39 +587,47 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const maxStep = maxStepFor({ hasDraft: !!handoverId, consentGiven, readySources: ready.length }, LAST_STEP);
   const shownStep = Math.min(step, maxStep);
 
+  const blockedReason =
+    shownStep === 1 && !consentGiven
+      ? "Tick every statement to continue. Without consent, nothing can be uploaded."
+      : shownStep === 2 && busy
+        ? "Wait for uploads to finish."
+        : shownStep === 2 && ready.length === 0
+          ? "Add at least one file that's ready."
+          : shownStep === 3 && matches.length > 0
+            ? "Answer each “same person?” question first."
+            : null;
+
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SaveStatus save={save} hasDraft={!!handoverId} />
-        {handoverId && (
-          <ConfirmDialog
-            trigger={
-              <Button size="sm" variant="ghost">
-                <Trash2 aria-hidden="true" data-icon="inline-start" />
-                Discard draft
-              </Button>
-            }
-            title="Discard this draft?"
-            description="The draft and its uploaded files are removed from your workspace. This can't be undone here."
-            confirmLabel="Discard draft"
-            destructive
-            onConfirm={discard}
+      <div className="space-y-5 border-b border-border pb-6">
+        <Stepper steps={STEPS} current={shownStep} onStepClick={submitting ? undefined : (i) => setStep(i)} label="New handover steps" />
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <SaveIndicator
+            state={save}
+            onRetry={handoverId && shownStep === 0 ? () => void autosave.flush(valuesOf(details)) : undefined}
+            className="min-w-0 flex-1"
           />
+          {handoverId && (
+            <ConfirmDialog
+              trigger={
+                <Button size="sm" variant="destructive-ghost">
+                  <Trash2 aria-hidden="true" data-icon="inline-start" />
+                  Discard draft
+                </Button>
+              }
+              title="Discard this draft?"
+              description="The draft and its uploaded files are removed from your workspace. This can't be undone here."
+              confirmLabel="Discard draft"
+              destructive
+              onConfirm={discard}
+            />
+          )}
+        </div>
+        {handoverId && (
+          <p className="text-caption text-muted-foreground">Everything is saved as you go. Leave any time and continue from the dashboard.</p>
         )}
       </div>
-
-      <ol aria-label="Steps" className="grid grid-cols-4 gap-2">
-        {STEPS.map((s, i) => (
-          <li key={s.id} aria-current={i === shownStep ? "step" : undefined} className="space-y-2">
-            <div className={cn("h-1 rounded-full transition-colors", i <= shownStep ? "bg-primary" : "bg-muted")} />
-            <p className={cn("text-xs font-medium", i === shownStep ? "text-foreground" : "text-muted-foreground")}>
-              <span className="font-mono">{i + 1}</span>
-              <span className="hidden sm:inline"> · {s.label}</span>
-            </p>
-          </li>
-        ))}
-      </ol>
-      <p className="text-sm font-medium sm:hidden">{STEPS[shownStep].label}</p>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
@@ -527,402 +636,274 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
           animate={{ opacity: 1, y: 0 }}
           exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="space-y-6"
+          className="space-y-8"
         >
-          {shownStep === 0 && <DetailsStep details={details} setDetails={setDetails} errors={errors} locked={!!handoverId} invites={invites} resumed={resumed} />}
+          {shownStep === 0 && (
+            <DetailsStep details={details} setDetail={setDetail} errors={errors} created={!!handoverId} invites={invites} resumed={resumed} />
+          )}
           {shownStep === 1 && (
-            <div className="space-y-6">
-              <section className="space-y-2">
-                <h2 className="font-serif text-2xl">Privacy and consent</h2>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Before any file is read, confirm how Baton may use it. Baton masks personal and financial details in memory before anything is saved,
-                  deletes the raw upload once processing succeeds, and keeps only masked, permitted evidence. Consent is recorded for each file as it is
-                  uploaded.
-                </p>
-              </section>
+            <div className="space-y-8">
+              <StepHeading
+                index={1}
+                title="Privacy and consent"
+                description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
+              />
               <GroupNotice teamName={details.teamName} />
               <ConsentChecklist value={consent} onChange={setConsent} />
-              {!consentGiven && <p className="text-xs text-muted-foreground">Tick every statement to continue. Without consent, nothing can be uploaded.</p>}
             </div>
           )}
-          {shownStep === 2 && <SourcesStep sources={sources} onFiles={onFiles} onRemove={remove} onRetry={retry} onDateOrder={chooseDateOrder} full={sources.length >= MAX_SOURCES} />}
-          {shownStep === 3 && (
-            <div className="space-y-6">
-              <ScopeStep sources={ready} update={update} />
-              {(matches.length > 0 || decisions.length > 0) && (
-                <MatchesSection
-                  matches={matches}
-                  decisions={decisions.filter((d) => ready.some((s) => s.sourceId === d.sourceId))}
-                  onAnswer={answerMatch}
-                  disabled={isPending}
-                />
+          {shownStep === 2 && (
+            <div className="space-y-8">
+              <StepHeading
+                index={2}
+                title="Add the team’s record"
+                description="Export WhatsApp chats without media (Chat → More → Export chat → Without media) and add any handbooks or notes. Up to 10 files, 25 MB each."
+              />
+              {skipped > 0 && (
+                <Alert tone="warning" title={`${skipped === 1 ? "1 file wasn’t" : `${skipped} files weren’t`} added`}>
+                  A handover holds up to {MAX_SOURCES} files. Remove one to add another.
+                </Alert>
               )}
+              <SourcesStep sources={sources} onFiles={onFiles} onRemove={remove} onRetry={retry} onDateOrder={chooseDateOrder} full={sources.length >= MAX_SOURCES} />
+            </div>
+          )}
+          {shownStep === 3 && (
+            <div className="space-y-8">
+              <StepHeading
+                index={3}
+                title="Choose what Baton reads"
+                description="Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and decide who may see evidence from each source."
+              />
+              {(matches.length > 0 || decisions.length > 0) && (
+                <MatchesSection matches={matches} decisions={decisions.filter((d) => ready.some((s) => s.sourceId === d.sourceId))} onAnswer={answerMatch} disabled={isPending} />
+              )}
+              <ScopeStep sources={ready} update={update} />
               <MaskingTable counts={detectedMasking} />
             </div>
           )}
         </motion.div>
       </AnimatePresence>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-        <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
-          <ArrowLeft aria-hidden="true" data-icon="inline-start" />
-          Back
-        </Button>
-        {shownStep < LAST_STEP ? (
-          <Button size="lg" disabled={!canNext || isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
-            {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft and continue" : "Continue"}
-            <ArrowRight aria-hidden="true" data-icon="inline-end" />
+      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 py-4 backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
+            <ArrowLeft aria-hidden="true" data-icon="inline-start" />
+            Back
           </Button>
-        ) : (
-          <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
-            {submitting || savingScope ? "Saving…" : pendingPeople ? "Save and review" : "Start processing"}
-            <ArrowRight aria-hidden="true" data-icon="inline-end" />
-          </Button>
-        )}
+          <div className="flex min-w-0 items-center gap-3">
+            {blockedReason && <p className="hidden text-right text-caption text-muted-foreground md:block">{blockedReason}</p>}
+            {shownStep < LAST_STEP ? (
+              <Button size="lg" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
+                {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft" : "Continue"}
+                <ArrowRight aria-hidden="true" data-icon="inline-end" />
+              </Button>
+            ) : (
+              <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
+                {submitting || savingScope ? "Saving…" : pendingPeople ? "Save and review" : "Start processing"}
+                <ArrowRight aria-hidden="true" data-icon="inline-end" />
+              </Button>
+            )}
+          </div>
+        </div>
+        {blockedReason && <p className="mt-2 text-caption text-muted-foreground md:hidden">{blockedReason}</p>}
       </div>
     </div>
   );
 }
 
-function SaveStatus({ save, hasDraft }: { save: SaveState; hasDraft: boolean }) {
-  if (!hasDraft) return <p className="text-xs text-muted-foreground">Nothing is saved until you create the draft.</p>;
-  if (save.kind === "saving")
-    return (
-      <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> Saving…
-      </p>
-    );
-  if (save.kind === "error")
-    return (
-      <p role="status" className="flex items-center gap-1.5 text-xs text-destructive">
-        <AlertCircle aria-hidden="true" className="size-3.5" /> Couldn&rsquo;t save the last change. Try that step again.
-      </p>
-    );
+function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
   return (
-    <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <CloudCheck aria-hidden="true" className="size-3.5 text-status-sourced" />
-      Draft saved{save.kind === "saved" ? ` · ${save.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}. You can leave and continue from the dashboard.
-    </p>
+    <header className="space-y-2">
+      <p className="type-eyebrow text-muted-foreground">
+        Step {index + 1} of {STEPS.length}
+      </p>
+      <h2 className="type-section-title">{title}</h2>
+      <p className="max-w-2xl type-body text-muted-foreground">{description}</p>
+    </header>
   );
 }
 
 // ── Steps ────────────────────────────────────────────────────────────────────
 
-function Field({ label, htmlFor, hint, error, children }: { label: string; htmlFor: string; hint?: string; error?: string; children: React.ReactNode }) {
+function DetailsStep({
+  details,
+  setDetail,
+  errors,
+  created,
+  invites,
+  resumed,
+}: {
+  details: Details;
+  setDetail: <K extends keyof Details>(k: K, v: Details[K]) => void;
+  errors: Record<string, string>;
+  created: boolean;
+  invites: Array<{ label: string; url: string }>;
+  resumed: boolean;
+}) {
+  const hint = {
+    title: "For example, “CodeCell technical lead”.",
+    role: "The role being handed over, e.g. Treasurer.",
+    description: "A sentence or two of context for reviewers. Shown only inside Baton.",
+  };
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
+    <div className="space-y-8">
+      <StepHeading
+        index={0}
+        title={created ? "Handover details" : "What is being handed over?"}
+        description={
+          created
+            ? "Edit the title, team and role any time while this is a draft. Changes save automatically."
+            : "Name the role and the people involved. You can invite more people later in Settings."
+        }
+      />
 
-function DetailsStep({ details, setDetails, errors, locked, invites, resumed }: { details: Details; setDetails: (d: Details) => void; errors: Record<string, string>; locked: boolean; invites: Array<{ label: string; url: string }>; resumed: boolean }) {
-  const set = <K extends keyof Details>(k: K, v: Details[K]) => setDetails({ ...details, [k]: v });
-  return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-serif text-2xl">What is being handed over?</h2>
-        <p className="text-sm text-muted-foreground">Name the role and the people involved. You can invite more people later in Settings.</p>
-      </section>
-      {locked && (
-        <div className="space-y-2 rounded-xl border border-status-sourced/25 bg-status-sourced-soft px-4 py-3 text-sm text-status-sourced-fg">
-          <p className="flex items-center gap-2 font-medium">
-            <Check aria-hidden="true" className="size-4" /> Draft handover saved. Title, team and role can&rsquo;t be edited after creation yet.
-          </p>
-          {resumed && <p className="text-xs">Invitations sent earlier are listed in Settings once processing starts.</p>}
-          {invites.length > 0 && (
-            <ul className="space-y-1 text-xs">
-              {invites.map((i) => (
-                <li key={i.url}>
-                  Invite link for {i.label}: <code className="font-mono break-all">{i.url}</code>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      <fieldset disabled={locked} className="grid gap-5 disabled:opacity-70 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <Field label="Handover title" htmlFor="title" error={errors.title} hint="For example, “CodeCell technical lead”.">
-            <Input id="title" value={details.title} maxLength={120} onChange={(e) => set("title", e.target.value)} aria-invalid={!!errors.title} />
-          </Field>
-        </div>
-        <Field label="Team or club" htmlFor="team" error={errors.teamName}>
-          <Input id="team" value={details.teamName} maxLength={120} onChange={(e) => set("teamName", e.target.value)} aria-invalid={!!errors.teamName} />
-        </Field>
-        <Field label="Role (optional)" htmlFor="role">
-          <Input id="role" value={details.roleTitle} maxLength={120} onChange={(e) => set("roleTitle", e.target.value)} placeholder="Treasurer" />
-        </Field>
-
-        <fieldset className="space-y-2 sm:col-span-2">
-          <legend className="text-sm font-medium">Are you the person leaving this role?</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(
-              [
-                ["outgoing", "Yes, I'm leaving", "You'll review the handover as the outgoing member."],
-                ["reviewer", "No, I'm setting it up for someone", "You'll review it; invite the outgoing member below."],
-              ] as const
-            ).map(([value, title, desc]) => (
-              <label key={value} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3 text-sm has-checked:border-primary/50 has-checked:ring-3 has-checked:ring-primary/10">
-                <input type="radio" name="creatorRole" value={value} checked={details.creatorRole === value} onChange={() => set("creatorRole", value)} className="mt-0.5 accent-primary" />
-                <span>
-                  <span className="block font-medium">{title}</span>
-                  <span className="text-xs text-muted-foreground">{desc}</span>
-                </span>
-              </label>
+      {invites.length > 0 && (
+        <Alert tone="success" title="Invitations created" icon={<Link2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}>
+          <ul className="mt-1 space-y-1.5">
+            {invites.map((i) => (
+              <li key={i.url} className="min-w-0">
+                <span className="font-medium">{i.label}</span>
+                <code className="mt-0.5 block font-mono text-2xs break-all opacity-90">{i.url}</code>
+              </li>
             ))}
-          </div>
-          {errors.creatorRole && <p className="text-xs text-destructive">{errors.creatorRole}</p>}
-        </fieldset>
+          </ul>
+        </Alert>
+      )}
 
-        {details.creatorRole === "reviewer" && (
-          <div className="sm:col-span-2">
-            <Field label="Outgoing member's email (optional)" htmlFor="outgoing" error={errors.outgoingEmail} hint="They get their own sign-in link and can review alongside you.">
-              <Input id="outgoing" type="email" value={details.outgoingEmail} onChange={(e) => set("outgoingEmail", e.target.value)} aria-invalid={!!errors.outgoingEmail} />
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Field id="title" label="Handover title" hint={hint.title} error={errors.title} className="sm:col-span-2">
+          <Input
+            id="title"
+            value={details.title}
+            maxLength={120}
+            autoComplete="off"
+            onChange={(e) => setDetail("title", e.target.value)}
+            aria-invalid={!!errors.title}
+            aria-describedby={fieldDescribedBy("title", { hint: hint.title, error: errors.title })}
+          />
+        </Field>
+        <Field id="team" label="Team or club" error={errors.teamName}>
+          <Input
+            id="team"
+            value={details.teamName}
+            maxLength={120}
+            autoComplete="organization"
+            onChange={(e) => setDetail("teamName", e.target.value)}
+            aria-invalid={!!errors.teamName}
+            aria-describedby={fieldDescribedBy("team", { error: errors.teamName })}
+          />
+        </Field>
+        <Field id="role" label="Role" optional hint={hint.role} error={errors.roleTitle}>
+          <Input
+            id="role"
+            value={details.roleTitle}
+            maxLength={120}
+            onChange={(e) => setDetail("roleTitle", e.target.value)}
+            aria-invalid={!!errors.roleTitle}
+            aria-describedby={fieldDescribedBy("role", { hint: hint.role, error: errors.roleTitle })}
+          />
+        </Field>
+        {details.description !== undefined && (
+          <Field id="description" label="Description" optional hint={hint.description} error={errors.description} className="sm:col-span-2">
+            <Textarea
+              id="description"
+              value={details.description}
+              maxLength={2000}
+              rows={3}
+              onChange={(e) => setDetail("description", e.target.value)}
+              aria-invalid={!!errors.description}
+              aria-describedby={fieldDescribedBy("description", { hint: hint.description, error: errors.description })}
+            />
+          </Field>
+        )}
+      </div>
+
+      <FieldGroup
+        legend="Are you the person leaving this role?"
+        description={created ? "Set when the draft was created; it decides your role in the review." : undefined}
+        error={errors.creatorRole}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              ["outgoing", "Yes, I'm leaving", "You'll review the handover as the outgoing member."],
+              ["reviewer", "No, I'm setting it up for someone", "You'll review it; invite the outgoing member below."],
+            ] as const
+          ).map(([value, title, desc]) => (
+            <ChoiceCard
+              key={value}
+              id={`creator-${value}`}
+              name="creatorRole"
+              value={value}
+              checked={details.creatorRole === value}
+              onChange={() => setDetail("creatorRole", value)}
+              disabled={created}
+              title={title}
+              description={desc}
+              icon={created && details.creatorRole === value ? <Lock /> : undefined}
+            />
+          ))}
+        </div>
+      </FieldGroup>
+
+      {created ? (
+        <p className="text-caption text-muted-foreground">
+          {resumed || invites.length > 0
+            ? "Invitations are listed in Settings once processing starts. Invite more people there."
+            : "Invite the incoming member from Settings once processing starts."}
+        </p>
+      ) : (
+        <FieldGroup legend="Who receives the handover?" description="You can add this later, but you need it before publishing.">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {details.creatorRole === "reviewer" && (
+              <Field
+                id="outgoing"
+                label="Outgoing member’s email"
+                optional
+                hint="They get their own sign-in link and can review alongside you."
+                error={errors.outgoingEmail}
+                className="sm:col-span-2"
+              >
+                <Input
+                  id="outgoing"
+                  type="email"
+                  autoComplete="off"
+                  value={details.outgoingEmail}
+                  onChange={(e) => setDetail("outgoingEmail", e.target.value)}
+                  aria-invalid={!!errors.outgoingEmail}
+                  aria-describedby={fieldDescribedBy("outgoing", { hint: true, error: errors.outgoingEmail })}
+                />
+              </Field>
+            )}
+            <Field id="incoming" label="Incoming member’s email" optional error={errors.incomingEmail}>
+              <Input
+                id="incoming"
+                type="email"
+                autoComplete="off"
+                value={details.incomingEmail}
+                onChange={(e) => setDetail("incomingEmail", e.target.value)}
+                aria-invalid={!!errors.incomingEmail}
+                aria-describedby={fieldDescribedBy("incoming", { error: errors.incomingEmail })}
+              />
+            </Field>
+            <Field
+              id="incoming-role"
+              label="Their role"
+              hint={details.incomingRole === "lead" ? "Leads see lead-level information." : "Sees everything marked Everyone."}
+            >
+              <NativeSelect
+                id="incoming-role"
+                value={details.incomingRole}
+                onChange={(e) => setDetail("incomingRole", e.target.value as Details["incomingRole"])}
+                aria-describedby="incoming-role-hint"
+              >
+                <option value="incoming">Incoming member</option>
+                <option value="lead">Incoming lead</option>
+              </NativeSelect>
             </Field>
           </div>
-        )}
-
-        <Field label="Incoming member's email" htmlFor="incoming" error={errors.incomingEmail} hint="You can add this later, but you need it before publishing.">
-          <Input id="incoming" type="email" value={details.incomingEmail} onChange={(e) => set("incomingEmail", e.target.value)} aria-invalid={!!errors.incomingEmail} />
-        </Field>
-        <Field label="Their role" htmlFor="incoming-role" hint={details.incomingRole === "lead" ? "Leads see lead-level information." : "Sees everything marked Everyone."}>
-          <select
-            id="incoming-role"
-            value={details.incomingRole}
-            onChange={(e) => set("incomingRole", e.target.value as Details["incomingRole"])}
-            className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <option value="incoming">Incoming member</option>
-            <option value="lead">Incoming lead</option>
-          </select>
-        </Field>
-      </fieldset>
-    </div>
-  );
-}
-
-function DropZone({ id, title, description, accept, icon, onFiles, disabled }: { id: string; title: string; description: string; accept: string; icon: React.ReactNode; onFiles: (f: FileList | null) => void; disabled: boolean }) {
-  const [over, setOver] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-  return (
-    <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        if (!disabled) onFiles(e.dataTransfer.files);
-      }}
-      className={cn(
-        "flex flex-col items-center rounded-xl border border-dashed bg-card/60 px-4 py-8 text-center transition-colors",
-        over ? "border-primary bg-primary/[0.04]" : "border-border-strong",
-        disabled && "opacity-50",
+        </FieldGroup>
       )}
-    >
-      <div aria-hidden="true" className="mb-3 flex size-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-soft [&_svg]:size-5">
-        {icon}
-      </div>
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      <input ref={input} id={id} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} disabled={disabled} />
-      <Button size="sm" variant="outline" className="mt-4" onClick={() => input.current?.click()} disabled={disabled}>
-        <Upload aria-hidden="true" data-icon="inline-start" />
-        Choose files
-      </Button>
-    </div>
-  );
-}
-
-function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, full }: { sources: DraftSource[]; onFiles: (f: FileList | null, g: "chat" | "doc") => void; onRemove: (s: DraftSource) => void; onRetry: (s: DraftSource) => void; onDateOrder: (s: DraftSource, o: DateOrder) => void; full: boolean }) {
-  const uid = useId();
-  return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-serif text-2xl">Add the team&rsquo;s record</h2>
-        <p className="text-sm text-muted-foreground">
-          Export WhatsApp chats without media (Chat → More → Export chat → Without media) and add any handbooks or notes. Up to 10 files, 25 MB each.
-        </p>
-      </section>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <DropZone id={`${uid}-chat`} title="WhatsApp chat exports" description=".txt or .zip (text only)" accept={CHAT_ACCEPT} icon={<MessageCircle />} onFiles={(f) => onFiles(f, "chat")} disabled={full} />
-        <DropZone id={`${uid}-doc`} title="Documents" description="PDF, DOCX or Markdown" accept={DOC_ACCEPT} icon={<FileText />} onFiles={(f) => onFiles(f, "doc")} disabled={full} />
-      </div>
-
-      {sources.length > 0 && (
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" aria-label="Added sources">
-          {sources.map((s) => (
-            <li key={s.localId} className="flex items-center gap-3 px-4 py-3">
-              {s.kind === "whatsapp_export" ? <MessageCircle aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /> : <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{s.name}</p>
-                <p className={cn("text-xs", s.status === "error" ? "text-destructive" : "text-muted-foreground")}>
-                  {s.status === "error"
-                    ? s.error
-                    : s.status === "ready"
-                      ? `${sourceKindLabel[s.kind]} · ${formatBytes(s.size)} · ${s.kind === "whatsapp_export" ? `${formatCount(s.preview?.stats.messagesKept)} messages, ${s.preview?.participants.length ?? 0} people` : `${formatCount(s.preview?.stats.messagesKept)} text blocks`}`
-                      : s.status === "hashing"
-                        ? "Checking file…"
-                        : s.status === "uploading"
-                          ? "Uploading to private storage…"
-                          : s.status === "verifying"
-                            ? "Verifying the upload…"
-                            : s.status === "consent"
-                              ? "Recording consent…"
-                              : "Reading a preview…"}
-                </p>
-              </div>
-              {s.status === "ready" ? (
-                <Check aria-label="Ready" className="size-4 text-status-sourced" />
-              ) : s.status !== "error" ? (
-                <Loader2 aria-label="Working" className="size-4 animate-spin text-primary" />
-              ) : null}
-              {s.status === "error" && s.needsDateOrder && (
-                <span className="flex flex-wrap gap-1" role="group" aria-label={`Date format for ${s.name}`}>
-                  <Button size="sm" variant="outline" onClick={() => onDateOrder(s, "dmy")}>Day/Month (31/12)</Button>
-                  <Button size="sm" variant="outline" onClick={() => onDateOrder(s, "mdy")}>Month/Day (12/31)</Button>
-                </span>
-              )}
-              {s.status === "error" && !s.needsDateOrder && s.file && s.kind !== "text" && (
-                <Button size="sm" variant="ghost" onClick={() => onRetry(s)}>
-                  <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                  Retry
-                </Button>
-              )}
-              <Button size="icon-sm" variant="ghost" aria-label={`Remove ${s.name}`} onClick={() => onRemove(s)} disabled={s.status !== "ready" && s.status !== "error"}>
-                <Trash2 />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function ScopeStep({ sources, update }: { sources: DraftSource[]; update: (id: string, patch: Partial<DraftSource>) => void }) {
-  const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
-  return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-serif text-2xl">Choose what Baton reads</h2>
-        <p className="text-sm text-muted-foreground">
-          Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and decide who may see evidence from each source.
-        </p>
-      </section>
-      {sources.some((s) => s.excludedParticipants.length > 0) && (
-        <p className="rounded-lg border border-status-inferred/25 bg-status-inferred-soft px-3 py-2 text-xs text-status-inferred-fg" role="status">
-          People you leave out are saved when you continue, for every chat in this handover. That can&rsquo;t be undone here.
-        </p>
-      )}
-      {sources.map((s) => {
-        const p = s.preview;
-        const keptConversations = p?.conversations.filter((c) => !s.excludedConversations.includes(c.localId)) ?? [];
-        return (
-          <section key={s.localId} className="space-y-5 rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5" aria-label={s.name}>
-            <div className="flex items-center gap-2">
-              {s.kind === "whatsapp_export" ? <MessageCircle aria-hidden="true" className="size-4 text-muted-foreground" /> : <FileText aria-hidden="true" className="size-4 text-muted-foreground" />}
-              <h3 className="min-w-0 truncate text-sm font-semibold">{s.name}</h3>
-            </div>
-
-            {s.kind === "whatsapp_export" && p ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`${s.localId}-from`}>From</Label>
-                    <Input id={`${s.localId}-from`} type="date" value={s.rangeFrom} min={dateOnly(p.firstMessageAt)} max={s.rangeTo || dateOnly(p.lastMessageAt)} onChange={(e) => update(s.localId, { rangeFrom: e.target.value })} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`${s.localId}-to`}>To</Label>
-                    <Input id={`${s.localId}-to`} type="date" value={s.rangeTo} min={s.rangeFrom || dateOnly(p.firstMessageAt)} max={dateOnly(p.lastMessageAt)} onChange={(e) => update(s.localId, { rangeTo: e.target.value })} />
-                  </div>
-                  <p className="text-xs text-muted-foreground sm:col-span-2">
-                    The export covers {formatDate(p.firstMessageAt)} to {formatDate(p.lastMessageAt)}.
-                  </p>
-                </div>
-
-                <fieldset className="space-y-2">
-                  <legend className="mb-1 text-sm font-medium">
-                    Conversations <span className="font-normal text-muted-foreground">· {keptConversations.length} of {p.conversations.length} included</span>
-                  </legend>
-                  {p.conversations.map((c) => {
-                    const included = !s.excludedConversations.includes(c.localId);
-                    return (
-                      <label key={c.localId} className={cn("flex items-start gap-3 rounded-lg border border-border p-3 text-sm", !included && "bg-muted/50 text-muted-foreground")}>
-                        <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={included} onChange={() => update(s.localId, { excludedConversations: toggle(s.excludedConversations, c.localId) })} />
-                        <span className="min-w-0">
-                          <MaskedText text={c.preview} className={cn("block font-mono text-xs", !included && "line-through")} />
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(c.startedAt)} – {formatDate(c.endedAt)} · {formatCount(c.messageCount)} messages
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </fieldset>
-
-                <fieldset className="space-y-2">
-                  <legend className="mb-1 text-sm font-medium">People</legend>
-                  <p className="text-xs text-muted-foreground">
-                    Untick anyone who asked to be left out. Their messages are dropped before anything is saved, in every chat of this handover, including later uploads.
-                    People saved under a name, not a number, are matched in other chats only after you confirm it&rsquo;s the same person.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {p.participants.map((person) => {
-                      const included = !s.excludedParticipants.includes(person.localId);
-                      return (
-                        <label
-                          key={person.localId}
-                          title={identityKindLabel[person.identityKind].label}
-                          className={cn("inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs", !included && "bg-muted text-muted-foreground line-through")}
-                        >
-                          <input type="checkbox" className="size-3.5 accent-primary" checked={included} onChange={() => update(s.localId, { excludedParticipants: toggle(s.excludedParticipants, person.localId) })} />
-                          {person.displayLabel}
-                          <span className="text-muted-foreground no-underline">{formatCount(person.messageCount)}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {(s.savedParticipantExclusions > 0 || p.stats.messagesExcluded > 0) && (
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <UserX aria-hidden="true" className="size-3.5" />
-                      {s.savedParticipantExclusions > 0 ? `${s.savedParticipantExclusions === 1 ? "1 person" : `${s.savedParticipantExclusions} people`} left out and saved. ` : ""}
-                      {formatCount(p.stats.messagesExcluded)} messages won&rsquo;t be read.
-                      {p.warnings.some((w) => w.code === "excluded_mentions_redacted") && " Mentions of them in other messages are removed."}
-                    </p>
-                  )}
-                </fieldset>
-              </>
-            ) : (
-              <div className="max-w-xs space-y-1.5">
-                <Label htmlFor={`${s.localId}-date`}>Document date (optional)</Label>
-                <Input id={`${s.localId}-date`} type="date" value={s.documentDate} onChange={(e) => update(s.localId, { documentDate: e.target.value })} />
-                <p className="text-xs text-muted-foreground">Used to flag points that may be outdated.</p>
-              </div>
-            )}
-
-            <fieldset className="space-y-2">
-              <legend className="mb-1 text-sm font-medium">Who can see evidence from this source?</legend>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {ACCESS_LEVELS.map((level) => (
-                  <label key={level} className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-3 text-sm has-checked:border-primary/50 has-checked:ring-3 has-checked:ring-primary/10">
-                    <input type="radio" name={`${s.localId}-access`} className="mt-0.5 accent-primary" checked={s.accessLevel === level} onChange={() => update(s.localId, { accessLevel: level })} />
-                    <span>
-                      <span className="block font-medium">{accessLevelMeta[level].label}</span>
-                      <span className="text-xs text-muted-foreground">{accessLevelMeta[level].description}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </section>
-        );
-      })}
     </div>
   );
 }
@@ -939,12 +920,12 @@ function MatchesSection({
   disabled: boolean;
 }) {
   return (
-    <section aria-labelledby="matches-heading" className="space-y-3 rounded-xl border border-status-inferred/30 bg-status-inferred-soft/60 p-4 sm:p-5">
+    <section aria-labelledby="matches-heading" className="space-y-4 rounded-xl border border-warning/30 bg-warning-soft/60 p-4 sm:p-5">
       <div className="space-y-1">
-        <h3 id="matches-heading" className="text-sm font-semibold">
+        <h3 id="matches-heading" className="type-heading text-warning-fg">
           Is this the same person?
         </h3>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm leading-relaxed text-foreground/80">
           Someone who asked to be left out was saved under the same name in another chat. Names can be shared, so Baton never assumes: nobody is left out of a
           chat by name until you say so for that chat. Answer each one before processing.
         </p>
@@ -952,10 +933,10 @@ function MatchesSection({
       {matches.length > 0 && (
         <ul className="space-y-2" aria-label="Waiting for your answer">
           {matches.map((m) => (
-            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center">
+            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-xs sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{m.label}</span> <span className="text-muted-foreground">in {m.sourceName}</span>
-                <span className="block text-xs text-muted-foreground">{identityKindLabel[m.kind].label} match · no decision yet</span>
+                <span className="block text-caption text-muted-foreground">{identityKindLabel[m.kind].label} match · no decision yet</span>
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" disabled={disabled} onClick={() => onAnswer(m, "different_person")}>
@@ -972,12 +953,12 @@ function MatchesSection({
         </ul>
       )}
       {decisions.length > 0 && (
-        <ul className="space-y-2" aria-label="Your decisions">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card/80" aria-label="Your decisions">
           {decisions.map((d) => (
-            <li key={`${d.sourceId}-${d.exclusionId}`} className="flex flex-col gap-2 rounded-lg border border-border bg-card/70 p-3 sm:flex-row sm:items-center">
+            <li key={`${d.sourceId}-${d.exclusionId}`} className="flex flex-col gap-2 p-3.5 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{d.label}</span> <span className="text-muted-foreground">in {d.sourceName}</span>
-                <span className="block text-xs text-muted-foreground">
+                <span className="block text-caption text-muted-foreground">
                   {d.decision === "same_person" ? "You said: same person. Left out of this chat." : "You said: different person. Kept in this chat."}
                 </span>
               </p>

@@ -33,17 +33,22 @@ export function ConsentChecklist({ value, onChange, className }: { value: Record
     <fieldset className={cn("space-y-3", className)}>
       <legend className="sr-only">Consent</legend>
       {CONSENT_ITEMS.map((item) => (
-        <label key={item.id} className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 text-sm leading-relaxed has-checked:border-primary/40 has-checked:bg-primary/[0.03]">
+        <label
+          key={item.id}
+          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm leading-relaxed shadow-xs transition-colors hover:border-border-strong has-checked:border-success/40 has-checked:bg-success-soft/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35"
+        >
           <input
             type="checkbox"
-            className="mt-1 size-4 shrink-0 accent-primary"
+            className="mt-1 size-4 shrink-0 accent-primary outline-none"
             checked={value[item.id]}
             onChange={(e) => onChange({ ...value, [item.id]: e.target.checked })}
           />
           {item.label}
         </label>
       ))}
-      <p className="text-xs text-muted-foreground">Consent statement version {CONSENT_STATEMENT_VERSION}. It is recorded with each source.</p>
+      <p className="text-caption text-muted-foreground">
+        {CONSENT_ITEMS.filter((i) => value[i.id]).length} of {CONSENT_ITEMS.length} confirmed · statement version {CONSENT_STATEMENT_VERSION}, recorded with each source.
+      </p>
     </fieldset>
   );
 }
@@ -53,16 +58,16 @@ export const consentComplete = (v: Record<ConsentItemId, boolean>) => CONSENT_IT
 
 export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, number>> }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <ShieldCheck aria-hidden="true" className="size-4 text-status-sourced" />
-        <p className="text-sm font-medium">Masked before anything is stored or sent to AI</p>
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
+        <ShieldCheck aria-hidden="true" className="size-4 text-success" />
+        <p className="type-subheading">Masked before anything is stored or sent to AI</p>
       </div>
       <ul className="divide-y divide-border text-sm">
         {MASK_KINDS.map((k) => (
           <li key={k} className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-2 sm:grid-cols-[1fr_9rem_5rem]">
             <span>{maskKindLabel[k].label}</span>
-            <code className="hidden font-mono text-xs text-muted-foreground sm:block">{maskKindLabel[k].token}</code>
+            <code className="hidden font-mono text-2xs text-muted-foreground sm:block">{maskKindLabel[k].token}</code>
             <span className="text-right font-mono text-xs tabular-nums">
               {counts ? (counts[k] ?? 0) : "—"}
               {counts && <span className="sr-only"> found</span>}
@@ -70,7 +75,7 @@ export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, num
           </li>
         ))}
       </ul>
-      <p className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+      <p className="border-t border-border px-4 py-2.5 text-caption text-muted-foreground">
         The same value always gets the same token, so threads stay readable. Masked values are never revealed.
       </p>
     </div>
@@ -81,9 +86,12 @@ export function GroupNotice({ teamName }: { teamName: string }) {
   const text = `Hi all — I'm preparing a handover for ${teamName || "our team"} using Baton. It will read this chat to pull out decisions, owners and open tasks, with quotes as evidence. Phone numbers, emails and payment details are masked first, and the original export is deleted after processing. If you'd rather your messages were left out, reply here or message me in the next few days, before I start processing.`;
   const [copied, setCopied] = useState(false);
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">Group notice</p>
+        <div>
+          <p className="type-subheading">Tell the group first</p>
+          <p className="text-caption text-muted-foreground">Post this in the chat so everyone can opt out before you process it.</p>
+        </div>
         <Button
           size="sm"
           variant="outline"
@@ -98,11 +106,10 @@ export function GroupNotice({ teamName }: { teamName: string }) {
           }}
         >
           {copied ? <Check aria-hidden="true" data-icon="inline-start" /> : <Copy aria-hidden="true" data-icon="inline-start" />}
-          {copied ? "Copied" : "Copy"}
+          <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
         </Button>
       </div>
-      <p className="mt-2 rounded-lg bg-background/70 p-3 font-mono text-xs leading-relaxed text-foreground/85">{text}</p>
-      <p className="mt-2 text-xs text-muted-foreground">Post this in the group before you continue, so everyone has a chance to opt out.</p>
+      <p className="mt-3 rounded-lg border border-border bg-muted/50 p-3 type-quote text-foreground/85">{text}</p>
     </div>
   );
 }

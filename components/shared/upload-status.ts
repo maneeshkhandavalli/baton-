@@ -59,13 +59,14 @@ export function uploadProgress(phase: UploadPhase): { step: number; total: numbe
 
 /**
  * Classify a failed upload. Order matters: local size checks first (they never reach the
- * server), then typed server codes (`conflict` = same file already uploaded to this handover).
+ * server), then typed server codes (`conflict` + reason `duplicate_source` = same file already in this handover).
  */
-export function phaseForError(input: { code?: string; parserCode?: string; sizeBytes?: number; maxBytes?: number }): UploadPhase {
+export function phaseForError(input: { code?: string; reason?: string; parserCode?: string; sizeBytes?: number; maxBytes?: number }): UploadPhase {
   if (input.sizeBytes !== undefined && input.maxBytes !== undefined && input.sizeBytes > input.maxBytes) return "too_large";
   if (input.sizeBytes === 0) return "empty";
   if (input.code === "payload_too_large") return "too_large";
-  if (input.code === "conflict") return "duplicate";
+  // Only the typed duplicate is "already added"; other (retryable) conflicts are plain failures.
+  if (input.code === "conflict" && input.reason === "duplicate_source") return "duplicate";
   if (input.parserCode === "date_format_ambiguous") return "needs_input";
   if (input.code === "unsupported_file_type" || input.parserCode === "unsupported_format") return "unsupported";
   return "failed";

@@ -7,6 +7,7 @@
 import type { SourceSummary } from "@/lib/contracts/dto";
 import type { AccessLevel, DateOrder, SourceKind } from "@/lib/contracts/enums";
 import type { SourcePreview } from "@/lib/contracts/parser";
+import type { UploadPhase } from "@/components/shared/upload-status";
 
 export type SourceStatus = "hashing" | "uploading" | "verifying" | "consent" | "previewing" | "ready" | "error";
 
@@ -17,6 +18,8 @@ export interface DraftSource {
   kind: SourceKind;
   status: SourceStatus;
   error?: string;
+  /** Why an `error` source failed, so the row can show the right state and action (duplicate, too large…). */
+  errorPhase?: UploadPhase;
   /** Kept in memory only, so a failed upload can be retried without choosing the file again. */
   file?: File;
   sourceId?: string;
@@ -80,4 +83,11 @@ export function resumeStep(stepParam: string | undefined, liveSourceCount: numbe
 /** Furthest step the wizard may show for the draft's real state. */
 export function maxStepFor(state: { hasDraft: boolean; consentGiven: boolean; readySources: number }, lastStep: number): number {
   return !state.hasDraft ? 0 : !state.consentGiven ? 1 : state.readySources === 0 ? 2 : lastStep;
+}
+
+/** The upload phase a source row shows. Working statuses map 1:1; an error uses its recorded reason. */
+export function phaseOf(s: Pick<DraftSource, "status" | "errorPhase" | "needsDateOrder">): UploadPhase {
+  if (s.status !== "error") return s.status;
+  if (s.needsDateOrder) return "needs_input";
+  return s.errorPhase ?? "failed";
 }

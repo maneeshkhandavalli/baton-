@@ -46,13 +46,14 @@ describe("save state (autosave indicator)", () => {
 
 describe("upload status (per-file states)", () => {
   it("classifies size problems before any server code", () => {
-    assert.equal(phaseForError({ sizeBytes: 30, maxBytes: 25, code: "conflict" }), "too_large");
+    assert.equal(phaseForError({ sizeBytes: 30, maxBytes: 25, code: "conflict", reason: "duplicate_source" }), "too_large");
     assert.equal(phaseForError({ sizeBytes: 0, code: "internal" }), "empty");
     assert.equal(phaseForError({ code: "payload_too_large" }), "too_large");
   });
 
   it("maps a duplicate upload (conflict) and parser outcomes", () => {
-    assert.equal(phaseForError({ code: "conflict" }), "duplicate");
+    assert.equal(phaseForError({ code: "conflict", reason: "duplicate_source" }), "duplicate");
+    assert.equal(phaseForError({ code: "conflict" }), "failed");
     assert.equal(phaseForError({ code: "parse_failed", parserCode: "date_format_ambiguous" }), "needs_input");
     assert.equal(phaseForError({ code: "unsupported_file_type" }), "unsupported");
     assert.equal(phaseForError({ code: "parse_failed", parserCode: "unsupported_format" }), "unsupported");
