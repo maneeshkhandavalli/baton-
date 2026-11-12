@@ -167,3 +167,118 @@ describe("createMasker: consistent tokens within a source", () => {
     assert.ok(r.text.includes("[PHONE_1]"));
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// QA-L5: credentials written with whitespace or other separators (§12.1 widened; over-mask)
+
+describe("QA-L5: credentials with whitespace and other separators", () => {
+  const masked: Array<{ text: string; leak: string[]; expected?: string; kind?: string }> = [
+    { text: "password Hunter2", leak: ["Hunter2"], expected: "password [PASSWORD]" },
+    { text: "Password Hunter2 for the office PC", leak: ["Hunter2"] },
+    { text: "pwd: x", leak: [], expected: "pwd: [PASSWORD]" },
+    { text: "pwd x9y8", leak: ["x9y8"] },
+    { text: "pw letmein", leak: ["letmein"] },
+    { text: "pin 4821", leak: ["4821"], expected: "pin [PASSWORD]" },
+    { text: "PIN is 4821", leak: ["4821"], expected: "PIN is [PASSWORD]" },
+    { text: "PIN: 4821", leak: ["4821"] },
+    { text: "my pin's 4821", leak: ["4821"] },
+    { text: "pin no. 4821", leak: ["4821"] },
+    { text: "pin number 4821", leak: ["4821"] },
+    { text: "pin #4821", leak: ["4821"] },
+    { text: "pin-4821", leak: ["4821"] },
+    { text: "ATM pin 4821", leak: ["4821"] },
+    { text: "mpin 902211", leak: ["902211"] },
+    { text: "otp 556677", leak: ["556677"], expected: "otp [PASSWORD]" },
+    { text: "OTP: 556677", leak: ["556677"] },
+    { text: "one time password 556677", leak: ["556677"] },
+    { text: "passcode 7788", leak: ["7788"], expected: "passcode [PASSWORD]" },
+    { text: "the passcode is lemontree", leak: ["lemontree"] },
+    { text: "passphrase correcthorse", leak: ["correcthorse"] },
+    { text: "door code 4821", leak: ["4821"] },
+    { text: "alarm code is 1234", leak: ["1234"] },
+    { text: "password changed to Hunter3", leak: ["Hunter3"] },
+    { text: "password is: Hunter4", leak: ["Hunter4"] },
+    { text: "password -> Hunter5", leak: ["Hunter5"] },
+    { text: "password—Hunter6 ", leak: [] },
+    { text: "the password for the router is admin123", leak: ["admin123"] },
+    { text: "password\nHunter2", leak: ["Hunter2"] },
+    { text: "login: bob / secret", leak: ["bob", "secret"], expected: "login: [PASSWORD] / [PASSWORD]" },
+    { text: "login bob/secret", leak: ["bob", "secret"] },
+    { text: "creds bob:hunter2", leak: ["bob", "hunter2"] },
+    { text: "credentials - admin | admin123", leak: ["admin123"] },
+    { text: "user bob pass hunter2", leak: ["bob", "hunter2"], expected: "user [PASSWORD] pass [PASSWORD]" },
+    { text: "username: bob, password: hunter", leak: ["bob", "hunter"] },
+    { text: "user: admin / pass: 1234", leak: ["admin", "1234"] },
+    { text: "id ravi92 and pwd ravi@123", leak: ["ravi92", "ravi@123"] },
+    { text: "wifi password CafeNet2024", leak: ["CafeNet2024"] },
+    { text: "WiFi password is sunflower", leak: ["sunflower"] },
+    { text: "wi-fi key Sunflower99", leak: ["Sunflower99"] },
+    { text: "wifi pw abc123", leak: ["abc123"] },
+    { text: "WiFi: HomeNet_5G", leak: ["HomeNet_5G"] },
+    { text: "wifi HomeNet5G", leak: ["HomeNet5G"] },
+    { text: "hotspot pass Jio4G99", leak: ["Jio4G99"] },
+    { text: "the wifi password for guests is Hunter2", leak: ["Hunter2"] },
+    { text: "api key abcd1234efgh", leak: ["abcd1234efgh"], kind: "api_key" },
+    { text: "API_KEY=xyz", leak: ["xyz"], kind: "api_key" },
+    { text: "apikey: qwerty", leak: ["qwerty"], kind: "api_key" },
+    { text: "token: abcdefgh", leak: ["abcdefgh"], kind: "api_key" },
+    { text: "access token abc123def456", leak: ["abc123def456"], kind: "api_key" },
+    { text: "Authorization: Bearer abc123def456ghi", leak: ["abc123def456ghi"] },
+    { text: "the api key is abcd1234efgh", leak: ["abcd1234efgh"], kind: "api_key" },
+    { text: "client secret: s3cr3t", leak: ["s3cr3t"], kind: "secret" },
+    { text: "secret key Zz12Yy34Xx56", leak: ["Zz12Yy34Xx56"] },
+    { text: "key: hunter2", leak: ["hunter2"] },
+    { text: "svc token Ab3dEf6hIj9kLm2nOp5qRs", leak: ["Ab3dEf6hIj9kLm2nOp5qRs"] },
+    { text: "Ab3dEf6hIj9kLm2nOp5qRs", leak: ["Ab3dEf6hIj9kLm2nOp5qRs"], kind: "secret" },
+    { text: "password Hunter2 and guest pass Guest99", leak: ["Hunter2", "Guest99"] },
+    { text: "ｐａｓｓｗｏｒｄ Hunter2", leak: ["Hunter2"] },
+  ];
+  for (const c of masked) {
+    it(`masks ${JSON.stringify(c.text)}`, () => {
+      const r = m(c.text);
+      if (c.expected) assert.equal(r.text, c.expected);
+      for (const leak of c.leak) assert.ok(!r.text.includes(leak), `leaked ${leak} in ${JSON.stringify(r.text)}`);
+      const total = Object.values(r.counts).reduce((a, b) => a + b, 0);
+      assert.ok(total >= 1, `nothing masked in ${JSON.stringify(r.text)}`);
+      if (c.kind) assert.ok((r.counts as Record<string, number>)[c.kind] >= 1, `count for ${c.kind}: ${JSON.stringify(r.counts)}`);
+    });
+  }
+
+  // Ordinary prose that shares a keyword. These stay readable; anything ambiguous is masked.
+  const prose = [
+    "pin the message",
+    "please pin it.",
+    "pass the keys to Ravi",
+    "pass 2 copies to the treasurer",
+    "the token is valid until March",
+    "secret santa on Friday",
+    "Key: Ravi holds the safe",
+    "use a password manager",
+    "reset your password please",
+    "forgot my password\nRavi will reset it",
+    "the user / admin roles",
+    "login and/or password",
+    "sign in / sign up",
+    "boarding pass",
+    "otp sent",
+    "wifi is down again",
+    "a pass-through cable",
+    "We are passing: the baton to next year",
+    "pin code 560001",
+  ];
+  for (const text of prose) {
+    it(`leaves prose ${JSON.stringify(text)}`, () => assert.equal(m(text).text, text));
+  }
+
+  it("is still deterministic and keeps the fixed [PASSWORD] token", () => {
+    const text = "pin 4821 / otp 556677 / login bob/secret";
+    assert.deepEqual(m(text), m(text));
+    assert.equal(m(text).text, "pin [PASSWORD] / otp [PASSWORD] / login [PASSWORD]/[PASSWORD]");
+  });
+  it("createMasker keeps the same signature and counts credentials", () => {
+    const masker = createMasker();
+    masker.mask("password Hunter2");
+    masker.mask("pin 4821", "chat");
+    assert.equal(masker.totals().password, 2);
+  });
+});
