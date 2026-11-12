@@ -31,7 +31,15 @@ export type InjectionPattern =
   | "template_token"
   | "addressed_to_ai"
   | "verdict_directive"
-  | "verdict_json";
+  | "verdict_json"
+  /** PI-11-R2: the override shape with its letters split ("ig nore all previous instruc tions"). */
+  | "split_override"
+  /** PI-11-R3: Hindi / Hinglish instruction override (a floor; other languages are the live suite's job). */
+  | "non_english_override"
+  /** PI-11-R4: indirect address of whoever checks the text, in the verifier's vocabulary. */
+  | "indirect_address"
+  /** PI-11-R5: "treat this message as supporting the claim" (the narrow self-referential form only). */
+  | "self_referential_support";
 
 export type InjectionField = "claim" | "quote" | "context";
 
@@ -112,11 +120,95 @@ const PATTERNS: Array<{ id: InjectionPattern; test: (t: string) => boolean }> = 
   },
 ];
 
+// ── PI-11 residuals (QA docs/qa/pi11-residuals.md) ─────────────────────────────
+
+const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", $: "s" };
+
+/** Privacy mask tokens ("[phone_1]", "[upi_2]" after lower-casing) are never folded. */
+const MASK_TOKEN = /(\[[a-z][a-z_]*_\d+\])/;
+
+/**
+ * R1: a view in which only tokens that MIX letters with digits or @/$ are folded ("1gn0re" → "ignore").
+ * Pure numbers, dates, phone numbers, amounts and mask tokens are left alone; patterns need whole
+ * keywords anyway, so "b4" → "ba" is harmless.
+ */
+export function leetView(t: string): string {
+  return t.replace(/\S+/g, (tok) =>
+    tok
+      .split(MASK_TOKEN)
+      .map((part, i) => (i % 2 === 0 && /[a-z]/.test(part) && /[0-9@$]/.test(part) ? part.replace(/[013457@$]/g, (c) => LEET[c]) : part))
+      .join(""),
+  );
+}
+
+/** R2: letters only. Used for the override shape ONLY: removing spaces fuses unrelated words. */
+const SPLIT_OVERRIDE = /(?:ignore|disregard|forget|override)(?:all|any|the|your)?(?:previous|prior|above|earlier|system)(?:instructions?|prompts?|rules?)/;
+
+/** R3: Hindi (Devanagari, NFKC like the screened text) and Hinglish override pairs. */
+const HI_INSTRUCTION = "(?:निर्देशों|निर्देशो|निर्देश|नियमों|नियम)".normalize("NFKC");
+const HI_IGNORE = "(?:अनदेखा|अनदेखी|नज़रअंदाज़|नजरअंदाज|नज़रअंदाज|नजरंदाज़|नजरंदाज)".normalize("NFKC");
+const NON_ENGLISH_OVERRIDE = [
+  new RegExp(`${HI_INSTRUCTION}[^।.!?\\n]{0,40}${HI_IGNORE}`, "u"),
+  new RegExp(`${HI_IGNORE}[^।.!?\\n]{0,40}${HI_INSTRUCTION}`, "u"),
+  /\b(?:instructions?|nirdesh|niyam|rules?)\b[^.!?\n]{0,40}\bignore\s*(?:kar(?:o|do|na|en|ein|iye)?|kijiye)\b/,
+  /\bignore\s*(?:kar(?:o|do|na|en|ein|iye)?|kijiye)\b[^.!?\n]{0,40}\b(?:instructions?|nirdesh|niyam|rules?)\b/,
+];
+
+/**
+ * "the claim" in the verifier's sense, not an expense claim ("the claim form", "the claim for the taxi").
+ * Shared by R4 and R5 so ordinary reimbursement chat is not flagged.
+ */
+const CLAIM_REF = String.raw`(?:(?:the|this)\s+claim(?!\s+(?:forms?|amounts?|money|settlements?|numbers?|for|of|no|ref)\b)|(?:the|this)\s+statement|(?:the|this)\s+point|the\s+evidence)`;
+
+/**
+ * R4 (narrow): "whoever checks this …" followed, within ~120 characters, by the verifier's vocabulary or a
+ * reference to the claim. The reader must be pointed at the text itself (this / it / the message …);
+ * the broad form ("whoever checks this sheet, it confirms the stock count is true") is not flagged.
+ */
+const INDIRECT_ADDRESS = new RegExp(
+  String.raw`\b(?:whoever|anyone|anybody)\b[^.!?\n]{0,30}\b(?:checks?|checking|reads?|reading|reviews?|reviewing|verif(?:y|ies|ying)|validates?|validating)\s+` +
+    String.raw`(?:this|these|it|the\s+(?:message|quote|text|line|note|evidence|claim|statement))\b[^]{0,120}?` +
+    String.raw`(?:\b(?:supports?|supported|sourced|verified)\b|\b${CLAIM_REF}\b)`,
+);
+
+/**
+ * R5 (narrow, self-referential): the text tells the reader to count ITSELF as support for THE CLAIM.
+ * The free-object form ("as confirming the treasurer handles …") is left to the live suite, and
+ * "treat this message as confirmation of the booking" is ordinary chat.
+ */
+const SELF_REFERENTIAL_SUPPORT = new RegExp(
+  String.raw`\b(?:treat|consider|count|regard)\s+(?:this|the)\s+(?:message|quote|text|line|note)\s+as\s+` +
+    String.raw`(?:supporting|support\s+for|proof\s+(?:of|that)|evidence\s+(?:for|of|that)|confirming|confirmation\s+of)\s+` +
+    String.raw`${CLAIM_REF}\b`,
+);
+
 function screenText(text: string | null | undefined): InjectionPattern[] {
   if (!text) return [];
   const t = normalizeForScreen(text);
-  return PATTERNS.filter((p) => p.test(t)).map((p) => p.id);
+  const leet = leetView(t);
+  const found = new Set<InjectionPattern>();
+  for (const view of leet === t ? [t] : [t, leet]) {
+    for (const p of PATTERNS) if (p.test(view)) found.add(p.id);
+    if (SPLIT_OVERRIDE.test(view.replace(/[^a-z]/g, ""))) found.add("split_override");
+    if (NON_ENGLISH_OVERRIDE.some((re) => re.test(view))) found.add("non_english_override");
+    if (INDIRECT_ADDRESS.test(view)) found.add("indirect_address");
+    if (SELF_REFERENTIAL_SUPPORT.test(view)) found.add("self_referential_support");
+  }
+  return ALL_PATTERN_IDS.filter((id) => found.has(id));
 }
+
+const ALL_PATTERN_IDS: InjectionPattern[] = [
+  "ignore_instructions",
+  "role_tag",
+  "template_token",
+  "addressed_to_ai",
+  "verdict_directive",
+  "verdict_json",
+  "split_override",
+  "non_english_override",
+  "indirect_address",
+  "self_referential_support",
+];
 
 /** Screens everything the verifier is shown that came from the source or the extractor. */
 export function screenVerifyRequest(req: VerifySupportRequest): InjectionScreen {
@@ -130,7 +222,7 @@ export function screenVerifyRequest(req: VerifySupportRequest): InjectionScreen 
   add("claim", [...screenText(req.claim.title), ...screenText(req.claim.statement)]);
   add("quote", [...screenText(req.quote.text), ...screenText(req.quote.authorLabel)]);
   for (const c of req.context) add("context", [...screenText(c.body), ...screenText(c.authorLabel)]);
-  const patterns = PATTERNS.map((p) => p.id).filter((id) => found.has(id));
+  const patterns = ALL_PATTERN_IDS.filter((id) => found.has(id));
   const order: InjectionField[] = ["claim", "quote", "context"];
   return { suspicious: patterns.length > 0, patterns, fields: order.filter((f) => fields.has(f)) };
 }
