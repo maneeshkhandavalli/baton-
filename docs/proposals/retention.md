@@ -3,6 +3,33 @@
 Status: **proposal for the lead and product** (D12/D14/D27 decisions). Author: Agent 3 (ingestion,
 storage, privacy). Nothing here has been run against the hosted project; nothing was deleted.
 
+## Decision needed (product owner)
+
+**Why it matters.** Raw uploads are the original, unmasked chats and documents. Today nothing expires
+them: a draft that is never processed keeps them indefinitely, and before Round 3 so did a discarded
+draft. Unfinished uploads (`pending_upload` rows) are never cleaned up either. No user can see these
+files, but keeping them contradicts the retention we promise (§12.6: "7-day ceiling").
+
+**Please approve or change these defaults:**
+
+| # | Choice | Recommended default | Alternative |
+|---|---|---|---|
+| 1 | How long an unfinished upload (`pending_upload`) may stay before it is cleared | **24 hours** (minimum 2 h, the upload link's lifetime) | 2–6 h (stricter) |
+| 2 | Raw file of an uploaded-but-never-processed source | **Deleted 7 days after upload** (§12.6); the user re-uploads to process | 3 or 14 days |
+| 3 | Raw file whose automatic delete after a successful parse failed | **Retried after 24 hours**, then hourly | Retry immediately |
+| 4 | Raw files of a discarded draft | **Deleted immediately on discard** (already built, R3-D5); the sweep retries any failure | Keep for the 30-day purge window (not recommended: unmasked data) |
+| 5 | Database rows of a discarded draft (messages, points, sources) | **Unchanged**: they stay until the 30-day purge, which remains blocked until D27 (backup and recovery) is decided | none until D27 |
+| 6 | How the sweep is first switched on | **Dry run for one week** (counts only), then live | Live immediately |
+
+**Already done without a decision:** detection (`list_orphan_upload_candidates`, read-only); raw cleanup
+on discard (R3-D5); refusing to record a raw delete for a source that still needs it (QA-L1); early
+refusal of wrong-type uploads; reuse of an interrupted upload's row on retry (Agent 2).
+
+**Blocked until approved:** the scheduled sweep (`app/api/cron/retention`, `CRON_SECRET`, hourly) and its
+SQL claim step `claim_raw_for_retention` (§7): nothing deletes expired `pending_upload` rows, raw files
+past the 7-day ceiling, or raw files whose post-parse/remove delete failed. The 30-day purge stays blocked
+on D27 regardless of this decision.
+
 ## 1. The observation
 
 Hosted dev holds 4 `sources` rows in state `pending_upload`, belonging to 2 soft-deleted drafts, with
