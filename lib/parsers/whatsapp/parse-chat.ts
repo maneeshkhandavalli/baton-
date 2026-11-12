@@ -105,16 +105,21 @@ function resolveDateOrder(headers: Header[], requested: DateOrder | undefined): 
   let firstMdy: Header | null = null;
   let firstEither: Header | null = null;
   let firstYmd: Header | null = null;
+  let firstSame: Header | null = null;
   for (const h of headers) {
     const e = evidenceFor(h);
     if (e === "dmy") firstDmy ??= h;
     else if (e === "mdy") firstMdy ??= h;
     else if (e === "either") firstEither ??= h;
     else if (e === "ymd") firstYmd ??= h;
+    else if (e === "same") firstSame ??= h;
   }
 
   if (requested !== undefined) {
-    const contradiction = requested === "dmy" ? firstMdy : requested === "mdy" ? firstDmy : (firstDmy ?? firstMdy ?? firstEither);
+    // A two-digit first field can never be a year, so `ymd` is contradicted by every non-ymd date,
+    // including day == month ones (R3: those used to be dropped silently, ending in empty_source).
+    const contradiction =
+      requested === "dmy" ? firstMdy : requested === "mdy" ? firstDmy : (firstDmy ?? firstMdy ?? firstEither ?? firstSame);
     if (contradiction) {
       throw new ParserAbort(
         "date_format_ambiguous",

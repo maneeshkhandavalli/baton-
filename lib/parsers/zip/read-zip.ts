@@ -77,11 +77,18 @@ export function openZip(bytes: Uint8Array): ZipArchive {
   }
   if (eocd < 0) throw new ParserAbort("corrupt_file", "The ZIP archive's directory is missing.");
 
+  const diskNumber = dv.getUint16(eocd + 4, true);
+  const cdDisk = dv.getUint16(eocd + 6, true);
+  const entriesOnDisk = dv.getUint16(eocd + 8, true);
   const totalEntries = dv.getUint16(eocd + 10, true);
   const cdSize = dv.getUint32(eocd + 12, true);
   const cdOffset = dv.getUint32(eocd + 16, true);
   if (totalEntries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
     throw new ParserAbort("unsupported_format", "ZIP64 archives are not supported.");
+  }
+  // R3 D2: a split (multi-part) archive's directory describes entries that are not in this file.
+  if (diskNumber !== 0 || cdDisk !== 0 || entriesOnDisk !== totalEntries) {
+    throw new ParserAbort("unsupported_format", "Split (multi-part) ZIP archives are not supported.");
   }
   if (totalEntries > LIMITS.maxZipEntries) throw new ParserAbort("too_large", "The ZIP archive has too many files.");
   if (cdOffset + cdSize > eocd) throw new ParserAbort("corrupt_file", "The ZIP archive's directory is damaged.");
