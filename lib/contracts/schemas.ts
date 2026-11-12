@@ -197,6 +197,21 @@ export const createHandoverInput = z.object({
   creatorRole: z.enum(CREATOR_ROLES),
 });
 
+/**
+ * R3 (draft metadata): edit a DRAFT's details after creation. Same limits as createHandoverInput; the
+ * creator role is not editable. `expectedUpdatedAt` is the HandoverSummary.updatedAt the editor last saw:
+ * the server refuses with `conflict` if the draft changed since (optimistic concurrency, so a slow autosave
+ * can never overwrite a newer edit). Only the creator (or the outgoing member) of a handover in `draft`.
+ */
+export const updateHandoverDetailsInput = z.object({
+  handoverId: uuidSchema,
+  title: z.string().trim().min(3).max(120),
+  teamName: z.string().trim().min(2).max(120),
+  roleTitle: z.string().trim().max(120).optional(),
+  description: z.string().trim().max(2000).optional(),
+  expectedUpdatedAt: z.iso.datetime({ offset: true }),
+});
+
 export const handoverIdInput = z.object({ handoverId: uuidSchema });
 
 export const publishHandoverInput = z.object({
@@ -586,6 +601,7 @@ export type SupportVerdictResponse = z.output<typeof supportVerdictResponseSchem
 // parsing, where defaults have been applied (z.output).
 
 export type CreateHandoverInput = z.input<typeof createHandoverInput>;
+export type UpdateHandoverDetailsInput = z.input<typeof updateHandoverDetailsInput>;
 export type HandoverIdInput = z.input<typeof handoverIdInput>;
 export type PublishHandoverInput = z.input<typeof publishHandoverInput>;
 export type OfferCreatorTransferInput = z.input<typeof offerCreatorTransferInput>;
