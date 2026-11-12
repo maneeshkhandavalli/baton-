@@ -376,3 +376,22 @@ select public.pipeline_mark_source_parse_failed(tests.id('parse3'), 1, 'parse_fa
 select tests.eq((select state from public.sources where id = tests.id('up3')), 'failed', 'the current parse claim fails the source');
 select tests.throws(format('select public.pipeline_store_extract_chunk(%L, 1, 0, 1, %L, %L, %L)', tests.id('parse3'),
                            'everyone', '{}', '[]'), 'BTFB0', 'a parse claim cannot store extraction chunks');
+
+-- ── QA-R3-01: a run needs at least one job (migration 20261113300400) ───────────
+select tests.as_owner();
+select tests.handover('h4', 'ann', 'outgoing');
+select tests.source('h4', 's4');
+select tests.as_user('ann');
+select tests.throws(format('select public.start_processing(tests.actor(), %L, %L, %L, %L)', tests.id('h4'), 'pv', '{"provider":"fake"}', '[]'),
+                    'BTVF0', 'an empty job list is refused');
+select tests.throws(format('select public.start_processing(tests.actor(), %L, %L, %L, null)', tests.id('h4'), 'pv', '{"provider":"fake"}'),
+                    'BTVF0', 'a missing job list is refused');
+select tests.throws(format('select public.start_processing(tests.actor(), %L, %L, %L, %L)', tests.id('h4'), 'pv', '{"provider":"fake"}', '{}'),
+                    'BTVF0', 'a non-array job list is refused');
+select tests.eq((select count(*)::int from public.processing_runs where handover_id = tests.id('h4')), 0, 'no run was created');
+select tests.eq((select state from public.handovers where id = tests.id('h4')), 'draft', 'the handover stays a draft');
+select tests.throws(format('select public.start_processing(tests.actor(), %L, %L, null, %L)', tests.id('h4'), 'pv', '[]'),
+                    'BTVF0', 'earlier validation still answers first (provider required)');
+select tests.ok(public.start_processing(tests.actor(), tests.id('h4'), 'pv', '{"provider":"fake"}',
+                  jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('s4'), 'inputHash', md5('e4')))) is not null,
+                'a run with one job still starts');
