@@ -8,18 +8,30 @@ import {
   offerCreatorTransferInput,
   publishHandoverInput,
   respondToCreatorTransferInput,
+  updateHandoverDetailsInput,
 } from "../../contracts/schemas";
 import type {
   CreateHandoverInput,
   OfferCreatorTransferInput,
   PublishHandoverInput,
   RespondToCreatorTransferInput,
+  UpdateHandoverDetailsInput,
 } from "../../contracts/schemas";
+import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { createInputMasker } from "./mask";
 import { action, failWith, ok, parseInput } from "./run";
 import type { ActionDeps } from "./types";
 
+/** R3 C1: the safe message and reason for a stale draft edit (optimistic concurrency). */
+export const STALE_DRAFT_MESSAGE = "This draft was changed somewhere else. Reload it to see the latest details.";
+export const STALE_DRAFT_REASON = "stale_draft";
+
+/**
+ * R3 C2: a double-click or a retried submission with the same details returns the SAME draft (the database
+ * reuses an untouched draft created by the same actor in the last 2 minutes), so the wizard never ends up
+ * with two empty drafts. Different details always create a new draft.
+ */
 export async function createHandover(deps: ActionDeps, input: CreateHandoverInput): Promise<Result<HandoverSummary>> {
   return action(deps, createHandoverInput, input, async (actor, v) => {
     const m = createInputMasker();
@@ -33,6 +45,38 @@ export async function createHandover(deps: ActionDeps, input: CreateHandoverInpu
     if (!masked.ok) return masked;
     const handoverId = await mutations.createHandover(deps.adminDb(), actor, masked.data);
     return deps.queries.getHandover(handoverId);
+  });
+}
+
+/**
+ * R3 C1: edit a draft's details. D35 order: validate → verified actor → mask (one masker per request, like
+ * createHandover) → re-validate the masked values → update_handover_details (creator or outgoing member,
+ * draft only, optimistic concurrency on `expectedUpdatedAt`) → RLS re-read.
+ *
+ * `roleTitle` / `description`: omitted keeps the stored value; an empty string clears it. A stale
+ * `expectedUpdatedAt` is `conflict` with `details.reason = "stale_draft"`: reload the draft (its new
+ * `updatedAt`) before saving again. A retry of a save that already committed succeeds (nothing changes).
+ */
+export async function updateHandoverDetails(deps: ActionDeps, input: UpdateHandoverDetailsInput): Promise<Result<HandoverSummary>> {
+  return action(deps, updateHandoverDetailsInput, input, async (actor, v) => {
+    const m = createInputMasker();
+    const masked = parseInput(updateHandoverDetailsInput, {
+      ...v,
+      title: m.text(v.title),
+      teamName: m.text(v.teamName),
+      roleTitle: m.optional(v.roleTitle),
+      description: m.optional(v.description),
+    });
+    if (!masked.ok) return masked;
+    try {
+      await mutations.updateHandoverDetails(deps.adminDb(), actor, masked.data);
+    } catch (error) {
+      if (isDbError(error) && error.code === "conflict" && !error.retryable) {
+        return failWith("conflict", { message: STALE_DRAFT_MESSAGE, details: { reason: STALE_DRAFT_REASON } });
+      }
+      throw error;
+    }
+    return deps.queries.getHandover(v.handoverId);
   });
 }
 

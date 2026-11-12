@@ -14,7 +14,7 @@ const ACTION_FILES = ["handovers", "sources", "review", "gaps", "members", "priv
 const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
   handovers: [
     "createHandover", "startProcessing", "cancelProcessing", "publishHandover", "startRevision", "deleteHandover",
-    "offerCreatorTransfer", "respondToCreatorTransfer",
+    "offerCreatorTransfer", "respondToCreatorTransfer", "updateHandoverDetails",
   ],
   sources: ["createSourceUpload", "confirmSourceUploaded", "previewSource", "recordSourceConsent", "addExclusion", "confirmIdentityMatch", "removeSource"],
   review: ["reviewPoint", "createManualPoint"],
@@ -49,7 +49,9 @@ describe("lib/actions Server Function modules", () => {
     const mock = new Set(asyncFunctionExports(read("lib/mocks/actions.ts")));
     const real = new Set(Object.values(EXPECTED).flat());
     assert.deepEqual([...mock].filter((n) => !real.has(n)), [], "every mock export exists under the same name");
-    assert.deepEqual([...real].filter((n) => !mock.has(n)), ["createManualPoint"]);
+    // R3: updateHandoverDetails may be missing from lib/mocks (lead-owned) until its mock lands.
+    const missing = [...real].filter((n) => !mock.has(n) && n !== "updateHandoverDetails");
+    assert.deepEqual(missing, ["createManualPoint"]);
   });
 
   it("deps.ts is server-only, exports only actionDeps, and offers no override", () => {

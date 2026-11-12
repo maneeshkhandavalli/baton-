@@ -9,12 +9,18 @@ import type {
   OfferCreatorTransferInput,
   PublishHandoverInput,
   RespondToCreatorTransferInput,
+  UpdateHandoverDetailsInput,
 } from "../contracts/schemas";
 import * as core from "./core/handovers";
 import { actionDeps } from "./deps";
 
 export async function createHandover(input: CreateHandoverInput): Promise<Result<HandoverSummary>> {
   return core.createHandover(actionDeps(), input);
+}
+
+/** R3 C1: edit a draft's details (creator or outgoing member; optimistic concurrency on expectedUpdatedAt). */
+export async function updateHandoverDetails(input: UpdateHandoverDetailsInput): Promise<Result<HandoverSummary>> {
+  return core.updateHandoverDetails(actionDeps(), input);
 }
 
 export async function startProcessing(input: { handoverId: string }): Promise<Result<{ runId: string }>> {
