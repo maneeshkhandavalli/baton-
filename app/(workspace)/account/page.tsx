@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { getAccountDeletionBlockers } from "@/lib/actions/account";
 import { getQueries } from "@/lib/data";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -23,6 +24,7 @@ export default function AccountPage() {
 }
 
 async function AccountContent() {
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const queries = getQueries(); // per-request: everything here depends on the signed-in user
   const [offers, handovers] = await Promise.all([queries.listMyCreatorTransferOffers(), queries.listMyHandovers()]);
   const blockers = await getAccountDeletionBlockers();

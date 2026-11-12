@@ -2,34 +2,42 @@
 
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, FileText, Loader2, MessageCircle, Sparkles, Trash2, Upload, UserCheck, UserX } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, CloudCheck, FileText, Loader2, MessageCircle, RotateCcw, Trash2, Upload, UserCheck, UserX } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { z } from "zod";
 
 import { formatBytes, formatCount, formatDate } from "@/components/handover/format";
 import { accessLevelMeta, identityKindLabel, sourceKindLabel } from "@/components/handover/labels";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { MaskedText } from "@/components/shared/masked-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAction } from "@/hooks/use-action";
-import { ACCESS_LEVELS, MASK_KINDS, type AccessLevel, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import type { SourceSummary } from "@/lib/contracts/dto";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
-import { createHandover, startProcessing } from "@/lib/actions/handovers";
+import { createHandover, deleteHandover, startProcessing } from "@/lib/actions/handovers";
 import { inviteMember } from "@/lib/actions/members";
 import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent, removeSource } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
+import { blankSource, fromSummary, maxStepFor, signedTarget, type DraftSource } from "./draft-state";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
 
+// Consent comes before any upload: the database refuses a preview until consent is recorded for the
+// source (§10 steps 2–3; source_preview_target), so each upload records consent right after the server
+// has verified the bytes, and only then asks for the preview.
 const STEPS = [
   { id: "details", label: "Details" },
+  { id: "privacy", label: "Privacy & consent" },
   { id: "sources", label: "Sources" },
   { id: "scope", label: "Scope & access" },
-  { id: "privacy", label: "Privacy & consent" },
 ] as const;
+const LAST_STEP = STEPS.length - 1;
 
 const MAX_SOURCES = 10; // D15
 
@@ -43,24 +51,14 @@ interface Details {
   incomingRole: "incoming" | "lead";
 }
 
-interface DraftSource {
-  localId: string;
-  name: string;
-  size: number;
-  kind: SourceKind;
-  status: "hashing" | "uploading" | "previewing" | "ready" | "error";
-  error?: string;
-  sourceId?: string;
-  preview?: SourcePreview;
-  accessLevel: AccessLevel;
-  excludedConversations: string[];
-  /** Participant local ids ticked off and not saved yet. Saved ones disappear from the preview (D33). */
-  excludedParticipants: string[];
-  /** How many people were left out of this source and saved (they're no longer in the preview). */
-  savedParticipantExclusions: number;
-  rangeFrom: string;
-  rangeTo: string;
-  documentDate: string;
+
+
+/** A draft reopened from the server (dashboard "Continue editing" or a refresh). */
+export interface WizardInitial {
+  handoverId: string;
+  details: Pick<Details, "title" | "teamName" | "roleTitle" | "creatorRole">;
+  sources: SourceSummary[];
+  step: number;
 }
 
 const CHAT_ACCEPT = ".txt,.zip";
@@ -88,12 +86,15 @@ async function sha256Hex(data: ArrayBuffer) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const SAMPLES: Array<{ name: string; size: number; kind: SourceKind }> = [
-  { name: "WhatsApp Chat with Core Team.txt", size: 842_000, kind: "whatsapp_export" },
-  { name: "WhatsApp Chat with Event Volunteers.txt", size: 512_000, kind: "whatsapp_export" },
-  { name: "Club handbook 2026.pdf", size: 310_000, kind: "pdf" },
-  { name: "event-checklist.md", size: 6_200, kind: "markdown" },
-];
+/** The browser's zone, used for consent and for every preview of this draft (D33: same parse context). */
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
+
 
 const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
 
@@ -124,31 +125,102 @@ interface PendingMatch {
   kind: SourcePreview["participants"][number]["identityKind"];
 }
 
-export function NewHandoverWizard() {
+
+
+type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: Date } | { kind: "error" };
+
+export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { run, isPending } = useAction();
-  const [step, setStep] = useState(0);
+  const resumed = !!initial;
+  const initialConsented = !!initial?.sources.some((s) => s.consentRecordedAt);
+  const [step, setStep] = useState(() => Math.min(Math.max(initial?.step ?? 0, 0), LAST_STEP));
   const [details, setDetails] = useState<Details>({
-    title: "",
-    teamName: "",
-    roleTitle: "",
-    creatorRole: "",
+    title: initial?.details.title ?? "",
+    teamName: initial?.details.teamName ?? "",
+    roleTitle: initial?.details.roleTitle ?? "",
+    creatorRole: initial?.details.creatorRole ?? "",
     outgoingEmail: "",
     incomingEmail: "",
     incomingRole: "incoming",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [handoverId, setHandoverId] = useState<string | null>(null);
+  const [handoverId, setHandoverId] = useState<string | null>(initial?.handoverId ?? null);
   const [invites, setInvites] = useState<Array<{ label: string; url: string }>>([]);
-  const [sources, setSources] = useState<DraftSource[]>([]);
-  const [consent, setConsent] = useState(emptyConsent());
+  const [sources, setSources] = useState<DraftSource[]>(() => (initial?.sources ?? []).map((s) => fromSummary(s, initialConsented)));
+  // A consent already recorded for this draft's sources was given on this checklist; re-ask otherwise.
+  const [consent, setConsent] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
   const [submitting, setSubmitting] = useState(false);
   const [savingScope, setSavingScope] = useState(false);
+  const [save, setSave] = useState<SaveState>({ kind: "idle" });
   /** Identity decisions recorded with confirmIdentityMatch in this session (§6.8.1). */
   const [decisions, setDecisions] = useState<Array<PendingMatch & { decision: IdentityMatchDecision }>>([]);
+  const timeZone = useRef(browserTimeZone()).current;
 
-  const update = (id: string, patch: Partial<DraftSource>) => setSources((list) => list.map((s) => (s.localId === id ? { ...s, ...patch } : s)));
+  const update = useCallback((id: string, patch: Partial<DraftSource>) => setSources((list) => list.map((s) => (s.localId === id ? { ...s, ...patch } : s))), []);
+
+  /** Wraps a server write so the "Saving… / Saved / Couldn't save" line is truthful. */
+  const saving = useCallback(async <R extends { ok: boolean }>(work: () => Promise<R>): Promise<R> => {
+    setSave({ kind: "saving" });
+    const r = await work();
+    setSave(r.ok ? { kind: "saved", at: new Date() } : { kind: "error" });
+    return r;
+  }, []);
+
+  // The step and the draft live in the URL, so a refresh or the dashboard reopens exactly here. The draft
+  // itself (details, sources, consent, exclusions) is already in the database.
+  useEffect(() => {
+    if (!handoverId) return;
+    const url = `${routes.handover.new}?draft=${encodeURIComponent(handoverId)}&step=${step}`;
+    if (window.location.pathname + window.location.search !== url) window.history.replaceState(null, "", url);
+  }, [handoverId, step]);
+
+  // ── One place that turns a preview result into the source's state (upload, resume, date-order choice) ─
+  const applyPreview = useCallback(
+    (localId: string, preview: Awaited<ReturnType<typeof previewSource>>) => {
+      if (!preview.ok) {
+        if (preview.error.details?.parserCode === "date_format_ambiguous") {
+          return update(localId, { status: "error", needsDateOrder: true, error: "Baton can't tell whether these dates are day/month or month/day. Which is it?" });
+        }
+        return update(localId, { status: "error", error: preview.error.message });
+      }
+      update(localId, { status: "ready", needsDateOrder: false, preview: preview.data, rangeFrom: dateOnly(preview.data.firstMessageAt), rangeTo: dateOnly(preview.data.lastMessageAt) });
+    },
+    [update],
+  );
+
+  // ── Consent + preview for one confirmed source ─────────────
+  const consentAndPreview = useCallback(
+    async (localId: string, sourceId: string, accessLevel: AccessLevel, dateOrder?: DateOrder) => {
+      update(localId, { status: "consent", error: undefined, needsDateOrder: false });
+      const c = await saving(() =>
+        recordSourceConsent({ sourceId, consentStatementVersion: CONSENT_STATEMENT_VERSION, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
+      );
+      if (!c.ok) return update(localId, { status: "error", error: c.error.message });
+      update(localId, { status: "previewing", dateOrder });
+      applyPreview(localId, await previewSource({ sourceId }));
+    },
+    [applyPreview, saving, timeZone, update],
+  );
+
+  // Reopened draft: preview sources that are uploaded (recording consent first where it is missing).
+  const resumedOnce = useRef(false);
+  useEffect(() => {
+    if (resumedOnce.current || !initial) return;
+    resumedOnce.current = true;
+    // Every state update below happens after an await (the initial statuses come from fromSummary).
+    for (const s of initial.sources) {
+      if (s.state !== "uploaded" || (!s.consentRecordedAt && !initialConsented)) continue;
+      void (async () => {
+        if (!s.consentRecordedAt) {
+          await Promise.resolve();
+          return consentAndPreview(s.id, s.id, s.accessLevel);
+        }
+        applyPreview(s.id, await previewSource({ sourceId: s.id }));
+      })();
+    }
+  }, [initial, initialConsented, consentAndPreview, applyPreview]);
 
   // ── Step 1 ────────────────────────────────────────────────
   async function submitDetails() {
@@ -172,10 +244,10 @@ export function NewHandoverWizard() {
     setErrors(next);
     if (Object.keys(next).length > 0 || !parsed.success) return;
 
-    const created = await run(() => createHandover(parsed.data));
+    const created = await saving(() => run(() => createHandover(parsed.data)));
     if (!created.ok) return;
     const id = created.data.id;
-    setHandoverId(id);
+    setHandoverId(id); // the URL now carries the draft, so a retry or refresh reopens it instead of creating another
     const made: Array<{ label: string; url: string }> = [];
     if (details.incomingEmail) {
       const r = await run(() => inviteMember({ handoverId: id, email: details.incomingEmail, role: details.incomingRole }));
@@ -189,79 +261,108 @@ export function NewHandoverWizard() {
     setStep(1);
   }
 
-  // ── Step 2 ────────────────────────────────────────────────
-  async function addSource(entry: { name: string; size: number; kind: SourceKind; file?: File }) {
+  // ── Step 3: real signed upload → server verification → consent → preview ─
+  async function uploadSource(localId: string, entry: { name: string; size: number; kind: SourceKind; file: File }) {
     if (!handoverId) return;
-    const localId = crypto.randomUUID();
-    const draft: DraftSource = {
-      localId,
-      name: entry.name,
-      size: entry.size,
-      kind: entry.kind,
-      status: "hashing",
-      accessLevel: "everyone",
-      excludedConversations: [],
-      excludedParticipants: [],
-      savedParticipantExclusions: 0,
-      rangeFrom: "",
-      rangeTo: "",
-      documentDate: "",
-    };
-    setSources((list) => [...list, draft]);
     if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", error: "Files can be up to 25 MB." });
-
-    const sha = entry.file
-      ? await sha256Hex(await entry.file.arrayBuffer())
-      : await sha256Hex(new TextEncoder().encode(`${entry.name}-${Date.now()}`).buffer as ArrayBuffer);
+    if (entry.size === 0) return update(localId, { status: "error", error: "This file is empty." });
+    update(localId, { status: "hashing", error: undefined });
+    let sha: string;
+    try {
+      sha = await sha256Hex(await entry.file.arrayBuffer());
+    } catch {
+      return update(localId, { status: "error", error: "Couldn't read this file. Choose it again." });
+    }
     update(localId, { status: "uploading" });
-    const ticket = await createSourceUpload({ handoverId, kind: entry.kind, fileName: entry.name, mimeType: entry.file?.type || MIME[entry.kind], sizeBytes: entry.size, sha256: sha });
+    const ticket = await saving(() =>
+      createSourceUpload({ handoverId, kind: entry.kind, fileName: entry.name, mimeType: entry.file.type || MIME[entry.kind], sizeBytes: entry.size, sha256: sha }),
+    );
     if (!ticket.ok) return update(localId, { status: "error", error: ticket.error.message });
-    // Mock: the browser would PUT the file to ticket.data.signedUploadUrl here (§10 step 1).
-    const confirmed = await confirmSourceUploaded({ sourceId: ticket.data.sourceId });
-    if (!confirmed.ok) return update(localId, { status: "error", error: confirmed.error.message, sourceId: ticket.data.sourceId });
-    update(localId, { status: "previewing", sourceId: ticket.data.sourceId });
-    const preview = await previewSource({ sourceId: ticket.data.sourceId });
-    if (!preview.ok) return update(localId, { status: "error", error: preview.error.message });
-    update(localId, {
-      status: "ready",
-      preview: preview.data,
-      rangeFrom: dateOnly(preview.data.firstMessageAt),
-      rangeTo: dateOnly(preview.data.lastMessageAt),
-    });
+    const { sourceId, signedUploadUrl, token } = ticket.data;
+    update(localId, { sourceId });
+
+    // The bytes go straight to the private bucket with the one-time signed URL; they never pass through a
+    // server action. Success is reported only after the server re-measures them (confirmSourceUploaded).
+    const target = signedTarget(signedUploadUrl);
+    let uploadError = !target;
+    if (target) {
+      try {
+        const { error } = await createSupabaseBrowserClient().storage.from(target.bucket).uploadToSignedUrl(target.path, token, entry.file, {
+          contentType: entry.file.type || MIME[entry.kind],
+          upsert: false,
+        });
+        uploadError = !!error;
+      } catch {
+        uploadError = true;
+      }
+    }
+    if (uploadError) {
+      await removeSource({ sourceId }); // don't leave a pending row behind; retry starts a fresh upload
+      return update(localId, { status: "error", error: "The upload didn't go through. Check your connection and retry.", sourceId: undefined });
+    }
+
+    update(localId, { status: "verifying" });
+    const confirmed = await saving(() => confirmSourceUploaded({ sourceId }));
+    if (!confirmed.ok) {
+      await removeSource({ sourceId });
+      return update(localId, { status: "error", error: "The uploaded file didn't match what was sent. Retry the upload.", sourceId: undefined });
+    }
+    await consentAndPreview(localId, sourceId, "everyone");
   }
 
   function onFiles(files: FileList | null, group: "chat" | "doc") {
     if (!files) return;
+    let count = sources.length;
     for (const file of Array.from(files)) {
-      if (sources.length >= MAX_SOURCES) break;
+      if (count >= MAX_SOURCES) break;
+      count += 1;
+      const localId = crypto.randomUUID();
       const kind = kindFor(file.name, group);
       if (!kind) {
         setSources((list) => [
           ...list,
-          { localId: crypto.randomUUID(), name: file.name, size: file.size, kind: "text", status: "error", error: group === "chat" ? "Use a WhatsApp export (.txt or .zip)." : "Use a PDF, DOCX or Markdown file.", accessLevel: "everyone", excludedConversations: [], excludedParticipants: [], savedParticipantExclusions: 0, rangeFrom: "", rangeTo: "", documentDate: "" },
+          blankSource({ localId, name: file.name, size: file.size, kind: "text", status: "error", error: group === "chat" ? "Use a WhatsApp export (.txt or .zip)." : "Use a PDF, DOCX or Markdown file." }),
         ]);
         continue;
       }
-      void addSource({ name: file.name, size: file.size, kind, file });
+      setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
+      void uploadSource(localId, { name: file.name, size: file.size, kind, file });
     }
+  }
+
+  function chooseDateOrder(s: DraftSource, order: DateOrder) {
+    if (!s.sourceId) return;
+    void consentAndPreview(s.localId, s.sourceId, s.accessLevel, order);
+  }
+
+  function retry(s: DraftSource) {
+    if (!s.file || s.kind === "text") return;
+    void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
   }
 
   async function remove(s: DraftSource) {
     if (s.sourceId) {
-      const r = await run(() => removeSource({ sourceId: s.sourceId! }));
+      const r = await saving(() => run(() => removeSource({ sourceId: s.sourceId! })));
       if (!r.ok) return;
     }
     setSources((list) => list.filter((x) => x.localId !== s.localId));
   }
 
-  const ready = sources.filter((s) => s.status === "ready");
-  const busy = sources.some((s) => s.status === "hashing" || s.status === "uploading" || s.status === "previewing");
+  async function discard() {
+    if (!handoverId) return;
+    const r = await run(() => deleteHandover({ handoverId }), { success: "Draft discarded" });
+    if (r.ok) router.push(routes.dashboard);
+  }
 
-  // ── Step 3 → 4: save people left out, then refresh every preview (D33) ─
-  // Participant exclusions are saved here, not at the end, because a handover-wide opt-out changes
-  // what the other chats' previews show and may need a "same person?" answer (§6.8.1).
-  async function saveScope() {
+  const ready = sources.filter((s) => s.status === "ready");
+  const busy = sources.some((s) => s.status !== "ready" && s.status !== "error");
+
+  // ── Scope: save people left out, then refresh every preview (D33) ─
+  // Participant exclusions are saved first, because a handover-wide opt-out changes what the other chats'
+  // previews show and may need a "same person?" answer (§6.8.1) before processing can start.
+  async function saveParticipantExclusions(): Promise<boolean> {
     const pending = ready.filter((s) => s.excludedParticipants.length > 0);
+    if (pending.length === 0) return true;
     setSavingScope(true);
     try {
       for (const s of pending) {
@@ -278,21 +379,20 @@ export function NewHandoverWizard() {
           };
           // Phone numbers are strong identities: one handover-wide rule applies to every chat (§6.8).
           // A saved name is weak: a handover-wide name rule is only DETECTED elsewhere and never applies
-          // to any source without that source's own same_person decision (§6.8.1). So the person is left
-          // out of THIS chat by a source-scoped rule, and the handover-wide rule asks about other chats.
+          // to any source without that source's own same_person decision (§6.8.1).
           const inputs: AddExclusionInput[] =
             person.identityKind === "phone" ? [{ ...identity, scope: "handover" }] : [{ ...identity, scope: "source" }, { ...identity, scope: "handover" }];
           for (const input of inputs) {
             // conflict = this handover-wide identity is already recorded; nothing to add.
-            const r = await run(() => addExclusion(input), { onError: (e) => e.code === "conflict" });
-            if (!r.ok && r.error.code !== "conflict") return;
+            const r = await saving(() => run(() => addExclusion(input), { onError: (e) => e.code === "conflict" }));
+            if (!r.ok && r.error.code !== "conflict") return false;
           }
           saved += 1;
         }
         update(s.localId, { excludedParticipants: [], savedParticipantExclusions: s.savedParticipantExclusions + saved });
       }
       await refreshPreviews();
-      setStep(3);
+      return false; // previews changed: let the creator review them (and any matches) before starting
     } finally {
       setSavingScope(false);
     }
@@ -310,21 +410,23 @@ export function NewHandoverWizard() {
   }
 
   async function answerMatch(m: PendingMatch, decision: IdentityMatchDecision) {
-    const r = await run(() => confirmIdentityMatch({ sourceId: m.sourceId, exclusionId: m.exclusionId, decision }), {
-      success: decision === "same_person" ? `${m.label} will be left out of ${m.sourceName}` : `${m.label} stays in ${m.sourceName}`,
-    });
+    const r = await saving(() =>
+      run(() => confirmIdentityMatch({ sourceId: m.sourceId, exclusionId: m.exclusionId, decision }), {
+        success: decision === "same_person" ? `${m.label} will be left out of ${m.sourceName}` : `${m.label} stays in ${m.sourceName}`,
+      }),
+    );
     if (!r.ok) return;
-    // The decision is stored on the server; this list only mirrors what was recorded, so it can be shown and changed.
     setDecisions((list) => [...list.filter((d) => !(d.sourceId === m.sourceId && d.exclusionId === m.exclusionId)), { ...m, decision }]);
     const p = await previewSource({ sourceId: m.sourceId });
     if (p.ok) update(m.sourceLocalId, { preview: p.data });
   }
 
-  // ── Step 4: record the remaining exclusions + consent, start processing ─
+  // ── Finish: remaining exclusions, final access levels on the consent record, start processing ─
   async function finish() {
     if (!handoverId) return;
     setSubmitting(true);
     try {
+      if (!(await saveParticipantExclusions())) return;
       for (const s of ready) {
         const preview = s.preview!;
         // Positional ids are bound to the preview they were chosen on (D32).
@@ -339,18 +441,22 @@ export function NewHandoverWizard() {
           inputs.push({ kind: "date_range", sourceId: s.sourceId!, scope: "source", rangeStart: zonedInstant(s.rangeTo, "23:59:59", tz), rangeEnd: preview.lastMessageAt! });
         }
         for (const input of inputs) {
-          const r = await run(() => addExclusion(input));
+          const r = await saving(() => run(() => addExclusion(input)));
           if (!r.ok) return;
         }
-        const c = await run(() =>
-          recordSourceConsent({
-            sourceId: s.sourceId!,
-            consentStatementVersion: CONSENT_STATEMENT_VERSION,
-            consentConfirmed: true,
-            accessLevel: s.accessLevel,
-            timezone: preview.parseContext.timezone, // the context the preview, and any exclusion, was chosen in
-            documentDate: s.kind !== "whatsapp_export" && s.documentDate ? s.documentDate : undefined,
-          }),
+        // Same statement and zone as at upload; this records the chosen access level and document date.
+        const c = await saving(() =>
+          run(() =>
+            recordSourceConsent({
+              sourceId: s.sourceId!,
+              consentStatementVersion: CONSENT_STATEMENT_VERSION,
+              consentConfirmed: true,
+              accessLevel: s.accessLevel,
+              timezone: tz,
+              dateOrder: s.dateOrder, // keep the creator's choice: the final parse must match the preview (D32)
+              documentDate: s.kind !== "whatsapp_export" && s.documentDate ? s.documentDate : undefined,
+            }),
+          ),
         );
         if (!c.ok) return;
       }
@@ -369,57 +475,80 @@ export function NewHandoverWizard() {
         : [];
     }),
   );
-  const canNext = step === 0 ? true : step === 1 ? ready.length > 0 && !busy : step === 2 ? !savingScope : consentComplete(consent) && matches.length === 0;
+  const consentGiven = consentComplete(consent);
+  const canNext = step === 0 ? true : step === 1 ? consentGiven : step === 2 ? ready.length > 0 && !busy : matches.length === 0 && !busy && !savingScope;
   const detectedMasking = ready.reduce<Partial<Record<MaskKind, number>>>((acc, s) => {
     for (const k of MASK_KINDS) acc[k] = (acc[k] ?? 0) + (s.preview?.masking.counts[k] ?? 0);
     return acc;
   }, {});
-  const hasChat = ready.some((s) => s.kind === "whatsapp_export");
+  const pendingPeople = ready.some((s) => s.excludedParticipants.length > 0);
+  // Never let the step indicator run ahead of what the draft really holds.
+  const maxStep = maxStepFor({ hasDraft: !!handoverId, consentGiven, readySources: ready.length }, LAST_STEP);
+  const shownStep = Math.min(step, maxStep);
 
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SaveStatus save={save} hasDraft={!!handoverId} />
+        {handoverId && (
+          <ConfirmDialog
+            trigger={
+              <Button size="sm" variant="ghost">
+                <Trash2 aria-hidden="true" data-icon="inline-start" />
+                Discard draft
+              </Button>
+            }
+            title="Discard this draft?"
+            description="The draft and its uploaded files are removed from your workspace. This can't be undone here."
+            confirmLabel="Discard draft"
+            destructive
+            onConfirm={discard}
+          />
+        )}
+      </div>
+
       <ol aria-label="Steps" className="grid grid-cols-4 gap-2">
         {STEPS.map((s, i) => (
-          <li key={s.id} aria-current={i === step ? "step" : undefined} className="space-y-2">
-            <div className={cn("h-1 rounded-full transition-colors", i <= step ? "bg-primary" : "bg-muted")} />
-            <p className={cn("text-xs font-medium", i === step ? "text-foreground" : "text-muted-foreground")}>
+          <li key={s.id} aria-current={i === shownStep ? "step" : undefined} className="space-y-2">
+            <div className={cn("h-1 rounded-full transition-colors", i <= shownStep ? "bg-primary" : "bg-muted")} />
+            <p className={cn("text-xs font-medium", i === shownStep ? "text-foreground" : "text-muted-foreground")}>
               <span className="font-mono">{i + 1}</span>
               <span className="hidden sm:inline"> · {s.label}</span>
             </p>
           </li>
         ))}
       </ol>
-      <p className="text-sm font-medium sm:hidden">{STEPS[step].label}</p>
+      <p className="text-sm font-medium sm:hidden">{STEPS[shownStep].label}</p>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={step}
+          key={shownStep}
           initial={reduceMotion ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           className="space-y-6"
         >
-          {step === 0 && <DetailsStep details={details} setDetails={setDetails} errors={errors} locked={!!handoverId} invites={invites} />}
-          {step === 1 && (
-            <SourcesStep
-              sources={sources}
-              onFiles={onFiles}
-              onSample={() => SAMPLES.filter((x) => !sources.some((s) => s.name === x.name)).forEach((x) => void addSource(x))}
-              onRemove={remove}
-              full={sources.length >= MAX_SOURCES}
-            />
-          )}
-          {step === 2 && <ScopeStep sources={ready} update={update} />}
-          {step === 3 && (
+          {shownStep === 0 && <DetailsStep details={details} setDetails={setDetails} errors={errors} locked={!!handoverId} invites={invites} resumed={resumed} />}
+          {shownStep === 1 && (
             <div className="space-y-6">
               <section className="space-y-2">
                 <h2 className="font-serif text-2xl">Privacy and consent</h2>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Baton masks personal and financial details in memory before anything is saved. The raw upload is deleted once processing succeeds.
-                  Only masked, permitted evidence is kept.
+                  Before any file is read, confirm how Baton may use it. Baton masks personal and financial details in memory before anything is saved,
+                  deletes the raw upload once processing succeeds, and keeps only masked, permitted evidence. Consent is recorded for each file as it is
+                  uploaded.
                 </p>
               </section>
+              <GroupNotice teamName={details.teamName} />
+              <ConsentChecklist value={consent} onChange={setConsent} />
+              {!consentGiven && <p className="text-xs text-muted-foreground">Tick every statement to continue. Without consent, nothing can be uploaded.</p>}
+            </div>
+          )}
+          {shownStep === 2 && <SourcesStep sources={sources} onFiles={onFiles} onRemove={remove} onRetry={retry} onDateOrder={chooseDateOrder} full={sources.length >= MAX_SOURCES} />}
+          {shownStep === 3 && (
+            <div className="space-y-6">
+              <ScopeStep sources={ready} update={update} />
               {(matches.length > 0 || decisions.length > 0) && (
                 <MatchesSection
                   matches={matches}
@@ -429,36 +558,51 @@ export function NewHandoverWizard() {
                 />
               )}
               <MaskingTable counts={detectedMasking} />
-              {hasChat && <GroupNotice teamName={details.teamName} />}
-              <ConsentChecklist value={consent} onChange={setConsent} />
             </div>
           )}
         </motion.div>
       </AnimatePresence>
 
       <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-        <Button variant="ghost" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0 || submitting}>
+        <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
           <ArrowLeft aria-hidden="true" data-icon="inline-start" />
           Back
         </Button>
-        {step < 3 ? (
-          <Button
-            size="lg"
-            disabled={!canNext || isPending}
-            aria-busy={savingScope}
-            onClick={() => (step === 0 ? submitDetails() : step === 2 ? saveScope() : setStep(step + 1))}
-          >
-            {isPending && step === 0 ? "Creating…" : savingScope ? "Saving…" : step === 0 && !handoverId ? "Create and continue" : "Continue"}
+        {shownStep < LAST_STEP ? (
+          <Button size="lg" disabled={!canNext || isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
+            {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft and continue" : "Continue"}
             <ArrowRight aria-hidden="true" data-icon="inline-end" />
           </Button>
         ) : (
-          <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting}>
-            {submitting ? "Starting…" : "Start processing"}
+          <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
+            {submitting || savingScope ? "Saving…" : pendingPeople ? "Save and review" : "Start processing"}
             <ArrowRight aria-hidden="true" data-icon="inline-end" />
           </Button>
         )}
       </div>
     </div>
+  );
+}
+
+function SaveStatus({ save, hasDraft }: { save: SaveState; hasDraft: boolean }) {
+  if (!hasDraft) return <p className="text-xs text-muted-foreground">Nothing is saved until you create the draft.</p>;
+  if (save.kind === "saving")
+    return (
+      <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> Saving…
+      </p>
+    );
+  if (save.kind === "error")
+    return (
+      <p role="status" className="flex items-center gap-1.5 text-xs text-destructive">
+        <AlertCircle aria-hidden="true" className="size-3.5" /> Couldn&rsquo;t save the last change. Try that step again.
+      </p>
+    );
+  return (
+    <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <CloudCheck aria-hidden="true" className="size-3.5 text-status-sourced" />
+      Draft saved{save.kind === "saved" ? ` · ${save.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}. You can leave and continue from the dashboard.
+    </p>
   );
 }
 
@@ -474,7 +618,7 @@ function Field({ label, htmlFor, hint, error, children }: { label: string; htmlF
   );
 }
 
-function DetailsStep({ details, setDetails, errors, locked, invites }: { details: Details; setDetails: (d: Details) => void; errors: Record<string, string>; locked: boolean; invites: Array<{ label: string; url: string }> }) {
+function DetailsStep({ details, setDetails, errors, locked, invites, resumed }: { details: Details; setDetails: (d: Details) => void; errors: Record<string, string>; locked: boolean; invites: Array<{ label: string; url: string }>; resumed: boolean }) {
   const set = <K extends keyof Details>(k: K, v: Details[K]) => setDetails({ ...details, [k]: v });
   return (
     <div className="space-y-6">
@@ -485,8 +629,9 @@ function DetailsStep({ details, setDetails, errors, locked, invites }: { details
       {locked && (
         <div className="space-y-2 rounded-xl border border-status-sourced/25 bg-status-sourced-soft px-4 py-3 text-sm text-status-sourced-fg">
           <p className="flex items-center gap-2 font-medium">
-            <Check aria-hidden="true" className="size-4" /> Draft handover created. Its details can be changed later in Settings.
+            <Check aria-hidden="true" className="size-4" /> Draft handover saved. Title, team and role can&rsquo;t be edited after creation yet.
           </p>
+          {resumed && <p className="text-xs">Invitations sent earlier are listed in Settings once processing starts.</p>}
           {invites.length > 0 && (
             <ul className="space-y-1 text-xs">
               {invites.map((i) => (
@@ -594,7 +739,7 @@ function DropZone({ id, title, description, accept, icon, onFiles, disabled }: {
   );
 }
 
-function SourcesStep({ sources, onFiles, onSample, onRemove, full }: { sources: DraftSource[]; onFiles: (f: FileList | null, g: "chat" | "doc") => void; onSample: () => void; onRemove: (s: DraftSource) => void; full: boolean }) {
+function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, full }: { sources: DraftSource[]; onFiles: (f: FileList | null, g: "chat" | "doc") => void; onRemove: (s: DraftSource) => void; onRetry: (s: DraftSource) => void; onDateOrder: (s: DraftSource, o: DateOrder) => void; full: boolean }) {
   const uid = useId();
   return (
     <div className="space-y-6">
@@ -608,10 +753,6 @@ function SourcesStep({ sources, onFiles, onSample, onRemove, full }: { sources: 
         <DropZone id={`${uid}-chat`} title="WhatsApp chat exports" description=".txt or .zip (text only)" accept={CHAT_ACCEPT} icon={<MessageCircle />} onFiles={(f) => onFiles(f, "chat")} disabled={full} />
         <DropZone id={`${uid}-doc`} title="Documents" description="PDF, DOCX or Markdown" accept={DOC_ACCEPT} icon={<FileText />} onFiles={(f) => onFiles(f, "doc")} disabled={full} />
       </div>
-      <button type="button" onClick={onSample} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
-        <Sparkles aria-hidden="true" className="size-4" />
-        No files handy? Add sample sources
-      </button>
 
       {sources.length > 0 && (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" aria-label="Added sources">
@@ -628,8 +769,12 @@ function SourcesStep({ sources, onFiles, onSample, onRemove, full }: { sources: 
                       : s.status === "hashing"
                         ? "Checking file…"
                         : s.status === "uploading"
-                          ? "Uploading securely…"
-                          : "Reading a preview (nothing is saved yet)…"}
+                          ? "Uploading to private storage…"
+                          : s.status === "verifying"
+                            ? "Verifying the upload…"
+                            : s.status === "consent"
+                              ? "Recording consent…"
+                              : "Reading a preview…"}
                 </p>
               </div>
               {s.status === "ready" ? (
@@ -637,6 +782,18 @@ function SourcesStep({ sources, onFiles, onSample, onRemove, full }: { sources: 
               ) : s.status !== "error" ? (
                 <Loader2 aria-label="Working" className="size-4 animate-spin text-primary" />
               ) : null}
+              {s.status === "error" && s.needsDateOrder && (
+                <span className="flex flex-wrap gap-1" role="group" aria-label={`Date format for ${s.name}`}>
+                  <Button size="sm" variant="outline" onClick={() => onDateOrder(s, "dmy")}>Day/Month (31/12)</Button>
+                  <Button size="sm" variant="outline" onClick={() => onDateOrder(s, "mdy")}>Month/Day (12/31)</Button>
+                </span>
+              )}
+              {s.status === "error" && !s.needsDateOrder && s.file && s.kind !== "text" && (
+                <Button size="sm" variant="ghost" onClick={() => onRetry(s)}>
+                  <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                  Retry
+                </Button>
+              )}
               <Button size="icon-sm" variant="ghost" aria-label={`Remove ${s.name}`} onClick={() => onRemove(s)} disabled={s.status !== "ready" && s.status !== "error"}>
                 <Trash2 />
               </Button>

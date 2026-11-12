@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { getSessionUser } from "@/lib/supabase/auth";
 
 import { acceptInvitation, requestInviteLink } from "./actions";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Handover invitation" };
 
@@ -58,6 +59,7 @@ async function InvitationContent({
     );
   }
 
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const user = await getSessionUser();
   if (!user) {
     return (

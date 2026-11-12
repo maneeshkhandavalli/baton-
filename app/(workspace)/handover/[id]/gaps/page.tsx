@@ -7,6 +7,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { LoadingState } from "@/components/shared/loading-state";
 import { SectionHeading } from "@/components/shared/section-heading";
 import { getQueries } from "@/lib/data";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Knowledge gaps" };
 
@@ -27,6 +28,7 @@ export default function GapsPage({ params }: PageProps<"/handover/[id]/gaps">) {
 
 async function GapsContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const queries = getQueries();
   const [handover, questions, points] = await Promise.all([queries.getHandover(id), queries.listGapQuestions(id), queries.listPoints(id)]);
   if (!handover.ok) notFound();

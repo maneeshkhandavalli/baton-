@@ -54,7 +54,7 @@ export class PgContainer {
   async start(): Promise<void> {
     await run("docker", ["rm", "-f", this.name]);
     const started = await run("docker", ["run", "-d", "--name", this.name, "-e", "POSTGRES_PASSWORD=postgres", "-e",
-      "POSTGRES_HOST_AUTH_METHOD=trust", process.env.BATON_PG_IMAGE ?? "postgres:15-alpine"]);
+      "POSTGRES_HOST_AUTH_METHOD=trust", process.env.BATON_PG_IMAGE ?? "postgres:17-alpine"]);
     if (started.code !== 0) throw new Error(`docker run failed: ${started.stderr}`);
     for (let i = 0; i < 120; i++) {
       if ((await run("docker", ["exec", this.name, "pg_isready", "-U", "postgres", "-q"])).code === 0) break;

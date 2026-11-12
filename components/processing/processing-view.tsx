@@ -154,6 +154,11 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
               {isPending ? "Starting…" : r ? "Try again" : "Start processing"}
             </Button>
             {sources.length === 0 && <p className="text-xs text-muted-foreground">This handover has no sources yet.</p>}
+            {handoverState === "draft" && (
+              <Link href={`${routes.handover.new}?draft=${encodeURIComponent(handoverId)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Add or change sources
+              </Link>
+            )}
           </div>
         )}
 

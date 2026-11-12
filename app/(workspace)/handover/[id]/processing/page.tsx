@@ -8,6 +8,7 @@ import { ProcessingView } from "@/components/processing/processing-view";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { getQueries } from "@/lib/data";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Processing" };
 
@@ -23,6 +24,7 @@ export default function ProcessingPage({ params }: PageProps<"/handover/[id]/pro
 
 async function ProcessingContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const queries = getQueries();
   const handover = await queries.getHandover(id);
   if (!handover.ok) notFound();

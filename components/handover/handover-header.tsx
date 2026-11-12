@@ -4,10 +4,12 @@ import { getQueries } from "@/lib/data";
 
 import { HandoverStateBadge } from "./badges";
 import { memberRoleLabel } from "./labels";
+import { connection } from "next/server";
 
 /** Title row for /handover/[id]/*. Reads the handover at request time, so render inside <Suspense>. */
 export async function HandoverHeader({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const result = await getQueries().getHandover(id);
   if (!result.ok) notFound();
   const h = result.data;

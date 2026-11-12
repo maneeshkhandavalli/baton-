@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { FilePlus2, Inbox } from "lucide-react";
 import { Suspense } from "react";
 
+import { DiscardDraftButton } from "@/components/dashboard/discard-draft-button";
 import { HandoverCard, HandoverCardSkeleton, type HandoverCardData } from "@/components/dashboard/handover-card";
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -54,6 +56,21 @@ async function cardFor(h: HandoverSummary): Promise<HandoverCardData> {
     // Lead and incoming members read the publication by membership (reconciliation Q3 proposal).
     return { handover: h, readiness: null, href: routes.handover.published(h.id), cta: "Read handover", isDemo };
   }
+  if (h.state === "draft" && (h.viewerIsCreator || h.viewerRole === "outgoing")) {
+    const sources = await queries.listSources(h.id);
+    const live = sources.ok ? sources.data.filter((s) => s.state !== "removed") : [];
+    if (!live.some((s) => s.state === "parsed" || s.state === "parsing")) {
+      const ready = live.filter((s) => s.state === "uploaded" && s.consentRecordedAt).length;
+      return {
+        handover: h,
+        readiness: null,
+        href: `${routes.handover.new}?draft=${encodeURIComponent(h.id)}`,
+        cta: "Continue editing",
+        isDemo,
+        draft: { sources: live.length, next: live.length === 0 ? "Consent and sources" : ready > 0 ? "Scope and start" : "Finish uploads" },
+      };
+    }
+  }
   const readiness = await queries.getReadiness(h.id);
   const target =
     h.pendingCreatorTransfer && !h.viewerIsCreator
@@ -67,6 +84,9 @@ async function cardFor(h: HandoverSummary): Promise<HandoverCardData> {
 }
 
 async function HandoverList({ newHandoverLink }: { newHandoverLink: React.ReactNode }) {
+  // Request-time only: every Supabase read below checks the session's expiry against the current time
+  // (auth-js getSession → Date.now()). With Partial Prefetching, cookies() alone does not end prerendering.
+  await connection();
   const result = await getQueries().listMyHandovers();
   if (!result.ok) {
     return <EmptyState icon={<Inbox />} title="We couldn't load your handovers" description={result.error.message} />;
@@ -103,8 +123,9 @@ async function HandoverList({ newHandoverLink }: { newHandoverLink: React.ReactN
         </h2>
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {preparing.map((c) => (
-            <li key={c.handover.id}>
+            <li key={c.handover.id} className="flex flex-col gap-1">
               <HandoverCard data={c} />
+              {c.draft && c.handover.viewerIsCreator && <DiscardDraftButton handoverId={c.handover.id} title={c.handover.title} />}
             </li>
           ))}
         </ul>

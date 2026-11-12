@@ -12,6 +12,7 @@ import { LoadingState } from "@/components/shared/loading-state";
 import { buttonVariants } from "@/components/ui/button";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Review" };
 
@@ -27,6 +28,7 @@ export default function ReviewPage({ params }: PageProps<"/handover/[id]/review"
 
 async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const load = await loadReview(getQueries(), id);
   if (load.kind === "not_found") notFound();
 

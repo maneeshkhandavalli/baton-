@@ -14,10 +14,12 @@ export interface HandoverCardData {
   href: string;
   cta: string;
   isDemo: boolean;
+  /** For a draft the viewer manages: what is saved and what comes next. */
+  draft?: { sources: number; next: string };
 }
 
 export function HandoverCard({ data }: { data: HandoverCardData }) {
-  const { handover: h, readiness, href, cta, isDemo } = data;
+  const { handover: h, readiness, href, cta, isDemo, draft } = data;
   return (
     <Link
       href={href}
@@ -54,7 +56,18 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
       </div>
 
       <div className="mt-5 flex-1">
-        {readiness !== null ? (
+        {draft ? (
+          <dl className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <dt className="text-muted-foreground">Sources saved</dt>
+              <dd className="font-mono font-medium tabular-nums">{draft.sources}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Next step</dt>
+              <dd className="font-medium">{draft.next}</dd>
+            </div>
+          </dl>
+        ) : readiness !== null ? (
           <div>
             <div className="flex items-baseline justify-between text-xs">
               <span className="text-muted-foreground">Readiness</span>
@@ -82,7 +95,7 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
       </div>
 
       <div className="mt-5 flex items-center justify-between border-t border-border pt-3 text-xs">
-        <span className="text-muted-foreground">Updated {formatDate(h.updatedAt)}</span>
+        <span className="text-muted-foreground">{draft ? "Last saved" : "Updated"} {formatDate(h.updatedAt)}</span>
         <span className="inline-flex items-center gap-1 font-medium text-primary">
           {cta}
           <ArrowRight aria-hidden="true" className="size-3.5 transition-transform group-hover:translate-x-0.5" />

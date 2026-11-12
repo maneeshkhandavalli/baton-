@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local database test runner (vanilla PostgreSQL 15 in Docker + supabase/tests/shim).
+# Local database test runner (vanilla PostgreSQL 17 in Docker by default + supabase/tests/shim).
 #
 #   bash supabase/tests/run.sh            # fresh database, apply migrations, run every test file
 #   bash supabase/tests/run.sh 30_rls     # only test files whose name contains "30_rls"
@@ -12,7 +12,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 NAME="${BATON_PG_CONTAINER:-baton-pg-test}"
-IMAGE="${BATON_PG_IMAGE:-postgres:15-alpine}"
+IMAGE="${BATON_PG_IMAGE:-postgres:17-alpine}" # hosted dev runs 17.x; BATON_PG_IMAGE=postgres:15-alpine still works
 FILTER="${1:-}"
 
 export MSYS_NO_PATHCONV=1 # Git Bash on Windows: don't rewrite container paths
