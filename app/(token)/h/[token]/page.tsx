@@ -47,7 +47,7 @@ async function InvitationContent({
 }) {
   const [{ token }, query] = await Promise.all([params, searchParams]);
   const error = typeof query.error === "string" ? ERRORS[query.error] ?? ERRORS.internal : null;
-  if (error) return <EmptyState icon={<LinkIcon />} title={error.title} description={error.description} />;
+  if (error) return <EmptyState tone="error" icon={<LinkIcon />} title={error.title} description={error.description} />;
 
   if (query.sent === "1") {
     return (

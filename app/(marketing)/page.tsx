@@ -8,7 +8,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
 import { statusConfig } from "@/config/status";
 import { routes } from "@/lib/routes";
-import { cn } from "@/lib/utils";
 import { EVIDENCE_STATUSES } from "@/types/status";
 
 const STEPS = [
@@ -41,19 +40,19 @@ export default function HomePage() {
       <section className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] items-center overflow-x-clip gap-14 px-4 pt-16 pb-20 sm:px-6 sm:pt-24 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
         <FadeIn className="space-y-6">
           <p className="type-eyebrow text-muted-foreground">{siteConfig.tagline}</p>
-          <h1 className="font-serif text-5xl leading-[1.04] tracking-tight text-balance sm:text-6xl lg:text-[4.25rem]">
+          <h1 className="type-display">
             Hand over a project <em className="text-primary">without losing what matters.</em>
           </h1>
-          <p className="max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
+          <p className="max-w-xl type-body-lg text-muted-foreground">
             When someone leaves a club role or project team, the knowledge usually leaves with them. Baton turns your chats and documents into a handover where
             every decision, owner and open task links back to the message it came from.
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <Link href={routes.handover.new} className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}>
+            <Link href={routes.handover.new} className={buttonVariants({ size: "xl" })}>
               Start a handover
               <ArrowRight aria-hidden="true" data-icon="inline-end" />
             </Link>
-            <Link href={routes.demo} className={cn(buttonVariants({ size: "lg", variant: "outline" }), "h-10 px-4")}>
+            <Link href={routes.demo} className={buttonVariants({ size: "xl", variant: "outline" })}>
               Try the demo
             </Link>
           </div>
@@ -67,7 +66,7 @@ export default function HomePage() {
       <section className="border-y border-border/70 bg-card/50">
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
           <div className="max-w-2xl space-y-3">
-            <h2 className="font-serif text-4xl leading-tight tracking-tight">Every point shows how sure you can be.</h2>
+            <h2 className="type-section-title sm:text-4xl">Every point shows how sure you can be.</h2>
             <p className="text-muted-foreground">
               Baton never presents a guess as a fact. Each point carries one of four labels, worked out from the evidence rather than set by hand.
             </p>
@@ -92,7 +91,7 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <h2 className="max-w-2xl font-serif text-4xl leading-tight tracking-tight">From group chat to handover in an afternoon.</h2>
+        <h2 className="max-w-2xl type-section-title sm:text-4xl">From group chat to handover in an afternoon.</h2>
         <ol className="mt-12 grid gap-10 md:grid-cols-3">
           {STEPS.map((step, i) => (
             <li key={step.title} className="space-y-3">
@@ -111,7 +110,7 @@ export default function HomePage() {
       <section className="bg-inverse text-inverse-foreground">
         <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-3">
-            <h2 className="font-serif text-4xl leading-tight tracking-tight">Built for group chats full of phone numbers.</h2>
+            <h2 className="type-section-title sm:text-4xl">Built for group chats full of phone numbers.</h2>
             <p className="text-inverse-muted">
               Student and volunteer groups run on WhatsApp. Baton is designed so that sharing those chats for a handover doesn&rsquo;t mean sharing everyone&rsquo;s
               details. You confirm the group was told, and anyone can ask to be left out.
@@ -132,11 +131,11 @@ export default function HomePage() {
       <section className="mx-auto w-full max-w-6xl px-4 py-20 text-center sm:px-6 sm:py-24">
         <h2 className="mx-auto max-w-2xl type-page-title">The next person shouldn&rsquo;t have to start from scratch.</h2>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link href={routes.handover.new} className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}>
+          <Link href={routes.handover.new} className={buttonVariants({ size: "xl" })}>
             Start a handover
             <ArrowRight aria-hidden="true" data-icon="inline-end" />
           </Link>
-          <Link href={routes.demo} className={cn(buttonVariants({ size: "lg", variant: "outline" }), "h-10 px-4")}>
+          <Link href={routes.demo} className={buttonVariants({ size: "xl", variant: "outline" })}>
             Explore the CodeCell demo
           </Link>
         </div>
