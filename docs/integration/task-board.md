@@ -61,3 +61,13 @@ Previous run archived (not applied): `../baton-first-run-recovery-20261112-03000
 - **L5** credential detector misses whitespace separators (`password Hunter2`): `lib/privacy` contract change.
 - **L7** `X-Forwarded-For` trust per platform before production.
 - **I1** incoming members can see member roles/ack flags and author profile UUIDs in publications.
+
+## Release-readiness triage (2026-11-12)
+- **Verified at `7c58e64`:** `npm test` 1,218/0; SQL 9/9; Tier P 6/6; E2E 4/4; tsc, eslint and build exit 0.
+- **Fixed:** QA-L3 TypeScript half (`ab7847d`, ai-engine) and QA-M1b (`7b49486`, lead). Both are hard
+  tests (qa-security `e82d87e`).
+- **Gated:** QA-L2 before erasure/purge; QA-L5, DB-12, DB-13 and PI-11 before production AI.
+- **Documented limitations:** QA-L3 DB half, QA-L7, QA-I1, QA-L1 DB half.
+- **Proposals awaiting the owner:** `proposals/q1-opaque-participant-refs.md` (R9) and
+  `proposals/q5-rate-limits.md`.
+- **Independent QA review** of `2076b8b..5d6f412`: no regressions, no D11/D27 weakening, no secrets.
