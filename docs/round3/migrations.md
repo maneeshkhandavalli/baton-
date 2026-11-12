@@ -3,7 +3,7 @@
 Owner: Agent 2 (R3-C8). Status: **LOCAL ONLY. Nothing in this document has been applied to hosted Supabase.**
 **Every migration below needs approval before it is applied to a hosted project.**
 
-This document covers all 16 Round 3 migrations, from every worker. For each one it gives:
+This document covers all 17 Round 3 migrations, from every worker. For each one it gives:
 - where it sits in the global apply order;
 - what kind of change it is;
 - what it depends on;
@@ -36,12 +36,18 @@ Migrations apply in file-name order. The Supabase CLI and both local runners do 
 | 14 | `20261113300500_revoke_unfenced_pipeline_writers.sql` | Agent 4 | **revoke**: 8 unfenced writers |
 | 15 | `20261113300600_revoke_mark_source_parse_failed.sql` | Agent 4 | **revoke**: `mark_source_parse_failed` |
 | 16 | `20261113300700_processing_status_partial.sql` | Agent 4 | replace, same signature (`api_get_processing_status`); **changes stage-status values** |
+| 17 | `20261113300800_claim_generation.sql` | Agent 4 | additive column (backfilled); replace, same signature (`_remember_claim_progress`, `_pipeline_claim`, `heartbeat_processing_job`); 8 new `pipeline_*` overloads; **tightens the attempt-only fence and the heartbeat** |
 
-Every replacement keeps its signature, so `CREATE OR REPLACE` keeps the existing grants. Every new function is
-`SECURITY DEFINER` with `set search_path = ''` and is granted to `service_role` only; browser roles get nothing.
-Three read functions stay `SECURITY INVOKER`, so RLS still controls what they return: #4 (`api_list_my_handovers`,
-`api_get_handover`) and #16 (`api_get_processing_status`). No migration changes or drops a table, column, policy
-or row. The only schema addition is #11's nullable column.
+Every replacement keeps its signature, so `CREATE OR REPLACE` keeps the existing grants. Every new API-callable
+function is `SECURITY DEFINER` with `set search_path = ''` and is granted to `service_role` only; browser roles get
+nothing. (#17's internal helper `_pipeline_use_generation` is executable by no API role at all; only the
+`SECURITY DEFINER` overloads call it, as its owner.) Three read functions stay `SECURITY INVOKER`, so RLS still
+controls what they return: #4 (`api_list_my_handovers`, `api_get_handover`) and #16 (`api_get_processing_status`).
+No migration changes or drops a table, column or policy. There are two schema additions:
+- #11 adds a nullable column, with no rewrite and no row writes.
+- #17 adds `processing_jobs.claim_generation bigint not null default 0`. On PG 11+ that is a metadata-only change,
+  but the same migration then backfills every `processing_jobs` row (`set claim_generation = attempt`). It is the
+  only Round 3 migration that writes existing rows. With no job in flight (§5.1) it is a single short update.
 
 ## 2. Order constraints and how they couple to app deploys
 
@@ -69,7 +75,31 @@ Order matters only in the cases below. Everything else can go in any order.
    - **UI gap (Agent 1):** `components/processing/processing-view.tsx` has no `partial` styling. A partial
      stage renders with the neutral dashed icon. It works, but it is not distinguishable from queued.
    - #16 also changes a stage whose jobs are still open from `failed` to `queued`/`running`.
-6. **These are safe in either order relative to the app:**
+6. **Deploy the generation-aware worker (`0bb1b96` or later) before #17.** Checked in the code:
+   - `claim_ready_processing_jobs` returns `setof processing_jobs`, so `claim_generation` appears in the claimed row
+     as soon as the column exists, with no change to that function.
+   - `lib/pipeline/stage-context.ts:30-36` (`claimOf`) reads `claimed.claim_generation`, accepting a number or a
+     numeric string. It sets `generation` only for a safe integer > 0; otherwise the claim is `{ jobId, attempt }`.
+   - `lib/db/pipeline.ts:76` (`fencedRpc`) adds `p_claim_generation` only when `claim.generation` is a number.
+     PostgREST then resolves the 8 new overloads by argument name.
+
+   What this means for each combination:
+   - **That worker on a database without #17:** the claim has no generation, so it calls the attempt-only writers
+     exactly as before. Deploying the worker first is safe.
+   - **That worker on a database with #17:** every fenced write sends the generation and is checked exactly.
+   - **An older worker (before `0bb1b96`) on a database with #17:** this combination is unsafe. It never sends a
+     generation, and #17 accepts an attempt-only write only while `claim_generation = attempt`. After a job's first
+     checkpointing `yield`, every later claim of that job is refused with `BTLL0` (`ClaimLostError`, so it records
+     nothing). The worker drops the job and the lease expires. The next claim raises `attempt` and the generation
+     together, so the gap never closes. The job is reaped as `failed` (`lease_expired`) once
+     `attempt >= max_attempts`.
+   - **The heartbeat change works with either build.** `runner.ts:184-185` already turns `'lost'` into
+     `LeaseLostError`. It is a behaviour change, though: a stage that goes longer than the lease (300 s,
+     `runner.ts:82`) between two heartbeats now loses its claim. Before #17, the late heartbeat renewed it.
+   - **PostgREST must see the new overloads.** Supabase reloads its schema cache on DDL. If the cache is stale, the
+     generation-aware worker gets `PGRST202`, which raises `PipelineSchemaError`, and every run fails with
+     `db_schema_outdated`. Run `notify pgrst, 'reload schema';` after the apply if in doubt.
+7. **These are safe in either order relative to the app:**
    - #4: the mapper treats a missing `description` as `null`.
    - #7: `deleteHandover` ignores a failed raw cleanup.
    - #9: `storage.ts` treats `kind` as optional.
@@ -221,12 +251,13 @@ Order matters only in the cases below. Everything else can go in any order.
   `BTLL0`. Granted to `service_role` only.
 - **Depends on:** the baseline only.
 - **Needed by:** `lib/db/pipeline.ts` (the worker). **Apply it before deploying the worker.**
-- **Rollback:** first roll back #14 and #15 (re-grant), then #12, then drop the new functions. The current worker
-  build cannot run without them.
-- **Verify:**
+- **Rollback:** first roll back #17, then #14 and #15 (re-grant), then #12, then drop the new functions. The current
+  worker build cannot run without them.
+- **Verify** (counts the attempt-only functions; #17's 8 generation overloads are excluded):
   ```sql
   select count(*) = 9 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and (p.proname like 'pipeline\_%' or p.proname = '_pipeline_claim');
+   where n.nspname = 'public' and (p.proname like 'pipeline\_%' or p.proname = '_pipeline_claim')
+     and p.proargnames[3] is distinct from 'p_claim_generation';
   ```
 
 ### #11 `20261113300200_job_yield_checkpoint.sql` (Agent 4, E4)
@@ -238,7 +269,7 @@ Order matters only in the cases below. Everything else can go in any order.
 - **Data note:** jobs claimed before the apply have `claim_progress_done = NULL`, which is treated as 0. Their first
   `yield` with any progress is therefore free. The upgrade test covers a job that was mid-flight during the apply.
 - **Needed by:** the `lib/pipeline` runner.
-- **Rollback:**
+- **Rollback** (roll back #17 first: it replaces `_remember_claim_progress`):
   1. Re-run `complete_processing_job` from `20261112000100_integration_worker_support.sql` (line 106).
   2. Drop the trigger and `_remember_claim_progress()`.
   3. Optionally drop the column.
@@ -325,6 +356,65 @@ Order matters only in the cases below. Everything else can go in any order.
   select prosrc like '%''partial''%' from pg_proc where oid = 'public.api_get_processing_status(uuid)'::regprocedure;
   ```
 
+### #17 `20261113300800_claim_generation.sql` (Agent 4, DB-12 follow-up)
+- **Changes:**
+  - **New column** `processing_jobs.claim_generation bigint not null default 0`, backfilled with `attempt` on every
+    existing row. `(job, attempt)` does not identify one claim: a checkpointing `yield` gives its attempt back,
+    so the next claim reuses the number. The generation does identify one claim.
+  - **`_remember_claim_progress()`** (the claim trigger from #11) now also sets
+    `claim_generation = old.claim_generation + 1` on every claim. Nothing ever lowers it, so
+    `claim_generation >= attempt` always holds.
+  - **`_pipeline_claim(uuid, int, text[])`** keeps its signature. It reads the transaction-local setting
+    `baton.claim_generation`:
+    - when the setting is present, the generation must match exactly;
+    - when it is absent, the call is accepted only while `claim_generation = attempt`, meaning no yield since the
+      job was first claimed at that attempt.
+
+    Either way, a mismatch raises `BTLL0`. All other checks are unchanged.
+  - **8 new overloads** `pipeline_*(p_job_id, p_attempt, p_claim_generation bigint, …)`, one for each fenced
+    writer: `set_job_provenance`, `persist_parsed_source`, `mark_source_parse_failed`, `record_quote_check`,
+    `record_support_verdict`, `create_system_gap_question`, `set_point_sort_keys`, `store_extract_chunk`.
+    - Each is `SECURITY DEFINER` and granted to `service_role` only.
+    - Each sets the generation through `_pipeline_use_generation` (no API grant; refuses NULL or < 1 with
+      `BTVF0`), calls the original writer, then clears the setting.
+    - The attempt-only originals stay granted to `service_role`.
+  - **`heartbeat_processing_job`** keeps its signature and grants. It now returns `'lost'` on a lease that has
+    already expired, instead of renewing it.
+- **Depends on:** #10 (`_pipeline_claim` and the fenced writers it overloads) and #11 (the claim trigger and
+  `_remember_claim_progress`). File-name order guarantees both.
+- **Data note:** after the backfill every row has `claim_generation = attempt`. A job that was mid-flight during the
+  apply keeps writing through the attempt-only path. The upgrade test covers this, then yields and reclaims that job.
+- **Needed by / coupling:** the worker from `0bb1b96` onwards (`lib/pipeline/stage-context.ts` `claimOf`,
+  `lib/db/pipeline.ts` `fencedRpc`). It sends `p_claim_generation` only when the claimed row has one. **Deploy that
+  worker before #17** (§2.6): an older worker is permanently refused on any job that has yielded once.
+- **Rollback** (in this order; every step is `create or replace`, so grants are kept):
+  1. Re-run `_pipeline_claim` from `20261113300100_pipeline_fencing.sql` (line 34).
+  2. Re-run `_remember_claim_progress` from `20261113300200_job_yield_checkpoint.sql` (line 17).
+  3. Re-run `heartbeat_processing_job` from `20261112000100_integration_worker_support.sql` (line 173).
+  4. Drop the 8 overloads `pipeline_*(uuid, int, bigint, …)` and `_pipeline_use_generation(bigint)`.
+  5. **Drop `processing_jobs.claim_generation`. This step is not optional while the generation-aware worker is
+     deployed.** If the column stays, claimed rows still carry a generation, the worker calls the dropped
+     overloads, and every run fails with `db_schema_outdated`. Once the column is gone, the same worker falls back
+     to the attempt-only writers.
+  6. `notify pgrst, 'reload schema';`
+- **Verify:**
+  ```sql
+  select exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'processing_jobs'
+                  and column_name = 'claim_generation' and is_nullable = 'NO')
+     and not exists (select 1 from public.processing_jobs where claim_generation < attempt)
+     and (select count(*) = 8 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+           where n.nspname = 'public' and p.proname like 'pipeline\_%' and p.proargnames[3] = 'p_claim_generation'
+             and p.prosecdef and has_function_privilege('service_role', p.oid, 'EXECUTE')
+             and not has_function_privilege('authenticated', p.oid, 'EXECUTE') and not has_function_privilege('anon', p.oid, 'EXECUTE'))
+     and not has_function_privilege('service_role', 'public._pipeline_use_generation(bigint)', 'EXECUTE')
+     and pg_get_functiondef('public._pipeline_claim(uuid,integer,text[])'::regprocedure) like '%baton.claim_generation%'
+     and pg_get_functiondef('public._remember_claim_progress()'::regprocedure) like '%claim_generation%'
+     and pg_get_functiondef('public.heartbeat_processing_job(uuid,integer,integer,integer,integer)'::regprocedure)
+         like '%lease_expires_at <= now()%'
+     and has_function_privilege('service_role', 'public.heartbeat_processing_job(uuid,integer,integer,integer,integer)', 'EXECUTE')
+     and not has_function_privilege('authenticated', 'public.heartbeat_processing_job(uuid,integer,integer,integer,integer)', 'EXECUTE');
+  ```
+
 ## 4. Upgrade-path test
 
 `supabase/tests/upgrade/run.sh` runs in Docker only, never against a hosted project. It does four things:
@@ -354,6 +444,16 @@ Order matters only in the cases below. Everything else can go in any order.
    - #13: an empty job list is refused;
    - #14 and #15: grants are revoked;
    - #16: the old mixed run now reports `partial`/`queued`, and a new mixed run reports `partial`;
+   - #17, on the same pre-upgrade job:
+     - every pre-upgrade job is backfilled with `claim_generation = attempt`;
+     - the mid-flight claim keeps writing through the attempt-only writer;
+     - after a yield and a re-claim the job reads `attempt 1 / generation 2`;
+     - the stale generation 1 is refused with `BTLL0`;
+     - the now-ambiguous attempt-only call is refused with `BTLL0`;
+     - generation 2 writes, and the setting does not leak past the call;
+     - a heartbeat renews a live lease and returns `'lost'` on an expired one, which stays expired;
+     - all 8 overloads are granted to `service_role` and nothing else, the 7 attempt-only writers stay granted,
+       and `_pipeline_use_generation` / `_pipeline_claim` have no API grant;
    - the old publication is still readable.
 
 ```bash
@@ -362,15 +462,20 @@ BATON_PG_IMAGE=postgres:15-alpine bash supabase/tests/upgrade/run.sh     # PG 15
 BATON_UPGRADE_EXTRA_DIR=/path/with/extra/migrations bash supabase/tests/upgrade/run.sh   # not-yet-merged files
 ```
 
-**Latest result (2026-11-13, all 16 migrations, integration at `b3f68ac`, which includes `0786b1f` and `357f0b5`):**
+**Latest result (2026-11-12, all 17 migrations, integration at `4bb8fef`, which includes Agent 4's `0bb1b96`):**
 - PG 17 and PG 15.19 both passed.
-- Every migration applied cleanly on the populated database.
-- After each step, every pre-upgrade read was unchanged; the only changes were the intended ones (#4's key, #16 on
-  mixed runs).
-- `verify.sql` passed. Its old line asserting that `mark_source_parse_failed` stays granted (QA-R3-13) is
-  replaced by the #15 revoke check.
-- All 17 Verify queries in §3 and the §5 pre-check returned `true` on the upgraded database.
-- I tampered with one title to confirm the diff detector catches a changed read.
+- Every migration applied cleanly on the populated database, #17's backfill included.
+- After each step, every pre-upgrade read was unchanged. #17 changes no read. The only changes were the intended
+  ones (#4's key, #16 on mixed runs).
+- `verify.sql` passed, including the #17 checks listed above.
+- On the upgraded PG 15 database, all 17 §3 Verify blocks returned `true` (18 rows, because #4's block returns two),
+  and so did the §5 pre-check function count.
+- Tamper checks:
+  - granting a #17 overload to `authenticated`, or setting one job's `claim_generation` below its `attempt`, turns
+    #17's Verify query `false`;
+  - the same grant makes `verify.sql` fail;
+  - an earlier run tampered with one title to confirm the diff detector catches a changed read.
+- The #10 Verify query now excludes the #17 overloads; without that change it would return `false` after #17.
 
 **No migration failed on populated data.**
 
@@ -387,10 +492,12 @@ BATON_UPGRADE_EXTRA_DIR=/path/with/extra/migrations bash supabase/tests/upgrade/
 -- the project is exactly at the baseline
 select version from supabase_migrations.schema_migrations order by version desc limit 3;
 --   expected: newest 20261112000500; nothing starting 20261113
--- no worker job is mid-flight (keeps the #11 data note and the #14/#15 switch trivial)
+-- no worker job is mid-flight (keeps the #11/#17 data notes, #17's backfill and the #14/#15 switch trivial)
 select status, count(*) from public.processing_jobs where status in ('queued', 'running') group by status;
 -- the functions about to be replaced exist with the expected signatures
-select count(*) = 13 from (values
+-- (#17 also replaces _pipeline_claim and _remember_claim_progress, which #10/#11 create in this same apply)
+select count(*) = 14 from (values
+  ('public.heartbeat_processing_job(uuid,integer,integer,integer,integer)'),
   ('public.create_handover(uuid,text,text,text,text,text)'), ('public.create_source(uuid,uuid,text,text,text,bigint,text,text)'),
   ('public.api_list_my_handovers()'), ('public.api_get_handover(uuid)'),
   ('public.erase_participant(uuid,uuid,text,bytea,text,uuid,uuid)'), ('public.purge_handover(uuid,uuid,uuid)'),
@@ -405,23 +512,33 @@ select count(*) = 13 from (values
 
 | Step | Do | Why |
 |---|---|---|
-| A | Apply #1–#13 (`20261113100100` … `20261113300400`), in file order, as one `supabase db push` | Additive changes or same-signature replacements; the current app tolerates all of them (§2.6) |
-| B | Deploy the Round 3 app build: wizard autosave, the mapper with `partial`, and the worker that uses only `pipeline_*` and passes its claim | Needs #1 and #10–#12 (§2.2, §2.4) |
+| A | Apply #1–#13 (`20261113100100` … `20261113300400`), in file order, as one `supabase db push` | Additive changes or same-signature replacements; the current app tolerates all of them (§2.7) |
+| B | Deploy the Round 3 app build: wizard autosave, the mapper with `partial`, and the worker that uses only `pipeline_*`, passes its claim, and sends its claim generation when the row has one (`0bb1b96` or later) | Needs #1 and #10–#12 (§2.2, §2.4). Without #17 this worker falls back to the attempt-only writers (§2.6) |
 | C | Smoke-check: edit a draft's details, confirm an upload, and open an existing run's processing page | Confirms B against A (production has no AI provider, so no new run) |
-| D | Apply #14–#16 (`20261113300500` … `20261113300700`) | The revokes need B's worker with the required claim (`parse.ts:73`, `b5d3480`; §2.3); #16 needs B's mapper (`mappers.ts:374`; §2.5) |
+| D | Confirm that no job is `running` (re-run the pre-check's job query), then apply #14–#17 (`20261113300500` … `20261113300800`). Then run `notify pgrst, 'reload schema';` | The revokes need B's worker with the required claim (`parse.ts:73`, `b5d3480`; §2.3). #16 needs B's mapper (`mappers.ts:374`; §2.5). #17 needs B's generation-aware worker, and an older worker is refused on every job that has yielded (§2.6). PostgREST must see #17's overloads (§2.6) |
 
-Do not apply #14–#16 before step B. Do not deploy B before step A.
+Do not apply #14–#17 before step B. Do not deploy B before step A. Never run a worker older than `0bb1b96` against a
+database that has #17.
 
 **3. Post-apply verification:** run every **Verify** query in §3. All must return `true`. Then run the pre-check
-again; the newest version should be `20261113300700`.
+again; the newest version should be `20261113300800`.
 
 **4. Rollback triggers.** Roll back the specific migration (its §3 Rollback) if any of these happens:
 - any Verify query returns `false`;
 - the processing page returns `internal` (suspect #16 before the mapper deploy, so roll back #16);
 - worker runs fail with `forbidden` / `42501` (suspect #14/#15 before the worker deploy, so re-grant);
-- runs fail with `db_schema_outdated` (#10–#12 missing, so apply them or roll back the worker deploy);
+- runs fail with `db_schema_outdated`:
+  - if #10–#12 are missing, apply them or roll back the worker deploy;
+  - right after #17, PostgREST may not see the overloads yet, so run `notify pgrst, 'reload schema';`;
+  - after a partial #17 rollback that kept `claim_generation`, finish #17's rollback through step 5;
+- after #17, jobs that have yielded keep coming back as `lost` and end `failed` / `lease_expired` (`BTLL0` in the
+  worker log):
+  - this means a worker older than `0bb1b96` is running, so redeploy B or roll back #17 (through step 5);
+- after #17, long stages lose their claim (heartbeat `'lost'`) where they did not before. A gap between heartbeats
+  went past the 300 s lease. Roll back #17's heartbeat only (rollback step 3), or shorten that stage's heartbeat
+  interval;
 - the wizard autosave returns `internal` (#1 missing).
 
-Roll back in reverse file order and only as far as needed. The app-tolerant migrations (§2.6) do not need to be
+Roll back in reverse file order and only as far as needed. The app-tolerant migrations (§2.7) do not need to be
 rolled back to undo an app deploy. If several of these fail at once, restore from the backup or recovery marker
 taken in step 0.

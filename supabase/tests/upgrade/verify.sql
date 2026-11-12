@@ -25,7 +25,25 @@ begin
     'public.list_deleted_handover_raw_paths(uuid,uuid)',                                            -- 200200
     'public.pipeline_store_extract_chunk(uuid,integer,integer,integer,text,jsonb,jsonb)',              -- 300100/300300
     'public.complete_processing_job(uuid,integer,text,jsonb,text,text,timestamp with time zone,integer,integer)', -- 300200
-    'public.start_processing(uuid,uuid,text,jsonb,jsonb)'] loop                                     -- 300400
+    'public.start_processing(uuid,uuid,text,jsonb,jsonb)',                                          -- 300400
+    -- 300100 fenced writers (attempt-only): still granted after 300800
+    'public.pipeline_set_job_provenance(uuid,integer,jsonb)',
+    'public.pipeline_persist_parsed_source(uuid,integer,jsonb,text)',
+    'public.pipeline_mark_source_parse_failed(uuid,integer,text)',
+    'public.pipeline_record_quote_check(uuid,integer,uuid,text)',
+    'public.pipeline_record_support_verdict(uuid,integer,uuid,uuid,text,text,jsonb,bytea)',
+    'public.pipeline_create_system_gap_question(uuid,integer,uuid,text,text,text,text,text)',
+    'public.pipeline_set_point_sort_keys(uuid,integer,jsonb)',
+    -- 300800: the 8 generation-checked overloads
+    'public.pipeline_set_job_provenance(uuid,integer,bigint,jsonb)',
+    'public.pipeline_persist_parsed_source(uuid,integer,bigint,jsonb,text)',
+    'public.pipeline_mark_source_parse_failed(uuid,integer,bigint,text)',
+    'public.pipeline_record_quote_check(uuid,integer,bigint,uuid,text)',
+    'public.pipeline_record_support_verdict(uuid,integer,bigint,uuid,uuid,text,text,jsonb,bytea)',
+    'public.pipeline_create_system_gap_question(uuid,integer,bigint,uuid,text,text,text,text,text)',
+    'public.pipeline_set_point_sort_keys(uuid,integer,bigint,jsonb)',
+    'public.pipeline_store_extract_chunk(uuid,integer,bigint,integer,integer,text,jsonb,jsonb)',
+    'public.heartbeat_processing_job(uuid,integer,integer,integer,integer)'] loop                    -- 300800 (replaced in place)
     perform tests.ok(to_regprocedure(f) is not null, 'exists: ' || f);
     perform tests.ok(has_function_privilege('service_role', f, 'EXECUTE'), 'server executes ' || f);
     perform tests.ok(not has_function_privilege('authenticated', f, 'EXECUTE') and not has_function_privilege('anon', f, 'EXECUTE'),
@@ -39,6 +57,23 @@ begin
     perform tests.ok(not has_function_privilege('service_role', f, 'EXECUTE') and not has_function_privilege('authenticated', f, 'EXECUTE')
                      and not has_function_privilege('anon', f, 'EXECUTE'), '100500/D27: no API role executes ' || f);
     perform tests.ok(pg_get_functiondef(to_regprocedure(f)) like '%_require_actor%', '100500: ' || f || ' validates the actor');
+  end loop;
+  -- 300800: the new overloads are granted to service_role ONLY (no PUBLIC grant, no other role)
+  perform tests.eq((select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                     where n.nspname = 'public' and p.proname like 'pipeline\_%' and p.proargnames[3] = 'p_claim_generation'),
+                   8, '300800: exactly 8 generation-checked overloads');
+  perform tests.eq((select array_agg(distinct coalesce(r.rolname::text, 'PUBLIC') order by coalesce(r.rolname::text, 'PUBLIC'))
+                      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                      cross join lateral aclexplode(p.proacl) a
+                      left join pg_roles r on r.oid = a.grantee
+                     where n.nspname = 'public' and p.proname like 'pipeline\_%' and p.proargnames[3] = 'p_claim_generation'
+                       and a.privilege_type = 'EXECUTE' and a.grantee <> p.proowner),
+                   array['service_role']::text[], '300800: the overloads'' only EXECUTE grantee besides the owner is service_role');
+  -- 300800: the internal helpers stay executable by no API role
+  foreach f in array array['public._pipeline_use_generation(bigint)', 'public._pipeline_claim(uuid,integer,text[])'] loop
+    perform tests.ok(to_regprocedure(f) is not null
+                     and not has_function_privilege('service_role', f, 'EXECUTE') and not has_function_privilege('authenticated', f, 'EXECUTE')
+                     and not has_function_privilege('anon', f, 'EXECUTE'), '300800: no API role executes ' || f);
   end loop;
   -- 300200: the new column and trigger
   perform tests.ok(exists (select 1 from information_schema.columns
@@ -105,6 +140,18 @@ select tests.eq((select e ->> 'rawStoragePath' from jsonb_array_elements(public.
 select tests.throws(format('select public.list_deleted_handover_raw_paths(%L, %L)', tests.id('ann'), tests.id('hd')), 'BTPF0',
                     '200200: a live draft is refused');
 
+-- 300800: claim_generation exists and was backfilled from attempt on the pre-upgrade rows
+select tests.ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'processing_jobs'
+                         and column_name = 'claim_generation' and is_nullable = 'NO'), '300800: processing_jobs.claim_generation exists');
+select tests.ok((select bool_and(claim_generation = attempt) from public.processing_jobs
+                  where run_id in (tests.id('run_hp'), tests.id('run_hr'), tests.id('run_hx'))),
+                '300800: pre-upgrade jobs are backfilled with claim_generation = attempt');
+select tests.eq((select claim_generation from public.processing_jobs where id = tests.id('job_hp')), 1::bigint,
+                '300800: the in-flight job keeps generation 1');
+-- 300800: the in-flight claim still writes through the legacy (no-generation) overload: (job, attempt) is unambiguous
+select tests.eq(tests.try(format($q$select public.pipeline_set_job_provenance(%L, 1, '{"provider":"fake"}'::jsonb)::text$q$, tests.id('job_hp'))),
+                'OK:', '300800: a claim taken before the upgrade keeps writing without a generation');
+
 -- 300200: the job claimed BEFORE the upgrade (claim_progress_done NULL) yields with progress
 select tests.ok((select claim_progress_done is null and status = 'running' from public.processing_jobs where id = tests.id('job_hp')),
                 '300200: the in-flight job has no claim checkpoint (claimed before the column existed)');
@@ -118,6 +165,23 @@ select tests.eq((select claim_progress_done from public.processing_jobs where id
                 '300200: the new claim records its starting progress');
 select tests.throws(format($q$select public.pipeline_set_job_provenance(%L, 99, '{}'::jsonb)$q$, tests.id('job_hp')), 'BTLL0',
                     '300100: a stale attempt cannot write');
+-- 300800: yield + reclaim reused attempt 1 but advanced the generation; only the current generation may write
+select tests.eq((select attempt::text || '/' || claim_generation::text from public.processing_jobs where id = tests.id('job_hp')), '1/2',
+                '300800: yield + reclaim reuses attempt 1 and increments the generation to 2');
+select tests.throws(format($q$select public.pipeline_set_job_provenance(%L, 1, 1::bigint, '{}'::jsonb)$q$, tests.id('job_hp')), 'BTLL0',
+                    '300800: the stale generation (the pre-yield claim, same attempt number) is refused');
+select tests.throws(format($q$select public.pipeline_set_job_provenance(%L, 1, '{}'::jsonb)$q$, tests.id('job_hp')), 'BTLL0',
+                    '300800: without a generation, an ambiguous (job, attempt) is refused');
+select tests.eq(tests.try(format($q$select public.pipeline_set_job_provenance(%L, 1, 2::bigint, '{"provider":"fake"}'::jsonb)::text$q$, tests.id('job_hp'))),
+                'OK:', '300800: the current generation writes');
+select tests.ok(coalesce(current_setting('baton.claim_generation', true), '') = '', '300800: the generation setting does not leak past the call');
+-- 300800: a live lease is still renewed; an expired lease is not
+select tests.ok(public.heartbeat_processing_job(tests.id('job_hp'), 1, 300) in ('queued', 'running'), '300800: a heartbeat on a live lease renews it');
+select tests.as_owner();
+update public.processing_jobs set lease_expires_at = now() - interval '1 second' where id = tests.id('job_hp');
+select tests.as_service();
+select tests.eq(public.heartbeat_processing_job(tests.id('job_hp'), 1, 300), 'lost', '300800: a heartbeat on an expired lease is lost');
+select tests.ok((select lease_expires_at < now() from public.processing_jobs where id = tests.id('job_hp')), '300800: and the lease stays expired');
 select tests.as_owner();
 
 -- 300400: an empty job list is refused on the pre-upgrade in-review handover
