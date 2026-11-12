@@ -40,7 +40,7 @@ export default function HomePage() {
     <>
       <section className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] items-center overflow-x-clip gap-14 px-4 pt-16 pb-20 sm:px-6 sm:pt-24 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
         <FadeIn className="space-y-6">
-          <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">{siteConfig.tagline}</p>
+          <p className="type-eyebrow text-muted-foreground">{siteConfig.tagline}</p>
           <h1 className="font-serif text-5xl leading-[1.04] tracking-tight text-balance sm:text-6xl lg:text-[4.25rem]">
             Hand over a project <em className="text-primary">without losing what matters.</em>
           </h1>
@@ -130,7 +130,7 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-20 text-center sm:px-6 sm:py-24">
-        <h2 className="mx-auto max-w-2xl font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">The next person shouldn&rsquo;t have to start from scratch.</h2>
+        <h2 className="mx-auto max-w-2xl type-page-title">The next person shouldn&rsquo;t have to start from scratch.</h2>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href={routes.handover.new} className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}>
             Start a handover

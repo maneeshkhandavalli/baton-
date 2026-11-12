@@ -25,8 +25,8 @@ export default function DemoPage() {
     <div className="mx-auto w-full max-w-[90rem] space-y-8 px-4 py-10 sm:px-6 lg:px-10">
       <header className="flex flex-col gap-6 border-b border-border pb-8 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl space-y-3">
-          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Public demo · read only</p>
-          <h1 className="font-serif text-4xl leading-[1.08] tracking-tight sm:text-5xl">CodeCell: handing over the technical lead role</h1>
+          <p className="type-eyebrow text-muted-foreground">Public demo · read only</p>
+          <h1 className="type-page-title">CodeCell: handing over the technical lead role</h1>
           <p className="leading-relaxed text-muted-foreground">
             Priya is leaving CodeCell, a college coding club. Baton read two WhatsApp groups, a sponsorship MoU, the hackathon runbook and some infrastructure
             notes. Browse what it found, how each point is backed, and what Neha, the incoming lead, receives.

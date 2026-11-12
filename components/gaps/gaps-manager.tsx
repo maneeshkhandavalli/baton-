@@ -124,13 +124,13 @@ function Group({
           return (
             <li key={q.id} className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={cn("inline-flex h-5 items-center rounded-md px-1.5 text-[0.6875rem] font-medium", q.priority === "required" ? "bg-status-conflicting-soft text-status-conflicting-fg" : "bg-muted text-muted-foreground")}>
+                <span className={cn("inline-flex h-5 items-center rounded-md px-1.5 text-2xs font-medium", q.priority === "required" ? "bg-status-conflicting-soft text-status-conflicting-fg" : "bg-muted text-muted-foreground")}>
                   {gapPriorityLabel[q.priority]}
                 </span>
                 {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
                 <span className="ml-auto text-xs text-muted-foreground capitalize">{q.status}</span>
               </div>
-              <h3 className="mt-2 text-[0.9375rem] leading-snug font-semibold"><MaskedText text={q.question} /></h3>
+              <h3 className="mt-2 text-md leading-snug font-semibold"><MaskedText text={q.question} /></h3>
               {q.context && <p className="mt-1 text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}
               {point && (
                 <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -144,7 +144,7 @@ function Group({
               {q.answers.length > 0 && (
                 <ul className="mt-4 space-y-2">
                   {q.answers.map((a) => (
-                    <li key={a.id} className={cn("rounded-lg border-l-2 bg-background/70 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-primary/50")}>
+                    <li key={a.id} className={cn("rounded-lg border-l-2 bg-muted/40 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-primary/50")}>
                       <p className="text-sm leading-relaxed"><MaskedText text={a.text} /></p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-medium text-foreground/80">{a.answererLabel}</span>

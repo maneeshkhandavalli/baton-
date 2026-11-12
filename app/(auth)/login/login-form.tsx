@@ -46,7 +46,7 @@ export function LoginForm({ next, error }: { next: string | null; error: string 
         />
       </div>
       {message ? (
-        <p id="login-message" role="alert" className="text-sm text-destructive">
+        <p id="login-message" role="alert" className="text-sm text-destructive-fg">
           {message}
         </p>
       ) : null}

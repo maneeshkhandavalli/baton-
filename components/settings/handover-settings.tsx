@@ -87,7 +87,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
           </dd>
         </dl>
         {offerIsForMe && offer && (
-          <div className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary/[0.04] p-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary-soft/50 p-3 sm:flex-row sm:items-center">
             <Crown aria-hidden="true" className="hidden size-4 shrink-0 text-primary sm:block" />
             <p className="flex-1 text-sm">
               {members.find((m) => m.isCreator)?.displayName ?? "The creator"} offered you creatorship on {formatDate(offer.offeredAt)}. As creator you publish, invite
@@ -236,7 +236,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               </Button>
             </div>
             {inviteLink && (
-              <div className="space-y-1.5 rounded-lg bg-background/70 p-3">
+              <div className="space-y-1.5 rounded-lg bg-muted/40 p-3">
                 <p className="text-xs text-muted-foreground">
                   Invite link, shown only once. It expires in 7 days and works once. They sign in with a magic link sent to that email.
                 </p>
@@ -360,7 +360,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
         <Panel id="danger">
           <SectionHeading title="Ownership and deletion" description="Only the creator can do these." />
           {offer && (
-            <p className="flex items-start gap-2 rounded-lg bg-background/70 p-3 text-sm">
+            <p className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-sm">
               <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <span>
                 Creatorship offered to {offeredTo?.displayName ?? "a member"} on {formatDate(offer.offeredAt)}. You stay the creator until they accept. Offers lapse after 14

@@ -112,7 +112,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
                   <label
                     className={cn(
                       "inline-flex items-center gap-2 self-start rounded-md border px-2 py-1 text-xs sm:self-auto",
-                      checked ? "border-destructive/40 bg-destructive/5 text-destructive" : "border-border",
+                      checked ? "border-destructive/40 bg-destructive/5 text-destructive-fg" : "border-border",
                     )}
                   >
                     <input
@@ -153,7 +153,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
           </DialogHeader>
           {purging.length > 0 && (
             <div className="space-y-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
-              <p className="font-medium text-destructive">
+              <p className="font-medium text-destructive-fg">
                 {purging.length === 1 ? "This handover is" : "These handovers are"} deleted permanently, for every member, right away:
               </p>
               <ul className="list-disc space-y-0.5 pl-5">
@@ -186,7 +186,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
               aria-invalid={!!error || (typed.length > 0 && !typedMatches)}
               aria-describedby="confirm-delete-hint"
             />
-            <p id="confirm-delete-hint" className={cn("text-xs", error ? "text-destructive" : "text-muted-foreground")} role={error ? "alert" : undefined}>
+            <p id="confirm-delete-hint" className={cn("text-xs", error ? "text-destructive-fg" : "text-muted-foreground")} role={error ? "alert" : undefined}>
               {error ? error.message : `Capital letters, exactly as shown.`}
             </p>
           </form>

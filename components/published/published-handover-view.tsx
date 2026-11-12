@@ -74,11 +74,11 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
 
       <div className="min-w-0 space-y-12">
         <header className="space-y-4 border-b border-border pb-8">
-          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
+          <p className="type-eyebrow text-muted-foreground">
             {handover.teamName}
             {handover.roleTitle && ` · ${handover.roleTitle}`}
           </p>
-          <h1 className="font-serif text-4xl leading-[1.08] tracking-tight text-balance sm:text-5xl">{handover.title}</h1>
+          <h1 className="type-page-title">{handover.title}</h1>
           <p className="text-sm text-muted-foreground">
             Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} ({memberRoleLabel[viewerRole].toLowerCase()})
           </p>
@@ -99,7 +99,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
 
         {groups.map((g) => (
           <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="scroll-mt-6 space-y-4">
-            <h2 id={`${g.id}-h`} className="font-serif text-3xl tracking-tight">
+            <h2 id={`${g.id}-h`} className="type-section-title">
               {g.label}
             </h2>
             <ul className="space-y-3">
@@ -115,7 +115,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         {gaps.length > 0 && (
           <section id="open-questions" aria-labelledby="oq-h" className="scroll-mt-6 space-y-4">
             <div>
-              <h2 id="oq-h" className="font-serif text-3xl tracking-tight">
+              <h2 id="oq-h" className="type-section-title">
                 Open questions
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">Known gaps. Nobody could answer these before the handover, so treat them as things to find out, not facts.</p>
@@ -178,7 +178,7 @@ function PublishedPoint({ point }: { point: Point }) {
         </p>
       )}
       {c.conflictResolution && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm">
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
           <Scale aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-conflicting" />
           <span>
             <span className="font-medium">Sources disagreed. {c.conflictResolution.byLabel} resolved it: </span>
@@ -246,7 +246,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
     <section id="first-week" aria-labelledby="fw-h" className="scroll-mt-6 rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 id="fw-h" className="font-serif text-3xl tracking-tight">
+          <h2 id="fw-h" className="type-section-title">
             Your first 7 days
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">Built from the handover. Your progress is saved on this device.</p>
@@ -261,13 +261,13 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
       <div className="mt-6 grid gap-6 md:grid-cols-3">
         {days.map((d) => (
           <div key={d.label}>
-            <h3 className="mb-2 text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{d.label}</h3>
+            <h3 className="mb-2 type-eyebrow text-muted-foreground">{d.label}</h3>
             <ul className="space-y-2">
               {d.items.map((item) => {
                 const checked = done.includes(item.id);
                 return (
                   <li key={item.id}>
-                    <label className={cn("flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-2.5 text-sm transition-colors hover:bg-background/70", checked && "bg-status-sourced-soft/50")}>
+                    <label className={cn("flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-2.5 text-sm transition-colors hover:bg-muted/40", checked && "bg-status-sourced-soft/50")}>
                       <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} className="mt-0.5 size-4 shrink-0 accent-[var(--status-sourced)]" />
                       <span className="min-w-0">
                         <span className={cn("block leading-snug", checked && "text-muted-foreground line-through")}>{item.title}</span>
@@ -296,7 +296,7 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
         <div className="flex items-start gap-3">
           <CheckCircle2 aria-hidden="true" className="mt-1 size-6 shrink-0 text-status-sourced" />
           <div>
-            <h2 id="ack-h" className="font-serif text-3xl">
+            <h2 id="ack-h" className="type-section-title">
               You&rsquo;ve acknowledged this handover
             </h2>
             <p className="mt-1 text-sm text-background/70">On {formatDate(acked)}. If a new version is published, you&rsquo;ll be asked to acknowledge it again.</p>
@@ -304,7 +304,7 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
         </div>
       ) : viewerRole !== "incoming" || preview ? (
         <div>
-          <h2 id="ack-h" className="font-serif text-3xl">
+          <h2 id="ack-h" className="type-section-title">
             Acknowledgement
           </h2>
           <p className="mt-1 text-sm text-background/70">
@@ -313,7 +313,7 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
         </div>
       ) : (
         <div className="space-y-4">
-          <h2 id="ack-h" className="font-serif text-3xl">
+          <h2 id="ack-h" className="type-section-title">
             Acknowledge the handover
           </h2>
           <label className="flex items-start gap-3 text-sm leading-relaxed text-background/85">

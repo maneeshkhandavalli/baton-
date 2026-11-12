@@ -19,7 +19,7 @@ const Toaster = ({ theme = "light", ...props }: ToasterProps) => {
         success: <CircleCheckIcon className="size-4 text-success" />,
         info: <InfoIcon className="size-4 text-info" />,
         warning: <TriangleAlertIcon className="size-4 text-warning" />,
-        error: <OctagonXIcon className="size-4 text-destructive" />,
+        error: <OctagonXIcon className="size-4 text-destructive-fg" />,
         loading: <Loader2Icon className="size-4 animate-spin text-muted-foreground" />,
       }}
       style={

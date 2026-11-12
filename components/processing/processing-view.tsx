@@ -72,7 +72,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
       <section aria-labelledby="run-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="run-heading" className="font-serif text-2xl">
+            <h2 id="run-heading" className="type-title">
               {active ? "Processing your sources" : r?.status === "succeeded" ? "Processing complete" : r?.status === "failed" ? "Processing failed" : r?.status === "cancelled" ? "Processing cancelled" : "Ready to process"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -114,7 +114,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
             {stages.map((s) => {
               const Icon = s.status === "succeeded" ? Check : s.status === "running" ? Loader2 : s.status === "failed" ? AlertTriangle : CircleDashed;
               return (
-                <li key={s.stage} aria-current={s.status === "running" ? "step" : undefined} className={cn("flex items-start gap-3 rounded-lg px-2 py-2.5", s.status === "running" && "bg-primary/[0.04]")}>
+                <li key={s.stage} aria-current={s.status === "running" ? "step" : undefined} className={cn("flex items-start gap-3 rounded-lg px-2 py-2.5", s.status === "running" && "bg-primary-soft/50")}>
                   <span
                     aria-hidden="true"
                     className={cn(
@@ -122,7 +122,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
                       s.status === "succeeded" && "border-primary bg-primary text-primary-foreground",
                       s.status === "running" && "border-primary text-primary",
                       (s.status === "queued" || s.status === "cancelled") && "border-border-strong text-muted-foreground",
-                      s.status === "failed" && "border-destructive text-destructive",
+                      s.status === "failed" && "border-destructive text-destructive-fg",
                     )}
                   >
                     <Icon className={cn("size-3.5", s.status === "running" && "animate-spin")} />
@@ -220,7 +220,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
       <p className="font-serif text-2xl tabular-nums">{value}</p>
-      <p className="text-[0.6875rem] tracking-wide text-muted-foreground uppercase">{label}</p>
+      <p className="type-eyebrow text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -236,7 +236,7 @@ function SourceRow({ s }: { s: SourceSummary }) {
       </div>
       <p className="pl-6 text-xs text-muted-foreground">
         {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} ·{" "}
-        <span className={cn(s.state === "failed" && "text-destructive", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
+        <span className={cn(s.state === "failed" && "text-destructive-fg", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
         {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${s.kind === "whatsapp_export" ? "messages" : "blocks"}`}
       </p>
       {s.firstMessageAt && <p className="pl-6 text-xs text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}

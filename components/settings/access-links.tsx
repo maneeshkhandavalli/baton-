@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 /** Exactly the canonical derived status; nothing else is inferred from the token. */
 function StatusPill({ token }: { token: AccessTokenSummary }) {
   const meta = tokenStatusMeta[token.status];
-  return <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[0.6875rem] font-medium", meta.className)}>{meta.label}</span>;
+  return <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-2xs font-medium", meta.className)}>{meta.label}</span>;
 }
 
 /**

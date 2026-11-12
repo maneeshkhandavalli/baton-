@@ -13,11 +13,11 @@ export function ProductPreview() {
           <div className="flex items-center gap-1.5">
             <StatusBadge status="sourced" size="sm" />
             <span className="text-xs text-muted-foreground">Account & access</span>
-            <span className="ml-auto inline-flex h-5 items-center gap-1 rounded-md bg-status-sourced-soft px-1.5 text-[0.6875rem] font-medium text-status-sourced-fg">
+            <span className="ml-auto inline-flex h-5 items-center gap-1 rounded-md bg-status-sourced-soft px-1.5 text-2xs font-medium text-status-sourced-fg">
               <Check className="size-3" /> Approved
             </span>
           </div>
-          <p className="mt-2 text-[0.9375rem] font-semibold">GitHub organisation owners</p>
+          <p className="mt-2 text-md font-semibold">GitHub organisation owners</p>
           <p className="mt-0.5 text-sm text-muted-foreground">Priya and Kabir own codecell-org. Credentials live in the club vault.</p>
           <EvidenceQuote
             className="mt-3"
@@ -36,8 +36,8 @@ export function ProductPreview() {
           </div>
           <p className="mt-2 text-sm font-semibold">Workshop fee for non-members</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <p className="rounded-md border-l-2 border-l-status-sourced bg-background/70 p-2 font-mono text-[0.6875rem] leading-relaxed">Non-members pay 100 for workshops…</p>
-            <p className="rounded-md border-l-2 border-l-status-conflicting bg-background/70 p-2 font-mono text-[0.6875rem] leading-relaxed">workshops are free for EVERYONE…</p>
+            <p className="rounded-md border-l-2 border-l-status-sourced bg-muted/40 p-2 font-mono text-2xs leading-relaxed">Non-members pay 100 for workshops…</p>
+            <p className="rounded-md border-l-2 border-l-status-conflicting bg-muted/40 p-2 font-mono text-2xs leading-relaxed">workshops are free for EVERYONE…</p>
           </div>
         </div>
         <div className="mr-8 flex items-center gap-2.5 rounded-xl border border-dashed border-border-strong bg-card/70 p-3 text-sm text-status-missing-fg">

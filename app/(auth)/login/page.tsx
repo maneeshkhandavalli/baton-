@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Sign in" };
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <section className="rounded-xl border border-border bg-card p-8 shadow-soft">
-      <h1 className="font-serif text-3xl leading-tight">Sign in to Baton</h1>
+      <h1 className="type-section-title">Sign in to Baton</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
         We&apos;ll email you a link. No password needed.
       </p>
