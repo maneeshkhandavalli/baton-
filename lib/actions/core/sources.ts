@@ -52,11 +52,12 @@ export async function createSourceUpload(deps: ActionDeps, input: CreateSourceUp
 }
 
 /**
- * R3 C3: the same file (same SHA-256) is already a live source of this handover, possibly one whose upload
- * was interrupted (`pending_upload`). Removing that source frees the file to be uploaded again.
+ * R3 C3/C5: the same file (same SHA-256) is already a live source of this handover: uploaded, parsed or
+ * failed, or still being uploaded by ANOTHER member. The actor's own unfinished upload is not a duplicate:
+ * create_source reuses (or replaces) that row and a fresh ticket is returned (migration 20261113100300).
  */
 export const DUPLICATE_SOURCE_MESSAGE =
-  "This file is already in this handover. If an earlier upload of it did not finish, remove that one and try again.";
+  "This file is already in this handover (or another member is uploading it), so there is no need to add it again.";
 export const DUPLICATE_SOURCE_REASON = "duplicate_source";
 
 /** M5: the server measures the uploaded object; the database compares it with the declared values. */

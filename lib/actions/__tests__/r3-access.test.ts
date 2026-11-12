@@ -50,6 +50,21 @@ describe("createHandover resubmission (R3 C2)", () => {
 describe("duplicate upload (R3 C3)", () => {
   const upload = { handoverId: H, kind: "whatsapp_export", fileName: "chat.txt", mimeType: "text/plain", sizeBytes: 10, sha256: "ab".repeat(32) } as const;
 
+  it("C5: a retried unfinished upload gets a fresh ticket for the source create_source hands back", async () => {
+    // create_source returns the reused pending source's id (or the id of the row that replaced it).
+    const f = fakeDeps({ rpc: { create_source: { data: S } } });
+    const first = await sources.createSourceUpload(f.deps, upload);
+    const retry = await sources.createSourceUpload(f.deps, { ...upload, fileName: "chat (1).txt" });
+    assert.ok(first.ok && retry.ok);
+    assert.equal(retry.data.sourceId, S);
+    assert.deepEqual(f.fns(), ["create_source", "create_source"]);
+    assert.deepEqual(f.storageCalls, [
+      { op: "createSignedUploadUrl", path: `raw/${H}/${S}` },
+      { op: "createSignedUploadUrl", path: `raw/${H}/${S}` },
+    ], "each attempt signs a fresh ticket for the same path");
+    assert.equal(f.calls[1].args?.p_sha256_hex, "ab".repeat(32));
+  });
+
   it("the (handover, sha256) duplicate is a friendly typed conflict and nothing is signed", async () => {
     const f = fakeDeps({ rpc: { create_source: dbError("BTCF0") } });
     const r = await sources.createSourceUpload(f.deps, upload);
