@@ -378,3 +378,47 @@ export async function deleteRawSource(db: DbClient, adminStorage: StorageClient,
   if (error) throw new DbError("internal");
   await callRpc(db, "mark_source_raw_deleted", { p_source_id: sourceId });
 }
+
+// ── Discard: raw cleanup for a soft-deleted handover (R3-D5) ────────────────
+
+/**
+ * Deletes the raw uploads of a handover that was just soft-deleted (discarded draft), best-effort.
+ * Call ONLY after `delete_handover` committed, with the same actor (its creator, or the actor who
+ * deleted it). Paths come from `list_deleted_handover_raw_paths` (refuses a live handover); each must be
+ * that source's own raw/{handover}/{source} path, is removed from Storage and then recorded with
+ * `mark_source_raw_deleted` (idempotent). Database rows are never deleted (the purge stays behind D27).
+ *
+ * Never throws for Storage or marking failures or for a foreign path: those count as `failed`, keep
+ * their raw path and are retried by the retention sweep (docs/proposals/retention.md). Throws a DbError
+ * only when the listing itself is refused (not_found, precondition_failed, unauthenticated, …).
+ */
+export async function deleteHandoverRawObjects(
+  db: DbClient,
+  adminStorage: StorageClient,
+  actor: VerifiedActor,
+  handoverId: string,
+): Promise<{ deleted: number; failed: number }> {
+  const listed = await callRpc(db, "list_deleted_handover_raw_paths", {
+    p_actor_profile_id: actor.profileId,
+    p_handover_id: handoverId,
+  });
+  const rows = Array.isArray(listed) ? (listed as Array<{ sourceId?: unknown; rawStoragePath?: unknown }>) : [];
+  let deleted = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const sourceId = typeof row?.sourceId === "string" ? row.sourceId : null;
+    const path = row?.rawStoragePath;
+    // The path must also sit under THIS handover, not only belong to the source.
+    if (!sourceId || !isOwnedRawPath(path, sourceId) || !path.startsWith(`raw/${handoverId}/`)) {
+      failed++;
+      continue;
+    }
+    try {
+      await deleteRawSource(db, adminStorage, sourceId, path);
+      deleted++;
+    } catch {
+      failed++;
+    }
+  }
+  return { deleted, failed };
+}

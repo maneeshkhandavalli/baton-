@@ -149,6 +149,10 @@ hourly. Per run, with a time budget and `limit` 100 per page:
    function returning `(source_id, raw_storage_path)` for a just-deleted handover's sources with a raw
    path (callable for a deleted handover by its creator, or by service role with the handover id), then
    `deleteRawSource` per row (lib/db/storage.ts, unchanged API). Reason: §4 last row.
+   **Status (R3-D5):** the database and storage half is done: migration `20261113200200`
+   (`list_deleted_handover_raw_paths`, service role, soft-deleted handovers only, creator or deleting
+   actor only) and `deleteHandoverRawObjects(db, adminStorage, actor, handoverId)` →
+   `{ deleted, failed }` in lib/db/storage.ts. Agent 2 calls it from `deleteHandover` after commit.
 2. **Lead** — the retention route (§7) and `CRON_SECRET` wiring; `claim_raw_for_retention` can be added
    by Agent 3 in the `2026111320*` range once the policy is approved.
 3. **Agent 1** — in the wizard, retry `confirmSourceUploaded` on `internal`/network errors before calling

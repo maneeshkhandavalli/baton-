@@ -12,6 +12,7 @@ import {
   checkSourceUploadRequest,
   confirmSourceUpload,
   createSourceUpload,
+  deleteHandoverRawObjects,
   deleteRawSource,
   downloadVerifiedRawSourceWithMeta,
   isOwnedRawPath,
@@ -314,5 +315,112 @@ describe("R3 D2: raw-path ownership on every read and delete", () => {
     const { db, fns } = fakeDb();
     await assert.rejects(deleteRawSource(db, fakeStorage({ removeError: true }).storage, S, rawSourcePath(H, S)), isCode("internal"));
     assert.deepEqual(fns(), []);
+  });
+});
+
+describe("R3-D5: raw cleanup on discard (deleteHandoverRawObjects)", () => {
+  const S3 = "99999999-9999-4999-8999-999999999999";
+  const OTHER_H = "22222222-2222-4222-8222-222222222222";
+  const row = (sourceId: string, path: unknown = rawSourcePath(H, sourceId)) => ({ sourceId, rawStoragePath: path });
+
+  /** Storage that fails `remove` for the listed paths only. */
+  function storageFailingFor(failing: string[] = []) {
+    const removed: string[][] = [];
+    const storage: StorageClient = {
+      from: () => ({
+        createSignedUploadUrl: async () => ({ data: null, error: { message: "unused" } }),
+        download: async () => ({ data: null, error: { message: "unused" } }),
+        remove: async (paths) => {
+          removed.push(paths);
+          return paths.some((p) => failing.includes(p)) ? { data: null, error: { message: "synthetic remove failure" } } : { data: [], error: null };
+        },
+      }),
+    };
+    return { storage, removed };
+  }
+
+  it("lists with the actor, removes each owned object, then marks it; counts per source", async () => {
+    const { db, calls } = fakeDb({ list_deleted_handover_raw_paths: { data: [row(S), row(S2), row(S3)] } });
+    const { storage, removed } = storageFailingFor();
+    assert.deepEqual(await deleteHandoverRawObjects(db, storage, actor, H), { deleted: 3, failed: 0 });
+    assert.deepEqual(calls[0], { fn: "list_deleted_handover_raw_paths", args: { p_actor_profile_id: USER, p_handover_id: H } });
+    assert.deepEqual(removed, [[rawSourcePath(H, S)], [rawSourcePath(H, S2)], [rawSourcePath(H, S3)]]);
+    assert.deepEqual(calls.slice(1).map((c) => [c.fn, c.args?.p_source_id]), [
+      ["mark_source_raw_deleted", S],
+      ["mark_source_raw_deleted", S2],
+      ["mark_source_raw_deleted", S3],
+    ]);
+  });
+
+  it("nothing to delete: { deleted: 0, failed: 0 } and no storage call", async () => {
+    for (const data of [[], null]) {
+      const { db, fns } = fakeDb({ list_deleted_handover_raw_paths: { data } });
+      const { storage, removed } = storageFailingFor();
+      assert.deepEqual(await deleteHandoverRawObjects(db, storage, actor, H), { deleted: 0, failed: 0 });
+      assert.deepEqual(fns(), ["list_deleted_handover_raw_paths"]);
+      assert.deepEqual(removed, []);
+    }
+  });
+
+  it("a Storage failure never throws: that source is counted failed, left unmarked, and the rest continue", async () => {
+    const { db, calls } = fakeDb({ list_deleted_handover_raw_paths: { data: [row(S), row(S2), row(S3)] } });
+    const { storage } = storageFailingFor([rawSourcePath(H, S2)]);
+    assert.deepEqual(await deleteHandoverRawObjects(db, storage, actor, H), { deleted: 2, failed: 1 });
+    assert.deepEqual(calls.filter((c) => c.fn === "mark_source_raw_deleted").map((c) => c.args?.p_source_id), [S, S3]);
+  });
+
+  it("a Storage client that throws is a failure too, not an exception", async () => {
+    const { db } = fakeDb({ list_deleted_handover_raw_paths: { data: [row(S)] } });
+    const storage: StorageClient = {
+      from: () => ({
+        createSignedUploadUrl: async () => ({ data: null, error: null }),
+        download: async () => ({ data: null, error: null }),
+        remove: async () => {
+          throw new Error("synthetic network failure");
+        },
+      }),
+    };
+    assert.deepEqual(await deleteHandoverRawObjects(db, storage, actor, H), { deleted: 0, failed: 1 });
+  });
+
+  it("a marking failure after a successful remove counts as failed (the path stays listed for the sweep)", async () => {
+    const { db } = fakeDb({
+      list_deleted_handover_raw_paths: { data: [row(S)] },
+      mark_source_raw_deleted: { error: { code: "BTNF0", message: "x" } },
+    });
+    assert.deepEqual(await deleteHandoverRawObjects(db, storageFailingFor().storage, actor, H), { deleted: 0, failed: 1 });
+  });
+
+  it("foreign or malformed paths are never removed: counted failed", async () => {
+    const bad = [
+      row(S, rawSourcePath(H, S2)), // another source's object
+      row(S2, rawSourcePath(OTHER_H, S2)), // another handover's folder
+      row(S3, `raw/${H}/../${S3}`),
+      row(S, null),
+      { sourceId: 42, rawStoragePath: rawSourcePath(H, S) },
+      null,
+    ];
+    const { db, fns } = fakeDb({ list_deleted_handover_raw_paths: { data: bad } });
+    const { storage, removed } = storageFailingFor();
+    assert.deepEqual(await deleteHandoverRawObjects(db, storage, actor, H), { deleted: 0, failed: bad.length });
+    assert.deepEqual(removed, []);
+    assert.deepEqual(fns(), ["list_deleted_handover_raw_paths"]);
+  });
+
+  it("a refused listing (live handover, wrong actor) throws the DbError and touches nothing", async () => {
+    for (const [code, expected] of [["BTPF0", "precondition_failed"], ["BTNF0", "not_found"], ["BTUA0", "unauthenticated"]] as const) {
+      const { db, fns } = fakeDb({ list_deleted_handover_raw_paths: { error: { code, message: "x" } } });
+      const { storage, removed } = storageFailingFor();
+      await assert.rejects(deleteHandoverRawObjects(db, storage, actor, H), isCode(expected));
+      assert.deepEqual(fns(), ["list_deleted_handover_raw_paths"]);
+      assert.deepEqual(removed, []);
+    }
+  });
+
+  it("idempotent: a second run after success finds nothing; a retry after a failure deletes the rest", async () => {
+    const first = fakeDb({ list_deleted_handover_raw_paths: { data: [row(S), row(S2)] } });
+    assert.deepEqual(await deleteHandoverRawObjects(first.db, storageFailingFor([rawSourcePath(H, S2)]).storage, actor, H), { deleted: 1, failed: 1 });
+    const retry = fakeDb({ list_deleted_handover_raw_paths: { data: [row(S2)] } });
+    assert.deepEqual(await deleteHandoverRawObjects(retry.db, storageFailingFor().storage, actor, H), { deleted: 1, failed: 0 });
   });
 });
