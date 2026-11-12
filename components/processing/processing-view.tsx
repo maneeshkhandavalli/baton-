@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { AccessBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
+import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyConsent } from "@/components/wizard/consent";
 import { useAction } from "@/hooks/use-action";
@@ -69,19 +70,29 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <section aria-labelledby="run-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-6">
+      <section aria-labelledby="run-heading" className="space-y-6 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 id="run-heading" className="type-title">
+          <div className="min-w-0 space-y-1.5">
+            <p className="type-eyebrow text-muted-foreground" aria-live="polite">
+              {active ? (
+                <span className="inline-flex items-center gap-1.5 text-primary-fg">
+                  <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
+                  Live · updates every few seconds
+                </span>
+              ) : (
+                "Processing"
+              )}
+            </p>
+            <h2 id="run-heading" className="type-section-title">
               {active ? "Processing your sources" : r?.status === "succeeded" ? "Processing complete" : r?.status === "failed" ? "Processing failed" : r?.status === "cancelled" ? "Processing cancelled" : "Ready to process"}
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {active
                 ? "You can leave this page. Baton keeps working and the review opens when it's done."
                 : r?.status === "succeeded"
                   ? `Finished ${formatDateTime(r.finishedAt)}. Every point is ready for your review.`
                   : r?.status === "failed"
-                    ? r.error?.message ?? "Something went wrong. Your sources are safe; try again."
+                    ? "Your sources are safe. Nothing was published."
                     : handoverState === "draft"
                       ? "Add consent for every source, then start processing."
                       : "Start processing to extract source-backed points."}
@@ -94,6 +105,13 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
             </Button>
           )}
         </div>
+
+        {r?.status === "failed" && (
+          <Alert tone="danger" title="This run stopped before it finished">
+            {r.error?.message ?? "Something went wrong while reading your sources."}
+            {canStart ? " Try again below." : " Ask the creator or outgoing member to try again."}
+          </Alert>
+        )}
 
         {r && (
           <div className="space-y-2">
@@ -150,7 +168,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
                 <ConsentChecklist value={consent} onChange={setConsent} />
               </>
             )}
-            <Button disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
+            <Button size="lg" aria-busy={isPending} disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
               {isPending ? "Starting…" : r ? "Try again" : "Start processing"}
             </Button>
             {sources.length === 0 && <p className="text-xs text-muted-foreground">This handover has no sources yet.</p>}
@@ -175,15 +193,15 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         )}
       </section>
 
-      <aside className="space-y-4">
-        <div className="grid grid-cols-3 gap-2 rounded-xl border border-border bg-card p-4 shadow-soft">
+      <aside className="divide-y divide-border self-start overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+        <dl className="grid grid-cols-3 gap-2 p-4">
           <Stat label="Sources" value={formatCount(sources.length)} />
           <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "—"} />
           <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "—"} />
-        </div>
+        </dl>
 
-        <section aria-labelledby="sources-heading" className="rounded-xl border border-border bg-card shadow-soft">
-          <h2 id="sources-heading" className="border-b border-border px-4 py-3 text-sm font-semibold">
+        <section aria-labelledby="sources-heading">
+          <h2 id="sources-heading" className="px-4 pt-4 pb-1 type-subheading">
             Sources
           </h2>
           <ul className="divide-y divide-border">
@@ -194,12 +212,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         </section>
 
         {totalMasked > 0 && (
-          <section className="rounded-xl border border-border bg-card p-4 shadow-soft">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck aria-hidden="true" className="size-4 text-status-sourced" />
+          <section className="p-4">
+            <p className="flex items-center gap-2 type-subheading">
+              <ShieldCheck aria-hidden="true" className="size-4 text-success" />
               Masked before storage
             </p>
-            <ul className="mt-2 space-y-1 text-xs">
+            <ul className="mt-2 space-y-1 text-caption">
               {(Object.entries(masking) as Array<[MaskKind, number]>)
                 .filter(([, n]) => n > 0)
                 .map(([k, n]) => (
@@ -218,9 +236,9 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center">
-      <p className="font-serif text-2xl tabular-nums">{value}</p>
-      <p className="type-eyebrow text-muted-foreground">{label}</p>
+    <div className="flex flex-col-reverse text-center">
+      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dd className="font-display text-2xl leading-tight tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -234,14 +252,14 @@ function SourceRow({ s }: { s: SourceSummary }) {
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{s.title}</p>
         <AccessBadge level={s.accessLevel} showEveryone={false} />
       </div>
-      <p className="pl-6 text-xs text-muted-foreground">
+      <p className="pl-6 text-caption text-muted-foreground">
         {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} ·{" "}
         <span className={cn(s.state === "failed" && "text-destructive-fg", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
         {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${s.kind === "whatsapp_export" ? "messages" : "blocks"}`}
       </p>
-      {s.firstMessageAt && <p className="pl-6 text-xs text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}
-      <p className="pl-6 text-xs text-muted-foreground">
-        {s.consentRecordedAt ? "Consent recorded" : <span className="text-status-inferred-fg">Consent needed</span>}
+      {s.firstMessageAt && <p className="pl-6 text-caption text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}
+      <p className="pl-6 text-caption text-muted-foreground">
+        {s.consentRecordedAt ? "Consent recorded" : <span className="font-medium text-warning-fg">Consent needed</span>}
         {s.rawDeletedAt ? " · raw file deleted" : ""}
       </p>
     </li>
