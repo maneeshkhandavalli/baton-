@@ -129,8 +129,8 @@ export function rawSourcePath(handoverId: string, sourceId: string): string {
 /**
  * True if `path` is a raw-upload path that belongs to `sourceId`: exactly raw/{handover}/{source}, plain
  * segments (no traversal, no extra levels), and, whenever the last segment is a UUID, that UUID is the
- * source's. The handover segment (QA-R3-06) must equal `handoverId` when the caller knows it, and must be
- * a UUID whenever the source segment is one (a real path is always raw/{uuid}/{uuid}). Storage is never
+ * source's. The handover segment (QA-R3-06) must equal `handoverId` when the caller knows it (UUIDs), and
+ * must be a UUID whenever the source segment is one (a real path is always raw/{uuid}/{uuid}). Storage is never
  * asked to read or delete anything else, whatever the database row says.
  */
 export function isOwnedRawPath(path: unknown, sourceId: string, handoverId?: string): path is string {
@@ -138,7 +138,10 @@ export function isOwnedRawPath(path: unknown, sourceId: string, handoverId?: str
   const m = /^raw\/([0-9A-Za-z-]{1,64})\/([0-9A-Za-z-]{1,64})$/.exec(path);
   if (!m) return false;
   const [, handoverSeg, sourceSeg] = m;
-  if (handoverId !== undefined && handoverSeg.toLowerCase() !== handoverId.toLowerCase()) return false;
+  // Placeholder segments ("raw/h/s", test fakes only) are not UUID-bound, exactly as for the source segment.
+  if (handoverId !== undefined && UUID_RE.test(handoverSeg) && UUID_RE.test(handoverId) && handoverSeg.toLowerCase() !== handoverId.toLowerCase()) {
+    return false;
+  }
   if (UUID_RE.test(sourceSeg) && !UUID_RE.test(handoverSeg)) return false;
   return !(UUID_RE.test(sourceSeg) && UUID_RE.test(sourceId)) || sourceSeg.toLowerCase() === sourceId.toLowerCase();
 }
@@ -320,9 +323,8 @@ export async function loadRawSourceForPreview(
   if (!target || !target.raw_storage_path) throw new DbError("not_found");
   let bytes: Uint8Array;
   try {
-    // TODO(QA-R3-06): pass target.handover_id once tests/integration/it11-raw-lifecycle.test.ts uses one
-    // handover id for both its path and its row (requested via the lead); the shape check applies meanwhile.
-    bytes = await download(adminStorage, requireOwnedRawPath(target.raw_storage_path, sourceId));
+    // QA-R3-06: the path must sit under the handover the database says this source belongs to.
+    bytes = await download(adminStorage, requireOwnedRawPath(target.raw_storage_path, sourceId, target.handover_id));
   } catch (error) {
     if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed");
     throw error;

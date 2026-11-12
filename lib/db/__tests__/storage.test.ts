@@ -460,3 +460,25 @@ describe("QA-R3-06: the handover segment of a raw path is checked", () => {
     assert.deepEqual(fns(), ["raw_source_for_processing"]);
   });
 });
+
+describe("QA-R3-06: the preview is bound to the source's handover", () => {
+  const OTHER_H = "22222222-2222-4222-8222-222222222222";
+  const bytes = new TextEncoder().encode("14/02/2024, 10:00 - Asha Rao: synthetic chat");
+  const target = async (path: string, handoverId: string) => {
+    const m = await measureBytes(bytes);
+    return { data: { raw_storage_path: path, size_bytes: m.sizeBytes, sha256: m.sha256, handover_id: handoverId, kind: "whatsapp_export",
+                     timezone: "Asia/Kolkata", date_order: null, original_filename: "chat.txt" } };
+  };
+  it("a path under the source's own handover is read", async () => {
+    const { db } = fakeDb({ source_preview_target: await target(rawSourcePath(H, S), H) });
+    const out = await loadRawSourceForPreview(db, fakeStorage({ objects: { [rawSourcePath(H, S)]: bytes } }).storage, actor, S);
+    assert.equal(out.handoverId, H);
+    assert.deepEqual(out.bytes, bytes);
+  });
+  it("the same source id under another handover's folder is refused before any download", async () => {
+    const { db } = fakeDb({ source_preview_target: await target(rawSourcePath(OTHER_H, S), H) });
+    const { storage, ops } = fakeStorage({ objects: { [rawSourcePath(OTHER_H, S)]: bytes } });
+    await assert.rejects(loadRawSourceForPreview(db, storage, actor, S), isCode("internal"));
+    assert.deepEqual(ops, []);
+  });
+});
