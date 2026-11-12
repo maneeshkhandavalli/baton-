@@ -110,8 +110,10 @@ begin
 end $$;
 
 -- the failed parse keeps the raw upload for a retry (§9.3, §10.3 step 5)
-select public.mark_source_parse_failed(tests.id('sa'), 'parse_failed');
+-- 300600 revoked the unfenced writer from service_role (the worker uses pipeline_mark_source_parse_failed);
+-- the fixture runs its body as the owner.
 select tests.as_owner();
+select public.mark_source_parse_failed(tests.id('sa'), 'parse_failed');
 select tests.eq((select state from public.sources where id = tests.id('sa')), 'failed', 'source a failed');
 select tests.ok((select raw_storage_path is not null and raw_deleted_at is null from public.sources where id = tests.id('sa')),
                 'its raw upload is kept');

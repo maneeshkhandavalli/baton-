@@ -38,6 +38,7 @@ begin
     perform public.complete_processing_job(v_job, a, 'retry', jsonb_build_object('attempt', a, 'outcome', 'failed'),
                                            'parse_failed', 'parse_failed', now());
   end loop;
+  perform tests.as_owner(); -- 300600: the unfenced writer is no longer granted to service_role
   perform public.mark_source_parse_failed(tests.id('sa'), 'parse_failed');
   perform public.finish_processing_run(tests.id('run1'), 'failed', 'processing_failed', 'no_source_succeeded');
   perform tests.as_owner();

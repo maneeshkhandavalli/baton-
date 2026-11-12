@@ -31,7 +31,8 @@ end $$;
 select pg_temp.mk('h', n) from unnest(array['pend', 'up', 'fail', 'parsing', 'rem']) n;
 select pg_temp.mk('gone', n) from unnest(array['gpend', 'gup']) n;
 select pg_temp.upload(n) from unnest(array['up', 'fail', 'parsing', 'gup']) n;
-select tests.as_service();
+-- 300600 revoked the unfenced writer from service_role; set up the failed source as the owner.
+select tests.as_owner();
 select public.mark_source_parse_failed(tests.id('fail'), 'parse_failed');
 select tests.as_owner();
 set session_replication_role = replica;
