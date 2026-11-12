@@ -287,7 +287,7 @@ describe("R3 D2: raw-path ownership on every read and delete", () => {
   it("the parse job refuses a foreign path and never marks the source failed for it", async () => {
     const { db, fns } = fakeDb({ raw_source_for_processing: { data: { raw_storage_path: `raw/${H}/${S2}`, size_bytes: 1, sha256: "00", kind: "text" } } });
     const { storage, ops } = fakeStorage();
-    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storage, S), isCode("internal"));
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storage, S, { jobId: "33333333-3333-4333-8333-333333333333", attempt: 1 }), isCode("internal"));
     assert.deepEqual(fns(), ["raw_source_for_processing"]);
     assert.deepEqual(ops, []);
   });
@@ -460,7 +460,7 @@ describe("QA-R3-06: the handover segment of a raw path is checked", () => {
   });
   it("deleteRawSource and the parse job refuse a placeholder handover segment on a real source path", async () => {
     const { db, fns } = fakeDb({ raw_source_for_processing: { data: { raw_storage_path: `raw/x/${S}`, size_bytes: 1, sha256: "00", kind: "text" } } });
-    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, fakeStorage().storage, S), isCode("internal"));
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, fakeStorage().storage, S, { jobId: "33333333-3333-4333-8333-333333333333", attempt: 1 }), isCode("internal"));
     await assert.rejects(deleteRawSource(db, fakeStorage().storage, S, `raw/x/${S}`), isCode("internal"));
     assert.deepEqual(fns(), ["raw_source_for_processing"]);
   });
@@ -514,18 +514,16 @@ describe("DB-12: the parse job's integrity failure goes through the fenced write
     await assert.rejects(downloadVerifiedRawSource(db, storageWith(tampered), S, { jobId: JOB, attempt: 1 }), (e: unknown) => e instanceof ClaimLostError);
   });
 
-  it("verified bytes never write anything, with or without a claim", async () => {
-    for (const claim of [undefined, { jobId: JOB, attempt: 1 }]) {
-      const { db, fns } = fakeDb({ raw_source_for_processing: await row() });
-      assert.deepEqual(await downloadVerifiedRawSource(db, storageWith(good), S, claim), good);
-      assert.deepEqual(fns(), ["raw_source_for_processing"]);
-    }
+  it("verified bytes never write anything", async () => {
+    const { db, fns } = fakeDb({ raw_source_for_processing: await row() });
+    assert.deepEqual(await downloadVerifiedRawSource(db, storageWith(good), S, { jobId: JOB, attempt: 1 }), good);
+    assert.deepEqual(fns(), ["raw_source_for_processing"]);
   });
 
-  it("without a claim (legacy callers): the unfenced writer, unchanged", async () => {
+  it("the unfenced writer is never called (it is no longer granted, 20261113300600)", async () => {
     const { db, fns } = fakeDb({ raw_source_for_processing: await row() });
-    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storageWith(tampered), S), isCode("validation_failed"));
-    assert.deepEqual(fns(), ["raw_source_for_processing", "mark_source_parse_failed"]);
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storageWith(tampered), S, { jobId: JOB, attempt: 3 }), isCode("validation_failed"));
+    assert.ok(!fns().includes("mark_source_parse_failed"));
   });
 });
 
