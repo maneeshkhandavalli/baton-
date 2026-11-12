@@ -12,7 +12,8 @@ Phone numbers use the obviously synthetic `99999 0000N` pattern; emails use `exa
 - `documents/*`: Markdown (front matter, ATX/setext headings, fenced code) and plain text.
 - `builders.ts`: deterministic builders for binary fixtures (ZIP, DOCX, PDF), generated in tests
   so no opaque binaries are committed. They can also produce encrypted, corrupt, zip-bomb,
-  image-only and undecodable-font variants.
+  image-only and undecodable-font variants, and ZIP entries with a data descriptor (flag bit 3, as
+  streaming Android exports use) or an arbitrary compression-method field.
 - `load.ts`: fixture loading, a test-only identity pepper, canonical rule builders (`participantRule`, `conversationRule`) and failure narrowing (`fileError`, `inputFailure`).
 
 Run the parser and privacy tests (Node 24, no test framework needed):
