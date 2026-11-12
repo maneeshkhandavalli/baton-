@@ -2,6 +2,13 @@
  * Pipeline worker writes (§9.3, §10), service role only. Main's lib/pipeline and lib/ai call these;
  * they never write tables directly. Each SQL function takes the handover lock first (FOR SHARE for
  * child-row writes, FOR UPDATE when finishing a run), per §5.5 item 2.
+ *
+ * DB-12 (Round 3): every job-scoped writer is FENCED. It takes the worker's `JobClaim` (job id + attempt)
+ * and the database refuses the write unless that claim is still current at commit time (job running at
+ * that attempt, lease unexpired, run active, stage allowed, target inside the job's handover/source;
+ * migration 20261113300100). A refused claim throws `ClaimLostError`: the caller must stop and record
+ * nothing else. DB-13: extraction persists one chunk's points + evidence + checkpoint atomically
+ * (`storeExtractChunk`).
  */
 
 import { z } from "zod";
@@ -22,6 +29,52 @@ import { DbError } from "./errors";
 import { callRpc } from "./rpc";
 import { hexToBytea, sha256Hex } from "./tokens";
 
+/** The worker's claim on one job: the fencing token every job-scoped writer takes (DB-12). */
+export interface JobClaim {
+  jobId: string;
+  attempt: number;
+}
+
+/** SQLSTATE the fenced writers raise when the claim is no longer current (lost lease, reclaimed, reaped, finished, run ended). */
+export const CLAIM_LOST_SQLSTATE = "BTLL0";
+
+/**
+ * The claim is no longer ours. Deliberately NOT a DbError, so stage code that handles DbError
+ * (conflict, not_found, ...) can never mistake a fencing refusal for a data condition and keep going.
+ */
+export class ClaimLostError extends Error {
+  constructor() {
+    super("claim lost");
+    this.name = "ClaimLostError";
+  }
+}
+
+/** SQLSTATEs meaning "this database has no such function": PostgREST PGRST202, Postgres 42883. */
+const MISSING_FUNCTION_STATES: ReadonlySet<string> = new Set(["PGRST202", "42883"]);
+
+/**
+ * The database lacks the fenced writer (migrations 2026111330* not applied). Never falls back to an
+ * unfenced writer (that would defeat DB-12); the runner fails the run loudly with `db_schema_outdated`.
+ */
+export class PipelineSchemaError extends Error {
+  readonly fn: string;
+  constructor(fn: string) {
+    super("pipeline database functions are missing");
+    this.name = "PipelineSchemaError";
+    this.fn = fn;
+  }
+}
+
+async function fencedRpc(adminDb: DbClient, fn: string, claim: JobClaim, args: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await callRpc(adminDb, fn, { p_job_id: claim.jobId, p_attempt: claim.attempt, ...args });
+  } catch (e) {
+    if (e instanceof DbError && e.sqlState === CLAIM_LOST_SQLSTATE) throw new ClaimLostError();
+    if (e instanceof DbError && e.sqlState !== undefined && MISSING_FUNCTION_STATES.has(e.sqlState)) throw new PipelineSchemaError(fn);
+    throw e;
+  }
+}
+
 export interface ClaimedJob {
   id: string;
   handover_id: string;
@@ -32,38 +85,9 @@ export interface ClaimedJob {
   max_attempts: number;
 }
 
-/** @deprecated QA-N1: the SQL function is no longer executable by service_role; use claimReadyJobs. */
-export async function claimJobs(adminDb: DbClient, limit = 5, leaseSeconds = 300): Promise<ClaimedJob[]> {
-  return ((await callRpc(adminDb, "claim_processing_jobs", { p_limit: limit, p_lease_seconds: leaseSeconds })) ?? []) as ClaimedJob[];
-}
-
-/** Write AiProvenance when the job is claimed, BEFORE calling the provider (§11.8 rule 3). */
-export const setJobProvenance = async (adminDb: DbClient, jobId: string, provenance: Record<string, unknown>) =>
-  void (await callRpc(adminDb, "set_job_provenance", { p_job_id: jobId, p_provenance: provenance }));
-
-/** @deprecated QA-N1: no longer executable; use completeJob (fenced). `attempt` is a non-sensitive AiAttemptRecord; `errorMessage` must be structural, never content (§12.7). */
-export const recordJobAttempt = async (
-  adminDb: DbClient,
-  input: {
-    jobId: string;
-    outcome: "succeeded" | "retry" | "failed";
-    attempt?: Record<string, unknown>;
-    errorCode?: string;
-    errorMessage?: string;
-    nextAttemptAt?: string;
-    progress?: { done: number; total: number };
-  },
-) =>
-  void (await callRpc(adminDb, "record_job_attempt", {
-    p_job_id: input.jobId,
-    p_outcome: input.outcome,
-    p_attempt: input.attempt ?? null,
-    p_error_code: input.errorCode ?? null,
-    p_error_message: input.errorMessage ?? null,
-    p_next_attempt_at: input.nextAttemptAt ?? null,
-    p_progress_done: input.progress?.done ?? null,
-    p_progress_total: input.progress?.total ?? null,
-  }));
+/** Write AiProvenance when the job is claimed, BEFORE calling the provider (§11.8 rule 3). Fenced (DB-12). */
+export const setJobProvenance = async (adminDb: DbClient, claim: JobClaim, provenance: Record<string, unknown>) =>
+  void (await fencedRpc(adminDb, "pipeline_set_job_provenance", claim, { p_provenance: provenance }));
 
 export const finishRun = async (
   adminDb: DbClient,
@@ -107,66 +131,91 @@ export async function getParseExclusions(adminDb: DbClient, sourceId: string): P
   return parsed.data;
 }
 
-/** One transaction; fails closed for any pepper other than p1 or any excluded participant's messages. */
-export const persistParsedSource = async (adminDb: DbClient, sourceId: string, parsed: ParsedSource, pepperVersion: "p1") =>
-  void (await callRpc(adminDb, "persist_parsed_source", { p_source_id: sourceId, p_parsed: parsed, p_pepper_version: pepperVersion }));
+/**
+ * One transaction; fails closed for any pepper other than p1 or any excluded participant's messages.
+ * Fenced (DB-12): the source is the parse job's own source.
+ */
+export const persistParsedSource = async (adminDb: DbClient, claim: JobClaim, parsed: ParsedSource, pepperVersion: "p1") =>
+  void (await fencedRpc(adminDb, "pipeline_persist_parsed_source", claim, { p_parsed: parsed, p_pepper_version: pepperVersion }));
 
-export const markSourceParseFailed = async (adminDb: DbClient, sourceId: string, errorCode: string) =>
-  void (await callRpc(adminDb, "mark_source_parse_failed", { p_source_id: sourceId, p_error_code: errorCode }));
+/** Fenced (DB-12): marks the parse job's own source failed. */
+export const markSourceParseFailed = async (adminDb: DbClient, claim: JobClaim, errorCode: string) =>
+  void (await fencedRpc(adminDb, "pipeline_mark_source_parse_failed", claim, { p_error_code: errorCode }));
 
-export async function insertExtractedPoint(
+export interface ExtractChunkCitation {
+  messageId: string;
+  /** `matchedText` for exact/normalized, the model's quote for not_found (stored `pending`). */
+  quote: string;
+  quoteStart: number | null;
+  quoteEnd: number | null;
+}
+
+export interface NewExtractedPoint {
+  category: PointCategory;
+  title: string;
+  statement: string;
+  attributes: Record<string, unknown>;
+  inferenceRationale: string | null;
+}
+
+/** Either attach citations to an existing point (`pointId`) or create a new point (`point`). */
+export type ExtractChunkEntry =
+  | { pointId: string; citations: ExtractChunkCitation[] }
+  | { point: NewExtractedPoint; citations: ExtractChunkCitation[] };
+
+export interface ExtractChunkEntryResult {
+  /** null when a new point had no surviving citation and was therefore not inserted */
+  pointId: string | null;
+  inserted: boolean;
+  citations: number;
+  rejected: number;
+  /** the target point was erased since it was read; nothing was attached */
+  skipped: boolean;
+}
+
+/**
+ * DB-13: one extraction chunk in ONE transaction: new points, their source-quote evidence (stored
+ * `pending`) and the job checkpoint (`progress_done = chunkIndex + 1`). No point is stored without at
+ * least one surviving citation, nothing is stored if any entry fails, and a chunk below the checkpoint is
+ * a no-op (`alreadyCommitted`), so a retry never duplicates a chunk. Fenced (DB-12).
+ */
+export async function storeExtractChunk(
   adminDb: DbClient,
+  claim: JobClaim,
   input: {
-    handoverId: string;
-    runId: string;
-    category: PointCategory;
-    title: string;
-    statement: string;
-    attributes: Record<string, unknown>;
-    inferenceRationale: string | null;
-    extractionAccessLevel: AccessLevel;
+    chunkIndex: number;
+    chunkTotal: number;
+    accessLevel: AccessLevel;
     aiProvenance: Record<string, unknown>;
-    sortKey?: number;
+    entries: ExtractChunkEntry[];
   },
-): Promise<string> {
-  return (await callRpc(adminDb, "insert_extracted_point", {
-    p_handover_id: input.handoverId,
-    p_run_id: input.runId,
-    p_category: input.category,
-    p_title: input.title,
-    p_statement: input.statement,
-    p_attributes: input.attributes,
-    p_inference_rationale: input.inferenceRationale,
-    p_extraction_access_level: input.extractionAccessLevel,
+): Promise<{ alreadyCommitted: boolean; entries: ExtractChunkEntryResult[] }> {
+  const data = (await fencedRpc(adminDb, "pipeline_store_extract_chunk", claim, {
+    p_chunk_index: input.chunkIndex,
+    p_chunk_total: input.chunkTotal,
+    p_access_level: input.accessLevel,
     p_ai_provenance: input.aiProvenance,
-    p_sort_key: input.sortKey ?? 0,
-  })) as string;
+    p_entries: input.entries.map((e) =>
+      "pointId" in e ? { pointId: e.pointId, point: null, citations: e.citations } : { pointId: null, point: e.point, citations: e.citations },
+    ),
+  })) as { alreadyCommitted?: boolean; entries?: ExtractChunkEntryResult[] } | null;
+  if (!data || !Array.isArray(data.entries)) throw new DbError("internal");
+  const alreadyCommitted = data.alreadyCommitted === true;
+  if (!alreadyCommitted && data.entries.length !== input.entries.length) throw new DbError("internal");
+  return { alreadyCommitted, entries: data.entries };
 }
 
-/** Returns the point_evidence id (quotes are deduplicated by message span, §6.10). */
-export async function addSourceQuoteEvidence(
-  adminDb: DbClient,
-  input: { pointId: string; sourceMessageId: string; quote: string; quoteStart: number | null; quoteEnd: number | null; quoteCheck: QuoteCheck },
-): Promise<string> {
-  return (await callRpc(adminDb, "add_source_quote_evidence", {
-    p_point_id: input.pointId,
-    p_source_message_id: input.sourceMessageId,
-    p_quote_text: input.quote,
-    p_quote_start: input.quoteStart,
-    p_quote_end: input.quoteEnd,
-    p_quote_check: input.quoteCheck,
-  })) as string;
-}
-
-export const recordQuoteCheck = async (adminDb: DbClient, evidenceId: string, quoteCheck: QuoteCheck) =>
-  void (await callRpc(adminDb, "record_quote_check", { p_evidence_id: evidenceId, p_quote_check: quoteCheck }));
+/** Fenced (DB-12): only the verify_quotes job of the evidence's own source may record its check. */
+export const recordQuoteCheck = async (adminDb: DbClient, claim: JobClaim, evidenceId: string, quoteCheck: QuoteCheck) =>
+  void (await fencedRpc(adminDb, "pipeline_record_quote_check", claim, { p_evidence_id: evidenceId, p_quote_check: quoteCheck }));
 
 /**
  * `verifiedQuoteText` is the exact text the verifier saw. If the evidence changed meanwhile (a privacy
- * redaction), the database refuses with conflict and the verdict must be discarded (§5.5 T6).
+ * redaction), the database refuses with conflict and the verdict must be discarded (§5.5 T6). Fenced (DB-12).
  */
 export async function recordSupportVerdict(
   adminDb: DbClient,
+  claim: JobClaim,
   input: {
     pointEvidenceId: string;
     revisionId: string;
@@ -176,7 +225,7 @@ export async function recordSupportVerdict(
     verifiedQuoteText: string;
   },
 ): Promise<void> {
-  await callRpc(adminDb, "record_support_verdict", {
+  await fencedRpc(adminDb, "pipeline_record_support_verdict", claim, {
     p_point_evidence_id: input.pointEvidenceId,
     p_revision_id: input.revisionId,
     p_verdict: input.verdict,
@@ -186,12 +235,13 @@ export async function recordSupportVerdict(
   });
 }
 
+/** Fenced (DB-12): analyze / prepare_review only; the question lands in the job's own handover. */
 export async function createSystemGapQuestion(
   adminDb: DbClient,
-  input: { handoverId: string; pointId: string | null; category: PointCategory | null; question: string; context: string | null; priority: "required" | "optional"; accessLevel: AccessLevel },
+  claim: JobClaim,
+  input: { pointId: string | null; category: PointCategory | null; question: string; context: string | null; priority: "required" | "optional"; accessLevel: AccessLevel },
 ): Promise<string> {
-  return (await callRpc(adminDb, "create_system_gap_question", {
-    p_handover_id: input.handoverId,
+  return (await fencedRpc(adminDb, "pipeline_create_system_gap_question", claim, {
     p_point_id: input.pointId,
     p_category: input.category,
     p_question: input.question,
@@ -413,12 +463,7 @@ export async function listFinishableRuns(adminDb: DbClient, limit = 20): Promise
   return ((await callRpc(adminDb, "list_finishable_runs", { p_limit: limit })) ?? []) as string[];
 }
 
-/** DB-10: §10.10 review order, only inside the given active run. Returns the number of points updated. */
-export async function setPointSortKeys(
-  adminDb: DbClient,
-  input: { handoverId: string; runId: string; keys: Array<{ pointId: string; sortKey: number }> },
-): Promise<number> {
-  return Number(
-    await callRpc(adminDb, "set_point_sort_keys", { p_handover_id: input.handoverId, p_run_id: input.runId, p_keys: input.keys }),
-  );
+/** DB-10: §10.10 review order, only inside the job's active run. Returns the number of points updated. Fenced (DB-12). */
+export async function setPointSortKeys(adminDb: DbClient, claim: JobClaim, keys: Array<{ pointId: string; sortKey: number }>): Promise<number> {
+  return Number(await fencedRpc(adminDb, "pipeline_set_point_sort_keys", claim, { p_keys: keys }));
 }

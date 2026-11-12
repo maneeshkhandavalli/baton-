@@ -199,3 +199,66 @@ export function jobContext(
 export function runJob(stage: RunJobState["stage"], status: RunJobState["status"], errorMessage: string | null = null, sourceId: string | null = null): RunJobState {
   return { id: `${stage}-${status}`, stage, sourceId, status, attempt: 1, maxAttempts: 3, errorCode: errorMessage ? "processing_failed" : null, errorMessage };
 }
+
+export interface StoredPoint {
+  id: string;
+  chunkIndex: number;
+  accessLevel: unknown;
+  provenance: unknown;
+  point: Record<string, unknown>;
+}
+export interface StoredEvidence {
+  pointId: string;
+  messageId: string;
+  quote: string;
+  quoteStart: number | null;
+  quoteEnd: number | null;
+}
+
+/**
+ * In-memory stand-in for `pipeline_store_extract_chunk` (DB-13), with the SQL semantics: chunks in
+ * order with an idempotent repeat below the checkpoint; a citation `reject` refuses is dropped and
+ * counted; a NEW point whose citations were all dropped is not stored unless it carries an inference
+ * rationale. `fail(chunkIndex)` makes the whole call fail (nothing stored).
+ */
+export function fakeChunkStore(
+  opts: { reject?: (citation: Record<string, unknown>) => boolean; fail?: (chunkIndex: number) => unknown; startAt?: number; idBase?: number } = {},
+) {
+  const points: StoredPoint[] = [];
+  const evidence: StoredEvidence[] = [];
+  const calls: Array<Record<string, unknown>> = [];
+  let done = opts.startAt ?? 0;
+  let seq = 0;
+  const idBase = opts.idBase ?? 500;
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const handler = (args: Record<string, unknown>) => {
+    calls.push(args);
+    const index = args.p_chunk_index as number;
+    const failure = opts.fail?.(index);
+    if (failure) return failure;
+    if (index < done) return { alreadyCommitted: true, entries: [] };
+    if (index > done) return rpcError("BTVF0");
+    const pending = { points: [] as StoredPoint[], evidence: [] as StoredEvidence[] };
+    const results = (args.p_entries as Array<Record<string, unknown>>).map((e) => {
+      const cites = (e.citations as Array<Record<string, unknown>>) ?? [];
+      const isNew = e.pointId === null;
+      const pointId = isNew ? id(idBase + seq + pending.points.length + 1) : (e.pointId as string);
+      const kept = cites.filter((c) => !opts.reject?.(c));
+      const point = e.point as Record<string, unknown> | null;
+      if (isNew && kept.length === 0 && !(typeof point?.inferenceRationale === "string" && point.inferenceRationale.trim())) {
+        return { pointId: null, inserted: false, citations: 0, rejected: cites.length, skipped: false };
+      }
+      if (isNew) pending.points.push({ id: pointId, chunkIndex: index, accessLevel: args.p_access_level, provenance: args.p_ai_provenance, point: point ?? {} });
+      for (const c of kept) {
+        pending.evidence.push({ pointId, messageId: c.messageId as string, quote: c.quote as string, quoteStart: c.quoteStart as number | null, quoteEnd: c.quoteEnd as number | null });
+      }
+      return { pointId, inserted: isNew, citations: kept.length, rejected: cites.length - kept.length, skipped: false };
+    });
+    seq += pending.points.length;
+    points.push(...pending.points);
+    evidence.push(...pending.evidence);
+    done = index + 1;
+    return { alreadyCommitted: false, entries: results };
+  };
+  return { handler, points, evidence, calls, progress: () => done };
+}

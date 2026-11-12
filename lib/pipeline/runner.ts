@@ -7,7 +7,8 @@
  *      without recording anything (the fenced `completeJob` would refuse it anyway).
  *   2. Generic preconditions: per-source stages after a failed or missing parse are `skipped`
  *      (upstream_failed); an `extract` whose input hash already succeeded in an earlier run is a no-op.
- *   3. The stage handler. Thrown errors become typed failures; `LeaseLostError` drops the job.
+ *   3. The stage handler. Thrown errors become typed failures; `LeaseLostError` (heartbeat) and
+ *      `ClaimLostError` (a fenced writer refused a stale claim, DB-12) drop the job.
  *   4. Exactly one fenced `completeJob`: succeeded | retry (backoff 30 s, 2 min, 8 min) | failed |
  *      skipped | yield. Ordering never costs an attempt: `claimReadyJobs` only returns ready jobs (DB-1).
  *   5. On a terminal job status, `listRunJobs` + `decideRunOutcome` decide whether to finish the run.
@@ -19,7 +20,9 @@ import { PIPELINE_STAGES, type PipelineStage } from "../contracts/enums";
 import type { DbClient } from "../db/client";
 import { DbError } from "../db/errors";
 import {
+  ClaimLostError,
   claimReadyJobs,
+  PipelineSchemaError,
   completeJob,
   finishRun,
   getJobContext,
@@ -110,7 +113,10 @@ function precheck(claimed: ClaimedJob, ctx: JobContext): Disposition | null {
 
 /** Typed failure for anything a handler throws. */
 export function classifyError(e: unknown): Disposition {
-  if (e instanceof LeaseLostError) return { kind: "lost" };
+  // DB-12: a heartbeat or a fenced writer found the claim superseded; record nothing.
+  if (e instanceof LeaseLostError || e instanceof ClaimLostError) return { kind: "lost" };
+  // Missing fenced functions: fail loudly and end the run (RUN_FATAL), never retry or fall back.
+  if (e instanceof PipelineSchemaError) return failed("precondition_failed", "db_schema_outdated");
   if (e instanceof DbError) {
     if (e.retryable || e.code === "internal") return failed(e.code === "internal" ? "processing_failed" : e.code, "db_transient", true);
     if (e.code === "invalid_transition") return failed("invalid_transition", "run_inactive");

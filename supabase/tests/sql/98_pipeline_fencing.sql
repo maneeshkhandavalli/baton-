@@ -117,11 +117,19 @@ select tests.throws(tests.chunk_sql('ex', 1, 4, 4, '[]'), 'BTVF0', 'the chunk in
 truncate r;
 insert into r select public.pipeline_store_extract_chunk(tests.id('ex'), 1, 1, 4, 'everyone', '{"provider":"fake"}',
                        (select val from chunk_entries where name = 'new_other_source_only') ||
-                       (select val from chunk_entries where name = 'new_no_cites'));
+                       (select val from chunk_entries where name = 'new_no_cites') ||
+                       jsonb_build_array(jsonb_build_object('pointId', null,
+                         'point', jsonb_build_object('category', 'decision', 'title', 'Inferred', 'statement',
+                                                     'Meetings probably move to Fridays', 'attributes', '{}'::jsonb,
+                                                     'inferenceRationale', 'Several messages plan Friday sessions'),
+                         'citations', '[]'::jsonb)));
 select tests.eq((select v #>> '{entries,0,pointId}' from r), null, 'no point for a claim without surviving evidence');
 select tests.eq((select (v #>> '{entries,0,rejected}')::int from r), 1, 'the foreign citation is rejected');
-select tests.eq((select v #>> '{entries,1,pointId}' from r), null, 'no point for a claim without any citation');
-select tests.eq(tests.points(), 1, 'no evidence-less point was persisted');
+select tests.eq((select v #>> '{entries,1,pointId}' from r), null, 'no point for a claim without any citation or rationale');
+select tests.eq((select v #>> '{entries,2,inserted}' from r), 'true', 'an inferred claim (rationale, no citation) is kept (§12.10)');
+select tests.eq((select inference_rationale from public.handover_points where id = (select (v #>> '{entries,2,pointId}')::uuid from r)),
+                'Several messages plan Friday sessions', 'with its rationale');
+select tests.eq(tests.points(), 2, 'only the inferred point was added; no evidence-less sourced point');
 select tests.eq(tests.quotes(), 2, 'no orphan quote was persisted');
 select tests.eq(tests.progress('ex'), 2, 'the chunk still counts as done');
 
@@ -133,7 +141,7 @@ select tests.throws(tests.chunk_sql('ex', 1, 2, 4,
                         'citations', jsonb_build_array(jsonb_build_object('messageId', tests.msg('xs', 'carol', 1), 'quote', 'q',
                                                                           'quoteStart', null, 'quoteEnd', null))))),
                     '23514', 'an invalid candidate fails the chunk');
-select tests.eq(tests.points(), 1, 'the failed chunk left no point behind');
+select tests.eq(tests.points(), 2, 'the failed chunk left no point behind');
 select tests.eq(tests.links(), 2, 'the failed chunk left no evidence link behind');
 select tests.eq(tests.quotes(), 2, 'the failed chunk left no orphan quote behind');
 select tests.eq(tests.progress('ex'), 2, 'the failed chunk did not move the checkpoint');

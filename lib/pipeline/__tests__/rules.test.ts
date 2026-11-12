@@ -71,7 +71,19 @@ describe("decideRunOutcome (§9.3, W0 I2.7)", () => {
   it("waits while any job is open", () => {
     assert.deepEqual(decideRunOutcome([...ok, runJob("prepare_review", "queued")]), { kind: "wait" });
     assert.deepEqual(decideRunOutcome([...ok, runJob("prepare_review", "running")]), { kind: "wait" });
-    assert.deepEqual(decideRunOutcome([]), { kind: "wait" });
+  });
+
+  it("QA-R3-01: a run without any job is closed as failed (no_jobs) instead of waiting forever", () => {
+    assert.deepEqual(decideRunOutcome([]), { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: "no_jobs" });
+  });
+
+  it("a missing pipeline schema (db_schema_outdated) fails the run at once, even with jobs still open", () => {
+    assert.deepEqual(decideRunOutcome([runJob("extract", "failed", "db_schema_outdated"), runJob("extract", "queued")]), {
+      kind: "finish",
+      status: "failed",
+      errorCode: "precondition_failed",
+      errorMessage: "db_schema_outdated",
+    });
   });
 
   it("succeeds when everything is terminal and at least one extract succeeded", () => {

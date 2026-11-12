@@ -6,6 +6,7 @@
  *   `ai_config_changed`), even while other jobs are still open;
  * - failed at once when a handover-level stage (`verify_support`, `analyze`, `prepare_review`) failed
  *   after its retries (every per-source job is terminal by then: claim ordering, DB-1);
+ * - failed at once (`no_jobs`) for a run without any job (QA-R3-01: nothing would ever close it);
  * - otherwise wait until every job is terminal; then failed when no `extract` job succeeded
  *   (`no_source_succeeded`), else succeeded.
  */
@@ -24,6 +25,8 @@ const HANDOVER_STAGES: ReadonlySet<PipelineStage> = new Set(["verify_support", "
 const TERMINAL: ReadonlySet<string> = new Set(["succeeded", "failed", "cancelled"]);
 
 export function decideRunOutcome(jobs: ReadonlyArray<Pick<RunJobState, "stage" | "status" | "errorMessage">>): RunDecision {
+  if (jobs.length === 0) return { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: "no_jobs" };
+
   const fatal = jobs.find((j) => j.status === "failed" && j.errorMessage !== null && RUN_FATAL_REASONS.has(j.errorMessage));
   if (fatal) {
     return { kind: "finish", status: "failed", errorCode: "precondition_failed", errorMessage: fatal.errorMessage as string };
@@ -34,7 +37,7 @@ export function decideRunOutcome(jobs: ReadonlyArray<Pick<RunJobState, "stage" |
     return { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: `${handoverFailure.stage}_failed` };
   }
 
-  if (jobs.length === 0 || jobs.some((j) => !TERMINAL.has(j.status))) return { kind: "wait" };
+  if (jobs.some((j) => !TERMINAL.has(j.status))) return { kind: "wait" };
 
   if (!jobs.some((j) => j.stage === "extract" && j.status === "succeeded")) {
     return { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: "no_source_succeeded" };

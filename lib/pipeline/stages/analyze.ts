@@ -11,7 +11,7 @@
 import type { PointCategory } from "../../contracts/enums";
 import { createSystemGapQuestion, listGapQuestionsForPipeline, listPointsForPipeline, type PipelinePoint } from "../../db/pipeline";
 import { EXPECTED_KNOWLEDGE_CHECKLIST, gapPriority, type ChecklistItem } from "../checklist";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import type { StageOutcome } from "../types";
 
 /** A category is covered by any point a reviewer has not rejected. */
@@ -39,8 +39,7 @@ export async function runAnalyze(ctx: StageContext): Promise<StageOutcome> {
   const items = uncoveredChecklistItems(points, questions.filter((q) => q.isSystem));
   let created = 0;
   for (const item of items) {
-    await createSystemGapQuestion(ctx.db, {
-      handoverId,
+    await createSystemGapQuestion(ctx.db, claimOf(ctx), {
       pointId: null,
       category: item.category,
       question: item.question,

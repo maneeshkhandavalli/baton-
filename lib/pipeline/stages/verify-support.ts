@@ -18,7 +18,7 @@ import type { PointAttributes } from "../../contracts/schemas";
 import { DbError } from "../../db/errors";
 import { listLinksNeedingSupport, recordSupportVerdict, type LinkNeedingSupport } from "../../db/pipeline";
 import { mapAiFailure } from "../ai";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import { failure, type AttemptRecord, type StageOutcome } from "../types";
 import { callSignal, startAiStage } from "./ai-prelude";
 
@@ -95,7 +95,7 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
       lastAttempt = result.data.attempt;
 
       try {
-        await recordSupportVerdict(ctx.db, {
+        await recordSupportVerdict(ctx.db, claimOf(ctx), {
           pointEvidenceId: link.pointEvidenceId,
           revisionId: link.revisionId,
           verdict: result.data.verdict,

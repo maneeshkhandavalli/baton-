@@ -18,12 +18,12 @@ import { DbError } from "../../db/errors";
 import { getParseExclusions, markSourceParseFailed, persistParsedSource } from "../../db/pipeline";
 import { deleteParsedRawSource, downloadVerifiedRawSourceWithMeta } from "../../db/storage";
 import { parseSource } from "../../parsers/parse-source";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import { failed, type FailureReason, type StageOutcome } from "../types";
 
 async function markFailed(ctx: StageContext, sourceId: string, errorCode: string): Promise<void> {
   try {
-    await markSourceParseFailed(ctx.db, sourceId, errorCode);
+    await markSourceParseFailed(ctx.db, claimOf(ctx), errorCode);
   } catch (e) {
     ctx.logger.warn("source_mark_failed_error", { jobId: ctx.claimed.id, sourceId, code: e instanceof DbError ? e.code : "internal" });
   }
@@ -105,7 +105,7 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
   await ctx.heartbeat(); // never persist under a claim that is no longer ours
 
   try {
-    await persistParsedSource(ctx.db, sourceId, parsed, pepper.data.version);
+    await persistParsedSource(ctx.db, claimOf(ctx), parsed, pepper.data.version);
   } catch (e) {
     if (e instanceof DbError && !e.retryable) {
       if (e.code === "precondition_failed") {

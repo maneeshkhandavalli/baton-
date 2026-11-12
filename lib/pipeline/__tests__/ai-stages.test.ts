@@ -15,7 +15,8 @@ import type { StageContext } from "../stage-context";
 import { EXTRACT_YIELD_MARGIN_MS, runExtract } from "../stages/extract";
 import { authoritativeCheck, runVerifyQuotes } from "../stages/verify-quotes";
 import { buildVerifyRequest, runVerifySupport, VERIFY_CALLS_PER_RUN } from "../stages/verify-support";
-import { attemptRecord, claimed, fakeAi, fakeDb, fakeStorage, IDS, jobContext, provenance, rpcError, RUN_CONFIG } from "./fakes";
+import { attemptRecord, claimed, fakeAi, fakeChunkStore, fakeDb, fakeStorage, IDS, jobContext, provenance, rpcError, RUN_CONFIG } from "./fakes";
+import { ClaimLostError } from "../../db/pipeline";
 
 const M = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -88,21 +89,24 @@ function ownerCandidate(statement: string, citations: CheckedCandidate["citation
   } as CheckedCandidate;
 }
 
-/** A DB fake for the extract stage over the given message pages. */
-function extractDb(messages: ExtractionMessage[], opts: { points?: PipelinePoint[]; levels?: string[]; evidence?: (args: Record<string, unknown>) => unknown } = {}) {
+/** A DB fake for the extract stage over the given message pages; `store` simulates the DB-13 chunk writer. */
+function extractDb(
+  messages: ExtractionMessage[],
+  opts: { points?: PipelinePoint[]; levels?: string[]; store?: ReturnType<typeof fakeChunkStore> } = {},
+) {
   let pageIndex = 0;
-  let pointSeq = 0;
-  return fakeDb({
+  const store = opts.store ?? fakeChunkStore();
+  const db = fakeDb({
     list_extraction_messages: (args: Record<string, unknown>) => {
       const level = opts.levels?.[pageIndex] ?? "leads_only";
       pageIndex += 1;
       return { accessLevel: level, messages: messages.filter((m) => m.seq > (args.p_after_seq as number)).slice(0, args.p_limit as number) };
     },
     list_points_for_pipeline: opts.points ?? [],
-    insert_extracted_point: () => M(500 + ++pointSeq),
-    add_source_quote_evidence: opts.evidence ?? (() => M(700)),
-    set_job_provenance: null,
+    pipeline_store_extract_chunk: store.handler,
+    pipeline_set_job_provenance: null,
   });
+  return Object.assign(db, { store });
 }
 
 describe("chunking (§10.6, §12.10 rule 4)", () => {
@@ -175,13 +179,17 @@ describe("extract stage", () => {
 
     assert.equal(out.kind, "succeeded");
     assert.deepEqual(heartbeats, [{ done: 1, total: 1 }]);
-    const ins = db.called("insert_extracted_point")[0].args;
-    assert.equal(ins.p_extraction_access_level, "leads_only", "QA-M8: the source's level");
-    assert.equal(ins.p_run_id, IDS.run);
-    assert.deepEqual(ins.p_ai_provenance, provenance("extract"));
-    const ev = db.called("add_source_quote_evidence").map((c) => c.args);
-    assert.deepEqual(ev[0], { p_point_id: M(501), p_source_message_id: M(0), p_quote_text: body0.slice(4, 36), p_quote_start: 4, p_quote_end: 36, p_quote_check: "pending" });
-    assert.deepEqual(ev[1], { p_point_id: M(501), p_source_message_id: M(1), p_quote_text: "a quote that does not exist", p_quote_start: null, p_quote_end: null, p_quote_check: "pending" });
+    const call = db.called("pipeline_store_extract_chunk")[0].args;
+    assert.equal(call.p_job_id, IDS.job, "DB-12: the write carries the claim");
+    assert.equal(call.p_attempt, 1);
+    assert.equal(call.p_chunk_index, 0);
+    assert.equal(call.p_chunk_total, 1);
+    assert.equal(db.store.points.length, 1);
+    assert.equal(db.store.points[0].accessLevel, "leads_only", "QA-M8: the source's level");
+    assert.deepEqual(db.store.points[0].provenance, provenance("extract"));
+    assert.deepEqual(db.store.evidence[0], { pointId: M(501), messageId: M(0), quote: body0.slice(4, 36), quoteStart: 4, quoteEnd: 36 });
+    assert.deepEqual(db.store.evidence[1], { pointId: M(501), messageId: M(1), quote: "a quote that does not exist", quoteStart: null, quoteEnd: null });
+    assert.equal(db.called("insert_extracted_point").length + db.called("add_source_quote_evidence").length, 0, "no unfenced writer is used");
 
     // the request: this source's messages only, all categories, no file names or titles
     assert.equal(calls.extract.length, 1);
@@ -196,13 +204,16 @@ describe("extract stage", () => {
     let provenanceWrittenFirst = false;
     const { ai } = fakeAi({
       extract: () => {
-        provenanceWrittenFirst = db.called("set_job_provenance").length === 1;
+        provenanceWrittenFirst = db.called("pipeline_set_job_provenance").length === 1;
         return outcome([]);
       },
     });
     await runExtract(ctxFor("extract", db, ai));
     assert.ok(provenanceWrittenFirst);
-    const p = db.called("set_job_provenance")[0].args.p_provenance as Record<string, unknown>;
+    const pc = db.called("pipeline_set_job_provenance")[0].args;
+    assert.equal(pc.p_job_id, IDS.job, "DB-12: provenance is written under the claim");
+    assert.equal(pc.p_attempt, 1);
+    const p = pc.p_provenance as Record<string, unknown>;
     assert.equal(p.model, null);
     assert.equal(p.requestedModel, RUN_CONFIG.extract.model);
   });
@@ -219,9 +230,8 @@ describe("extract stage", () => {
         ]),
     });
     await runExtract(ctxFor("extract", db, ai));
-    assert.equal(db.called("insert_extracted_point").length, 0);
-    const ev = db.called("add_source_quote_evidence").map((c) => c.args.p_point_id);
-    assert.deepEqual(ev, [IDS.point1, IDS.point1]);
+    assert.equal(db.store.points.length, 0);
+    assert.deepEqual(db.store.evidence.map((e) => e.pointId), [IDS.point1, IDS.point1]);
   });
 
   it("dedups within the run too: a later identical candidate attaches to the point just inserted", async () => {
@@ -229,18 +239,84 @@ describe("extract stage", () => {
     const cit = { messageId: M(0), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: body0.slice(0, 12) };
     const { ai } = fakeAi({ extract: () => outcome([ownerCandidate("A claim", [cit]), ownerCandidate("a claim!", [cit], "other")]) });
     await runExtract(ctxFor("extract", db, ai));
-    assert.equal(db.called("insert_extracted_point").length, 1);
-    assert.equal(db.called("add_source_quote_evidence").length, 2);
+    assert.equal(db.store.points.length, 1);
+    assert.equal(db.store.evidence.length, 2);
+    const entries = db.called("pipeline_store_extract_chunk")[0].args.p_entries as unknown[];
+    assert.equal(entries.length, 1, "a same-chunk duplicate shares the new point's entry (one transaction)");
   });
 
   it("drops a citation the database refuses or whose message is gone, keeps going", async () => {
-    let n = 0;
-    const db = extractDb(messages, { evidence: () => (n++ === 0 ? rpcError("BTNF0") : M(700)) });
+    const db = extractDb(messages, { store: fakeChunkStore({ reject: (c) => c.messageId === M(0) }) });
     const cit = { messageId: M(0), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: body0.slice(0, 12) };
     const { ai } = fakeAi({ extract: () => outcome([ownerCandidate("Claim one", [cit, { ...cit, messageId: M(1) }])]) });
     const out = await runExtract(ctxFor("extract", db, ai));
     assert.equal(out.kind, "succeeded");
-    assert.equal(db.called("add_source_quote_evidence").length, 2);
+    assert.equal(db.store.points.length, 1);
+    assert.deepEqual(db.store.evidence.map((e) => e.messageId), [M(1)]);
+  });
+
+  it("DB-13: a claim whose every citation is refused is not stored; an inferred claim without citations is", async () => {
+    const db = extractDb(messages, { store: fakeChunkStore({ reject: () => true }) });
+    const cit = { messageId: M(0), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: body0.slice(0, 12) };
+    const inferred = { ...ownerCandidate("Ravi probably takes over reimbursements", [], "payments"), inferenceRationale: "He asked for the ledger twice" } as CheckedCandidate;
+    const { ai } = fakeAi({ extract: () => outcome([ownerCandidate("Unsupported claim", [cit]), inferred]) });
+    const out = await runExtract(ctxFor("extract", db, ai));
+    assert.equal(out.kind, "succeeded");
+    assert.deepEqual(db.store.points.map((p) => p.point.statement), ["Ravi probably takes over reimbursements"]);
+    assert.equal(db.store.evidence.length, 0);
+  });
+
+  it("DB-13: a failed chunk write stores nothing and the job fails at the last committed chunk", async () => {
+    const many = Array.from({ length: 450 }, (_, i) => msg(i, `synthetic message ${i}`));
+    const cit = (n: number) => ({ messageId: M(n), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: `synthetic me` });
+    const store = fakeChunkStore({ fail: (i) => (i === 1 ? rpcError("40001") : null) });
+    const db = extractDb(many, { store });
+    const { ai } = fakeAi({ extract: (req) => outcome([ownerCandidate(`Claim from ${req.messages[0].id}`, [cit(Number(req.messages[0].id.slice(-12)))])]) });
+    await assert.rejects(runExtract(ctxFor("extract", db, ai)), (e: unknown) => (e as { retryable?: boolean }).retryable === true);
+    assert.equal(store.points.length, 1, "only chunk 0 committed");
+    assert.equal(store.evidence.length, 1, "no orphan evidence from the failed chunk");
+    assert.equal(store.progress(), 1, "the checkpoint is the last committed chunk");
+  });
+
+  it("DB-13: a retry resumes after the committed chunk and never stores a chunk twice", async () => {
+    const many = Array.from({ length: 450 }, (_, i) => msg(i, `synthetic message ${i}`));
+    const store = fakeChunkStore({ startAt: 1 });
+    const db = extractDb(many, { store });
+    const { ai, calls } = fakeAi();
+    const out = await runExtract(ctxFor("extract", db, ai, { job: withProgress(jobContext("extract", { source: { state: "parsed" } }), 1) }));
+    assert.equal(out.kind, "succeeded");
+    assert.deepEqual(db.called("pipeline_store_extract_chunk").map((c) => c.args.p_chunk_index), [1, 2]);
+    assert.equal(calls.extract[0].messages[0].id, M(200));
+  });
+
+  it("DB-13: a repeated delivery of a committed chunk is a no-op and the index is re-read", async () => {
+    const store = fakeChunkStore();
+    const db = extractDb(messages, { store });
+    const cit = { messageId: M(0), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: body0.slice(0, 12) };
+    const { ai } = fakeAi({ extract: () => outcome([ownerCandidate("Claim", [cit])]) });
+    await runExtract(ctxFor("extract", db, ai));
+    const before = db.called("list_points_for_pipeline").length;
+    const again = await runExtract(ctxFor("extract", db, ai));
+    assert.equal(again.kind, "succeeded");
+    assert.equal(store.points.length, 1, "nothing stored twice");
+    assert.ok(db.called("list_points_for_pipeline").length > before + 1, "the point index is reloaded after an already-committed chunk");
+  });
+
+  it("DB-12: a stale claim stops the stage at once with ClaimLostError and nothing is stored", async () => {
+    const store = fakeChunkStore({ fail: () => rpcError("BTLL0") });
+    const db = extractDb(messages, { store });
+    const cit = { messageId: M(0), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: body0.slice(0, 12) };
+    const { ai } = fakeAi({ extract: () => outcome([ownerCandidate("Claim", [cit])]) });
+    await assert.rejects(runExtract(ctxFor("extract", db, ai)), ClaimLostError);
+    assert.equal(store.points.length, 0);
+  });
+
+  it("a source access-level change at write time is a retryable source_changed failure", async () => {
+    const store = fakeChunkStore({ fail: () => rpcError("BTCF0") });
+    const { ai } = fakeAi({ extract: () => outcome([]) });
+    const out = await runExtract(ctxFor("extract", extractDb(messages, { store }), ai));
+    assert.ok(out.kind === "failed" && out.failure.reason === "source_changed" && out.failure.retryable);
+    if (out.kind === "failed") assert.deepEqual(out.progress, { done: 0, total: 1 });
   });
 
   it("ignores citations to messages outside the chunk (defence in depth)", async () => {
@@ -248,7 +324,8 @@ describe("extract stage", () => {
     const foreign = { messageId: M(99), quote: "x", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 12, matchedText: "x".repeat(12) };
     const { ai } = fakeAi({ extract: () => outcome([ownerCandidate("Claim", [foreign])]) });
     await runExtract(ctxFor("extract", db, ai));
-    assert.equal(db.called("add_source_quote_evidence").length, 0);
+    assert.equal(db.store.evidence.length, 0);
+    assert.equal(db.store.points.length, 0, "a claim cited only outside the chunk is not stored without evidence");
   });
 
   it("fails the run without calling the AI when the provider is not configured or the config changed", async () => {
@@ -263,7 +340,7 @@ describe("extract stage", () => {
         assert.equal(out.failure.reason, error.details?.reason);
       }
       assert.equal(calls.extract.length, 0);
-      assert.equal(db.called("set_job_provenance").length, 0);
+      assert.equal(db.called("pipeline_set_job_provenance").length, 0);
     }
   });
 
@@ -277,7 +354,8 @@ describe("extract stage", () => {
 
   it("checkpoints: a retryable AI failure keeps progress, and a retry resumes at the next chunk", async () => {
     const many = Array.from({ length: 450 }, (_, i) => msg(i, `synthetic message ${i}`));
-    const db1 = extractDb(many);
+    const store1 = fakeChunkStore();
+    const db1 = extractDb(many, { store: store1 });
     const { ai: ai1 } = fakeAi({
       extract: (_r, call) =>
         call === 0 ? outcome([]) : { ok: false, error: { code: "processing_failed", message: "x", retryable: true, details: { reason: "ai_timed_out" } }, attempt: attemptRecord(1) },
@@ -290,9 +368,10 @@ describe("extract stage", () => {
       assert.equal(out.failure.retryable, true);
       assert.ok(out.attemptRecord);
     }
+    assert.equal(store1.progress(), 1, "the checkpoint committed with chunk 0");
 
     const { ai: ai2, calls } = fakeAi();
-    const resumed = await runExtract(ctxFor("extract", extractDb(many), ai2, { job: withProgress(jobContext("extract", { source: { state: "parsed" } }), 1) }));
+    const resumed = await runExtract(ctxFor("extract", extractDb(many, { store: fakeChunkStore({ startAt: 1 }) }), ai2, { job: withProgress(jobContext("extract", { source: { state: "parsed" } }), 1) }));
     assert.equal(resumed.kind, "succeeded");
     assert.equal(calls.extract.length, 2);
     assert.equal(calls.extract[0].messages[0].id, M(200));
@@ -345,12 +424,12 @@ describe("verify_quotes stage (§10.7)", () => {
         { evidenceId: M(2), sourceMessageId: M(10), quoteText: "never said this at all", quoteStart: null, quoteEnd: null, quoteCheck: "pending", messageBody: body },
         { evidenceId: M(3), sourceMessageId: null, quoteText: "pruned message quote", quoteStart: 0, quoteEnd: 20, quoteCheck: "pending", messageBody: null },
       ],
-      record_quote_check: (args: Record<string, unknown>) => (args.p_evidence_id === M(1) && args.p_quote_check === "exact" ? rpcError("BTVF0") : null),
+      pipeline_record_quote_check: (args: Record<string, unknown>) => (args.p_evidence_id === M(1) && args.p_quote_check === "exact" ? rpcError("BTVF0") : null),
     });
     const out = await runVerifyQuotes(ctxFor("verify_quotes", db, fakeAi().ai));
     assert.equal(out.kind, "succeeded");
     assert.deepEqual(
-      db.called("record_quote_check").map((c) => [c.args.p_evidence_id, c.args.p_quote_check]),
+      db.called("pipeline_record_quote_check").map((c) => [c.args.p_evidence_id, c.args.p_quote_check]),
       [[M(1), "exact"], [M(1), "not_found"], [M(2), "not_found"]],
     );
   });
@@ -375,12 +454,12 @@ describe("verify_support stage (§10.8, D16)", () => {
     const verified = new Set<string>();
     return fakeDb({
       list_links_needing_support: (args: Record<string, unknown>) => links.filter((l) => !verified.has(l.pointEvidenceId)).slice(0, args.p_limit as number),
-      record_support_verdict: (args: Record<string, unknown>) => {
+      pipeline_record_support_verdict: (args: Record<string, unknown>) => {
         const r = record?.(args);
         if (!r) verified.add(args.p_point_evidence_id as string);
         return r ?? null;
       },
-      set_job_provenance: null,
+      pipeline_set_job_provenance: null,
     });
   }
 
@@ -391,7 +470,7 @@ describe("verify_support stage (§10.8, D16)", () => {
     });
     const out = await runVerifySupport(ctxFor("verify_support", db, ai));
     assert.deepEqual(out, { kind: "succeeded", progress: { done: 2, total: 2 }, attemptRecord: attemptRecord() });
-    const rec = db.called("record_support_verdict").map((c) => c.args);
+    const rec = db.called("pipeline_record_support_verdict").map((c) => c.args);
     assert.equal(rec.length, 2);
     assert.equal(rec[0].p_verdict, "contradicts");
     assert.equal(rec[0].p_revision_id, IDS.point3);
@@ -429,7 +508,7 @@ describe("verify_support stage (§10.8, D16)", () => {
     const { ai, calls } = fakeAi();
     assert.equal((await runVerifySupport(ctxFor("verify_support", db, ai))).kind, "succeeded");
     assert.equal(calls.verify.length, 0);
-    assert.equal(db.called("record_support_verdict").length, 0);
+    assert.equal(db.called("pipeline_record_support_verdict").length, 0);
   });
 
   it("an AI failure fails the job with the calls made so far as progress", async () => {

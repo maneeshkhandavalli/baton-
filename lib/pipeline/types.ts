@@ -39,12 +39,15 @@ export type FailureReason =
   | "ai_request_invalid"
   | "db_transient"
   | "db_rejected"
+  /** The database lacks the fenced pipeline functions (migrations 2026111330* not applied). */
+  | "db_schema_outdated"
   | "internal";
 
 /** Reasons that end the whole run at once: every later AI job would fail the same way. */
 export const RUN_FATAL_REASONS: ReadonlySet<string> = new Set<FailureReason>([
   "provider_not_configured",
   "ai_config_changed",
+  "db_schema_outdated",
 ]);
 
 export interface PipelineFailure {

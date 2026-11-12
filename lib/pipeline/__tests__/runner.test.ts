@@ -10,6 +10,17 @@ import type { StageHandler } from "../stage-context";
 import { LeaseLostError, type StageOutcome } from "../types";
 import { providerNotConfiguredError } from "../../ai/errors";
 import { claimed, fakeAi, fakeDb, fakeStorage, IDS, jobContext, rpcError, runJob } from "./fakes";
+import { ClaimLostError, setPointSortKeys } from "../../db/pipeline";
+import type { DbClient } from "../../db/client";
+import { claimOf } from "../stage-context";
+
+/** Makes one RPC fail with the given SQLSTATE while still recording the call. */
+function wrapRpc(rpc: DbClient["rpc"], fn: string, sqlState: string): DbClient["rpc"] {
+  return async (name, args) => {
+    const r = await rpc(name, args);
+    return name === fn ? { data: null, error: { code: sqlState, message: "synthetic" } } : r;
+  };
+}
 
 const NOW = Date.UTC(2026, 10, 12, 1, 0, 0);
 const OUTCOME_STATUS: Record<string, string> = { succeeded: "succeeded", failed: "failed", retry: "queued", skipped: "cancelled", yield: "queued" };
@@ -106,6 +117,40 @@ describe("drain loop", () => {
     const { db, run } = drain({ stage: "analyze", heartbeat: "lost", handler });
     assert.equal((await run()).lost, 1);
     assert.equal(completion(db).length, 0);
+  });
+
+  it("DB-12: a fenced writer refusing a stale claim drops the job and records nothing (not a failure)", async () => {
+    const handler: StageHandler = async (ctx) => {
+      await setPointSortKeys(ctx.db, claimOf(ctx), []);
+      throw new Error("unreachable");
+    };
+    const { db, run } = drain({ stage: "prepare_review", handler });
+    db.client.rpc = wrapRpc(db.client.rpc, "pipeline_set_point_sort_keys", "BTLL0");
+    const r = await run();
+    assert.equal(r.lost, 1);
+    assert.equal(r.failed, 0);
+    assert.equal(completion(db).length, 0, "no completion is attempted for a superseded claim");
+    assert.equal(db.called("finish_processing_run").length, 0);
+    assert.deepEqual(classifyError(new ClaimLostError()), { kind: "lost" });
+  });
+
+  it("a database without the fenced functions fails loudly (db_schema_outdated) and ends the run; no unfenced fallback", async () => {
+    for (const state of ["PGRST202", "42883"]) {
+      const handler: StageHandler = async (ctx) => {
+        await setPointSortKeys(ctx.db, claimOf(ctx), []);
+        return { kind: "succeeded" };
+      };
+      const { db, run } = drain({ stage: "prepare_review", handler, runJobs: [runJob("prepare_review", "failed", "db_schema_outdated")] });
+      db.client.rpc = wrapRpc(db.client.rpc, "pipeline_set_point_sort_keys", state);
+      const r = await run();
+      assert.equal(r.failed, 1, state);
+      const c = completion(db)[0];
+      assert.equal(c.p_outcome, "failed", "not retried: every attempt would fail the same way");
+      assert.equal(c.p_error_code, "precondition_failed");
+      assert.equal(c.p_error_message, "db_schema_outdated");
+      assert.equal(db.called("finish_processing_run")[0].args.p_error_message, "db_schema_outdated", "the run state names the cause");
+      assert.equal(db.called("set_point_sort_keys").length, 0, "never falls back to the unfenced writer");
+    }
   });
 
   it("retries a retryable failure with backoff; a final retry becomes failed in the database", async () => {
