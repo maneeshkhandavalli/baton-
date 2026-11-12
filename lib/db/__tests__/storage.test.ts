@@ -7,12 +7,14 @@ import { describe, it } from "node:test";
 import type { VerifiedActor } from "../actor-rules";
 import type { DbClient } from "../client";
 import { DbError } from "../errors";
+import { ClaimLostError } from "../pipeline";
 import {
   MAX_SOURCE_BYTES,
   checkSourceUploadRequest,
   confirmSourceUpload,
   createSourceUpload,
   deleteHandoverRawObjects,
+  downloadVerifiedRawSource,
   deleteRawSource,
   downloadVerifiedRawSourceWithMeta,
   isOwnedRawPath,
@@ -480,5 +482,46 @@ describe("QA-R3-06: the preview is bound to the source's handover", () => {
     const { storage, ops } = fakeStorage({ objects: { [rawSourcePath(OTHER_H, S)]: bytes } });
     await assert.rejects(loadRawSourceForPreview(db, storage, actor, S), isCode("internal"));
     assert.deepEqual(ops, []);
+  });
+});
+
+describe("DB-12: the parse job's integrity failure goes through the fenced writer", () => {
+  const JOB = "33333333-3333-4333-8333-333333333333";
+  const good = new TextEncoder().encode("14/02/2024, 10:00 - Asha Rao: synthetic chat");
+  const tampered = new TextEncoder().encode("14/02/2024, 10:00 - Asha Rao: synthetic chaT");
+  const row = async () => {
+    const m = await measureBytes(good);
+    return { data: { raw_storage_path: rawSourcePath(H, S), size_bytes: m.sizeBytes, sha256: m.sha256, kind: "whatsapp_export",
+                     timezone: "Asia/Kolkata", date_order: null, original_filename: "chat.txt", state: "uploaded" } };
+  };
+  const storageWith = (b: Uint8Array) => fakeStorage({ objects: { [rawSourcePath(H, S)]: b } }).storage;
+
+  it("with a claim: pipeline_mark_source_parse_failed(job, attempt), never the unfenced writer", async () => {
+    const { db, calls, fns } = fakeDb({ raw_source_for_processing: await row() });
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storageWith(tampered), S, { jobId: JOB, attempt: 2 }), isCode("validation_failed"));
+    assert.deepEqual(fns(), ["raw_source_for_processing", "pipeline_mark_source_parse_failed"]);
+    assert.deepEqual(calls[1].args, { p_job_id: JOB, p_attempt: 2, p_error_code: "integrity_mismatch" });
+  });
+
+  it("with a claim that was lost: ClaimLostError, and the source is not failed by this worker", async () => {
+    const { db } = fakeDb({
+      raw_source_for_processing: await row(),
+      pipeline_mark_source_parse_failed: { error: { code: "BTLL0", message: "claim lost" } },
+    });
+    await assert.rejects(downloadVerifiedRawSource(db, storageWith(tampered), S, { jobId: JOB, attempt: 1 }), (e: unknown) => e instanceof ClaimLostError);
+  });
+
+  it("verified bytes never write anything, with or without a claim", async () => {
+    for (const claim of [undefined, { jobId: JOB, attempt: 1 }]) {
+      const { db, fns } = fakeDb({ raw_source_for_processing: await row() });
+      assert.deepEqual(await downloadVerifiedRawSource(db, storageWith(good), S, claim), good);
+      assert.deepEqual(fns(), ["raw_source_for_processing"]);
+    }
+  });
+
+  it("without a claim (legacy callers): the unfenced writer, unchanged", async () => {
+    const { db, fns } = fakeDb({ raw_source_for_processing: await row() });
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storageWith(tampered), S), isCode("validation_failed"));
+    assert.deepEqual(fns(), ["raw_source_for_processing", "mark_source_parse_failed"]);
   });
 });

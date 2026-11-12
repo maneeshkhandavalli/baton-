@@ -23,6 +23,7 @@ import type { VerifiedActor } from "./actor-rules";
 import type { DbClient } from "./client";
 import { DbError } from "./errors";
 import { createSource, removeSource } from "./mutations";
+import { markSourceParseFailed, type JobClaim } from "./pipeline";
 import { callRpc } from "./rpc";
 
 export const SOURCE_BUCKET = "source-uploads";
@@ -274,9 +275,19 @@ async function alreadyConfirmed(db: DbClient, sourceId: string): Promise<boolean
 /**
  * Parse job (service role): the raw bytes, re-verified against the confirmed size and SHA-256 (M5).
  * A mismatch marks the source failed with `integrity_mismatch` and throws; the bytes are never parsed.
+ *
+ * DB-12: pass the parse job's `claim` (job id + attempt) and the failure is written through the FENCED
+ * `pipeline_mark_source_parse_failed`, so a worker that lost its lease cannot fail the source (a lost
+ * claim surfaces as `ClaimLostError`). Without a claim the legacy unfenced writer is used; every
+ * production caller (lib/pipeline/stages/parse.ts) runs inside a parse job and should pass its claim.
  */
-export async function downloadVerifiedRawSource(db: DbClient, adminStorage: StorageClient, sourceId: string): Promise<Uint8Array> {
-  return (await downloadVerifiedRawSourceWithMeta(db, adminStorage, sourceId)).bytes;
+export async function downloadVerifiedRawSource(
+  db: DbClient,
+  adminStorage: StorageClient,
+  sourceId: string,
+  claim?: JobClaim,
+): Promise<Uint8Array> {
+  return (await downloadVerifiedRawSourceWithMeta(db, adminStorage, sourceId, claim)).bytes;
 }
 
 /** Parse inputs that travel with the raw bytes (§11.4 ParseSourceInput). */
@@ -293,13 +304,15 @@ export async function downloadVerifiedRawSourceWithMeta(
   db: DbClient,
   adminStorage: StorageClient,
   sourceId: string,
+  claim?: JobClaim,
 ): Promise<RawSourceMeta & { bytes: Uint8Array }> {
   const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as RawSourceRow | null;
   if (!source || !source.raw_storage_path) throw new DbError("not_found");
   const bytes = await download(adminStorage, requireOwnedRawPath(source.raw_storage_path, sourceId));
   const measured = await measureBytes(bytes);
   if (measured.sizeBytes !== Number(source.size_bytes) || measured.sha256 !== source.sha256.toLowerCase()) {
-    await callRpc(db, "mark_source_parse_failed", { p_source_id: sourceId, p_error_code: "integrity_mismatch" });
+    if (claim) await markSourceParseFailed(db, claim, "integrity_mismatch");
+    else await callRpc(db, "mark_source_parse_failed", { p_source_id: sourceId, p_error_code: "integrity_mismatch" });
     throw new DbError("validation_failed");
   }
   return { bytes, ...rawMeta(source) };
