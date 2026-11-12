@@ -12,8 +12,9 @@
  *  - a duplicate checksum is passed through as `conflict` unchanged (reusing a stale `pending_upload` row for
  *    an interrupted upload is done by create_source itself, Agent 2's C2/C3 change);
  *  - if signing fails after the row was created, the row is removed again (no orphan for a live draft);
- *  - confirm is idempotent (a lost response followed by a retry succeeds) and removes an oversized or
- *    mismatching object so the user can upload again (an empty object is a size mismatch);
+ *  - confirm is idempotent (a lost response followed by a retry succeeds) and removes an oversized,
+ *    mismatching or wrong-type object (bytes that are not the declared kind) so the user can upload again
+ *    (an empty object is a size mismatch);
  *  - every raw path read or deleted must have the raw/{handover}/{source} shape and belong to the source.
  */
 
@@ -116,6 +117,45 @@ export function checkSourceUploadRequest(input: SourceUploadRequest): void {
   if (ext !== null && !allowedExt.includes(ext)) throw new DbError("validation_failed");
   const mime = input.mimeType.split(";")[0].trim().toLowerCase();
   if (!SOURCE_KIND_MIME_TYPES[input.kind].includes(mime)) throw new DbError("validation_failed");
+}
+
+/**
+ * Whether the bytes plausibly are the declared kind (magic numbers only; the parser does the real work).
+ * Used at confirm (approved request #4) so a renamed or wrong-type file is refused while the user is still
+ * on the upload step. Mirrors the parser's own content checks, so nothing it accepts is refused here:
+ *  - pdf: a `%PDF-` header in the first 1024 bytes;
+ *  - docx: a ZIP, or an OLE compound file (an encrypted package; the parser reports password_protected);
+ *  - whatsapp_export: a ZIP, or text (no NUL in the first 8 KB unless UTF-16 with a BOM) not starting as a PDF;
+ *  - markdown / text: text that is neither a ZIP, an OLE file nor a PDF.
+ */
+export function bytesMatchKind(bytes: Uint8Array, kind: SourceKind): boolean {
+  const isZip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05);
+  const isCfb = bytes.length >= 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+  const head = bytes.subarray(0, 1024);
+  let pdfAt = -1;
+  for (let i = 0; i + 5 <= head.length; i++) {
+    if (head[i] === 0x25 && head[i + 1] === 0x50 && head[i + 2] === 0x44 && head[i + 3] === 0x46 && head[i + 4] === 0x2d) {
+      pdfAt = i;
+      break;
+    }
+  }
+  const bom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+  const startsAsPdf = pdfAt === bom;
+  const utf16 = bytes.length >= 2 && ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff));
+  const text = utf16 || !bytes.subarray(0, 8192).includes(0);
+  switch (kind) {
+    case "pdf":
+      return pdfAt >= 0;
+    case "docx":
+      return isZip || isCfb;
+    case "whatsapp_export":
+      return isZip || (text && !isCfb && !startsAsPdf);
+    case "markdown":
+    case "text":
+      return !isZip && !isCfb && text && !startsAsPdf;
+    default:
+      return false;
+  }
 }
 
 // ── Raw path ownership (R3 D2) ───────────────────────────────────────────────
@@ -226,7 +266,7 @@ export async function confirmSourceUpload(
   actor: VerifiedActor,
   sourceId: string,
 ): Promise<void> {
-  let target: { raw_storage_path: string; size_bytes: number; sha256: string };
+  let target: { raw_storage_path: string; size_bytes: number; sha256: string; kind?: SourceKind };
   try {
     target = (await callRpc(db, "source_upload_target", {
       p_actor_profile_id: actor.profileId,
@@ -248,6 +288,11 @@ export async function confirmSourceUpload(
     throw error;
   }
   const measured = await measureBytes(bytes);
+  // Request #4: `kind` comes from source_upload_target (migration 20261113200400); older databases omit it.
+  if (target.kind && bytes.byteLength > 0 && !bytesMatchKind(bytes, target.kind)) {
+    await removeQuietly(adminStorage, path);
+    throw new DbError("validation_failed");
+  }
 
   try {
     await callRpc(db, "confirm_source_uploaded", {

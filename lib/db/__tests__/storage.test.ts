@@ -4,12 +4,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { MULTIFORMAT_SET } from "../../../fixtures/demo/round3-multiformat/build";
+import { buildDocx, buildPdf, buildZip, bytesOf } from "../../../fixtures/parser/builders";
 import type { VerifiedActor } from "../actor-rules";
 import type { DbClient } from "../client";
 import { DbError } from "../errors";
 import { ClaimLostError } from "../pipeline";
 import {
   MAX_SOURCE_BYTES,
+  bytesMatchKind,
   checkSourceUploadRequest,
   confirmSourceUpload,
   createSourceUpload,
@@ -523,5 +526,67 @@ describe("DB-12: the parse job's integrity failure goes through the fenced write
     const { db, fns } = fakeDb({ raw_source_for_processing: await row() });
     await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storageWith(tampered), S), isCode("validation_failed"));
     assert.deepEqual(fns(), ["raw_source_for_processing", "mark_source_parse_failed"]);
+  });
+});
+
+describe("Request #4: confirm refuses bytes that are not the declared kind", () => {
+  const pdf = buildPdf([{ paragraphs: [["Synthetic report"]] }], { compress: true });
+  const zip = buildZip([{ name: "_chat.txt", data: "14/02/2024, 10:00 - Asha Rao: hi\n" }]);
+  const docx = buildDocx([{ text: "Synthetic paragraph" }]);
+  const chat = bytesOf("14/02/2024, 10:00 - Asha Rao: synthetic chat\n");
+  const md = bytesOf("# Notes\n\nSynthetic.\n");
+  const cfb = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0, 0, 0]);
+  const utf16 = new Uint8Array([0xff, 0xfe, 0x31, 0x00, 0x34, 0x00]);
+  const textPdf = bytesOf("%PDF-1.4\n1 0 obj\n<< >>\nendobj\n%%EOF\n");
+
+  it("bytesMatchKind: the expected pairs", () => {
+    const yes: Array<[Uint8Array, Parameters<typeof bytesMatchKind>[1]]> = [
+      [pdf, "pdf"], [textPdf, "pdf"], [docx, "docx"], [cfb, "docx"], [zip, "whatsapp_export"], [chat, "whatsapp_export"],
+      [utf16, "whatsapp_export"], [md, "markdown"], [chat, "markdown"], [md, "text"], [bytesOf("\uFEFF# BOM notes\n"), "markdown"],
+      [bytesOf("Notes mention %PDF- later on.\n"), "markdown"],
+    ];
+    for (const [b, k] of yes) assert.ok(bytesMatchKind(b, k), `${k} should accept`);
+    const no: Array<[Uint8Array, Parameters<typeof bytesMatchKind>[1]]> = [
+      [zip, "pdf"], [chat, "pdf"], [pdf, "docx"], [chat, "docx"], [pdf, "whatsapp_export"], [textPdf, "whatsapp_export"],
+      [cfb, "whatsapp_export"], [zip, "markdown"], [docx, "markdown"], [pdf, "markdown"], [textPdf, "text"], [cfb, "text"],
+      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]), "markdown"],
+    ];
+    for (const [b, k] of no) assert.ok(!bytesMatchKind(b, k), `${k} should refuse`);
+  });
+
+  it("every file of the multi-format QA set (including its failure cases) passes for its own kind", () => {
+    for (const f of MULTIFORMAT_SET) assert.ok(bytesMatchKind(f.bytes(), f.kind), f.file);
+  });
+
+  const path = rawSourcePath(H, S);
+  const targetFor = async (b: Uint8Array, kind?: string) => {
+    const m = await measureBytes(b);
+    return { data: { raw_storage_path: path, size_bytes: m.sizeBytes, sha256: m.sha256, ...(kind ? { kind } : {}) } };
+  };
+
+  it("a ZIP renamed to .pdf is removed and refused before the database confirms it", async () => {
+    const { db, fns } = fakeDb({ source_upload_target: await targetFor(zip, "pdf") });
+    const { storage, ops } = fakeStorage({ objects: { [path]: zip } });
+    await assert.rejects(confirmSourceUpload(db, storage, actor, S), isCode("validation_failed"));
+    assert.deepEqual(fns(), ["source_upload_target"]);
+    assert.deepEqual(ops.at(-1), { op: "remove", path: [path] });
+  });
+
+  it("a PDF chosen as a chat export is refused the same way", async () => {
+    const { db, fns } = fakeDb({ source_upload_target: await targetFor(pdf, "whatsapp_export") });
+    await assert.rejects(confirmSourceUpload(db, fakeStorage({ objects: { [path]: pdf } }).storage, actor, S), isCode("validation_failed"));
+    assert.deepEqual(fns(), ["source_upload_target"]);
+  });
+
+  it("matching bytes confirm normally", async () => {
+    const { db, fns } = fakeDb({ source_upload_target: await targetFor(pdf, "pdf") });
+    await confirmSourceUpload(db, fakeStorage({ objects: { [path]: pdf } }).storage, actor, S);
+    assert.deepEqual(fns(), ["source_upload_target", "confirm_source_uploaded"]);
+  });
+
+  it("a database without the kind field (before 20261113200400) skips the check", async () => {
+    const { db, fns } = fakeDb({ source_upload_target: await targetFor(zip) });
+    await confirmSourceUpload(db, fakeStorage({ objects: { [path]: zip } }).storage, actor, S);
+    assert.deepEqual(fns(), ["source_upload_target", "confirm_source_uploaded"]);
   });
 });
