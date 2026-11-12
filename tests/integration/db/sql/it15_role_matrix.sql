@@ -122,8 +122,8 @@ begin
       ('remove_source', format('select public.remove_source(tests.actor(), %L)', tests.id('r1')), managers, 'ok'),
       ('update_handover_details (R3 C1; h is in review, so allowed roles stop at BTIT0)',
          format($q$select public.update_handover_details(tests.actor(), %L, now(), 'Renamed title', 'Renamed team')$q$, tests.id('h')), managers, 'gate'),
-      ('start_processing', format($q$select public.start_processing(tests.actor(), %L, 'pipeline@1', '{"provider":"fake"}', '[]')$q$,
-         tests.id('h')), managers, 'gate'),
+      ('start_processing', format($q$select public.start_processing(tests.actor(), %L, 'pipeline@1', '{"provider":"fake"}', %L)$q$,
+         tests.id('h'), jsonb_build_array(jsonb_build_object('stage', 'parse', 'sourceId', tests.id('r1'), 'inputHash', md5('it15')))), managers, 'ok'),
       -- the incoming member's own acts
       ('acknowledge_publication', format('select public.acknowledge_publication(tests.actor(), %L, %L)', tests.id('pub'), 'v1'), array['inc'], 'gate'),
       ('respond_to_creator_transfer(offered to out)', format('select public.respond_to_creator_transfer(tests.actor(), %L, false)', tests.id('h')),
@@ -253,6 +253,41 @@ begin
   if cardinality(failures) > 0 then
     raise exception 'ASSERTION FAILED: storage upload policy:%', E'\n  ' || array_to_string(failures, E'\n  ');
   end if;
+end $$;
+
+-- ── QA-R3-05 (fixed by C5, 4c02b02): retrying an interrupted upload of the same file ──
+-- The uploader's own stale pending_upload row is reused (no object) or retired (object present); another
+-- member's pending upload of the same file stays a duplicate (BTCF0). Every probe is rolled back.
+do $$
+declare
+  v_sha text := encode((select sha256 from public.sources where id = tests.id('s_pend_ann')), 'hex');
+  v_path text := (select raw_storage_path from public.sources where id = tests.id('s_pend_ann'));
+  v_retry text := format('select public.create_source(tests.actor(), %L, %L, %L, %L, 100, %L)::text', tests.id('h'), 'whatsapp_export',
+                         'pending-ann.txt', 'text/plain', '%s');
+  r text;
+begin
+  perform tests.as_user('ann');
+  r := tests.try(format(v_retry, v_sha));
+  perform tests.as_owner();
+  perform tests.eq(r, 'OK:' || tests.id('s_pend_ann'), 'QA-R3-05: the uploader''s retry reuses the stale pending row (no object arrived)');
+  perform tests.as_user('out');
+  r := tests.try(format(v_retry, v_sha));
+  perform tests.as_owner();
+  perform tests.eq(r, 'ERR:BTCF0', 'QA-R3-05: another member''s pending upload of the same file is still a duplicate');
+  -- an unconfirmed object occupies the old path: the retry gets a NEW row, the old one is retired
+  insert into storage.objects (bucket_id, name, metadata) values ('source-uploads', v_path, '{"size": 100}');
+  perform tests.as_user('ann');
+  r := tests.try(format(v_retry, v_sha));
+  perform tests.as_owner();
+  perform tests.ok(r like 'OK:%' and r <> 'OK:' || tests.id('s_pend_ann'), 'QA-R3-05: object present -> a new source row, got ' || r);
+  perform tests.eq((select state from public.sources where id = tests.id('s_pend_ann')), 'removed', 'QA-R3-05: the stale row is retired');
+  perform tests.ok((select raw_storage_path is not null from public.sources where id = tests.id('s_pend_ann')),
+                   'QA-R3-05: its path is kept for the retention sweep');
+  -- restore the fixture for the checks below
+  delete from public.sources where id = substr(r, 4)::uuid;
+  perform set_config('baton.transition', 'on', true);
+  update public.sources set state = 'pending_upload', deleted_at = null where id = tests.id('s_pend_ann');
+  delete from storage.objects where name = v_path;
 end $$;
 
 -- ── B1: the incoming member's own authenticated view ─────────────────────────

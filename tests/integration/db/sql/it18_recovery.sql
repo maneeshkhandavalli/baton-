@@ -3,9 +3,8 @@
 --     back in a state from which it can be retried (draft without prior success);
 --   * the creator AND an outgoing member (non-creator) can retry; reviewer, lead, incoming cannot;
 --   * a retry is a new run; the old run's jobs are never claimable again;
---   * (open, P3) a run created with zero jobs is never finishable: the worker waits forever and the handover
---     stays `processing` (only the creator can cancel). The action's planner always adds the per-handover
---     stages, so this is defence in depth: start_processing should refuse an empty job list.
+--   * QA-R3-01 (fixed, 48b2126): a run with zero jobs could never finish (the worker waited forever and the
+--     handover stayed `processing`); start_processing now refuses an empty job list with BTVF0.
 \set ON_ERROR_STOP 1
 
 select tests.user(u) from unnest(array['ann', 'out', 'rev', 'lead', 'inc']) u;
@@ -103,26 +102,21 @@ begin
   perform tests.eq(r, 'OK', 'the creator can cancel the retry');
 end $$;
 
--- (open, P3) a zero-job run can never finish
+-- QA-R3-01: an empty job list is refused
 select tests.as_user('ann');
 select public.cancel_processing(tests.actor(), tests.id('h'));
 select tests.as_owner();
 do $$
 declare
   r text;
-  v_run uuid;
 begin
   perform tests.as_user('ann');
   r := tests.try(format('select public.start_processing(tests.actor(), %L, ''it-1'', ''{"provider":"fake"}'', ''[]'')', tests.id('h')));
   perform tests.as_owner();
-  perform it.todo(r like 'ERR:%', 'QA-R3-01',
-    'start_processing must refuse an empty job list (such a run is never finishable: decideRunOutcome([]) waits forever); got ' || r);
-  if r like 'OK:%' then
-    v_run := substr(r, 4)::uuid;
-    perform tests.as_service();
-    perform tests.ok(public.list_finishable_runs(20) ? v_run::text, 'the empty run is nominated as finishable on every drain');
-    perform tests.as_owner();
-  end if;
+  -- QA-R3-01 fixed by the lead (20261113300400_start_processing_requires_jobs.sql): hard.
+  perform tests.eq(r, 'ERR:BTVF0', 'QA-R3-01: start_processing refuses an empty job list (such a run could never finish)');
+  perform tests.ok(not exists (select 1 from public.processing_runs where handover_id = tests.id('h') and status in ('queued', 'running')),
+                   'QA-R3-01: no run was created');
 end $$;
 
 select 'ok' as it18_recovery;

@@ -1,12 +1,13 @@
 // Round 3 F1 (DB-12 / DB-13, owner Agent 4): the worker must USE the fenced pipeline API.
 // 20261113300100_pipeline_fencing.sql added fenced twins (pipeline_*) and the atomic chunk writer, and their
 // SQL behaviour is hard-tested in tests/integration/db/sql/it17_db12_db13_fencing.sql. This file checks the
-// TypeScript side: no worker code path may call a legacy, unfenced writer. PENDING until the wiring lands
-// (`# TODO open DB-12-TS`); prints NOW HOLDS when it does — then make it a hard assertion.
+// TypeScript side: no worker code path may call a legacy, unfenced writer. HARD since Agent 4's wiring
+// (ab96beb, integrated): lib/db/pipeline.ts calls only pipeline_* writers (through fencedRpc) and the atomic
+// chunk writer. The legacy writers' GRANTS are still open (DB-12-LEGACY, pending in it17).
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { describe, it, type TestContext } from "node:test";
+import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -29,20 +30,11 @@ function rpcNames(): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const f of [join(ROOT, "lib", "db", "pipeline.ts"), ...files(join(ROOT, "lib", "pipeline"))]) {
     const src = readFileSync(f, "utf8");
-    for (const m of src.matchAll(/(?:callRpc|\.rpc)\(\s*[A-Za-z_.()]*\s*,\s*"([a-z_]+)"/g)) {
+    for (const m of src.matchAll(/(?:callRpc|fencedRpc|\.rpc)\(\s*[A-Za-z_.()]*\s*,\s*"([a-z_]+)"/g)) {
       out.set(m[1], [...(out.get(m[1]) ?? []), f.slice(ROOT.length + 1)]);
     }
   }
   return out;
-}
-
-function pendingUntilFixed(t: TestContext, finding: string, check: () => void): void {
-  try {
-    check();
-    t.diagnostic(`NOW HOLDS ${finding}: make this a hard assertion (tests/integration/r3-pipeline-fencing-wiring.test.ts)`);
-  } catch (error) {
-    t.todo(`open ${finding}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
-  }
 }
 
 describe("DB-12/DB-13 wiring: the worker calls only fenced writers", () => {
@@ -51,13 +43,20 @@ describe("DB-12/DB-13 wiring: the worker calls only fenced writers", () => {
     assert.ok(names.has("claim_ready_processing_jobs") && names.has("complete_processing_job"), [...names.keys()].join(", "));
   });
 
-  it("no legacy unfenced writer is called from lib/db/pipeline.ts or lib/pipeline/** (pending)", (t) => {
+  it("no legacy unfenced writer is called from lib/db/pipeline.ts or lib/pipeline/** (DB-12-TS, hard)", () => {
     const names = rpcNames();
     const legacy = LEGACY_WRITERS.filter((n) => names.has(n)).map((n) => `${n} (${names.get(n)!.join(", ")})`);
-    pendingUntilFixed(t, "DB-12-TS", () => assert.deepEqual(legacy, [], `legacy writers still called: ${legacy.join("; ")}`));
+    assert.deepEqual(legacy, [], `legacy writers still called: ${legacy.join("; ")}`);
   });
 
-  it("extraction stores chunks atomically through pipeline_store_extract_chunk (pending)", (t) => {
-    pendingUntilFixed(t, "DB-13-TS", () => assert.ok(rpcNames().has("pipeline_store_extract_chunk"), "pipeline_store_extract_chunk is not called"));
+  it("every fenced twin is the one the worker calls (DB-12-TS, hard)", () => {
+    const names = rpcNames();
+    const missing = LEGACY_WRITERS.filter((n) => !["insert_extracted_point", "add_source_quote_evidence"].includes(n))
+      .map((n) => `pipeline_${n}`).filter((n) => !names.has(n));
+    assert.deepEqual(missing, [], `fenced writers not used: ${missing.join(", ")}`);
+  });
+
+  it("extraction stores chunks atomically through pipeline_store_extract_chunk (DB-13-TS, hard)", () => {
+    assert.ok(rpcNames().has("pipeline_store_extract_chunk"), "pipeline_store_extract_chunk is not called");
   });
 });
