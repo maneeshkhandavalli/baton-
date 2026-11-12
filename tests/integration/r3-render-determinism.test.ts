@@ -16,7 +16,8 @@ import { after, describe, it } from "node:test";
 import { createElement, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 
-import { DraftRow, type HandoverCardData } from "../../components/dashboard/handover-card";
+import { DraftRow } from "../../components/dashboard/draft-row";
+import type { HandoverCardData } from "../../components/dashboard/handover-card";
 import { PublishedHandoverView } from "../../components/published/published-handover-view";
 import { CODECELL_ID } from "../../lib/mocks/fixtures/codecell";
 import { MOCK_VIEWER_ID, PROFILES } from "../../lib/mocks/fixtures/profiles";
