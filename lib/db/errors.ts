@@ -81,7 +81,7 @@ export function toAppError(error: unknown, requestId?: string): AppError {
       code: error.code,
       message: SAFE_MESSAGES[error.code],
       retryable: error.retryable,
-      ...(error.code === "internal" && requestId ? { details: { requestId } } : {}),
+      ...(error.code === "internal" && requestId ? { details: { requestId } } : clientDetails(error)),
     };
   }
   return {
@@ -90,6 +90,19 @@ export function toAppError(error: unknown, requestId?: string): AppError {
     retryable: false,
     ...(requestId ? { details: { requestId } } : {}),
   };
+}
+
+/**
+ * R3 QA-R3-16: structural, content-free details a lib/db error chose to expose (e.g. storage's
+ * UploadRejectedError `{ reason: "kind_mismatch" }`). Only short snake_case string values pass, so no
+ * database text, identifiers or user content can reach the client.
+ */
+function clientDetails(error: DbError): { details?: Record<string, string> } {
+  const d = (error as { details?: unknown }).details;
+  if (!d || typeof d !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(d)) if (typeof v === "string" && /^[a-z_]{1,64}$/.test(v)) out[k] = v;
+  return Object.keys(out).length > 0 ? { details: out } : {};
 }
 
 export function fail<T>(code: ErrorCode): Result<T> {
