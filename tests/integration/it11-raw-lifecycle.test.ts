@@ -27,13 +27,14 @@ function setup(row: Record<string, unknown> | null) {
   const db = new RecordingDb(events);
   const storage = new RecordingStorage(events);
   const sourceId = randomUUID();
-  const path = `raw/${randomUUID()}/${sourceId}`;
+  const handoverId = randomUUID(); // the raw path and the row share one handover (QA-R3-06)
+  const path = `raw/${handoverId}/${sourceId}`;
   storage.put(SOURCE_BUCKET, path, BYTES);
   const fullRow =
     row === null
       ? null
       : { raw_storage_path: path, size_bytes: BYTES.byteLength, sha256: SHA, kind: "whatsapp_export", timezone: "Asia/Kolkata",
-          date_order: "dmy", original_filename: "chat.txt", handover_id: randomUUID(), ...row };
+          date_order: "dmy", original_filename: "chat.txt", handover_id: handoverId, ...row };
   db.returns("raw_source_for_processing", fullRow)
     .returns("source_preview_target", fullRow)
     .returns("mark_source_raw_deleted", null)
