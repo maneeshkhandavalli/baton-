@@ -31,8 +31,9 @@ begin
   perform tests.throws(format($q$select public.start_processing(tests.actor(), %L, '1', '{"provider":"fake"}', '[]')$q$, tests.id('h')),
                        'BTPF0', 'no source ready');
   v_s := public.create_source(tests.actor(), tests.id('h'), 'text', 'notes.txt', 'text/plain', 100, repeat('b', 64));
-  perform tests.throws(format($q$select public.create_source(tests.actor(), %L, 'text', 'again.txt', 'text/plain', 100, %L)$q$, tests.id('h'), repeat('b', 64)),
-                       'BTCF0', 'duplicate upload is conflict');
+  -- R3 C5: retrying the actor's own unfinished upload reuses the row (a confirmed duplicate is still BTCF0, 96_*).
+  perform tests.eq(public.create_source(tests.actor(), tests.id('h'), 'text', 'notes.txt', 'text/plain', 100, repeat('b', 64)), v_s,
+                   'retrying an unfinished upload reuses the pending source');
   perform tests.throws(format('select public.confirm_source_uploaded(tests.actor(), %L, 100, %L)', v_s, repeat('b', 64)),
                        'BTPF0', 'upload must have arrived');
   perform tests.eq(public.source_upload_target(tests.actor(), v_s) ->> 'raw_storage_path', 'raw/' || tests.id('h') || '/' || v_s,
