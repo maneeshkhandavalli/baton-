@@ -88,4 +88,61 @@ language sql immutable as $$
     'warnings', '[]'::jsonb)
 $$;
 
+-- ── Round 3 (QA): rolled-back permission probes (it15+) ──────────────────────
+
+-- Runs p_sql as the server acting for p_who, ALWAYS rolls it back, and returns 'OK' or 'ERR:<sqlstate>'.
+create function it.gate_as(p_who text, p_sql text) returns text language plpgsql as $$
+declare
+  s text;
+begin
+  perform tests.as_user(p_who);
+  begin
+    execute p_sql;
+    raise exception 'it.gate_as rollback' using errcode = 'QAOK0';
+  exception when others then
+    get stacked diagnostics s = returned_sqlstate;
+  end;
+  perform tests.as_owner();
+  return case when s = 'QAOK0' then 'OK' else 'ERR:' || s end;
+end $$;
+
+-- The same through the browser role (authenticated, RLS applies), for Storage policies.
+create function it.gate_reader(p_who text, p_sql text) returns text language plpgsql as $$
+declare
+  s text;
+begin
+  perform tests.as_reader(p_who);
+  begin
+    execute p_sql;
+    raise exception 'it.gate_reader rollback' using errcode = 'QAOK0';
+  exception when others then
+    get stacked diagnostics s = returned_sqlstate;
+  end;
+  perform tests.as_owner();
+  return case when s = 'QAOK0' then 'OK' else 'ERR:' || s end;
+end $$;
+
+-- NULL when the outcome matches the expectation, otherwise a one-line failure description.
+-- p_mode: 'ok' = allowed personas must succeed; 'gate' = allowed personas must not be refused for
+-- permission (state errors such as BTIT0/BTPF0/BTCF0 are acceptable there).
+create function it.judge(p_label text, p_who text, p_result text, p_allowed text[], p_mode text) returns text
+language plpgsql as $$
+begin
+  if p_who = any (p_allowed) then
+    if p_mode = 'ok' and p_result <> 'OK' then
+      return format('%s: %s should succeed, got %s', p_label, p_who, p_result);
+    end if;
+    if p_result in ('ERR:BTNF0', 'ERR:BTFB0', 'ERR:BTUA0', 'ERR:42501') then
+      return format('%s: %s should pass the permission gate, got %s', p_label, p_who, p_result);
+    end if;
+    return null;
+  end if;
+  if p_who = 'eve' then
+    return case when p_result = 'ERR:BTNF0' then null
+                else format('%s: non-member must get not_found (BTNF0, §8.5), got %s', p_label, p_result) end;
+  end if;
+  return case when p_result in ('ERR:BTNF0', 'ERR:BTFB0') then null
+              else format('%s: %s must be refused (BTFB0/BTNF0), got %s', p_label, p_who, p_result) end;
+end $$;
+
 grant execute on all functions in schema it to anon, authenticated, service_role;
