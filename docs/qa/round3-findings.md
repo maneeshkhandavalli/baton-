@@ -11,8 +11,8 @@ lines from `bash tests/integration/db/run.sh`, or Node `# open <id>` TODO tests.
 | ID | Sev | Owner | Status | Evidence |
 |---|---|---|---|---|
 | QA-L5 | P1 | Agent 4 | **VERIFIED FIXED** on `integration/round3` (`25b34b1`). All 12 plan forms masked, including through parse → persisted body → evidence quote. Residuals below (QA-L5-R1…R6). | `tests/integration/r3-privacy-evidence.test.ts` (hard), `lib/privacy/__tests__/mask.test.ts` |
-| DB-12 | P1 (gated: production AI) | Agent 4 | **OPEN** — 7 reproductions | `tests/integration/db/sql/it17_db12_db13_fencing.sql` |
-| DB-13 | P2 (gated: production AI) | Agent 4 | **OPEN** | `it17_db12_db13_fencing.sql` (DB-13 block) |
+| DB-12 | P1 (gated: production AI) | Agent 4 | **PARTIAL** — DB side VERIFIED: fenced twins `pipeline_*` (`20261113300100_pipeline_fencing.sql`, integrated) refuse stale attempts, cancelled runs, wrong stage and cross-handover targets (hard checks in it17). STILL OPEN: (a) `lib/db/pipeline.ts` still calls all 9 legacy writers (DB-12-TS, pending test); (b) the legacy writers stay granted to `service_role` (DB-12-LEGACY, 7 reproductions kept as TODO) | `it17_db12_db13_fencing.sql`, `tests/integration/r3-pipeline-fencing-wiring.test.ts` |
+| DB-13 | P2 (gated: production AI) | Agent 4 | **PARTIAL** — `pipeline_store_extract_chunk` VERIFIED (no evidence-less point, partial citations kept, idempotent repeat, foreign point refused) — hard in it17. Worker does not call it yet (DB-13-TS, pending) | same |
 | PI-11 | — (gated: D11) | Agent 4 | **NOT LANDED** — no commit on `feature/r3-ai-pipeline` yet | to verify when pushed |
 | QA-L2 | P1 (gated: D27) | lead (migration) | **OPEN** — analysis + 7 reproductions under a simulated grant | `tests/integration/db/sql/it16_qa_l2_d27.sql` |
 | D27 | — | — | **RE-VERIFIED fail-closed**: no API role (nor PUBLIC) can execute any function that turns on the erasure/purge flag or hard-deletes handovers (structural scan, so a new function cannot slip in); TS gate refuses every receipt before any DB call | `it16` parts A/C, `it09_privileges.sql`, `it09-d27-gate.test.ts` |
@@ -70,13 +70,28 @@ after it, and restrict the actor-less purge to callers without a JWT subject.
 | QA-L5-R5 | P3 | Agent 4 | `mask.ts` `VALUE` (one token) | spaced values leak their tail: `OTP 556 677` → `[PASSWORD] 677`; `password Hunter 2` → `[PASSWORD] 2` | residual R5 |
 | QA-L5-R6 | P3 | Agent 4 | `mask.ts` `VALUE` | multi-word passphrase after `password:` keeps all but the first word (pre-existing) | residual R6 |
 | QA-R3-01 | P3 | lead / Agent 2 | `20261111000400_lifecycle.sql:507` + `lib/pipeline/finish.ts:37` | `start_processing` accepts `p_jobs = []`; such a run is nominated by `list_finishable_runs` on every drain but `decideRunOutcome([])` always waits, so the handover stays `processing` until the creator cancels. Unreachable from the UI (the planner always adds 3 per-handover stages): defence in depth. | `it18_recovery.sql` (QA-R3-01) |
-| QA-R3-03 | P2 | Agent 1 | `components/wizard/draft-state.ts:24-27`, `new-handover-wizard.tsx:424` | Privacy-relevant UX: participants/conversations ticked off on the Scope step are kept only in memory until "Start processing"; a refresh (or a second tab) silently drops them, and the preview again shows the person as included. Persist on tick (addExclusion) or warn before unload / show "not saved". | `r3-draft-resume.test.ts` (documents current behaviour); browser BS-01 step 7 |
+| QA-R3-03 | P2 → P3 (mitigated on `feature/r3-uiux` d99fc1d: Scope step now says "People you leave out are saved when you continue"; a refresh still drops unsaved ticks) | Agent 1 | `components/wizard/draft-state.ts:24-27`, `new-handover-wizard.tsx:424` | Privacy-relevant UX: participants/conversations ticked off on the Scope step are kept only in memory until "Start processing"; a refresh (or a second tab) silently drops them, and the preview again shows the person as included. Persist on tick (addExclusion) or warn before unload / show "not saved". | `r3-draft-resume.test.ts` (documents current behaviour); browser BS-01 step 7 |
 | QA-R3-04 | P3 | lead (product) | `20261111000400_lifecycle.sql:581` | An outgoing member (not the creator) may start/retry processing but cannot cancel it; §8.2 is silent on cancel. | `it15` matrix (cancel_processing creator-only), `it18` |
-| QA-R3-05 | P2 | Agent 2 + Agent 3 | `feature/r3-ingestion:lib/db/storage.ts:12`; `create_source` (`20261111000600_sources_members_tokens.sql:23`) unchanged | Coordination gap: Agent 3's storage.ts says "reusing a stale `pending_upload` row … is done by create_source itself (Agent 2)", but no Round 3 migration changes `create_source`. Re-adding a file whose upload was interrupted returns `duplicate_source` until the user removes the stale row (the message says so). Decide: reuse the stale row in SQL, or keep the message and fix the comment. | browser BS-02 steps 4–5 |
+| QA-R3-05 | P2 — **RESOLVED on `feature/r3-backend` 4c02b02 (C5)**, not yet integrated: create_source reuses the actor's own stale `pending_upload` row (no object) or retires it (object present). Reviewed: same-actor only, storage policy still binds the uploader, advisory lock per (handover, sha256). | Agent 2 + Agent 3 | `feature/r3-ingestion:lib/db/storage.ts:12`; `create_source` (`20261111000600_sources_members_tokens.sql:23`) unchanged | Coordination gap: Agent 3's storage.ts says "reusing a stale `pending_upload` row … is done by create_source itself (Agent 2)", but no Round 3 migration changes `create_source`. Re-adding a file whose upload was interrupted returns `duplicate_source` until the user removes the stale row (the message says so). Decide: reuse the stale row in SQL, or keep the message and fix the comment. | browser BS-02 steps 4–5 |
 | QA-R3-06 | P3 | Agent 3 | `feature/r3-ingestion:lib/db/storage.ts:134` | `isOwnedRawPath` accepts any `raw/<a>/<b>` when either id is not a UUID, and never binds the handover segment to the source's handover. The DB row is authoritative, so this is belt-and-braces only; bind both segments. | review |
 | QA-R3-07 | P3 | Agent 2 | `20261113100100_update_handover_details.sql:82` | Optimistic token compared at millisecond precision: two saves landing in the same millisecond as the previous write would both pass. Negligible in practice; documented. | review |
 | QA-R3-08 | P3 | Agent 1 | `new-handover-wizard.tsx:137,153` | Consent ticks are remembered only once a source has consent recorded; refreshing on Sources before the first upload sends the user back to re-tick consent. Fine for privacy, surprising for "obvious draft resume" (A2). | `r3-draft-resume.test.ts`; BS-01 step 5 |
+| QA-R3-10 | P3 | Agent 4 | `lib/db/pipeline.ts:37` | Dead code: a wrapper for the legacy `claim_processing_jobs` (revoked from every role by QA-N1) is still exported; remove it with the DB-12 wiring. | review |
 | QA-R3-09 | P3 | Agent 4 | `lib/pipeline/stages/verify-support.ts:60,79` | Observation: verify_support reads its first page of links before resolving the provider (lazy prelude). No call or write happens; the run still fails closed when links exist. | `r3-production-refusal.test.ts` |
+
+## Tier E (real Postgres) — `tests/integration/r3-e2e-multisource.test.ts`
+
+5/5 PASS (`BATON_IT_PG=1`, PG 17, ~56 s): one run over three sources — the conflict pair plus a broken
+"WhatsApp export". The broken source fails alone (`parser:unsupported_format`, raw kept, downstream jobs
+cancelled `upstream_failed`), the other two parse/extract/verify, the run succeeds, handover `in_review`, no
+PII or file text persisted. The banking owner point is `conflicting` with one `supports` and one
+`contradicts` link (one per source); plain approve is refused, approve with a resolution note succeeds.
+B2 and B4 are therefore verified end to end below the UI.
+
+## Browser runs
+
+BS-01…08 (`docs/qa/browser-scripts.md`): **not run yet** — the Claude in Chrome extension was not connected
+(2026-11-12; same for the lead). Resume when it is reconnected; results go here.
 
 ## Branch reviews
 

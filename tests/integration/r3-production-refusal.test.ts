@@ -17,7 +17,10 @@ import { allowFakeAi, setAiEnv } from "./support/platform";
 
 const SECRET = "r3-cron-secret-0123456789abcdefghijklmnop"; // synthetic, ≥ 32 chars
 const AI_WRITES = ["set_job_provenance", "list_extraction_messages", "insert_extracted_point", "add_source_quote_evidence",
-  "record_quote_check", "record_support_verdict", "create_system_gap_question"];
+  "record_quote_check", "record_support_verdict", "create_system_gap_question",
+  // DB-12/DB-13 (ab96beb): the worker now writes only through the fenced pipeline_* writers.
+  "pipeline_set_job_provenance", "pipeline_store_extract_chunk", "pipeline_record_quote_check",
+  "pipeline_record_support_verdict", "pipeline_create_system_gap_question"];
 // verify_support reads its first page of links BEFORE resolving the provider (lazy prelude, by design: no
 // call, no write); the refusal is asserted on a page with one link that needs a verdict.
 const LINK = {
@@ -47,6 +50,7 @@ function world(stage: "extract" | "verify_support") {
     .returns("get_processing_job_context", jobContext(stage, { source: { state: "parsed" } }))
     .returns("heartbeat_processing_job", "running")
     .returns("set_job_provenance", null)
+    .returns("pipeline_set_job_provenance", null)
     .returns("list_extraction_messages", { accessLevel: "everyone", messages: [] })
     .returns("list_points_for_pipeline", [])
     .on("list_links_needing_support", () => (stage === "verify_support" ? [LINK] : []))
@@ -94,7 +98,7 @@ describe("B5: the worker refuses a 'fake' run outside development/test", () => {
     allowFakeAi();
     const res = await drain();
     assert.equal(res.status, 200);
-    assert.ok(w.adminDb.called("set_job_provenance"), "the stage got past the provider check");
+    assert.ok(w.adminDb.called("pipeline_set_job_provenance") || w.adminDb.called("set_job_provenance"), "the stage got past the provider check");
     assert.notEqual(w.adminDb.last("complete_processing_job")?.args.p_error_message, "provider_not_configured");
   });
 });

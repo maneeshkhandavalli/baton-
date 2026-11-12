@@ -1,6 +1,11 @@
 -- IT-17 (Round 3, F1): DB-12 stale-worker fencing and DB-13 point+evidence atomicity, characterised against
 -- the baseline so Agent 4's fix (E1/E2) can be verified the moment it lands.
 --
+-- STATUS (2026-11-12): Agent 4's 20261113300100_pipeline_fencing.sql adds fenced twins (pipeline_*) that
+-- lib/pipeline now uses, and pipeline_store_extract_chunk (DB-13). Their behaviour is HARD-tested at the end
+-- of this file. The legacy unfenced writers below remain granted to service_role, so the original
+-- reproductions are kept as TODO(open DB-12-LEGACY) until they are revoked.
+--
 -- DB-12: a worker whose claim was superseded (its lease expired and the job was re-claimed as attempt 2), or
 --   whose run was cancelled and replaced by a new run, must not be able to write points, evidence, quote
 --   checks, support verdicts or system gap questions. Today the writers are fenced only to "some active run
@@ -52,22 +57,22 @@ begin
   -- every writer below is the call stale worker A makes; none carries the claim, so none can be fenced to it
   v := tests.try(format($q$select public.insert_extracted_point(%L, %L, 'decision', 'Stale title', 'A stale statement', '{}', null, 'everyone', '{"provider":"fake"}')$q$,
                         tests.id('h'), tests.id('run1')));
-  perform it.todo(v like 'ERR:%', 'DB-12', 'insert_extracted_point from a superseded attempt must be refused; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'insert_extracted_point from a superseded attempt must be refused; got ' || v);
   v_pt := case when v like 'OK:%' then substr(v, 4)::uuid end;
   perform tests.as_owner();
   if v_pt is null then v_pt := tests.point('h', 'p_tmp'); end if;
   perform tests.as_service();
 
   v := tests.try(format('select public.add_source_quote_evidence(%L, %L, %L, 0, 15, %L)', v_pt, tests.msg('s', 'bob', 2), 'Bob message 2 a', 'pending'));
-  perform it.todo(v like 'ERR:%', 'DB-12', 'add_source_quote_evidence from a superseded attempt must be refused; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'add_source_quote_evidence from a superseded attempt must be refused; got ' || v);
 
   v := tests.try(format('select public.record_quote_check(%L, %L)',
                         (select evidence_id from public.point_evidence where id = tests.id('pe_old')), 'not_found')); -- always plausible: only the fence can refuse it
-  perform it.todo(v like 'ERR:%', 'DB-12', 'record_quote_check from a superseded attempt must be refused; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'record_quote_check from a superseded attempt must be refused; got ' || v);
 
   v := tests.try(format('select public.create_system_gap_question(%L, null, %L, %L, null, %L, %L)', tests.id('h'), 'owner',
                         'Stale question?', 'optional', 'everyone'));
-  perform it.todo(v like 'ERR:%', 'DB-12', 'create_system_gap_question from a superseded attempt must be refused; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'create_system_gap_question from a superseded attempt must be refused; got ' || v);
   perform tests.as_owner();
 end $$;
 
@@ -96,10 +101,10 @@ begin
   -- open: writers without a run/claim parameter accept run 1's worker because run 2 is active
   v := tests.try(format('select public.add_source_quote_evidence(%L, %L, %L, 0, 15, %L)', tests.id('p_old'), tests.msg('s', 'carol', 3),
                         'Carol message 3', 'pending'));
-  perform it.todo(v like 'ERR:%', 'DB-12', 'add_source_quote_evidence from a cancelled run''s worker must be refused while another run is active; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'add_source_quote_evidence from a cancelled run''s worker must be refused while another run is active; got ' || v);
   v := tests.try(format('select public.record_support_verdict(%L, %L, %L, null, %L, %L)', tests.id('pe_old'), v_rev, 'contradicts',
                         '{"provider":"fake"}', sha256(convert_to(v_quote, 'UTF8'))));
-  perform it.todo(v like 'ERR:%', 'DB-12', 'record_support_verdict from a cancelled run''s worker must be refused; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'record_support_verdict from a cancelled run''s worker must be refused; got ' || v);
   perform tests.as_owner();
 end $$;
 
@@ -120,7 +125,7 @@ begin
   v := tests.try(format('select public.record_support_verdict(%L, %L, %L, null, %L, %L)', tests.id('pe_old'), v_rev, 'irrelevant',
                         '{"provider":"fake"}', sha256(convert_to(v_quote, 'UTF8'))));
   perform tests.as_owner();
-  perform it.todo(v like 'ERR:%', 'DB-12', 'record_support_verdict with no active run (a late worker after the run ended) must be refused; got ' || v);
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY', 'record_support_verdict with no active run (a late worker after the run ended) must be refused; got ' || v);
 end $$;
 
 -- ── DB-13: a point can exist without its evidence ─────────────────────────────
@@ -145,11 +150,89 @@ begin
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prosrc ~* 'insert\s+into\s+public\.handover_points' and p.prosrc ~* 'insert\s+into\s+public\.point_evidence'
      and p.prosrc ~* '''extracted''' and p.proname <> 'create_manual_point'; -- manual points with testimony are not extraction
-  perform it.todo(v like 'ERR:%' or v_atomic is not null, 'DB-13',
-    'an extracted point must be written together with its evidence (atomic writer) — today a standalone insert_extracted_point commits ' || v);
+  if to_regprocedure('public.pipeline_store_extract_chunk(uuid,int,int,int,text,jsonb,jsonb)') is not null then
+    v_atomic := coalesce(v_atomic || ', ', '') || 'pipeline_store_extract_chunk';
+  end if;
+  -- DB-13 fixed by Agent 4 (pipeline_store_extract_chunk; behaviour hard-tested in the fenced block below).
+  perform tests.ok(v_atomic is not null, 'DB-13: an atomic point+evidence writer exists');
+  -- Residual: the legacy standalone writer is still granted to service_role (revoke follow-up, DB-12-LEGACY).
+  perform it.todo(v like 'ERR:%', 'DB-12-LEGACY',
+    'legacy insert_extracted_point still commits an evidence-less point for any service_role caller; got ' || v);
   if v_atomic is not null then
     raise notice 'DB-13: candidate atomic writer(s): % (QA: add a hard test that a failing citation rolls the point back)', v_atomic;
   end if;
+end $$;
+
+-- ── Fenced twins (Agent 4, 20261113300100_pipeline_fencing.sql): HARD once present ──
+-- Runs only when the fenced API exists, so this file stays green on branches without it.
+do $$
+declare
+  v_fn regprocedure := to_regprocedure('public.pipeline_store_extract_chunk(uuid,int,int,int,text,jsonb,jsonb)');
+  v text;
+  v_job uuid;
+  v_run uuid;
+  v_good jsonb;
+  v_foreign uuid := gen_random_uuid();
+  prov text := '{"provider":"fake"}';
+  store text := 'select public.pipeline_store_extract_chunk(%L, %s, %s, 3, ''everyone'', %L, %L)::text';
+begin
+  if v_fn is null then
+    raise notice 'fenced pipeline API not present on this branch: fenced-twin checks skipped';
+    return;
+  end if;
+  perform tests.handover('hf', 'ann', 'outgoing');
+  perform tests.source('hf', 'sf');
+  perform tests.as_user('ann');
+  v_run := public.start_processing(tests.actor(), tests.id('hf'), 'it-1', '{"provider":"fake"}',
+             jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('sf'), 'inputHash', md5('f1'))));
+  perform tests.as_service();
+  select id into v_job from public.claim_ready_processing_jobs(10, 300) where run_id = v_run;
+  perform tests.ok(v_job is not null, 'fenced: attempt 1 claimed');
+  perform tests.as_owner();
+  update public.processing_jobs set lease_expires_at = now() - interval '1 second' where id = v_job;
+  perform tests.as_service();
+  perform tests.eq((select attempt from public.claim_ready_processing_jobs(10, 300) c where c.id = v_job), 2, 'fenced: re-claimed as attempt 2');
+  v_good := jsonb_build_array(jsonb_build_object('point', jsonb_build_object('category', 'decision', 'title', 'Fenced title',
+              'statement', 'A fenced statement'), 'citations', jsonb_build_array(
+                jsonb_build_object('messageId', tests.msg('sf', 'alice', 1), 'quote', 'Alice message 1', 'quoteStart', 0, 'quoteEnd', 15),
+                jsonb_build_object('messageId', v_foreign, 'quote', 'not in this source'))));
+
+  -- DB-12: the superseded attempt cannot write
+  perform tests.eq(tests.try(format(store, v_job, 1, 0, prov, v_good)), 'ERR:BTLL0', 'DB-12 fenced: stale attempt 1 cannot store a chunk');
+  perform tests.eq(tests.try(format('select public.pipeline_record_quote_check(%L, 1, %L, ''not_found'')', v_job,
+                   (select evidence_id from public.point_evidence where id = tests.id('pe_old')))), 'ERR:BTLL0',
+                   'DB-12 fenced: stale attempt 1 cannot record a quote check');
+  -- stage scoping: the extract claim may not write quote checks
+  perform tests.eq(tests.try(format('select public.pipeline_record_quote_check(%L, 2, %L, ''not_found'')', v_job,
+                   (select evidence_id from public.point_evidence where id = tests.id('pe_old')))), 'ERR:BTFB0',
+                   'DB-12 fenced: an extract claim cannot write quote checks');
+
+  -- DB-13: a new point whose citations all fail is not inserted; the chunk still checkpoints
+  v := tests.try(format(store, v_job, 2, 0, prov, jsonb_build_array(jsonb_build_object('point',
+         jsonb_build_object('category', 'decision', 'title', 'Orphan', 'statement', 'No surviving evidence'),
+         'citations', jsonb_build_array(jsonb_build_object('messageId', v_foreign, 'quote', 'foreign'))))));
+  perform tests.ok(v like 'OK:%' and (substr(v, 4)::jsonb #>> '{entries,0,inserted}') = 'false', 'DB-13: evidence-less point not inserted, got ' || v);
+  perform tests.eq((select count(*)::int from public.handover_points where handover_id = tests.id('hf')), 0, 'DB-13: no orphan point');
+  -- one valid + one foreign citation: point with exactly one link
+  v := tests.try(format(store, v_job, 2, 1, prov, v_good));
+  perform tests.ok(v like 'OK:%', 'DB-13: chunk 1 stored, got ' || v);
+  perform tests.eq((select count(*)::int from public.handover_points where handover_id = tests.id('hf')), 1, 'DB-13: one point');
+  perform tests.eq((select count(*)::int from public.point_evidence where handover_id = tests.id('hf')), 1, 'DB-13: its one surviving citation');
+  -- idempotent repeat of a committed chunk
+  v := tests.try(format(store, v_job, 2, 1, prov, v_good));
+  perform tests.eq(substr(v, 4)::jsonb ->> 'alreadyCommitted', 'true', 'DB-13: a repeated chunk is a no-op');
+  perform tests.eq((select count(*)::int from public.handover_points where handover_id = tests.id('hf')), 1, 'DB-13: still one point');
+  -- a chunk cannot attach to another handover's point
+  perform tests.eq(tests.try(format(store, v_job, 2, 2, prov, jsonb_build_array(jsonb_build_object('pointId', tests.id('p_old'),
+                     'citations', jsonb_build_array(jsonb_build_object('messageId', tests.msg('sf', 'bob', 1), 'quote', 'Bob message 1')))))),
+                   'ERR:BTFB0', 'DB-12 fenced: a chunk cannot attach evidence to another handover''s point');
+  -- the run is cancelled: the live claim is lost too
+  perform tests.as_user('ann');
+  perform public.cancel_processing(tests.actor(), tests.id('hf'));
+  perform tests.as_service();
+  perform tests.eq(tests.try(format(store, v_job, 2, 2, prov, v_good)), 'ERR:BTLL0', 'DB-12 fenced: a cancelled run''s claim cannot write');
+  perform tests.as_owner();
+  raise notice 'fenced pipeline API: hard checks passed';
 end $$;
 
 select 'ok' as it17_db12_db13_fencing;
