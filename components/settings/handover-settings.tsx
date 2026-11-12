@@ -14,6 +14,7 @@ import { SectionHeading } from "@/components/shared/section-heading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { useAction } from "@/hooks/use-action";
 import type { AccessTokenSummary, ExclusionSummary, HandoverSummary, MemberSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, type AccessLevel, type MaskKind, type MemberRole } from "@/lib/contracts/enums";
@@ -32,15 +33,25 @@ interface HandoverSettingsProps {
   exclusions: ExclusionSummary[];
 }
 
+/**
+ * One settings group. Groups are separated by hairlines and space, not boxed; only the danger
+ * zone gets a frame, so destructive actions are set apart from everyday settings.
+ */
 function Panel({ children, id }: { children: React.ReactNode; id?: string }) {
+  if (id === "danger") {
+    return (
+      <section id={id} className="space-y-5 rounded-xl border border-destructive/25 bg-card p-5 shadow-soft sm:p-6">
+        {children}
+      </section>
+    );
+  }
   return (
-    <section id={id} className="space-y-5 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-6">
+    <section id={id} className="space-y-5 border-t border-border pt-8 first:border-t-0 first:pt-0">
       {children}
     </section>
   );
 }
 
-const selectClass = "h-8 rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60";
 
 export function HandoverSettings({ handover: h, members, sources, tokens, participants, exclusions }: HandoverSettingsProps) {
   const router = useRouter();
@@ -66,7 +77,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
   const reviewRole = invite.role === "outgoing" || invite.role === "reviewer";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <Panel>
         <SectionHeading title="Handover" description="Lifecycle and basic details." />
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
@@ -142,9 +153,8 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                     <Label htmlFor={`clr-${m.id}`} className="sr-only">
                       Clearance for {m.displayName}
                     </Label>
-                    <select
+                    <NativeSelect
                       id={`clr-${m.id}`}
-                      className={selectClass}
                       value={m.clearance}
                       disabled={!creator || fixed || isPending}
                       title={fixed ? "Outgoing and reviewer members always have reviewer-only clearance" : undefined}
@@ -155,7 +165,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                           Sees: {accessLevelMeta[l].label}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                     {creator && !m.isCreator && (
                       <ConfirmDialog
                         trigger={
@@ -213,23 +223,23 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               <Label htmlFor="invite-role" className="sr-only">
                 Role
               </Label>
-              <select id="invite-role" className={selectClass} value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value as MemberRole, clearance: "" })}>
+              <NativeSelect id="invite-role" value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value as MemberRole, clearance: "" })}>
                 <option value="incoming">Incoming</option>
                 <option value="lead">Lead</option>
                 <option value="reviewer">Reviewer</option>
                 <option value="outgoing">Outgoing</option>
-              </select>
+              </NativeSelect>
               <Label htmlFor="invite-clearance" className="sr-only">
                 Clearance
               </Label>
-              <select id="invite-clearance" className={selectClass} disabled={reviewRole} value={reviewRole ? "reviewer_only" : invite.clearance} onChange={(e) => setInvite({ ...invite, clearance: e.target.value as AccessLevel })}>
+              <NativeSelect id="invite-clearance" disabled={reviewRole} value={reviewRole ? "reviewer_only" : invite.clearance} onChange={(e) => setInvite({ ...invite, clearance: e.target.value as AccessLevel })}>
                 {!reviewRole && <option value="">Default clearance</option>}
                 {ACCESS_LEVELS.map((l) => (
                   <option key={l} value={l}>
                     Sees: {accessLevelMeta[l].label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
               <Button type="submit" disabled={isPending || !invite.email}>
                 <UserPlus aria-hidden="true" data-icon="inline-start" />
                 Invite
@@ -320,7 +330,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
         <SectionHeading title="Privacy" description="What Baton keeps, and how people can opt out." />
         <ul className="space-y-3 text-sm">
           <li className="flex gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-sourced" />
+            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
             <span>
               Personal and financial details were masked before storage
               {Object.keys(masking).length > 0 && (
@@ -338,11 +348,11 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
             </span>
           </li>
           <li className="flex gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-sourced" />
+            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
             <span>Raw uploads are deleted as soon as processing succeeds. Only masked, permitted evidence is kept.</span>
           </li>
           <li className="flex gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-sourced" />
+            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
             <span>
               <span className="font-medium">Late opt-outs.</span> If someone asks to be removed after processing, the creator can erase them as a participant. Their
               messages and quotes are deleted, affected points go to privacy review, and published versions are redacted.
@@ -358,7 +368,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
 
       {creator && (
         <Panel id="danger">
-          <SectionHeading title="Ownership and deletion" description="Only the creator can do these." />
+          <SectionHeading title="Danger zone" description="Ownership and deletion. Only the creator can do these." className="[&_h2]:text-destructive-fg" />
           {offer && (
             <p className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-sm">
               <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -371,14 +381,14 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="transfer">Offer creatorship to</Label>
-              <select id="transfer" className={`${selectClass} w-full`} value={transferTo} onChange={(e) => setTransferTo(e.target.value)} disabled={transferable.length === 0}>
+              <NativeSelect id="transfer" value={transferTo} onChange={(e) => setTransferTo(e.target.value)} disabled={transferable.length === 0}>
                 <option value="">{transferable.length ? "Choose an outgoing or reviewer member" : "No eligible members"}</option>
                 {transferable.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.displayName} ({memberRoleLabel[m.role]})
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <Button
               variant="outline"

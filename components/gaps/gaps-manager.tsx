@@ -8,10 +8,12 @@ import { formatDate, formatDateTime } from "@/components/handover/format";
 import { accessLevelMeta, categoryLabel, gapPriorityLabel } from "@/components/handover/labels";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedText } from "@/components/shared/masked-text";
 import { maskedTextToPlain } from "@/components/shared/mask-tokens";
@@ -124,13 +126,15 @@ function Group({
           return (
             <li key={q.id} className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={cn("inline-flex h-5 items-center rounded-md px-1.5 text-2xs font-medium", q.priority === "required" ? "bg-status-conflicting-soft text-status-conflicting-fg" : "bg-muted text-muted-foreground")}>
+                <Badge shape="tag" size="sm" tone={q.priority === "required" ? "warning" : "neutral"}>
                   {gapPriorityLabel[q.priority]}
-                </span>
+                </Badge>
                 {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
-                <span className="ml-auto text-xs text-muted-foreground capitalize">{q.status}</span>
+                <Badge size="sm" className="ml-auto capitalize" tone={q.status === "open" ? "primary" : q.status === "answered" ? "warning" : "neutral"} dot>
+                  {q.status}
+                </Badge>
               </div>
-              <h3 className="mt-2 text-md leading-snug font-semibold"><MaskedText text={q.question} /></h3>
+              <h3 className="mt-2.5 type-heading"><MaskedText text={q.question} /></h3>
               {q.context && <p className="mt-1 text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}
               {point && (
                 <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -263,7 +267,7 @@ function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId:
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="link-level">Most restricted question it may show</Label>
-                <select
+                <NativeSelect
                   id="link-level"
                   value={maxAccessLevel}
                   onChange={(e) => setChosenLevel(e.target.value as AccessLevel)}
@@ -275,7 +279,7 @@ function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId:
                       {accessLevelMeta[l].label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
                 <p id="link-level-hint" className="text-xs text-muted-foreground">
                   {error?.fieldErrors?.maxAccessLevel?.[0] ??
                     (underivable > 0
@@ -336,25 +340,25 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="prio">Priority</Label>
-              <select id="prio" value={priority} onChange={(e) => setPriority(e.target.value as GapPriority)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="prio" value={priority} onChange={(e) => setPriority(e.target.value as GapPriority)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
                 <option value="optional">Optional</option>
                 <option value="required">Required before publishing</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pt">Link to a missing point</Label>
-              <select id="pt" value={pointId} onChange={(e) => { setPointId(e.target.value); if (e.target.value) setCategory(""); }} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="pt" value={pointId} onChange={(e) => { setPointId(e.target.value); if (e.target.value) setCategory(""); }} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
                 <option value="">None</option>
                 {points.map((p) => (
                   <option key={p.id} value={p.id}>
                     {maskedTextToPlain(p.title)}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cat">Topic</Label>
-              <select
+              <NativeSelect
                 id="cat"
                 value={category}
                 disabled={!!pointId}
@@ -368,17 +372,17 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
                     {categoryLabel[c]}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ask-level">Who may see it</Label>
-              <select id="ask-level" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="ask-level" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
                 {ACCESS_LEVELS.map((l) => (
                   <option key={l} value={l}>
                     {accessLevelMeta[l].label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
           {pointId && <p className="text-xs text-muted-foreground">If the point is more restricted, the question is raised to its level.</p>}

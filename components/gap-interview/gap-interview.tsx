@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { categoryLabel } from "@/components/handover/labels";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,7 +72,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
   if (done) {
     return (
       <div className="rounded-xl border border-border bg-card p-8 text-center shadow-soft">
-        <CheckCircle2 aria-hidden="true" className="mx-auto size-10 text-status-sourced" />
+        <CheckCircle2 aria-hidden="true" className="mx-auto size-10 text-success" />
         <h2 className="mt-4 type-section-title">Thank you{draft.name ? `, ${draft.name.split(" ")[0]}` : ""}</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
           {done.submitted} {done.submitted === 1 ? "answer was" : "answers were"} sent to the team. A reviewer will check each one before it becomes part of the handover.
@@ -84,7 +85,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
   if (qs.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-card p-8 text-center shadow-soft">
-        <CheckCircle2 aria-hidden="true" className="mx-auto size-10 text-status-sourced" />
+        <CheckCircle2 aria-hidden="true" className="mx-auto size-10 text-success" />
         <h2 className="mt-4 type-section-title">Nothing left to answer</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Every question on this link has been answered. Thanks for helping the next person.</p>
       </div>
@@ -125,7 +126,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                   Answer what you can and skip the rest. It takes about {Math.max(2, qs.length * 2)} minutes.
                 </p>
                 <p className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-                  <ShieldCheck aria-hidden="true" className="mt-px size-4 shrink-0 text-status-sourced" />
+                  <ShieldCheck aria-hidden="true" className="mt-px size-4 shrink-0 text-success" />
                   Phone numbers, emails, payment details and passwords you type are masked automatically. Please don&rsquo;t share passwords; say where they are kept instead.
                 </p>
               </div>
@@ -144,9 +145,9 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
           {q && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={cn("inline-flex h-5 items-center rounded-md px-1.5 text-2xs font-medium", q.priority === "required" ? "bg-status-conflicting-soft text-status-conflicting-fg" : "bg-muted text-muted-foreground")}>
+                <Badge shape="tag" size="sm" tone={q.priority === "required" ? "warning" : "neutral"}>
                   {q.priority === "required" ? "Important" : "Optional"}
-                </span>
+                </Badge>
                 {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
               </div>
               <h2 className="type-section-title"><MaskedText text={q.question} /></h2>

@@ -134,7 +134,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
           )}
         </div>
       ) : (
-        <p className="flex items-center gap-2 text-sm text-status-sourced-fg">
+        <p className="flex items-center gap-2 text-sm text-success-fg">
           <CheckCircle2 aria-hidden="true" className="size-4" />
           Nothing is blocking deletion.
         </p>
