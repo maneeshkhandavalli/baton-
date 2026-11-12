@@ -4,12 +4,11 @@
 //
 // QA-L5 (open at baseline 24320e1; fixed by Agent 4 / E0 in 61552db, integrated as 25b34b1): credentials
 // written with a WHITESPACE separator ("password Hunter2", "pin 4821", "otp 556677", "login … / secret")
-// are now masked — those checks are HARD. Residual forms found by QA after the fix (QA-L5-R1…R6, see
-// docs/qa/round3-findings.md) run as PENDING: a failing check marks the test TODO (reported, not red); a
-// passing one prints "NOW HOLDS" so it can be flipped to a hard assertion.
+// are now masked — those checks are HARD. The residual forms QA found after the fix (QA-L5-R1…R6) were fixed
+// by Agent 3 in 8cac176 and are HARD too.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { describe, it, type TestContext } from "node:test";
+import { describe, it } from "node:test";
 
 import { extractCandidates } from "../../lib/ai/extract";
 import type { AiStageOptions, ExtractRequest } from "../../lib/ai/provider";
@@ -20,17 +19,6 @@ import { parseSource, previewSource } from "../../lib/parsers/parse-source";
 import { createMasker, maskText } from "../../lib/privacy/mask";
 import { input, participantRule } from "../../fixtures/parser/load";
 import { assertAbsent, assertNoLeaks } from "./support/sentinels";
-
-/** Runs a check that is expected to fail until `finding` is fixed: failure → TODO, success → "NOW HOLDS". */
-function pendingUntilFixed(t: TestContext, finding: string, check: () => void): void {
-  try {
-    check();
-    t.diagnostic(`NOW HOLDS ${finding}: make this a hard assertion (tests/integration/r3-privacy-evidence.test.ts)`);
-  } catch (error) {
-    const first = error instanceof Error ? error.message.split("\n")[0] : String(error);
-    t.todo(`open ${finding}: ${first}`);
-  }
-}
 
 // ── QA-L5: the credential forms named in the Round 3 plan (E0), each with the secret that must vanish ──
 const L5_FORMS: ReadonlyArray<{ text: string; secret: string }> = [
@@ -84,9 +72,9 @@ describe("QA-L5: credentials with whitespace separators are masked (fixed in E0;
     L5_FORMS.forEach(({ secret }, i) => assert.ok(!outs[i].includes(secret), `${secret} survived: ${outs[i]}`));
   });
   for (const { id, text, secrets } of L5_RESIDUAL) {
-    it(`residual ${id} (pending): ${JSON.stringify(text)}`, (t) => {
+    it(`residual ${id} (fixed in 8cac176, hard): ${JSON.stringify(text)}`, () => {
       const out = maskText({ text }).text;
-      pendingUntilFixed(t, id, () => secrets.forEach((x) => assert.ok(!out.includes(x), `${JSON.stringify(x)} survived masking: ${out}`)));
+      secrets.forEach((x) => assert.ok(!out.includes(x), `${JSON.stringify(x)} survived masking: ${out}`));
     });
   }
   it("over-masking stays bounded: ordinary sentences keep their words (§12.1 errs to over-mask, not to erase)", () => {

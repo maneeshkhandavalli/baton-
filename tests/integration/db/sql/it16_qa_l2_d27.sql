@@ -5,9 +5,9 @@
 --   that turns on the erasure or purge privilege flag, or hard-deletes handovers, must be executable by NO
 --   API role. No restore role exists.
 -- Part B (QA-L2, latent): simulate the FUTURE reviewed grant to service_role inside this throw-away test
---   database, then probe actor validation. Checks that already hold are hard assertions; the open ones are
---   reported with it.todo(...) as "TODO(open QA-L2)" and flip to "NOW HOLDS" when the fix lands.
---   Expected fix: both functions call public._require_actor(p_actor_profile_id) (session subject must equal
+--   database, then probe actor validation. Every check is a hard assertion.
+--   STATUS: FIXED on integration/round3 (lead migration); every case below is now a hard assertion.
+--   Fix: both functions call public._require_actor(p_actor_profile_id) (session subject must equal
 --   the actor, the actor must be a live profile, API client roles refused) BEFORE any read or early return,
 --   with purge's actor-less retention path restricted to a dedicated caller.
 -- Part C (hard): the simulated grant is revoked and Part A holds again.
@@ -69,21 +69,19 @@ begin
   perform tests.as_user('rev');
   v := tests.try(format(erase, v_eid, tests.id('h'), hash_alice, tests.id('ann')));
   perform tests.as_owner();
-  perform it.todo(v = 'ERR:BTFB0', 'QA-L2',
-    'erase_participant must refuse an actor that differs from the session subject (_require_actor); got ' || v);
+  perform tests.ok(v = 'ERR:BTFB0', 'QA-L2 (fixed): ' || 'erase_participant must refuse an actor that differs from the session subject (_require_actor); got ' || v);
 
   -- open: replaying a known erasure id answers alreadyApplied BEFORE any actor check (an oracle for ids)
   perform tests.as_user('eve');
   v := tests.try(format(erase, v_eid, tests.id('h'), hash_alice, tests.id('eve')));
   perform tests.as_owner();
-  perform it.todo(v in ('ERR:BTFB0', 'ERR:BTNF0'), 'QA-L2',
-    'erase_participant idempotency must not answer a non-creator (alreadyApplied before the actor check); got ' || v);
+  perform tests.ok(v in ('ERR:BTFB0', 'ERR:BTNF0'), 'QA-L2 (fixed): ' || 'erase_participant idempotency must not answer a non-creator (alreadyApplied before the actor check); got ' || v);
 
   -- open: a deleted creator account can still erase
   perform tests.as_user('gone');
   v := tests.try(format(erase, gen_random_uuid(), tests.id('hg'), hash_alice, tests.id('gone')));
   perform tests.as_owner();
-  perform it.todo(v = 'ERR:BTUA0', 'QA-L2', 'erase_participant must refuse a deleted actor (BTUA0); got ' || v);
+  perform tests.ok(v = 'ERR:BTUA0', 'QA-L2 (fixed): ' || 'erase_participant must refuse a deleted actor (BTUA0); got ' || v);
 
   -- open: with a mistaken grant to the browser role, nothing inside the function refuses it
   grant execute on function public.erase_participant(uuid, uuid, text, bytea, text, uuid, uuid) to authenticated;
@@ -91,8 +89,7 @@ begin
   v := tests.try(format(erase, gen_random_uuid(), tests.id('h'), hash_bob, tests.id('ann')));
   perform tests.as_owner();
   revoke execute on function public.erase_participant(uuid, uuid, text, bytea, text, uuid, uuid) from authenticated;
-  perform it.todo(v = 'ERR:BTFB0', 'QA-L2',
-    'erase_participant must refuse client API roles even if granted by mistake (_require_actor defence in depth); got ' || v);
+  perform tests.ok(v = 'ERR:BTFB0', 'QA-L2 (fixed): ' || 'erase_participant must refuse client API roles even if granted by mistake (_require_actor defence in depth); got ' || v);
 
   -- control: the creator under her own session (the legitimate path) still works
   perform tests.as_user('ann');
@@ -120,13 +117,13 @@ begin
   perform tests.as_user('rev');
   v := tests.try(format(purge, gen_random_uuid(), tests.id('hp1'), tests.id('ann')));
   perform tests.as_owner();
-  perform it.todo(v = 'ERR:BTFB0', 'QA-L2', 'purge_handover must refuse an actor that differs from the session subject; got ' || v);
+  perform tests.ok(v = 'ERR:BTFB0', 'QA-L2 (fixed): ' || 'purge_handover must refuse an actor that differs from the session subject; got ' || v);
 
   -- open: a deleted creator can purge
   perform tests.as_user('gone');
   v := tests.try(format(purge, gen_random_uuid(), tests.id('hp3'), tests.id('gone')));
   perform tests.as_owner();
-  perform it.todo(v = 'ERR:BTUA0', 'QA-L2', 'purge_handover must refuse a deleted actor (BTUA0); got ' || v);
+  perform tests.ok(v = 'ERR:BTUA0', 'QA-L2 (fixed): ' || 'purge_handover must refuse a deleted actor (BTUA0); got ' || v);
 
   -- open: the actor-less path is open to ANY holder of the grant, not only the retention sweep: a user
   -- session (JWT subject set) that omits the actor purges a due handover it has nothing to do with
@@ -134,8 +131,7 @@ begin
   perform tests.as_user('eve');
   v := tests.try(format('select public.purge_handover(%L, %L, null)::text', gen_random_uuid(), tests.id('hp2')));
   perform tests.as_owner();
-  perform it.todo(v like 'ERR:%', 'QA-L2',
-    'purge_handover''s actor-less retention path must not run for a user session (only the sweep caller); got ' || v);
+  perform tests.ok(v like 'ERR:%', 'QA-L2 (fixed): ' || 'purge_handover''s actor-less retention path must not run for a user session (only the sweep caller); got ' || v);
 end $$;
 
 -- ── Part C: the simulated grant is gone; D27 fail-closed again ────────────────

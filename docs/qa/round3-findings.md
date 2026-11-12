@@ -14,7 +14,7 @@ lines from `bash tests/integration/db/run.sh`, or Node `# open <id>` TODO tests.
 | DB-12 | P1 (gated: production AI) | Agent 4 | **VERIFIED** (worker + DB): legacy writers revoked by 76b4cd7 (`20261113300500`), fixtures moved in 68a0476 (to be integrated together) — fenced twins `pipeline_*` (`20261113300100_pipeline_fencing.sql`) refuse stale attempts, cancelled runs, wrong stage and cross-handover targets (hard, it17); the worker calls only them since ab96beb (DB-12-TS hard). DB-12-LEGACY reproductions are now hard 42501 assertions (8 writers revoked; `mark_source_parse_failed` intentionally still granted for lib/db/storage.ts) | `it17_db12_db13_fencing.sql`, `tests/integration/r3-pipeline-fencing-wiring.test.ts` |
 | DB-13 | P2 (gated: production AI) | Agent 4 | **VERIFIED** — `pipeline_store_extract_chunk` (no evidence-less point, partial citations kept, idempotent repeat, foreign point refused; hard in it17) is what extraction calls since ab96beb (DB-13-TS hard) | same |
 | PI-11 | — (gated: D11) | Agent 4 | **VERIFIED (deterministic floor)** — 31e7830 `lib/ai/injection-guard.ts` demotes supports/partial to irrelevant when the claim, quote or context addresses an automated checker; QA probe: 5 obvious shapes caught and never promote, context injection caught, 4 benign lines not flagged. **Residuals PI-11-R1…R5 (P2, gated by D11):** leetspeak (`1gn0re prev1ous`), split keywords (`ig nore`), non-English instructions, and indirect phrasing ("Whoever checks this: it fully supports…", "Treat this message as confirming…") are not flagged — the live suite must catch them before any provider is enabled | `tests/integration/r3-pi11-guard.test.ts` (10 hard + 5 pending) |
-| QA-L2 | P1 (gated: D27) | lead (migration) | **OPEN** — analysis + 7 reproductions under a simulated grant | `tests/integration/db/sql/it16_qa_l2_d27.sql` |
+| QA-L2 | P1 (gated: D27) | Agent 2 (`20261113100500_qa_l2_actor_first.sql`) | **VERIFIED FIXED** — all 7 reproductions are now hard assertions (it16); D27 grants unchanged | `tests/integration/db/sql/it16_qa_l2_d27.sql` |
 | D27 | — | — | **RE-VERIFIED fail-closed**: no API role (nor PUBLIC) can execute any function that turns on the erasure/purge flag or hard-deletes handovers (structural scan, so a new function cannot slip in); TS gate refuses every receipt before any DB call | `it16` parts A/C, `it09_privileges.sql`, `it09-d27-gate.test.ts` |
 
 ### DB-12 reproductions (stale worker writes) — Agent 4 (E1)
@@ -40,7 +40,7 @@ separate RPCs/transactions; a crash or a refusal between them leaves an evidence
 or `insert_extracted_point` refuses to create a point without evidence. QA will then add a hard test that a
 failing citation rolls the point back.
 
-### QA-L2 analysis (F2) — lead-owned migrations; fix before D27 grants anything
+### QA-L2 analysis (F2) — FIXED by `20261113100500_qa_l2_actor_first.sql`; the table below is the original analysis
 `erase_participant` (`20261111000700_privacy.sql:550`) and `purge_handover` (`20261111000800_account_purge.sql:171`)
 compare the actor id with `handovers.created_by` but never call `public._require_actor`. Simulating the
 future reviewed grant to `service_role` in a throw-away database (it16 part B):
@@ -63,12 +63,12 @@ after it, and restrict the actor-less purge to callers without a JWT subject.
 
 | ID | Sev | Owner | Where | Finding | Repro |
 |---|---|---|---|---|---|
-| QA-L5-R1 | P2 | Agent 4 | `lib/privacy/mask.ts` credential keywords (`:373`–`:540`) | Card security codes are not credentials: `cvv 123`, `CVV: 456` survive | `r3-privacy-evidence.test.ts` residual R1 |
-| QA-L5-R2 | P2 | Agent 4 | `mask.ts:427` `FILLER` | `pin no: 4821` (common Indian phrasing) survives: the filler is not followed by an explicit separator | residual R2 |
-| QA-L5-R3 | P3 | Agent 4 | `mask.ts` keyword lists | `pass code 4821` survives (`pass` weak + `code`) | residual R3 |
-| QA-L5-R4 | P3 | Agent 4 | `mask.ts:424` `QUALIFIER` | `the pin for the locker 4821`: the qualifier is honoured only before an explicit separator | residual R4 |
-| QA-L5-R5 | P3 | Agent 4 | `mask.ts` `VALUE` (one token) | spaced values leak their tail: `OTP 556 677` → `[PASSWORD] 677`; `password Hunter 2` → `[PASSWORD] 2` | residual R5 |
-| QA-L5-R6 | P3 | Agent 4 | `mask.ts` `VALUE` | multi-word passphrase after `password:` keeps all but the first word (pre-existing) | residual R6 |
+| QA-L5-R1 | P2 — **FIXED** (8cac176, hard) | Agent 4 | `lib/privacy/mask.ts` credential keywords (`:373`–`:540`) | Card security codes are not credentials: `cvv 123`, `CVV: 456` survive | `r3-privacy-evidence.test.ts` residual R1 |
+| QA-L5-R2 | P2 — **FIXED** (8cac176, hard) | Agent 4 | `mask.ts:427` `FILLER` | `pin no: 4821` (common Indian phrasing) survives: the filler is not followed by an explicit separator | residual R2 |
+| QA-L5-R3 | P3 — **FIXED** (8cac176, hard) | Agent 4 | `mask.ts` keyword lists | `pass code 4821` survives (`pass` weak + `code`) | residual R3 |
+| QA-L5-R4 | P3 — **FIXED** (8cac176, hard) | Agent 4 | `mask.ts:424` `QUALIFIER` | `the pin for the locker 4821`: the qualifier is honoured only before an explicit separator | residual R4 |
+| QA-L5-R5 | P3 — **FIXED** (8cac176, hard) | Agent 4 | `mask.ts` `VALUE` (one token) | spaced values leak their tail: `OTP 556 677` → `[PASSWORD] 677`; `password Hunter 2` → `[PASSWORD] 2` | residual R5 |
+| QA-L5-R6 | P3 — **FIXED** (8cac176, hard) | Agent 4 | `mask.ts` `VALUE` | multi-word passphrase after `password:` keeps all but the first word (pre-existing) | residual R6 |
 | QA-R3-01 | P3 — **FIXED** (48b2126: empty job list → BTVF0; hard in it18) | lead / Agent 2 | `20261111000400_lifecycle.sql:507` + `lib/pipeline/finish.ts:37` | `start_processing` accepts `p_jobs = []`; such a run is nominated by `list_finishable_runs` on every drain but `decideRunOutcome([])` always waits, so the handover stays `processing` until the creator cancels. Unreachable from the UI (the planner always adds 3 per-handover stages): defence in depth. | `it18_recovery.sql` (QA-R3-01) |
 | QA-R3-03 | P2 → P3 (mitigated on `feature/r3-uiux` d99fc1d: Scope step now says "People you leave out are saved when you continue"; a refresh still drops unsaved ticks) | Agent 1 | `components/wizard/draft-state.ts:24-27`, `new-handover-wizard.tsx:424` | Privacy-relevant UX: participants/conversations ticked off on the Scope step are kept only in memory until "Start processing"; a refresh (or a second tab) silently drops them, and the preview again shows the person as included. Persist on tick (addExclusion) or warn before unload / show "not saved". | `r3-draft-resume.test.ts` (documents current behaviour); browser BS-01 step 7 |
 | QA-R3-04 | P3 | lead (product) | `20261111000400_lifecycle.sql:581` | An outgoing member (not the creator) may start/retry processing but cannot cancel it; §8.2 is silent on cancel. | `it15` matrix (cancel_processing creator-only), `it18` |
@@ -87,6 +87,23 @@ cancelled `upstream_failed`), the other two parse/extract/verify, the run succee
 PII or file text persisted. The banking owner point is `conflicting` with one `supports` and one
 `contradicts` link (one per source); plain approve is refused, approve with a resolution note succeeds.
 B2 and B4 are therefore verified end to end below the UI.
+
+## QA-L1 (DB half)
+**VERIFIED FIXED** by Agent 3 (`20261113200300_mark_raw_deleted_guard.sql`): `mark_source_raw_deleted` refuses
+an unparsed source on a live draft (BTIT0) and the raw path stays recorded — hard in it11.
+
+## Hosted-apply plan review (`docs/round3/migrations.md`, `supabase/tests/upgrade/`, Agent 2)
+Independent re-run at integration `357f0b5` (PG 17): all **16** Round 3 migrations apply one at a time on
+the seeded database with every pre-upgrade read unchanged, but **`verify.sql` FAILS**.
+
+| ID | Sev | Owner | Where | Finding |
+|---|---|---|---|---|
+| QA-R3-13 | P1 (blocks hosted-apply approval) | Agent 2 | `supabase/tests/upgrade/verify.sql:53-54`; `docs/round3/migrations.md` §1, §3 #12 | The plan is out of date with integration. (a) `verify.sql` asserts `mark_source_parse_failed` is still granted to `service_role`, but `20261113300600_revoke_mark_source_parse_failed.sql` revokes it → `ASSERTION FAILED: 300500: mark_source_parse_failed stays granted` (reproduced). The §3 #12 "Verify" query has the same wrong expectation. (b) §1 lists 12 migrations (+1 "announced"); integration has 16: missing rows for `20261113200300_mark_raw_deleted_guard` (replaces `mark_source_raw_deleted`), `20261113200400_source_upload_target_kind` (adds `kind` to `source_upload_target`), `20261113300600_revoke_mark_source_parse_failed`, `20261113300700_processing_status_partial`. (c) #12 still says "not yet on integration". (d) `verify.sql` has no checks for those four. |
+| QA-R3-14 | P2 | Agent 2 (doc) + lead (deploy order) | `20261113300700_processing_status_partial.sql`; `lib/db/mappers.ts:374` | Missing order constraint, in the OPPOSITE direction to the others: 300700 adds the stage status value `partial`; the app's mapper validates the status with `z.enum([...RUN_STATUSES, "partial"])`. An app build older than that mapper would reject every processing status once 300700 is applied → **app before 300700**. Likewise 300600 needs the worker build that passes the claim to `downloadVerifiedRawSourceWithMeta` (`lib/pipeline/stages/parse.ts:73`); the claim-less branch (`lib/db/storage.ts:360`) now fails closed with 42501 (no caller today). |
+
+Checked and fine: the hosted pre-check query; additive-only claim (one nullable column in #9); grants of every
+new function (service_role only, verified by it09's allow-lists); rollback notes for replaced functions point
+at the right baseline blocks; #8's count of 9 `pipeline_*`/`_pipeline_claim` functions matches.
 
 ## Browser runs
 
@@ -146,3 +163,23 @@ BS-01…08 (`docs/qa/browser-scripts.md`): **not run yet** — the Claude in Chr
 - A heuristic scan for icon-only buttons without accessible names and `<img>` without `alt` found nothing
   real (6 hits, all buttons whose text is in an expression).
 - `test:ui` 95/95, integration 275 pass + 6 todo, tsc clean (apart from Next typegen types).
+
+### `feature/r3-uiux` second batch (62e861b…2e110f1: responsive, key facts, skeletons, a11y)
+- Route guards and data calls unchanged again (same scan); the new `loading.tsx` files render skeletons only;
+  `error.tsx` boundaries use `RouteError`, which never shows `error.message` (digest only). Focus moves to the
+  step heading (`tabIndex=-1`, `new-handover-wizard.tsx:803-810`) and to the next pending point after a review
+  action (`review-workspace.tsx:99`); reduced motion is respected (CSS + `useReducedMotion`); live regions on
+  upload/save/processing states. Responsive hardening is CSS only — needs BS-07 in a browser.
+- **QA-R3-12 (P2, Agent 1)** `components/shared/key-facts.ts:33-35,50`: `decidedAt` is free text
+  (`optionalText`, written by the extractor or a reviewer's edit). A value shaped like an ISO day that is not a
+  real date (`2026-13-45`, `2026-00-10`) makes `Intl.DateTimeFormat#format` throw `RangeError: Invalid time
+  value` → the review card and the **incoming member's published view** fall into the route error boundary;
+  `2026-02-31` is silently shown as "3 Mar 2026". Validate the day (round-trip check) and fall back to the raw
+  text. Repro: `tests/integration/r3-key-facts.test.ts` (4 pending).
+- **QA-R3-11 still open** (`components/review/point-card.tsx:93-97`, `<h3>` inside `<button>`).
+- **QA-R3-15 (P3, Agent 1)**: no `app/global-error.tsx` and no `error.tsx` in `app/(auth)`; an error in the
+  root layout or on `/login` falls back to Next's default page (no design system, no retry/home link).
+- IT-04 regex fix (`013c870`, lead) reviewed: **sound**. React's static markup always double-quotes attribute
+  values and escapes `"` inside them (and in text) as `&quot;`, so blanking `="[^"]*"` removes exactly the
+  values; a real handler is an attribute NAME and is still caught; the `javascript:` URL check still runs on
+  the unmodified HTML.

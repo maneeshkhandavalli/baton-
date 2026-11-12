@@ -125,9 +125,12 @@ update public.sources set state = 'failed', raw_storage_path = null, raw_deleted
 select tests.as_user('ann');
 select tests.throws(format('select public.source_preview_target(%L, %L)', tests.actor(), tests.id('sc')), 'BTPF0', 'raw gone → re-upload');
 
--- QA-L1 (DB half, accepted by the lead and kept open on purpose): the TypeScript parse path
--- (deleteParsedRawSource) refuses unparsed sources, but the SQL function must still mark a failed or
--- abandoned upload's raw object deleted, because the 7-day retention sweep (§12.6) uses it for exactly those.
+-- QA-L1 (DB half, fixed by Agent 3 in 20261113200300_mark_raw_deleted_guard.sql): a raw delete is recorded
+-- only for a parsed or removed source, or one whose handover is deleted; an uploaded/failed source on a live
+-- draft keeps its raw upload for a (re)parse. The 7-day ceiling is a separate retention function.
 select tests.as_service();
-select it.todo(tests.try(format('select public.mark_source_raw_deleted(%L)', tests.id('sa'))) like 'ERR:%', 'QA-L1',
-               'mark_source_raw_deleted accepts a source that was never parsed');
+select tests.eq(tests.try(format('select public.mark_source_raw_deleted(%L)', tests.id('sa'))), 'ERR:BTIT0',
+                'QA-L1 (fixed): mark_source_raw_deleted refuses an unparsed source on a live draft');
+select tests.as_owner();
+select tests.ok((select raw_storage_path is not null and raw_deleted_at is null from public.sources where id = tests.id('sa')),
+                'QA-L1 (fixed): its raw upload is still recorded');
