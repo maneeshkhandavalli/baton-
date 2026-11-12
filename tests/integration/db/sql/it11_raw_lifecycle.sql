@@ -70,7 +70,7 @@ select tests.throws(format('select public.start_processing(%L, %L, %L, %L, %L)',
 select public.remove_source(tests.actor(), tests.id('nocons'));
 select tests.throws(format('select public.start_processing(%L, %L, %L, %L, %L)', tests.actor(), tests.id('h'), 'it-1', '{"provider":"other"}', '[]'),
                     'BTPF0', 'provider mismatch still refused once every source has consent');
-select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', '[]'));
+select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x')))));
 select tests.as_service();
 select tests.throws(format('select public.persist_parsed_source(%L, %L, %L)', tests.id('sb'), it.parsed('phone', repeat('a1', 32)), 'p1'),
                     'BTCF0', 'messages of an excluded phone identity are refused');
@@ -95,7 +95,7 @@ select tests.throws(format('select public.confirm_identity_match(%L, %L, %L, %L)
                            'different_person'), 'BTFB0', 'only the creator decides identity matches');
 select tests.as_user('ann');
 select public.confirm_identity_match(tests.actor(), tests.id('sb'), tests.id('ex_name'), 'different_person');
-select tests.put('run2', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', '[]'));
+select tests.put('run2', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x')))));
 select tests.as_service();
 select public.persist_parsed_source(tests.id('sb'), it.parsed('name', repeat('b2', 32)), 'p1');
 select tests.as_owner();
