@@ -40,7 +40,7 @@ export function ProductPreview() {
             <p className="rounded-md border-l-2 border-l-status-conflicting bg-background/70 p-2 font-mono text-[0.6875rem] leading-relaxed">workshops are free for EVERYONE…</p>
           </div>
         </div>
-        <div className="mr-8 flex items-center gap-2.5 rounded-xl border border-dashed border-input bg-card/70 p-3 text-sm text-status-missing-fg">
+        <div className="mr-8 flex items-center gap-2.5 rounded-xl border border-dashed border-border-strong bg-card/70 p-3 text-sm text-status-missing-fg">
           <CircleHelp className="size-4 shrink-0" />
           Who holds the club bank account? <span className="ml-auto text-xs">Sent to Gap Interview</span>
         </div>

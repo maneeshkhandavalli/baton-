@@ -3,46 +3,94 @@
 @import "shadcn/tailwind.css";
 
 /*
- * Baton design tokens
- * -------------------
- * All colours are defined once as CSS custom properties on :root and exposed
- * to Tailwind through @theme. Components must reference tokens (e.g.
- * `bg-card`, `text-status-sourced-fg`) — never raw hex values.
+ * Baton design tokens (docs/design/design-system.md)
+ * --------------------------------------------------
+ * Every colour is a CSS custom property on :root (light) and .dark (dark), exposed to
+ * Tailwind through @theme. Components reference tokens only (`bg-card`, `text-warning-fg`,
+ * `type-page-title`), never raw hex values or arbitrary sizes.
  *
- * Dark mode: add a `.dark { ... }` block that redefines the same custom
- * properties. Components need no changes.
+ * Three colour families, never mixed up:
+ *   1. Surfaces + ink        background, card, muted, border, foreground…
+ *   2. System tones          primary, success, warning, danger (destructive), info
+ *                            — the outcome of an action or the state of the app.
+ *   3. Evidence status       sourced, inferred, conflicting, missing
+ *                            — how well a handover point is backed. Only for evidence.
+ * Each tone has: base (marks, dots, solid fills), -fg (text on paper/soft), -soft (tints).
+ *
+ * Dark mode: the `.dark` block below is complete; it is opt-in (class on <html>) until every
+ * route has been verified in dark (see the design doc, "Dark mode").
  */
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Typography — variables are injected by next/font in app/layout.tsx */
+  /* ── Typography ───────────────────────────────────────── */
+  /* Variables are injected by next/font in app/layout.tsx (lib/fonts.ts). */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  --font-heading: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  /* `font-heading` is UI (sans) headings; editorial headings use `font-display` / `type-*`. */
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 
-  /* Core surfaces */
+  /* Extra steps on Tailwind's scale: 11px (badges, eyebrows), 13px (dense UI), 15px (reading UI). */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.25rem;
+  --text-md: 0.9375rem;
+  --text-md--line-height: 1.5rem;
+
+  /* ── Surfaces + ink ───────────────────────────────────── */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-inverse: var(--inverse);
+  --color-inverse-foreground: var(--inverse-foreground);
+  --color-inverse-muted: var(--inverse-muted);
 
-  /* Sidebar */
+  /* ── System tones ─────────────────────────────────────── */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-fg: var(--primary-fg);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-fg: var(--success-fg);
+
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-fg: var(--warning-fg);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-fg: var(--destructive-fg);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-fg: var(--info-fg);
+
+  /* ── Sidebar ──────────────────────────────────────────── */
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
@@ -53,7 +101,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Evidence status — base (marks, dots, logo), fg (text), soft (tints) */
+  /* ── Evidence status ──────────────────────────────────── */
   --color-status-sourced: var(--status-sourced);
   --color-status-sourced-fg: var(--status-sourced-fg);
   --color-status-sourced-soft: var(--status-sourced-soft);
@@ -74,7 +122,8 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  /* Radii — Baton uses 10–12px for most surfaces */
+  /* ── Radii ────────────────────────────────────────────── */
+  /* controls md (8px) · panels/cards xl (12px) · overlays 2xl (16px) · pills full */
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -83,66 +132,271 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* Elevation — soft, warm-tinted shadows */
-  --shadow-soft: 0 1px 2px 0 rgb(18 27 51 / 0.04), 0 1px 3px 0 rgb(18 27 51 / 0.03);
-  --shadow-raised: 0 2px 4px -1px rgb(18 27 51 / 0.05), 0 8px 24px -6px rgb(18 27 51 / 0.08);
+  /* ── Elevation ────────────────────────────────────────── */
+  /* xs: controls · soft: resting cards · raised: hover, popovers, toasts · overlay: dialogs */
+  --shadow-xs: var(--elevation-xs);
+  --shadow-soft: var(--elevation-soft);
+  --shadow-raised: var(--elevation-raised);
+  --shadow-overlay: var(--elevation-overlay);
+
+  /* ── Motion ───────────────────────────────────────────── */
+  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :root {
   color-scheme: light;
-  --radius: 0.625rem; /* 10px; xl = 12px */
+  --radius: 0.625rem; /* 10px → md 8px, xl 12px, 2xl 16px */
 
-  /* Brand palette */
-  --background: #f7f3ec;
-  --foreground: #16203d;
+  /* Surfaces + ink: warm paper, white sheets, navy ink */
+  --background: #f7f4ee;
+  --foreground: #151c33;
   --card: #ffffff;
-  --card-foreground: #16203d;
+  --card-foreground: #151c33;
   --popover: #ffffff;
-  --popover-foreground: #16203d;
-  --primary: #3550e0;
-  --primary-foreground: #ffffff;
-  --secondary: #efe9df;
-  --secondary-foreground: #16203d;
-  --muted: #efe9df;
-  --muted-foreground: #5a6279;
+  --popover-foreground: #151c33;
+  --muted: #efeae1;
+  --muted-foreground: #5a6177;
   --accent: #ebe5da;
-  --accent-foreground: #16203d;
-  --destructive: #c8384f;
-  --border: #e7e1d6;
-  --input: #ddd5c7;
-  --ring: #3550e0;
+  --accent-foreground: #151c33;
+  --secondary: #efeae1;
+  --secondary-foreground: #151c33;
+  --border: #e6e0d5;
+  --border-strong: #d4cbbb;
+  --input: #9d9483; /* control borders: 3:1 against the card (WCAG 1.4.11) */
+  --ring: #2c42c9;
+  --overlay: rgb(21 28 51 / 0.32);
+  --inverse: #151c33;
+  --inverse-foreground: #eef0f6;
+  --inverse-muted: #a3abc2;
 
-  /* Sidebar */
-  --sidebar: #121b33;
-  --sidebar-foreground: #e8ebf4;
-  --sidebar-muted-foreground: #9aa3bd;
-  --sidebar-primary: #3550e0;
+  /* System tones */
+  --primary: #2c42c9;
+  --primary-hover: #2335a6;
+  --primary-foreground: #ffffff;
+  --primary-soft: #eaedfb;
+  --primary-fg: #2335a6;
+
+  --success: #127a58;
+  --success-hover: #0d6248;
+  --success-foreground: #ffffff;
+  --success-soft: #e3f2eb;
+  --success-fg: #0b6146;
+
+  --warning: #c25e0c;
+  --warning-soft: #fcecdc;
+  --warning-fg: #8e4307;
+
+  --destructive: #c2364b;
+  --destructive-hover: #a42a3e;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #f9e5e8;
+  --destructive-fg: #9f2638;
+
+  --info: #2c42c9;
+  --info-soft: #eaedfb;
+  --info-fg: #2335a6;
+
+  /* Sidebar: the same paper, separated by a hairline — no heavy dark rail */
+  --sidebar: #f2eee6;
+  --sidebar-foreground: #151c33;
+  --sidebar-muted-foreground: #5a6177;
+  --sidebar-primary: #2c42c9;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgb(255 255 255 / 0.07);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgb(255 255 255 / 0.08);
-  --sidebar-ring: #7d8ff0;
+  --sidebar-accent: #e8e2d6;
+  --sidebar-accent-foreground: #151c33;
+  --sidebar-border: #e3dccf;
+  --sidebar-ring: #2c42c9;
 
-  /* Evidence status */
+  /* Evidence status: green · ochre · berry · slate. Conflicting is berry, not error-red:
+     a conflict needs a decision, it is not a failure. */
   --status-sourced: #0e8a62;
   --status-sourced-fg: #0a6b4c;
   --status-sourced-soft: #e4f3ec;
   --status-inferred: #b8780c;
   --status-inferred-fg: #865606;
   --status-inferred-soft: #f8eedb;
-  --status-conflicting: #c8384f;
-  --status-conflicting-fg: #a32a3f;
-  --status-conflicting-soft: #f9e5e8;
+  --status-conflicting: #b0336f;
+  --status-conflicting-fg: #8e2659;
+  --status-conflicting-soft: #f8e6ef;
   --status-missing: #6b7590;
-  --status-missing-fg: #4f586f;
+  --status-missing-fg: #4c556c;
   --status-missing-soft: #eceef3;
 
   /* Charts */
-  --chart-1: #3550e0;
+  --chart-1: #2c42c9;
   --chart-2: #0e8a62;
   --chart-3: #b8780c;
-  --chart-4: #c8384f;
+  --chart-4: #b0336f;
   --chart-5: #6b7590;
+
+  /* Elevation: low, warm-tinted, never grey smudges */
+  --elevation-xs: 0 1px 1px 0 rgb(21 28 51 / 0.04);
+  --elevation-soft: 0 1px 2px 0 rgb(21 28 51 / 0.04), 0 1px 3px 0 rgb(21 28 51 / 0.03);
+  --elevation-raised: 0 2px 4px -1px rgb(21 28 51 / 0.05), 0 10px 28px -8px rgb(21 28 51 / 0.12);
+  --elevation-overlay: 0 4px 8px -2px rgb(21 28 51 / 0.06), 0 24px 56px -12px rgb(21 28 51 / 0.24);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0f1320;
+  --foreground: #e9ebf2;
+  --card: #161b2b;
+  --card-foreground: #e9ebf2;
+  --popover: #1a2033;
+  --popover-foreground: #e9ebf2;
+  --muted: #1c2234;
+  --muted-foreground: #9ba3b9;
+  --accent: #232a3f;
+  --accent-foreground: #e9ebf2;
+  --secondary: #1c2234;
+  --secondary-foreground: #e9ebf2;
+  --border: #262d42;
+  --border-strong: #353d56;
+  --input: #5f6782;
+  --ring: #8d9cf7;
+  --overlay: rgb(5 7 14 / 0.6);
+  --inverse: #f3efe7;
+  --inverse-foreground: #151c33;
+  --inverse-muted: #5a6177;
+
+  --primary: #8d9cf7;
+  --primary-hover: #a5b1fa;
+  --primary-foreground: #0f1320;
+  --primary-soft: #1f2752;
+  --primary-fg: #b3bdfb;
+
+  --success: #3cc28f;
+  --success-hover: #5bd3a5;
+  --success-foreground: #07150f;
+  --success-soft: #10291f;
+  --success-fg: #74dcb2;
+
+  --warning: #f08a3c;
+  --warning-soft: #301d0e;
+  --warning-fg: #f6ad73;
+
+  --destructive: #f0697d;
+  --destructive-hover: #f58999;
+  --destructive-foreground: #1a0a0e;
+  --destructive-soft: #33151b;
+  --destructive-fg: #f7909f;
+
+  --info: #8d9cf7;
+  --info-soft: #1f2752;
+  --info-fg: #b3bdfb;
+
+  --sidebar: #121726;
+  --sidebar-foreground: #e9ebf2;
+  --sidebar-muted-foreground: #9ba3b9;
+  --sidebar-primary: #8d9cf7;
+  --sidebar-primary-foreground: #0f1320;
+  --sidebar-accent: #1f2638;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #232a3e;
+  --sidebar-ring: #8d9cf7;
+
+  --status-sourced: #3cc28f;
+  --status-sourced-fg: #74dcb2;
+  --status-sourced-soft: #10291f;
+  --status-inferred: #e0a53a;
+  --status-inferred-fg: #f0c472;
+  --status-inferred-soft: #2c2210;
+  --status-conflicting: #e06aa6;
+  --status-conflicting-fg: #f29ac6;
+  --status-conflicting-soft: #2e1424;
+  --status-missing: #8d96ad;
+  --status-missing-fg: #b4bbcc;
+  --status-missing-soft: #1e2333;
+
+  --chart-1: #8d9cf7;
+  --chart-2: #3cc28f;
+  --chart-3: #e0a53a;
+  --chart-4: #e06aa6;
+  --chart-5: #8d96ad;
+
+  --elevation-xs: 0 1px 1px 0 rgb(0 0 0 / 0.3);
+  --elevation-soft: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 0 rgb(0 0 0 / 0.2);
+  --elevation-raised: 0 2px 4px -1px rgb(0 0 0 / 0.3), 0 12px 28px -8px rgb(0 0 0 / 0.5);
+  --elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 0.35), 0 24px 56px -12px rgb(0 0 0 / 0.6);
+}
+
+/* ── Type roles ───────────────────────────────────────────
+ * Prefer these composites over ad-hoc size/leading/tracking combinations.
+ * Display roles are serif (Instrument Serif, one weight); UI roles are Inter.
+ */
+@utility type-display {
+  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  font-size: clamp(2.75rem, 1.9rem + 3.4vw, 4.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+@utility type-page-title {
+  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  font-size: clamp(2.125rem, 1.75rem + 1.4vw, 2.875rem);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+@utility type-section-title {
+  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  font-size: clamp(1.625rem, 1.45rem + 0.7vw, 2rem);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+@utility type-title {
+  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+@utility type-heading {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+@utility type-subheading {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+@utility type-body-lg {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+@utility type-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+@utility type-caption {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+@utility type-eyebrow {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+@utility type-quote {
+  font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+@utility type-numeric {
+  font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 @layer base {
@@ -154,11 +408,39 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
   }
   ::selection {
     background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+  /* Focus is always visible for keyboard users. Components that draw their own ring set
+     `outline-none` and use `focus-visible:ring-3 ring-ring/40`; everything else gets this. */
+  :where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  [id] {
+    scroll-margin-top: 5rem;
+  }
+}
+
+/* Reduced motion: no movement or fades. Spinners keep turning (slowly) because they carry
+   meaning; skeleton pulses stop. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-spin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
   }
 }

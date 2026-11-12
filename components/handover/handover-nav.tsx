@@ -17,7 +17,7 @@ export function HandoverNav() {
   const { id } = useParams<{ id: string }>();
 
   return (
-    <nav aria-label="Handover sections" className="-mb-px overflow-x-auto">
+    <nav aria-label="Handover sections" className="-mb-px overflow-x-auto [scrollbar-width:none]">
       <ul className="flex gap-6">
         {handoverNav.map(({ title, href }) => {
           const target = href(id);
@@ -29,7 +29,7 @@ export function HandoverNav() {
                 href={target}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-11 items-center border-b-2 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:text-foreground",
+                  "inline-flex h-11 items-center border-b-2 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:rounded-sm focus-visible:ring-3 focus-visible:ring-ring/40",
                   active
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",

@@ -121,7 +121,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
                       "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border",
                       s.status === "succeeded" && "border-primary bg-primary text-primary-foreground",
                       s.status === "running" && "border-primary text-primary",
-                      (s.status === "queued" || s.status === "cancelled") && "border-input text-muted-foreground",
+                      (s.status === "queued" || s.status === "cancelled") && "border-border-strong text-muted-foreground",
                       s.status === "failed" && "border-destructive text-destructive",
                     )}
                   >

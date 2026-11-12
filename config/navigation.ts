@@ -8,11 +8,20 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
+/** Primary workspace destinations (top of the sidebar). */
 export const workspaceNav: readonly NavItem[] = [
   { title: "Dashboard", href: routes.dashboard, icon: LayoutDashboard },
   { title: "New handover", href: routes.handover.new, icon: FilePlus2 },
-  { title: "Account", href: routes.account, icon: CircleUserRound },
 ];
+
+/** Personal destinations (bottom of the sidebar, above sign-out). */
+export const accountNav: readonly NavItem[] = [{ title: "Account", href: routes.account, icon: CircleUserRound }];
+
+/**
+ * POST-only sign-out route handler (app/auth/signout/route.ts). Rendered as a <form method="post">
+ * so a link or prefetch can never sign someone out. TODO(lead): move to `routes.signOut`.
+ */
+export const SIGN_OUT_PATH = "/auth/signout";
 
 export interface HandoverNavItem {
   title: string;

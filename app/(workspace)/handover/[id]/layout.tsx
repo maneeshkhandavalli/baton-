@@ -7,7 +7,7 @@ export default function HandoverLayout({ children, params }: LayoutProps<"/hando
   return (
     <div className="flex min-h-full flex-col">
       <div className="border-b border-border">
-        <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-10 xl:px-12">
           <Suspense fallback={<HandoverHeaderFallback />}>
             <HandoverHeader params={params} />
           </Suspense>

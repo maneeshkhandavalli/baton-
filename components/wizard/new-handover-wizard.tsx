@@ -721,7 +721,7 @@ function DropZone({ id, title, description, accept, icon, onFiles, disabled }: {
       }}
       className={cn(
         "flex flex-col items-center rounded-xl border border-dashed bg-card/60 px-4 py-8 text-center transition-colors",
-        over ? "border-primary bg-primary/[0.04]" : "border-input",
+        over ? "border-primary bg-primary/[0.04]" : "border-border-strong",
         disabled && "opacity-50",
       )}
     >

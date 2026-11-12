@@ -108,11 +108,11 @@ export default function HomePage() {
         </ol>
       </section>
 
-      <section className="bg-sidebar text-sidebar-foreground">
+      <section className="bg-inverse text-inverse-foreground">
         <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-3">
             <h2 className="font-serif text-4xl leading-tight tracking-tight">Built for group chats full of phone numbers.</h2>
-            <p className="text-sidebar-muted-foreground">
+            <p className="text-inverse-muted">
               Student and volunteer groups run on WhatsApp. Baton is designed so that sharing those chats for a handover doesn&rsquo;t mean sharing everyone&rsquo;s
               details. You confirm the group was told, and anyone can ask to be left out.
             </p>
@@ -120,9 +120,9 @@ export default function HomePage() {
           <ul className="grid gap-6 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
             {PRIVACY.map((p) => (
               <li key={p.title} className="space-y-2">
-                <p.icon aria-hidden="true" className="size-5 text-sidebar-ring" />
+                <p.icon aria-hidden="true" className="size-5 text-inverse-muted" />
                 <h3 className="font-semibold">{p.title}</h3>
-                <p className="text-sm leading-relaxed text-sidebar-muted-foreground">{p.body}</p>
+                <p className="text-sm leading-relaxed text-inverse-muted">{p.body}</p>
               </li>
             ))}
           </ul>

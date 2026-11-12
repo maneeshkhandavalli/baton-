@@ -4,23 +4,23 @@ import { AppSidebar } from "./app-sidebar";
 import { MobileHeader } from "./mobile-header";
 
 /**
- * Authenticated workspace frame: dark sidebar on desktop, compact header on
- * mobile, and a scrollable main region. Page content controls its own width
- * via <PageContainer>, so dense views (e.g. review) can go full-width.
+ * Authenticated workspace frame: quiet paper sidebar on desktop (≥ lg), a top bar with a drawer
+ * below that, and a scrollable main region. Pages set their own width with <PageContainer>, so
+ * dense views (review) can go wide while forms stay narrow.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-raised"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-raised"
       >
         Skip to content
       </a>
       <AppSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileHeader />
-        <main id="main" className="flex-1">
+        <main id="main" tabIndex={-1} className="flex-1 outline-none">
           {children}
         </main>
       </div>

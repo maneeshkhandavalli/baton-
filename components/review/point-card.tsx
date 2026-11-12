@@ -54,7 +54,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
       onClick={onSelect}
       className={cn(
         "group relative scroll-mt-24 rounded-xl border bg-card p-4 shadow-soft transition-[box-shadow,border-color] sm:p-5",
-        selected ? "border-primary/50 ring-3 ring-primary/10" : "border-border hover:border-input",
+        selected ? "border-primary/50 ring-3 ring-primary/10" : "border-border hover:border-border-strong",
         point.reviewState === "rejected" && "opacity-70",
       )}
     >
@@ -108,7 +108,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
             </div>
           </div>
         ) : status === "missing" ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-dashed border-input bg-status-missing-soft/50 px-3 py-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 rounded-lg border border-dashed border-border-strong bg-status-missing-soft/50 px-3 py-3 sm:flex-row sm:items-center">
             <CircleHelp aria-hidden="true" className="size-4 shrink-0 text-status-missing-fg" />
             <p className="flex-1 text-sm text-status-missing-fg">
               {gapQuestion ? (

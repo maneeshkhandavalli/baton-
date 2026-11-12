@@ -1,5 +1,5 @@
 import { statusConfig } from "@/config/status";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import type { EvidenceStatus } from "@/types/status";
 
 interface StatusBadgeProps {
@@ -10,21 +10,12 @@ interface StatusBadgeProps {
   className?: string;
 }
 
+/** Evidence status pill (sourced / inferred / conflicting / missing). Only for evidence. */
 export function StatusBadge({ status, label, size = "md", className }: StatusBadgeProps) {
   const meta = statusConfig[status];
-
   return (
-    <span
-      title={meta.description}
-      className={cn(
-        "inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border font-medium whitespace-nowrap",
-        size === "sm" ? "h-5 px-2 text-[0.6875rem]" : "h-6 px-2.5 text-xs",
-        meta.className.badge,
-        className,
-      )}
-    >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", meta.className.dot)} />
+    <Badge tone={status} size={size} dot title={meta.description} className={className}>
       {label ?? meta.label}
-    </span>
+    </Badge>
   );
 }

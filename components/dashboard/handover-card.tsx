@@ -25,7 +25,7 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
       href={href}
       className={cn(
         "group flex h-full flex-col rounded-xl border bg-card p-5 shadow-soft transition-[box-shadow,border-color,transform] outline-none hover:-translate-y-px hover:shadow-raised focus-visible:ring-3 focus-visible:ring-ring/40 motion-reduce:hover:translate-y-0",
-        isDemo ? "border-primary/30" : "border-border hover:border-input",
+        isDemo ? "border-primary/30" : "border-border hover:border-border-strong",
       )}
     >
       <div className="flex items-start justify-between gap-3">

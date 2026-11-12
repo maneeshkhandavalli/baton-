@@ -122,7 +122,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
             </div>
             <ul className="space-y-2">
               {gaps.map((p) => (
-                <li key={p.id} className="flex items-start gap-3 rounded-xl border border-dashed border-input bg-status-missing-soft/40 p-4">
+                <li key={p.id} className="flex items-start gap-3 rounded-xl border border-dashed border-border-strong bg-status-missing-soft/40 p-4">
                   <CircleHelp aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-missing-fg" />
                   <div>
                     <p className="text-sm font-medium"><MaskedText text={p.content.title} /></p>

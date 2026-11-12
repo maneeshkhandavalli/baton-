@@ -15,7 +15,7 @@ const SIZES = {
 
 interface BatonLogoProps {
   size?: keyof typeof SIZES;
-  /** `inverse` renders the wordmark for dark surfaces such as the sidebar. */
+  /** `inverse` renders the wordmark on `bg-inverse` surfaces (dark bands). */
   tone?: "default" | "inverse";
   /** Hide the wordmark to render the bar mark alone. */
   showWordmark?: boolean;
@@ -60,7 +60,7 @@ export function BatonLogo({
           className={cn(
             "font-sans leading-none font-semibold uppercase",
             SIZES[size].word,
-            tone === "inverse" ? "text-sidebar-foreground" : "text-foreground",
+            tone === "inverse" ? "text-inverse-foreground" : "text-foreground",
           )}
         >
           Baton
