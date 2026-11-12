@@ -26,12 +26,29 @@ function text(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
-function isoDay(v: unknown): string | null {
-  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+/**
+ * A real calendar day in `YYYY-MM-DD` form, or null. Round-trips through Date.UTC so values the
+ * regex accepts but the calendar doesn't ("2026-13-45", "2026-02-31") are rejected (QA-R3-12).
+ */
+export function validIsoDay(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const t = new Date(Date.UTC(y, mo - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d ? m[0] : null;
 }
 
-function fmtDay(iso: string): string {
-  return TZ_DATE.format(new Date(`${iso}T00:00:00+05:30`));
+/** Formats a valid day; anything else (including an unexpected Intl error) is shown as written. Never throws. */
+export function formatDayOrRaw(v: unknown): string | null {
+  const raw = text(v);
+  const iso = validIsoDay(v);
+  if (!iso) return raw;
+  try {
+    return TZ_DATE.format(new Date(`${iso}T00:00:00+05:30`));
+  } catch {
+    return raw;
+  }
 }
 
 /**
@@ -47,7 +64,7 @@ export function keyFacts(category: PointCategory, attributes: unknown, today?: s
 
   switch (category) {
     case "decision": {
-      push("date", "Decided", isoDay(a.decidedAt) ? fmtDay(a.decidedAt as string) : text(a.decidedAt));
+      push("date", "Decided", formatDayOrRaw(a.decidedAt));
       push("person", "By", text(a.decidedByLabel));
       break;
     }
@@ -58,9 +75,10 @@ export function keyFacts(category: PointCategory, attributes: unknown, today?: s
     }
     case "open_task": {
       push("person", "Assignee", text(a.assigneeLabel) ?? "Unassigned", text(a.assigneeLabel) ? "neutral" : "warning");
-      const due = isoDay(a.dueDate);
-      if (due) push("date", "Due", fmtDay(due), today && due < today ? "danger" : "neutral");
-      else push("date", "Due", "No date");
+      const due = validIsoDay(a.dueDate);
+      const dueText = formatDayOrRaw(a.dueDate);
+      if (due) push("date", "Due", dueText, today && due < today ? "danger" : "neutral");
+      else push("date", "Due", dueText ?? "No date", dueText ? "warning" : "neutral");
       push("status", "Status", text(a.progressNote) ? "In progress" : "Open");
       break;
     }

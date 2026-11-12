@@ -1,7 +1,7 @@
 import type { PointCategory } from "@/lib/contracts/enums";
 import type { PointAttributes } from "@/lib/contracts/schemas";
 
-import { formatDate } from "./format";
+import { formatDayOrRaw } from "@/components/shared/key-facts";
 
 const LABELS: Record<string, string> = {
   decidedAt: "Decided",
@@ -66,8 +66,9 @@ export function attributeRows(_category: PointCategory, attributes: PointAttribu
       const dc = raw as { channel?: string; value?: string };
       value = dc.value ? `${dc.value} (${dc.channel})` : "";
       if (!value) continue;
-    } else if (DATE_KEYS.has(key) && typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      value = formatDate(raw);
+    } else if (DATE_KEYS.has(key) && typeof raw === "string") {
+      // Free text from the extractor or a reviewer: only real calendar days are formatted (QA-R3-12).
+      value = formatDayOrRaw(raw) ?? raw;
     } else {
       value = ENUM_VALUES[key]?.[String(raw)] ?? String(raw);
     }

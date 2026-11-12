@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { keyFacts } from "../key-facts";
+import { formatDayOrRaw, keyFacts, validIsoDay } from "../key-facts";
 
 describe("keyFacts: decisions and action items are scannable", () => {
   it("open task: assignee, due date and status", () => {
@@ -39,5 +39,24 @@ describe("keyFacts: decisions and action items are scannable", () => {
 
   it("tolerates missing attributes", () => {
     assert.deepEqual(keyFacts("dependency", null), []);
+  });
+});
+
+describe("QA-R3-12: invalid date-like values never throw", () => {
+  it("rejects impossible calendar days and shows the raw text", () => {
+    assert.equal(validIsoDay("2026-13-45"), null);
+    assert.equal(validIsoDay("2026-02-31"), null);
+    assert.equal(validIsoDay("2024-02-29"), "2024-02-29");
+    assert.equal(formatDayOrRaw("2026-13-45"), "2026-13-45");
+    assert.equal(formatDayOrRaw("2026-02-31"), "2026-02-31");
+    assert.equal(formatDayOrRaw("next Friday"), "next Friday");
+    assert.equal(formatDayOrRaw(null), null);
+  });
+  it("key facts render raw text instead of crashing", () => {
+    assert.doesNotThrow(() => keyFacts("decision", { decidedAt: "2026-13-45" }));
+    assert.equal(keyFacts("decision", { decidedAt: "2026-13-45" })[0].value, "2026-13-45");
+    const due = keyFacts("open_task", { dueDate: "2026-02-31" }, "2026-11-12")[1];
+    assert.equal(due.value, "2026-02-31");
+    assert.equal(due.tone, "warning");
   });
 });
