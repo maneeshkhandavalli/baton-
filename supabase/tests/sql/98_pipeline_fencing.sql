@@ -395,3 +395,59 @@ select tests.throws(format('select public.start_processing(tests.actor(), %L, %L
 select tests.ok(public.start_processing(tests.actor(), tests.id('h4'), 'pv', '{"provider":"fake"}',
                   jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('s4'), 'inputHash', md5('e4')))) is not null,
                 'a run with one job still starts');
+
+-- ── E4: accurate stage states in api_get_processing_status (migration 20261113300700) ──
+select tests.as_owner();
+select tests.handover('h5', 'ann', 'outgoing');
+select tests.source('h5', 's5a');
+select tests.source('h5', 's5b');
+select tests.as_user('ann');
+select tests.put('run5', public.start_processing(tests.actor(), tests.id('h5'), 'pv', '{"provider":"fake"}'::jsonb,
+  jsonb_build_array(
+    jsonb_build_object('stage', 'extract', 'sourceId', tests.id('s5a'), 'inputHash', md5('5a')),
+    jsonb_build_object('stage', 'extract', 'sourceId', tests.id('s5b'), 'inputHash', md5('5b')),
+    jsonb_build_object('stage', 'verify_quotes', 'sourceId', tests.id('s5a'), 'inputHash', md5('q5a')),
+    jsonb_build_object('stage', 'verify_quotes', 'sourceId', tests.id('s5b'), 'inputHash', md5('q5b')),
+    jsonb_build_object('stage', 'verify_support', 'sourceId', null, 'inputHash', md5('vs5')),
+    jsonb_build_object('stage', 'analyze', 'sourceId', null, 'inputHash', md5('an5')))));
+select tests.as_owner();
+create function tests.stage_status(p_stage text) returns text language sql as $$
+  select s ->> 'status' from jsonb_array_elements(public.api_get_processing_status(tests.id('h5')) #> '{run,stages}') s
+   where s ->> 'stage' = p_stage
+$$;
+grant execute on function tests.stage_status(text) to authenticated, service_role;
+create function tests.set_job(p_stage text, p_source text, p_status text) returns void language sql as $$
+  update public.processing_jobs set status = p_status
+   where run_id = tests.id('run5') and stage = p_stage and source_id is not distinct from (case when p_source is null then null else tests.id(p_source) end)
+$$;
+select tests.as_owner();
+select tests.set_job('extract', 's5a', 'succeeded');
+select tests.set_job('extract', 's5b', 'failed');
+select tests.set_job('verify_quotes', 's5a', 'running');
+select tests.as_reader('ann');
+select tests.eq(tests.stage_status('extract'), 'partial', 'one source extracted, one failed: partial (was "failed")');
+select tests.eq(tests.stage_status('verify_quotes'), 'running', 'a stage still working is running');
+select tests.eq(tests.stage_status('analyze'), 'queued', 'a stage not started is queued');
+select tests.as_owner();
+select tests.set_job('verify_quotes', 's5a', 'succeeded');
+select tests.set_job('verify_quotes', 's5b', 'queued');
+select tests.as_reader('ann');
+select tests.eq(tests.stage_status('verify_quotes'), 'queued', 'a pending retry keeps the stage queued, not failed');
+select tests.as_owner();
+select tests.set_job('verify_quotes', 's5b', 'cancelled');
+select tests.set_job('verify_support', null, 'succeeded');
+select tests.set_job('analyze', null, 'succeeded');
+select tests.as_reader('ann');
+select tests.eq(tests.stage_status('verify_quotes'), 'partial', 'one source verified, one skipped: partial (was "cancelled")');
+select tests.eq(tests.stage_status('analyze'), 'succeeded', 'all succeeded');
+-- the run fails: a stage whose only jobs failed is failed; when the run succeeds instead, it is partial
+select tests.as_owner();
+select tests.set_job('extract', 's5a', 'failed');
+update public.processing_runs set status = 'failed', finished_at = now() where id = tests.id('run5');
+select tests.as_reader('ann');
+select tests.eq(tests.stage_status('extract'), 'failed', 'every job failed in a failed run: failed');
+select tests.as_owner();
+update public.processing_runs set status = 'succeeded' where id = tests.id('run5');
+select tests.as_reader('ann');
+select tests.eq(tests.stage_status('extract'), 'partial', 'failed jobs in a succeeded run: partial');
+select tests.eq((public.api_get_processing_status(tests.id('h5')) #>> '{run,status}'), 'succeeded', 'the run status itself is unchanged');

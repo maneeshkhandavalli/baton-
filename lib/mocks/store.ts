@@ -136,7 +136,8 @@ const STAGE_WEIGHTS: Record<PipelineStage, number> = {
 
 export interface StageProgress {
   stage: PipelineStage;
-  status: RunStatus;
+  /** `partial`: the run succeeded but some sources failed or were skipped at this stage (E4). */
+  status: RunStatus | "partial";
   done: number;
   total: number;
 }
@@ -157,7 +158,16 @@ export function runStages(store: MockStore, run: MockRun, now = Date.now()): Sta
   return PIPELINE_STAGES.map((stage) => {
     const start = cursor;
     cursor += STAGE_WEIGHTS[stage];
-    if (run.status === "succeeded") return { stage, status: "succeeded" as const, done: totals[stage], total: totals[stage] };
+    if (run.status === "succeeded") {
+      // Per-source stages of a source that failed to parse: the run still succeeded, so the stage is partial.
+      const perSource = stage === "parse" || stage === "extract" || stage === "verify_quotes";
+      const failedSources = sources.filter((s) => s.state === "failed").length;
+      if (perSource && failedSources > 0) {
+        const done = stage === "parse" ? Math.max(0, totals.parse - failedSources) : totals[stage];
+        return { stage, status: "partial" as const, done, total: totals[stage] };
+      }
+      return { stage, status: "succeeded" as const, done: totals[stage], total: totals[stage] };
+    }
     const raw = (fraction - start) / STAGE_WEIGHTS[stage];
     const local = Math.max(0, Math.min(1, raw > 0.9999 ? 1 : raw)); // weights don't sum exactly in floating point
     const status: RunStatus =

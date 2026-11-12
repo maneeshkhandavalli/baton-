@@ -371,7 +371,7 @@ const processingRow = z.object({
       finished_at: nullableTimestamp,
       error: z.object({ code: text, message: text }).nullable(),
       stages: z.array(
-        z.object({ stage: z.enum(PIPELINE_STAGES), status: z.enum(RUN_STATUSES), done: count, total: count }),
+        z.object({ stage: z.enum(PIPELINE_STAGES), status: z.enum([...RUN_STATUSES, "partial"]), done: count, total: count }),
       ),
     })
     .nullable(),

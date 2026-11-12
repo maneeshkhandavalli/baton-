@@ -295,7 +295,11 @@ export interface ProcessingStatus {
     status: RunStatus;
     startedAt: string | null;
     finishedAt: string | null;
-    stages: Array<{ stage: PipelineStage; status: RunStatus; done: number; total: number }>;
+    /**
+     * Per-stage status. `partial` (Round 3, E4): all of the stage's jobs are terminal and some succeeded while
+     * the rest failed or were skipped, or the run succeeded although this stage's jobs failed or were skipped.
+     */
+    stages: Array<{ stage: PipelineStage; status: RunStatus | "partial"; done: number; total: number }>;
     error: { code: string; message: string } | null;
   };
   sources: SourceSummary[];
