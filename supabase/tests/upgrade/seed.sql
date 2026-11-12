@@ -74,6 +74,27 @@ select tests.as_user('ann');
 select public.delete_handover(tests.actor(), tests.id('hdel'));
 select tests.as_owner();
 
+-- ── hx: a run with mixed stage outcomes (its stage statuses change on purpose in 20261113300700) ─────
+--   extract: one job succeeded, one failed          → before 'failed', after 'partial'
+--   verify_quotes: one job failed, one still queued → before 'failed', after 'queued'
+select tests.handover('hx', 'ann', 'outgoing');
+select tests.source('hx', 'sx1');
+select tests.source('hx', 'sx2');
+select tests.as_user('ann');
+select tests.put('run_hx', public.start_processing(tests.actor(), tests.id('hx'), 'pv-upgrade', '{"provider":"fake"}'::jsonb,
+  jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('sx1'), 'inputHash', md5('x1')),
+                    jsonb_build_object('stage', 'extract', 'sourceId', tests.id('sx2'), 'inputHash', md5('x2')),
+                    jsonb_build_object('stage', 'verify_quotes', 'sourceId', tests.id('sx1'), 'inputHash', md5('q1')),
+                    jsonb_build_object('stage', 'verify_quotes', 'sourceId', tests.id('sx2'), 'inputHash', md5('q2')))));
+select tests.as_owner();
+update public.processing_jobs set status = 'succeeded', finished_at = now()
+ where run_id = tests.id('run_hx') and stage = 'extract' and source_id = tests.id('sx1');
+update public.processing_jobs set status = 'failed', finished_at = now(), error_code = 'processing_failed'
+ where run_id = tests.id('run_hx') and source_id = tests.id('sx2') and stage in ('extract', 'verify_quotes');
+-- the remaining verify_quotes job waits for a retry backoff, so no claim in this test picks it up
+update public.processing_jobs set next_attempt_at = now() + interval '1 day'
+ where run_id = tests.id('run_hx') and status = 'queued';
+
 -- ── snapshot helpers (schema "upgrade", local only) ─────────────────────────
 create schema upgrade;
 grant usage on schema upgrade to anon, authenticated, service_role;
@@ -123,6 +144,14 @@ end $$;
 
 create table upgrade.snapshot (id int primary key, reads jsonb not null);
 insert into upgrade.snapshot values (1, upgrade.strip(upgrade.reads()));
+grant select, insert on upgrade.snapshot to service_role;
+-- hx is kept out of the byte-for-byte diff: 20261113300700 changes its stage statuses ON PURPOSE.
+-- Its pre-upgrade stage statuses are recorded here and compared in verify.sql.
+select tests.as_user('ann');
+insert into upgrade.snapshot
+select 2, coalesce(jsonb_object_agg(s ->> 'stage', s ->> 'status'), '{}'::jsonb)
+  from jsonb_array_elements(tests.read(format('select public.api_get_processing_status(%L)', tests.id('hx'))) -> 'run' -> 'stages') s;
+select tests.as_owner();
 
 -- The keys whose read differs from the snapshot (empty array = every read unchanged).
 create function upgrade.diff() returns text[] language sql as $$
@@ -134,8 +163,10 @@ $$;
 grant execute on all functions in schema upgrade to anon, authenticated, service_role;
 
 -- sanity: the snapshot really contains data
-select tests.ok((select jsonb_array_length(reads -> 'ann:list') from upgrade.snapshot) = 4, 'ann lists hd, hp, hr, hpub');
-select tests.ok((select (reads -> 'inc:hpub:published') is not null and (reads -> 'inc:hpub:published') <> 'null'::jsonb from upgrade.snapshot),
+select tests.ok((select jsonb_array_length(reads -> 'ann:list') from upgrade.snapshot where id = 1) = 5, 'ann lists hd, hp, hr, hpub, hx');
+select tests.eq((select reads from upgrade.snapshot where id = 2), '{"extract": "failed", "verify_quotes": "failed"}'::jsonb,
+                'baseline stage statuses of the mixed run');
+select tests.ok((select (reads -> 'inc:hpub:published') is not null and (reads -> 'inc:hpub:published') <> 'null'::jsonb from upgrade.snapshot where id = 1),
                 'inc reads the publication');
-select tests.ok((select jsonb_array_length(reads -> 'rev:hr:points') from upgrade.snapshot) = 3, 'rev reads hr''s points');
-select tests.ok((select reads -> 'eve:hr:get' = 'null'::jsonb from upgrade.snapshot), 'eve reads nothing');
+select tests.ok((select jsonb_array_length(reads -> 'rev:hr:points') from upgrade.snapshot where id = 1) = 3, 'rev reads hr''s points');
+select tests.ok((select reads -> 'eve:hr:get' = 'null'::jsonb from upgrade.snapshot where id = 1), 'eve reads nothing');

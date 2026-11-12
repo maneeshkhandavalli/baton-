@@ -45,14 +45,27 @@ begin
                             where table_schema = 'public' and table_name = 'processing_jobs' and column_name = 'claim_progress_done'),
                    '300200: processing_jobs.claim_progress_done exists');
   perform tests.ok(exists (select 1 from pg_trigger where tgname = 'processing_jobs_claim_progress'), '300200: claim-progress trigger exists');
-  -- 300500 (only when that migration was applied): unfenced writers revoked, mark_source_parse_failed kept
-  if exists (select 1 from upgrade.applied where name like '20261113300500%') then
-    perform tests.ok(not has_function_privilege('service_role', 'public.insert_extracted_point(uuid,uuid,text,text,text,jsonb,text,text,jsonb,double precision)', 'EXECUTE')
-                     and not has_function_privilege('service_role', 'public.persist_parsed_source(uuid,jsonb,text)', 'EXECUTE'),
-                     '300500: unfenced pipeline writers are revoked');
-    perform tests.ok(has_function_privilege('service_role', 'public.mark_source_parse_failed(uuid,text)', 'EXECUTE'),
-                     '300500: mark_source_parse_failed stays granted (lib/db/storage.ts)');
-  end if;
+  -- 300500: the 8 unfenced writers are revoked from every API role
+  perform tests.ok(not has_function_privilege('service_role', 'public.insert_extracted_point(uuid,uuid,text,text,text,jsonb,text,text,jsonb,double precision)', 'EXECUTE')
+                   and not has_function_privilege('service_role', 'public.persist_parsed_source(uuid,jsonb,text)', 'EXECUTE')
+                   and not has_function_privilege('service_role', 'public.add_source_quote_evidence(uuid,uuid,text,integer,integer,text)', 'EXECUTE'),
+                   '300500: unfenced pipeline writers are revoked');
+  -- 300600: mark_source_parse_failed revoked too; its fenced twin stays callable
+  perform tests.ok(not has_function_privilege('service_role', 'public.mark_source_parse_failed(uuid,text)', 'EXECUTE')
+                   and not has_function_privilege('authenticated', 'public.mark_source_parse_failed(uuid,text)', 'EXECUTE'),
+                   '300600: mark_source_parse_failed is revoked from every API role');
+  perform tests.ok(has_function_privilege('service_role', 'public.pipeline_mark_source_parse_failed(uuid,integer,text)', 'EXECUTE'),
+                   '300600: the fenced pipeline_mark_source_parse_failed stays granted');
+  -- 200300 / 200400 / 300700: replaced in place, grants kept
+  perform tests.ok(has_function_privilege('service_role', 'public.mark_source_raw_deleted(uuid)', 'EXECUTE')
+                   and not has_function_privilege('authenticated', 'public.mark_source_raw_deleted(uuid)', 'EXECUTE'),
+                   '200300: mark_source_raw_deleted keeps its server-only grant');
+  perform tests.ok(has_function_privilege('service_role', 'public.source_upload_target(uuid,uuid)', 'EXECUTE')
+                   and not has_function_privilege('authenticated', 'public.source_upload_target(uuid,uuid)', 'EXECUTE'),
+                   '200400: source_upload_target keeps its server-only grant');
+  perform tests.ok(has_function_privilege('authenticated', 'public.api_get_processing_status(uuid)', 'EXECUTE')
+                   and not (select prosecdef from pg_proc where oid = 'public.api_get_processing_status(uuid)'::regprocedure),
+                   '300700: api_get_processing_status stays a SECURITY INVOKER read');
 end $$;
 
 -- ── new behaviour on PRE-UPGRADE rows ───────────────────────────────────────
@@ -100,7 +113,7 @@ select tests.eq(public.complete_processing_job(tests.id('job_hp'), 1, 'yield', n
 select tests.eq((select attempt from public.processing_jobs where id = tests.id('job_hp')), 0,
                 '300200: a checkpointing yield of the in-flight job does not consume an attempt');
 -- 300100: the re-claimed job is fenced; a stale attempt is refused
-select tests.eq((select id from public.claim_ready_processing_jobs(5, 900) limit 1), tests.id('job_hp'), 'the job is claimable again');
+select tests.ok(tests.id('job_hp') in (select id from public.claim_ready_processing_jobs(10, 900)), 'the job is claimable again');
 select tests.eq((select claim_progress_done from public.processing_jobs where id = tests.id('job_hp')), 3,
                 '300200: the new claim records its starting progress');
 select tests.throws(format($q$select public.pipeline_set_job_provenance(%L, 99, '{}'::jsonb)$q$, tests.id('job_hp')), 'BTLL0',
@@ -117,6 +130,64 @@ select tests.as_owner();
 select tests.as_user('inc');
 select tests.ok(tests.read(format('select public.api_get_published_handover(%L)', tests.id('hpub'))) ->> 'publication_id' = tests.id('pub')::text,
                 'the pre-upgrade publication still reads');
+select tests.as_owner();
+
+-- 200400: source_upload_target also returns the declared kind (pre-upgrade pending upload)
+select tests.as_service();
+select tests.eq(public.source_upload_target(tests.id('ann'), tests.id('sd1')) ->> 'kind', 'text', '200400: source_upload_target returns kind');
+select tests.ok(public.source_upload_target(tests.id('ann'), tests.id('sd1')) ?& array['raw_storage_path', 'size_bytes', 'sha256'],
+                '200400: the existing fields are unchanged');
+select tests.as_owner();
+
+-- 200300: a raw delete is recorded only when the raw upload is no longer needed
+select tests.as_user('ann');
+select tests.put('sup', public.create_source(tests.actor(), tests.id('hd'), 'text', 'live.txt', 'text/plain', 70, repeat('4', 64)));
+select tests.as_owner();
+insert into storage.objects (bucket_id, name, metadata)
+select 'source-uploads', raw_storage_path, '{"size": 70}' from public.sources where id = tests.id('sup');
+select tests.as_user('ann');
+select public.confirm_source_uploaded(tests.actor(), tests.id('sup'), 70, repeat('4', 64));
+select tests.as_service();
+select tests.throws(format('select public.mark_source_raw_deleted(%L)', tests.id('sup')), 'BTIT0',
+                    '200300: a live uploaded source keeps its raw upload');
+select tests.throws(format('select public.mark_source_raw_deleted(%L)', tests.id('sd1')), 'BTIT0',
+                    '200300: a live pending upload keeps its raw path');
+select public.mark_source_raw_deleted(tests.id('sdel'));
+select public.mark_source_raw_deleted(tests.id('sd2'));
+select tests.as_owner();
+select tests.ok((select raw_storage_path is null and raw_deleted_at is not null from public.sources where id = tests.id('sdel')),
+                '200300 + 200200: the pre-upgrade discarded draft''s cleanup is still recorded');
+select tests.ok((select raw_storage_path is null from public.sources where id = tests.id('sd2')),
+                '200300 + 100300: the replaced (removed) row''s cleanup is still recorded');
+select tests.eq(jsonb_array_length(public.list_deleted_handover_raw_paths(tests.id('ann'), tests.id('hdel'))), 0,
+                '200200: nothing left to clean for the discarded draft');
+
+-- 300700: a stage whose jobs are all terminal, some succeeded and some failed, reports `partial`
+select tests.handover('hm', 'ann', 'outgoing');
+select tests.source('hm', 'sm1');
+select tests.source('hm', 'sm2');
+select tests.as_user('ann');
+select tests.put('run_hm', public.start_processing(tests.actor(), tests.id('hm'), 'pv-upgrade', '{"provider":"fake"}'::jsonb,
+  jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('sm1'), 'inputHash', md5('m1')),
+                    jsonb_build_object('stage', 'extract', 'sourceId', tests.id('sm2'), 'inputHash', md5('m2')),
+                    jsonb_build_object('stage', 'prepare_review', 'sourceId', null, 'inputHash', md5('mp')))));
+select tests.as_owner();
+update public.processing_jobs set status = 'succeeded', finished_at = now() where run_id = tests.id('run_hm') and source_id = tests.id('sm1');
+update public.processing_jobs set status = 'failed', finished_at = now(), error_code = 'processing_failed'
+ where run_id = tests.id('run_hm') and source_id = tests.id('sm2');
+select tests.as_user('ann');
+select tests.eq((select s ->> 'status' from jsonb_array_elements(tests.read(format('select public.api_get_processing_status(%L)', tests.id('hm')))
+                   -> 'run' -> 'stages') s where s ->> 'stage' = 'extract'), 'partial', '300700: a mixed stage reports partial');
+select tests.eq((select s ->> 'status' from jsonb_array_elements(tests.read(format('select public.api_get_processing_status(%L)', tests.id('hm')))
+                   -> 'run' -> 'stages') s where s ->> 'stage' = 'prepare_review'), 'queued', '300700: an open stage stays queued');
+select tests.eq((select (s ->> 'done') || '/' || (s ->> 'total') from jsonb_array_elements(tests.read(format('select public.api_get_processing_status(%L)', tests.id('hm')))
+                   -> 'run' -> 'stages') s where s ->> 'stage' = 'extract'), '1/2', '300700: done/total unchanged');
+-- 300700 on the PRE-UPGRADE mixed run: the intended change of the stage statuses the UI receives
+select tests.eq(coalesce((select jsonb_object_agg(s ->> 'stage', s ->> 'status')
+                            from jsonb_array_elements(tests.read(format('select public.api_get_processing_status(%L)', tests.id('hx')))
+                                   -> 'run' -> 'stages') s), '{}'::jsonb),
+                '{"extract": "partial", "verify_quotes": "queued"}'::jsonb,
+                '300700: pre-upgrade mixed run: extract failed → partial, verify_quotes failed → queued (a job is still open)');
 select tests.as_owner();
 
 select 'upgrade verified' as result;
