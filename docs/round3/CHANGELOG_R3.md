@@ -81,16 +81,38 @@ worker commit it was cherry-picked from (`lead` = lead commit). Verification is 
 | 68 | `b5d3480` | `f8b31b7` | refactor(r3-ingestion): parse-job raw download requires its claim; drop the unfenced writer (DB-12) | |
 | 69 | `e3d83dd` | `fc6743d` | docs(r3-ingestion): retention proposal — decision summary for the product owner | |
 | 70 | `a2b44a1` | `lead` | test(round3): security + IT-11 pass the job claim to downloadVerifiedRawSource (f8b31b7) | |
+| 71 | `0786b1f` | `ae0601f` | test(qa-r3): QA-L1, QA-L2 (7) and QA-L5-R1..R6 now hard; UI batch 2 + hosted-apply plan review | |
+| 72 | `794709f` | `31b01f8` | docs(r3-privacy): proposal — postal addresses as a §12.1 mask kind | |
+| 73 | `b3f68ac` | `9ca7118` | docs(r3-privacy): proposal — participant exclusions in PDF/DOCX/MD companions | |
+| 74 | `0c26c0e` | `94eb74f` | docs+test(r3-backend): C8 update - all 16 Round 3 migrations, hosted apply runbook (QA-R3-13/14) | |
+| 75 | `56eaa27` | `669cc9a` | test(qa-r3): headless browser harness tests/browser/run.mjs; PI-11 residuals analysis | |
+| 76 | `38f0e98` | `lead` | test(round3): browser harness ignores the Next.js dev overlay and non-overflowing decorative layers | |
+| 77 | `0bb1b96` | `d635477` | feat(db): claim generation fences writers; an expired lease is not renewed | |
+| 78 | `06a0fa3` | `dbeed82` | docs(r3-ingestion): retention decision summary — options, risks and consequences per choice | |
+| 79 | `2f6c9b3` | `d628306` | feat(ui): processing — partial stage state and plain-language run reasons | |
+| 80 | `3636804` | `d4cbdb6` | fix(ui): DEMO-SCROLL — review scrolls only on user-driven selection, never on mount | |
+| 81 | `a0dd414` | `726d5b9` | feat(ui): show the PI-11 injection guard distinctly on review evidence | |
+| 82 | `670c2da` | `0dad0ee` | feat(ui): wizard — wrong-type upload shows "This file isn't a valid <kind>" on the row | |
+| 83 | `c1acd4c` | `88357ef` | fix(ui): QA-R3-11 — point title heading wraps its select button, not the reverse | |
+| 84 | `f677338` | `a1636fb` | docs(design): route-by-route verification checklist (13 routes + boundaries) | |
+| 85 | `07d8897` | `8057e21` | fix(ui): QA-R3-12 — invalid date-like values never throw or shift | |
+| 86 | `f76439e` | `e3ca083` | feat(ui): QA-R3-15 — global-error boundary and (auth) error boundary | |
+| 87 | `b5464f5` | `8e778aa` | feat(ui): dev-only design previews — /preview, dashboard and review | |
+| 88 | `95423e9` | `70eff0d` | feat(ui): dev-only previews — wizard (4 steps, every upload state), processing, published | |
 
-## Verification (latest full run on the integration HEAD at the time of writing)
-- `npm test`: contracts 104, db 216, parsers+privacy 581, ui 100, ai 200, actions 152, pipeline 116, integration 294 (0 fail)
-- SQL (Docker): PG17 19/19, PG15 19/19 · integration SQL 10/10 · Tier E real-Postgres E2E 4/4 · multi-source 5/5
-- `tsc --noEmit` 0 errors · `eslint .` clean · `next build` passed (at 470a736; re-run at the end)
-- Upgrade-path test (populated DB, every R3 migration in order): PG17 + PG15 pass (Agent 2, C8)
-- Headless device-emulated screenshots (public routes, 1440/1024/390): 0px horizontal overflow, one h1 per route
+## Verification (integration HEAD 95423e9)
+- `npm test`: contracts 104, db 218, parsers+privacy 581, ui 130, ai 200, actions 152, pipeline 118, integration 299 (0 fail; 5 todo = PI-11-R1..R5)
+- SQL (Docker): PG17 19/19, PG15 19/19 · integration SQL 10/10 (0 open findings) · Tier E E2E 4/4 · multi-source 5/5
+- Upgrade-path test (populated DB, all 17 R3 migrations in order): PASS incl. verify.sql
+- `tsc --noEmit` 0 · `eslint .` clean · `next build` last passed at 470a736 (re-run at the end)
+- Browser harness (tests/browser/run.mjs, headless, device-emulated 1440/1024/390): public routes 15/15 PASS;
+  /preview: review, dashboard?empty, processing PASS; dashboard, wizard, published have runtime errors (Agent 1 fixing).
+  Screenshots: baton-multiagent/verification/browser-public/ and browser-preview/
 
 ## Implemented, not integrated
-(none at the time of writing; see the latest status update)
+- Agent 1: preview runtime fixes (in progress)
+- Agent 4: PI-11 residuals R1–R5; guarded/modelVerdict on the evidence DTO (in progress)
+- Agent 2: migration plan #17 (300800) (in progress)
 
 ## Not yet implemented / open
 - Live browser verification (Chrome extension not connected) — authenticated routes at 390/1024/1440
