@@ -90,12 +90,20 @@ begin
   perform tests.ok(not exists (select 1 from public.evidence_quotes where handover_id = tests.id('h')
                                  and source_message_id = tests.msg('s2', 'alice', 1)), 'no cross-handover evidence row');
 
-  -- QA-M1b (accepted by the lead as documented): the database checks that an exact quote occurs in the body,
-  -- not that the stored offsets point at it. Offsets are UTF-16 indices (W0 decision), so SQL checks
-  -- containment only; the offsets are authoritative from lib/ai checkQuote.
-  perform it.todo(tests.try(format($q$select public.add_source_quote_evidence(%L, %L, %L, 10, 31, 'exact')$q$,
-                                   tests.id('p2'), v_a1, 'Alice message 1 about')) like 'ERR:%',
-                  'QA-M1b', 'exact quote stored with offsets that do not point at the quoted text');
+  -- QA-M1b (fixed in 20261112000500): for all-BMP bodies an exact quote must sit exactly at its stored
+  -- offsets (UTF-16 units = characters there), and verified offsets must lie inside the body.
+  perform tests.throws(format($q$select public.add_source_quote_evidence(%L, %L, %L, 10, 31, 'exact')$q$,
+                              tests.id('p2'), v_a1, 'Alice message 1 about'),
+                       'BTVF0', 'QA-M1b: an exact quote whose offsets point elsewhere is refused');
+  perform tests.throws(format($q$select public.add_source_quote_evidence(%L, %L, %L, 0, 60, 'normalized')$q$,
+                              tests.id('p2'), v_a1, 'Alice message 1 about the bank'),
+                       'BTVF0', 'QA-M1b: verified offsets must lie inside an all-BMP body');
+  perform tests.throws(format($q$select public.add_source_quote_evidence(%L, %L, %L, -1, 20, 'exact')$q$,
+                              tests.id('p2'), v_a1, 'Alice message 1 about'),
+                       'BTVF0', 'QA-M1b: negative offsets are refused');
+  perform tests.ok(not exists (select 1 from public.point_evidence where point_id = tests.id('p2')
+                                 and evidence_id in (select id from public.evidence_quotes where source_message_id = v_a1)),
+                   'QA-M1b: none of the refused quotes was stored');
 end $$;
 
 -- §4.2: verification uses only exact/normalized quotes. A "supports" verdict on a not_found quote never

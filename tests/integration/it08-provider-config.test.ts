@@ -20,6 +20,8 @@ const NOT_CONFIGURED: Array<[string, Record<string, string | undefined>]> = [
   ["fake in production, even when allowed", { AI_PROVIDER: "fake", BATON_ALLOW_FAKE_AI: "1", NODE_ENV: "production" }],
   ["fake without the allow flag", { AI_PROVIDER: "fake", NODE_ENV: "development" }],
   ["fake with a non-exact allow flag", { AI_PROVIDER: "fake", BATON_ALLOW_FAKE_AI: "true", NODE_ENV: "development" }],
+  ["fake with NODE_ENV unset, even when allowed (QA-L3)", { AI_PROVIDER: "fake", BATON_ALLOW_FAKE_AI: "1", NODE_ENV: undefined }],
+  ["fake with NODE_ENV other than development/test (QA-L3)", { AI_PROVIDER: "fake", BATON_ALLOW_FAKE_AI: "1", NODE_ENV: "staging" }],
   ["a differently-cased fake", { AI_PROVIDER: "FAKE", BATON_ALLOW_FAKE_AI: "1", NODE_ENV: "development" }],
 ];
 
@@ -54,6 +56,7 @@ describe("IT-08: actions write nothing without a provider", () => {
     it(`startProcessing and recordSourceConsent: ${label}`, async () => {
       const w = actionWorld();
       setAiEnv(env);
+      if ("NODE_ENV" in env) assert.equal(process.env.NODE_ENV, env.NODE_ENV, "the action really runs with this NODE_ENV");
       w.userDb.returns("api_list_sources", [sourceRow(w.ids.source, w.ids.handover)]);
 
       const { result: started, lines } = await captureConsole(() => startProcessing({ handoverId: w.ids.handover }));
