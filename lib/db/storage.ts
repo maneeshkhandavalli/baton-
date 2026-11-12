@@ -192,10 +192,39 @@ function requireOwnedRawPath(path: unknown, sourceId: string, handoverId?: strin
   return path;
 }
 
+// ── Why an upload was refused (QA-R3-16) ─────────────────────────────────────
+
+/** Structural reasons a stored upload is refused; safe to show to the client (no content, no values). */
+export const UPLOAD_REJECTION_REASONS = ["kind_mismatch", "integrity_mismatch", "too_large"] as const;
+export type UploadRejectionReason = (typeof UPLOAD_REJECTION_REASONS)[number];
+
+/**
+ * `validation_failed` with a distinguishing `details.reason`, so the wizard can tell the causes apart:
+ *  - `kind_mismatch`: the bytes are not the declared kind (a renamed or wrong-type file);
+ *  - `integrity_mismatch`: size or SHA-256 differs from what was declared (confirm_source_uploaded BTVF0,
+ *    or the parse job's re-verification);
+ *  - `too_large`: the stored object is over 25 MB.
+ * The code stays `validation_failed` and the message stays the fixed safe one. `details` reaches the
+ * client once `toAppError` passes DbError details through (lib/db/errors.ts, requested from the owner).
+ */
+export class UploadRejectedError extends DbError {
+  readonly reason: UploadRejectionReason;
+  readonly details: { reason: UploadRejectionReason };
+  constructor(reason: UploadRejectionReason, sqlState?: string) {
+    super("validation_failed", sqlState);
+    this.reason = reason;
+    this.details = { reason };
+  }
+}
+
+export function isUploadRejected(error: unknown, reason?: UploadRejectionReason): error is UploadRejectedError {
+  return error instanceof UploadRejectedError && (reason === undefined || error.reason === reason);
+}
+
 async function download(storage: StorageClient, path: string): Promise<Uint8Array> {
   const { data, error } = await storage.from(SOURCE_BUCKET).download(path);
   if (error || !data) throw new DbError("not_found");
-  if (data.size > MAX_SOURCE_BYTES) throw new DbError("validation_failed");
+  if (data.size > MAX_SOURCE_BYTES) throw new UploadRejectedError("too_large");
   return new Uint8Array(await data.arrayBuffer());
 }
 
@@ -284,14 +313,14 @@ export async function confirmSourceUpload(
     bytes = await download(adminStorage, path);
   } catch (error) {
     if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed"); // not uploaded yet
-    if (error instanceof DbError && error.code === "validation_failed") await removeQuietly(adminStorage, path); // oversized
+    if (isUploadRejected(error, "too_large")) await removeQuietly(adminStorage, path);
     throw error;
   }
   const measured = await measureBytes(bytes);
   // Request #4: `kind` comes from source_upload_target (migration 20261113200400); older databases omit it.
   if (target.kind && bytes.byteLength > 0 && !bytesMatchKind(bytes, target.kind)) {
     await removeQuietly(adminStorage, path);
-    throw new DbError("validation_failed");
+    throw new UploadRejectedError("kind_mismatch");
   }
 
   try {
@@ -303,7 +332,9 @@ export async function confirmSourceUpload(
     });
   } catch (error) {
     if (error instanceof DbError && error.code === "validation_failed") {
-      await adminStorage.from(SOURCE_BUCKET).remove([path]);
+      // BTVF0 from confirm_source_uploaded: measured size/SHA-256 differ from the declaration (M5).
+      await removeQuietly(adminStorage, path);
+      throw new UploadRejectedError("integrity_mismatch", error.sqlState);
     }
     if (error instanceof DbError && error.code === "invalid_transition" && (await alreadyConfirmed(db, sourceId))) return;
     throw error;
@@ -357,7 +388,7 @@ export async function downloadVerifiedRawSourceWithMeta(
   const measured = await measureBytes(bytes);
   if (measured.sizeBytes !== Number(source.size_bytes) || measured.sha256 !== source.sha256.toLowerCase()) {
     await markSourceParseFailed(db, claim, "integrity_mismatch");
-    throw new DbError("validation_failed");
+    throw new UploadRejectedError("integrity_mismatch");
   }
   return { bytes, ...rawMeta(source) };
 }

@@ -12,6 +12,8 @@ import { DbError } from "../errors";
 import { ClaimLostError } from "../pipeline";
 import {
   MAX_SOURCE_BYTES,
+  UPLOAD_REJECTION_REASONS,
+  UploadRejectedError,
   bytesMatchKind,
   checkSourceUploadRequest,
   confirmSourceUpload,
@@ -586,5 +588,90 @@ describe("Request #4: confirm refuses bytes that are not the declared kind", () 
     const { db, fns } = fakeDb({ source_upload_target: await targetFor(zip) });
     await confirmSourceUpload(db, fakeStorage({ objects: { [path]: zip } }).storage, actor, S);
     assert.deepEqual(fns(), ["source_upload_target", "confirm_source_uploaded"]);
+  });
+});
+
+describe("QA-R3-16: confirm tells the wizard WHY an upload was refused (details.reason)", () => {
+  const path = rawSourcePath(H, S);
+  const chat = new TextEncoder().encode("14/02/2024, 10:00 - Asha Rao: synthetic chat\n");
+  const pdf = buildPdf([{ paragraphs: [["Synthetic report"]] }], { compress: true });
+  const targetFor = async (b: Uint8Array, kind?: string) => {
+    const m = await measureBytes(b);
+    return { data: { raw_storage_path: path, size_bytes: m.sizeBytes, sha256: m.sha256, ...(kind ? { kind } : {}) } };
+  };
+  /** validation_failed, the reason, a plain JSON-safe details object, and the fixed content-free message. */
+  const rejected = (reason: string) => (e: unknown) => {
+    assert.ok(e instanceof UploadRejectedError, String(e));
+    assert.ok(e instanceof DbError);
+    assert.equal(e.code, "validation_failed");
+    assert.equal(e.reason, reason);
+    assert.deepEqual(JSON.parse(JSON.stringify(e.details)), { reason });
+    assert.equal(e.message, new DbError("validation_failed").message, "the message is the fixed safe one");
+    return true;
+  };
+
+  it("the reasons are exactly the three agreed strings", () => {
+    assert.deepEqual([...UPLOAD_REJECTION_REASONS], ["kind_mismatch", "integrity_mismatch", "too_large"]);
+  });
+
+  it("kind_mismatch: bytes are not the declared kind (object removed, database never asked)", async () => {
+    const { db, fns } = fakeDb({ source_upload_target: await targetFor(pdf, "whatsapp_export") });
+    const { storage, ops } = fakeStorage({ objects: { [path]: pdf } });
+    await assert.rejects(confirmSourceUpload(db, storage, actor, S), rejected("kind_mismatch"));
+    assert.deepEqual(fns(), ["source_upload_target"]);
+    assert.deepEqual(ops.at(-1), { op: "remove", path: [path] });
+  });
+
+  it("integrity_mismatch: confirm_source_uploaded refuses the measured size/SHA-256 (BTVF0); object removed", async () => {
+    const { db } = fakeDb({
+      source_upload_target: await targetFor(chat, "whatsapp_export"),
+      confirm_source_uploaded: { error: { code: "BTVF0", message: "the uploaded file does not match what was declared" } },
+    });
+    const { storage, ops } = fakeStorage({ objects: { [path]: chat } });
+    await assert.rejects(confirmSourceUpload(db, storage, actor, S), (e: unknown) => {
+      rejected("integrity_mismatch")(e);
+      assert.equal((e as DbError).sqlState, "BTVF0");
+      assert.ok(!(e as Error).message.includes("declared"), "the database message never leaks");
+      return true;
+    });
+    assert.deepEqual(ops.at(-1), { op: "remove", path: [path] });
+  });
+
+  it("integrity_mismatch: an empty (truncated) object", async () => {
+    const { db } = fakeDb({
+      source_upload_target: await targetFor(chat, "whatsapp_export"),
+      confirm_source_uploaded: { error: { code: "BTVF0", message: "x" } },
+    });
+    await assert.rejects(confirmSourceUpload(db, fakeStorage({ objects: { [path]: new Uint8Array(0) } }).storage, actor, S), rejected("integrity_mismatch"));
+  });
+
+  it("too_large: the stored object is over 25 MB (removed, never read)", async () => {
+    const big = { size: MAX_SOURCE_BYTES + 1, arrayBuffer: async () => assert.fail("must not be read") } as unknown as Blob;
+    const { db, fns } = fakeDb({ source_upload_target: await targetFor(chat, "whatsapp_export") });
+    const { storage, ops } = fakeStorage({ objects: { [path]: big } });
+    await assert.rejects(confirmSourceUpload(db, storage, actor, S), rejected("too_large"));
+    assert.deepEqual(fns(), ["source_upload_target"]);
+    assert.deepEqual(ops.at(-1), { op: "remove", path: [path] });
+  });
+
+  it("other confirm failures carry no reason (not uploaded yet, wrong state, refused actor)", async () => {
+    const missing = fakeDb({ source_upload_target: await targetFor(chat, "whatsapp_export") });
+    await assert.rejects(confirmSourceUpload(missing.db, fakeStorage().storage, actor, S), (e: unknown) =>
+      e instanceof DbError && !(e instanceof UploadRejectedError) && e.code === "precondition_failed");
+    const forbidden = fakeDb({ source_upload_target: { error: { code: "BTFB0", message: "x" } } });
+    await assert.rejects(confirmSourceUpload(forbidden.db, fakeStorage().storage, actor, S), (e: unknown) =>
+      e instanceof DbError && !(e instanceof UploadRejectedError) && e.code === "forbidden");
+  });
+
+  it("the parse job's re-verification reports integrity_mismatch too", async () => {
+    const m = await measureBytes(chat);
+    const { db } = fakeDb({
+      raw_source_for_processing: { data: { raw_storage_path: path, size_bytes: m.sizeBytes, sha256: "00".repeat(32), kind: "whatsapp_export",
+                                           timezone: "Asia/Kolkata", date_order: null, original_filename: "chat.txt", state: "uploaded" } },
+    });
+    await assert.rejects(
+      downloadVerifiedRawSourceWithMeta(db, fakeStorage({ objects: { [path]: chat } }).storage, S, { jobId: "33333333-3333-4333-8333-333333333333", attempt: 1 }),
+      rejected("integrity_mismatch"),
+    );
   });
 });
