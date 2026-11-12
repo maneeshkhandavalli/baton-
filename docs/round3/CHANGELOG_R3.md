@@ -99,20 +99,32 @@ worker commit it was cherry-picked from (`lead` = lead commit). Verification is 
 | 86 | `f76439e` | `e3ca083` | feat(ui): QA-R3-15 — global-error boundary and (auth) error boundary | |
 | 87 | `b5464f5` | `8e778aa` | feat(ui): dev-only design previews — /preview, dashboard and review | |
 | 88 | `95423e9` | `70eff0d` | feat(ui): dev-only previews — wizard (4 steps, every upload state), processing, published | |
+| 89 | `f24171f` | `b304bb3` | feat(ai): PI-11 residuals R1-R5 in the deterministic verifier guard | |
+| 90 | `1f896b8` | `5e5230e` | docs(round3): add migration #17 (claim_generation) to the hosted-apply plan; upgrade test covers it | |
+| 91 | `f52cfa6` | `08853af` | feat(review): PI-11 guard fields on PointDetail evidence (guarded, modelVerdict) | |
+| 92 | `f256b92` | `1858361` | test(qa-r3): QA-R3-12 hard; preview guard + shared render checks; UI batch 3 review | |
+| 93 | `43a56cd` | `05f4049` | fix(ui): preview runtime errors — DraftRow module, wizard clock, deterministic rendering | |
+| 94 | `3fb28f6` | `lead` | test(round3): render-determinism imports DraftRow from its new module (05f4049) | |
+| 95 | `a450123` | `ede850a` | feat(r3-ingestion): distinguishing reasons for refused uploads (QA-R3-16, storage half) | |
+| 96 | `c3da9b5` | `9b616e1` | test(qa-r3): PI-11-R1..R5 hard (f24171f); guarded evidence render; link stub lint | |
+| 97 | `da7dd56` | `lead` | feat(round3): toAppError passes structural snake_case details (QA-R3-16 upload reasons) | |
+| 98 | `57b9461` | `aa9446f` | fix(ui): QA-R3-12-R1 — first-week due dates never roll over or guess | |
+| 99 | `c9797ac` | `507eedb` | feat(ui): PI-11 — review reads EvidenceItem.guarded instead of the rationale text | |
+| 100 | `186d070` | `283f2fb` | fix(ui): QA-R3-16 — confirm validation_failed messages follow details.reason | |
 
-## Verification (integration HEAD 95423e9)
-- `npm test`: contracts 104, db 218, parsers+privacy 581, ui 130, ai 200, actions 152, pipeline 118, integration 299 (0 fail; 5 todo = PI-11-R1..R5)
-- SQL (Docker): PG17 19/19, PG15 19/19 · integration SQL 10/10 (0 open findings) · Tier E E2E 4/4 · multi-source 5/5
-- Upgrade-path test (populated DB, all 17 R3 migrations in order): PASS incl. verify.sql
-- `tsc --noEmit` 0 · `eslint .` clean · `next build` last passed at 470a736 (re-run at the end)
-- Browser harness (tests/browser/run.mjs, headless, device-emulated 1440/1024/390): public routes 15/15 PASS;
-  /preview: review, dashboard?empty, processing PASS; dashboard, wizard, published have runtime errors (Agent 1 fixing).
-  Screenshots: baton-multiagent/verification/browser-public/ and browser-preview/
+## Verification (integration HEAD 186d070)
+- `npm test`: contracts 104, db 235, parsers+privacy 581, ui 147, ai 238, actions 152, pipeline 118, integration 338 (0 fail; 1 todo = D11-LIVE-1, a live-suite case by design)
+- SQL (Docker): PG17 20/20, PG15 20/20 · integration SQL 10/10 (0 open findings) · Tier E E2E 4/4
+- Upgrade-path test (populated DB, all 18 R3 migrations in order): 19/19 PASS incl. verify.sql
+- `tsc --noEmit` 0 · `eslint .` clean · `next build` PASS at 186d070
+- Production (`next start`): every /preview route returns 404, no mock data in the response (P3: the /preview index title remains in the 404 payload)
+- Browser harness (clean dev server, 1440/1024/390): home, login, demo, all /preview routes (dashboard, wizard 1–4, review, published, processing running/partial/failed/schema) PASS: 0 overflow, 1 h1, visible keyboard focus, no console errors
+  Screenshots: baton-multiagent/verification/browser-public, browser-preview-2, browser-final
 
 ## Implemented, not integrated
-- Agent 1: preview runtime fixes (in progress)
-- Agent 4: PI-11 residuals R1–R5; guarded/modelVerdict on the evidence DTO (in progress)
-- Agent 2: migration plan #17 (300800) (in progress)
+- Agent 1: published stat-label wrap at 1024; generic preview metadata (in progress)
+- Agent 2: migration plan #18 (300900) + verify.sql coverage (in progress)
+- Agent 5: flips QA-R3-12-R1/QA-R3-21; harness per-route expected status; QA-R3-16 action-level check (in progress)
 
 ## Not yet implemented / open
 - Live browser verification (Chrome extension not connected) — authenticated routes at 390/1024/1440
