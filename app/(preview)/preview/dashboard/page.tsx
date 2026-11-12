@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { FilePlus2, Inbox } from "lucide-react";
 import { Suspense } from "react";
 
-import { DraftRow, HandoverCard, type HandoverCardData } from "@/components/dashboard/handover-card";
+import { DraftRow } from "@/components/dashboard/draft-row";
+import { HandoverCard, type HandoverCardData } from "@/components/dashboard/handover-card";
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";

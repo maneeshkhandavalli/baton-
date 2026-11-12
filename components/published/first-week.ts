@@ -15,6 +15,23 @@ export interface ChecklistDay {
   items: ChecklistItem[];
 }
 
+/** Browser-storage key for one viewer's ticks on one publication. */
+export const firstWeekStorageKey = (publicationId: string) => `baton:first-week:${publicationId}`;
+
+/**
+ * Ticked item ids from browser storage. Anything missing, malformed or not a list of strings reads as
+ * "nothing ticked", which is also what the server renders, so hydration always matches.
+ */
+export function parseTicks(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Derives a "First 7 days" checklist from the published points. It is a UI view only: there is no
  * checklist entity in the contracts, so completion is kept per viewer in browser storage.

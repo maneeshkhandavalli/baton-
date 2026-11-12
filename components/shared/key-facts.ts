@@ -5,6 +5,7 @@
  * Pure and React-free (components/shared/__tests__/key-facts.test.ts).
  */
 
+import { formatDate } from "@/components/handover/format";
 import type { PointCategory } from "@/lib/contracts/enums";
 
 export type FactKind = "person" | "date" | "status" | "info";
@@ -19,8 +20,6 @@ export interface KeyFact {
 
 /** Categories that are things someone must DO; missing owner / date is called out. */
 export const ACTION_CATEGORIES: readonly PointCategory[] = ["open_task", "next_action", "blocker"];
-
-const TZ_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 function text(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
@@ -45,7 +44,7 @@ export function formatDayOrRaw(v: unknown): string | null {
   const iso = validIsoDay(v);
   if (!iso) return raw;
   try {
-    return TZ_DATE.format(new Date(`${iso}T00:00:00+05:30`));
+    return formatDate(iso);
   } catch {
     return raw;
   }

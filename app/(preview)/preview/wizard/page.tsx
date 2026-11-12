@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
@@ -55,6 +56,8 @@ function ready(localId: string, name: string, kind: DraftSource["kind"], size: n
 }
 
 async function Content({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // Request-time only: the "saved 2 min ago" clock must not run during prerendering (Cache Components).
+  await connection();
   const q = await searchParams;
   const n = Number(typeof q.step === "string" ? q.step : "1");
   const step = Number.isInteger(n) && n >= 1 && n <= 4 ? n - 1 : 0;

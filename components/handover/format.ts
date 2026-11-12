@@ -5,34 +5,51 @@
 
 const TZ = "Asia/Kolkata";
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: TZ });
-const shortDateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: TZ });
-const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
+/**
+ * Only NUMERIC parts come from Intl (stable across ICU versions); month names are fixed here. Locale
+ * month abbreviations differ between ICU builds ("Sep" vs "Sept"), so server (Node) and browser
+ * output could disagree and break hydration.
+ */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const partsFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ,
   year: "numeric",
+  month: "numeric",
+  day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
-  hour12: false,
-  timeZone: TZ,
+  hourCycle: "h23",
 });
+
+function zoned(d: Date): { y: number; m: number; d: number; hh: string; mm: string } {
+  const p = Object.fromEntries(partsFmt.formatToParts(d).map((x) => [x.type, x.value]));
+  return { y: Number(p.year), m: Number(p.month), d: Number(p.day), hh: String(p.hour).padStart(2, "0"), mm: String(p.minute).padStart(2, "0") };
+}
+
+const valid = (d: Date) => !Number.isNaN(d.getTime());
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00+05:30` : iso);
-  return Number.isNaN(d.getTime()) ? iso : dateFmt.format(d);
+  if (!valid(d)) return iso;
+  const z = zoned(d);
+  return `${z.d} ${MONTHS[z.m - 1]} ${z.y}`;
 }
 
 export function formatShortDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : shortDateFmt.format(d);
+  if (!valid(d)) return iso;
+  const z = zoned(d);
+  return `${z.d} ${MONTHS[z.m - 1]}`;
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : dateTimeFmt.format(d);
+  if (!valid(d)) return iso;
+  const z = zoned(d);
+  return `${z.d} ${MONTHS[z.m - 1]} ${z.y}, ${z.hh}:${z.mm}`;
 }
 
 export function formatDateRange(from: string | null, to: string | null): string {

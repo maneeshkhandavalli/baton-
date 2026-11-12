@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ChevronDown, CircleHelp, Lightbulb, Scale } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { OutdatedBadge } from "@/components/handover/badges";
 import { attributeRows } from "@/components/handover/attributes";
@@ -19,7 +19,7 @@ import type { MemberRole, PointCategory } from "@/lib/contracts/enums";
 import { acknowledgePublication } from "@/lib/actions/members";
 import { cn } from "@/lib/utils";
 
-import { buildFirstWeek } from "./first-week";
+import { buildFirstWeek, firstWeekStorageKey, parseTicks } from "./first-week";
 
 /** Version of the acknowledgement statement shown below (acknowledgePublication.statementVersion). */
 export const ACK_STATEMENT_VERSION = "2026-11-ack-v1";
@@ -299,25 +299,38 @@ function PublishedPoint({ point }: { point: Point }) {
   );
 }
 
+const STORAGE_EVENT = "baton:first-week";
+
+function subscribeStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(STORAGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(STORAGE_EVENT, onChange);
+  };
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 function FirstWeek({ handover }: { handover: PublishedHandover }) {
   const days = useMemo(() => buildFirstWeek(handover), [handover]);
-  const key = `baton:first-week:${handover.publicationId}`;
-  const [done, setDone] = useState<string[]>([]);
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(key);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from browser storage after hydration
-      if (raw) setDone(JSON.parse(raw) as string[]);
-    } catch {
-      /* storage unavailable */
-    }
-  }, [key]);
+  const key = firstWeekStorageKey(handover.publicationId);
+  // Ticks live in this browser only. The server snapshot is "nothing ticked", so the first client
+  // render matches the server HTML; stored ticks appear right after hydration.
+  const raw = useSyncExternalStore(subscribeStorage, () => readStorage(key), () => null);
+  const done = useMemo(() => parseTicks(raw), [raw]);
 
   function toggle(id: string) {
     const next = done.includes(id) ? done.filter((x) => x !== id) : [...done, id];
-    setDone(next);
     try {
       window.localStorage.setItem(key, JSON.stringify(next));
+      window.dispatchEvent(new Event(STORAGE_EVENT));
     } catch {
       /* storage unavailable */
     }
