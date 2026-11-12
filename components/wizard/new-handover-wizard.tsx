@@ -83,6 +83,15 @@ function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
   return null;
 }
 
+/** "This file isn't a valid …" */
+const KIND_NOUN: Record<SourceKind, string> = {
+  whatsapp_export: "WhatsApp chat export",
+  pdf: "PDF",
+  docx: "Word document",
+  markdown: "Markdown file",
+  text: "text file",
+};
+
 const MIME: Record<SourceKind, string> = {
   whatsapp_export: "text/plain",
   pdf: "application/pdf",
@@ -422,6 +431,11 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
       }
       if (confirmed.ok || !(confirmed.error.retryable || confirmed.error.code === "internal")) break;
     }
+    if (confirmed && !confirmed.ok && confirmed.error.code === "validation_failed") {
+      // The server checked the bytes and they aren't this kind of file (e.g. a PDF renamed .docx).
+      const hint = isTxt(entry.name) ? " If it's a plain text document, switch it to Plain text." : "";
+      return cleanUp(localId, sourceId, `This file isn't a valid ${KIND_NOUN[entry.kind]}. Choose the right file.${hint}`, "unsupported");
+    }
     if (!confirmed?.ok) {
       const transient = !!confirmed && (confirmed.error.retryable || confirmed.error.code === "internal");
       return cleanUp(
@@ -434,17 +448,17 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   }
 
   /** A failed upload removes its pending source; if that fails too, the row says so and keeps the id for Remove. */
-  async function cleanUp(localId: string, sourceId: string, message: string) {
+  async function cleanUp(localId: string, sourceId: string, message: string, phase: "failed" | "unsupported" = "failed") {
     let removed = false;
     try {
       removed = (await removeSource({ sourceId })).ok;
     } catch {
       removed = false;
     }
-    if (removed) return update(localId, { status: "error", errorPhase: "failed", error: message, sourceId: undefined });
+    if (removed) return update(localId, { status: "error", errorPhase: phase, error: message, sourceId: undefined });
     update(localId, {
       status: "error",
-      errorPhase: "failed",
+      errorPhase: phase,
       error: `${message} Baton also couldn't clean up this upload: remove it before adding the file again.`,
       sourceId,
     });
