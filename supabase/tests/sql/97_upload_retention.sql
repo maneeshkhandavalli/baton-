@@ -1,5 +1,5 @@
--- Round 3 (Agent 3, D2/D3): migration 20261113200100. stale_pending_source (retry after an interrupted
--- upload) and list_orphan_upload_candidates (read-only orphan detection). Synthetic data only.
+-- Round 3 (Agent 3, D3): migration 20261113200100, list_orphan_upload_candidates (read-only orphan
+-- detection), plus the upload lifecycle shapes that produce orphans. Synthetic data only.
 \set ON_ERROR_STOP 1
 
 select tests.user(u) from unnest(array['ann', 'bob', 'rev', 'eve']) u;
@@ -24,54 +24,27 @@ select tests.as_user('bob');
 select tests.put('b', public.create_source(tests.actor(), tests.id('h'), 'whatsapp_export', 'b.txt', 'text/plain', 10, (select hex from sha where name = 'b')));
 select tests.as_owner();
 
--- ── grants: browser roles cannot reach either function ──────────────────────
+-- ── grants: browser roles cannot reach the function ─────────────────────────
 select tests.as_reader('ann');
-select tests.throws(format('select public.stale_pending_source(%L, %L, %L)', tests.id('ann'), tests.id('h'), (select hex from sha where name = 'a')),
-                    '42501', 'authenticated cannot call stale_pending_source');
 select tests.throws('select public.list_orphan_upload_candidates()', '42501', 'authenticated cannot list orphan candidates');
 select tests.as_anon();
 select tests.throws('select public.list_orphan_upload_candidates()', '42501', 'anon cannot list orphan candidates');
 select tests.as_owner();
-select tests.ok(not has_function_privilege('authenticated', 'public.stale_pending_source(uuid, uuid, text)', 'execute'), 'no execute for authenticated');
+select tests.ok(not has_function_privilege('authenticated', 'public.list_orphan_upload_candidates(interval, interval, int)', 'execute'), 'no execute for authenticated');
 select tests.ok(has_function_privilege('service_role', 'public.list_orphan_upload_candidates(interval, interval, int)', 'execute'), 'service_role may list');
 
--- ── stale_pending_source ────────────────────────────────────────────────────
-select tests.as_user('ann');
-select tests.eq(public.stale_pending_source(tests.actor(), tests.id('h'), (select hex from sha where name = 'a')), tests.id('a'),
-                'the actor''s own unfinished upload of the same file is found');
-select tests.eq(public.stale_pending_source(tests.actor(), tests.id('h'), (select hex from sha where name = 'b')), null::uuid,
-                'another member''s pending upload is never offered for replacement');
-select tests.eq(public.stale_pending_source(tests.actor(), tests.id('h'), (select hex from sha where name = 'z')), null::uuid,
-                'no row for an unknown checksum');
-select tests.throws(format('select public.stale_pending_source(%L, %L, %L)', tests.id('ann'), tests.id('h'), 'NOT-HEX'),
-                    'BTVF0', 'checksum must be lowercase hex');
-select tests.as_user('bob');
-select tests.eq(public.stale_pending_source(tests.actor(), tests.id('h'), (select hex from sha where name = 'b')), tests.id('b'),
-                'an outgoing member finds their own pending upload');
-select tests.as_user('rev');
-select tests.throws(format('select public.stale_pending_source(%L, %L, %L)', tests.id('rev'), tests.id('h'), (select hex from sha where name = 'a')),
-                    'BTFB0', 'a reviewer does not manage sources');
-select tests.as_user('eve');
-select tests.throws(format('select public.stale_pending_source(%L, %L, %L)', tests.id('eve'), tests.id('h'), (select hex from sha where name = 'a')),
-                    'BTNF0', 'a non-member sees nothing');
-select tests.as_user('ann');
-select tests.throws(format('select public.stale_pending_source(%L, %L, %L)', tests.id('bob'), tests.id('h'), (select hex from sha where name = 'b')),
-                    'BTFB0', 'the actor must match the session');
-
--- uploaded (confirmed) sources are real duplicates, not stale ones
+-- c and d are uploaded (confirmed)
 select tests.as_owner();
 insert into storage.objects (bucket_id, name, metadata)
 select 'source-uploads', raw_storage_path, '{"size": "10"}'::jsonb from public.sources where id in (tests.id('c'), tests.id('d'));
 select tests.as_user('ann');
 select public.confirm_source_uploaded(tests.actor(), tests.id('c'), 10, (select hex from sha where name = 'c'));
 select public.confirm_source_uploaded(tests.actor(), tests.id('d'), 10, (select hex from sha where name = 'd'));
-select tests.eq(public.stale_pending_source(tests.actor(), tests.id('h'), (select hex from sha where name = 'c')), null::uuid,
-                'an uploaded source is never stale');
 
--- the retry flow: remove the stale row, then the same file can be created again
+-- the wizard's retry flow today: remove the unfinished row, then the same file can be created again
 select public.remove_source(tests.actor(), tests.id('a'));
 select tests.ok(public.create_source(tests.actor(), tests.id('h'), 'whatsapp_export', 'a.txt', 'text/plain', 10, (select hex from sha where name = 'a')) is not null,
-                'after removing the stale row the same file can be uploaded again');
+                'after removing the unfinished row the same file can be uploaded again');
 select tests.as_owner();
 
 -- ── list_orphan_upload_candidates ───────────────────────────────────────────
@@ -117,7 +90,7 @@ select tests.eq((select reason from cand where source_id = tests.id('e')::text),
 select tests.eq((select reason from cand where source_id = tests.id('f')::text), 'parsed_raw_pending', 'a parsed source with a raw path is reported');
 select tests.ok(not exists (select 1 from cand where source_id = tests.id('d')::text), 'an uploaded source within the ceiling is not reported');
 select tests.eq((select reason from cand where source_id = tests.id('a')::text), 'removed_raw_pending',
-                'the stale row replaced by a retry is reported until its (empty) raw path is marked deleted');
+                'a removed unfinished row is reported until its (empty) raw path is marked deleted');
 select tests.eq((select count(*)::int from cand group by source_id order by 1 desc limit 1), 1, 'each source is reported once');
 
 -- a freshly created pending upload is never reported (the signed URL may still be in use)

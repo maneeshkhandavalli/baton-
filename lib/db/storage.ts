@@ -9,9 +9,8 @@
  * Round 3 (D2) robustness:
  *  - the upload request is checked before any row exists: size (0 < n ≤ 25 MB), lowercase SHA-256, a
  *    file-name extension that fits the kind and a MIME type plausible for it (`checkSourceUploadRequest`);
- *  - a retry after an interrupted upload replaces the actor's own stale `pending_upload` row for the same
- *    file instead of failing on the duplicate-checksum index (`stale_pending_source`); a real duplicate
- *    still fails with `conflict`;
+ *  - a duplicate checksum is passed through as `conflict` unchanged (reusing a stale `pending_upload` row for
+ *    an interrupted upload is done by create_source itself, Agent 2's C2/C3 change);
  *  - if signing fails after the row was created, the row is removed again (no orphan for a live draft);
  *  - confirm is idempotent (a lost response followed by a retry succeeds) and removes an oversized or
  *    mismatching object so the user can upload again (an empty object is a size mismatch);
@@ -168,22 +167,16 @@ async function removeQuietly(storage: StorageClient, path: string): Promise<void
  * and the 10-source limit are checked in SQL), then sign a direct-to-storage upload with the USER's
  * storage client, so the bucket's INSERT policy applies to that user. The file never passes through a
  * server action body.
- *
- * Retry after an interrupted upload (R3 D2): if the checksum already belongs to the actor's OWN
- * unfinished upload in this handover, that stale row is removed and a fresh one created, so choosing the
- * same file again works. Any other duplicate still fails with `conflict`. With `adminStorage` the stale
- * row's object (a partial upload, if any) is deleted at once; without it the row keeps its raw path and
- * the retention sweep removes it (list_orphan_upload_candidates: removed_raw_pending).
+
  */
 export async function createSourceUpload(
   db: DbClient,
   actor: VerifiedActor,
   userStorage: StorageClient,
   input: SourceUploadRequest,
-  adminStorage?: StorageClient,
 ): Promise<SourceUploadTicket> {
   checkSourceUploadRequest(input);
-  const sourceId = await createSourceReplacingStale(db, actor, input, adminStorage);
+  const sourceId = await createSource(db, actor, input);
   const path = rawSourcePath(input.handoverId, sourceId);
   let signed: { signedUrl: string; token: string; path: string } | null = null;
   try {
@@ -209,30 +202,6 @@ export async function createSourceUpload(
     token: signed.token,
     expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString(),
   };
-}
-
-async function createSourceReplacingStale(
-  db: DbClient,
-  actor: VerifiedActor,
-  input: SourceUploadRequest,
-  adminStorage: StorageClient | undefined,
-): Promise<string> {
-  try {
-    return await createSource(db, actor, input);
-  } catch (error) {
-    if (!(error instanceof DbError) || error.code !== "conflict" || error.retryable) throw error;
-    const staleId = (await callRpc(db, "stale_pending_source", {
-      p_actor_profile_id: actor.profileId,
-      p_handover_id: input.handoverId,
-      p_sha256_hex: input.sha256,
-    })) as string | null;
-    if (typeof staleId !== "string") throw error; // a real duplicate (uploaded, parsed, someone else's)
-    const stalePath = await removeSource(db, actor, staleId);
-    if (stalePath && adminStorage) {
-      await deleteRawSource(db, adminStorage, staleId, stalePath).catch(() => undefined); // else: the sweep
-    }
-    return createSource(db, actor, input);
-  }
 }
 
 // ── Step 2: confirm (M5) ─────────────────────────────────────────────────────

@@ -26,7 +26,6 @@ const USER = "44444444-4444-4444-8444-444444444444";
 const H = "11111111-1111-4111-8111-111111111111";
 const S = "66666666-6666-4666-8666-666666666666";
 const S2 = "77777777-7777-4777-8777-777777777777";
-const STALE = "88888888-8888-4888-8888-888888888888";
 const SHA = "ab".repeat(32);
 
 // Tests may mint actors directly (boundaries.test.ts allows casts only in tests and lib/db/actor.ts).
@@ -171,51 +170,21 @@ describe("R3 D2: create + sign", () => {
   });
 });
 
-describe("R3 D2: duplicate checksum and retry after an interrupted upload", () => {
-  const conflict = { error: { code: "BTCF0", message: "this file was already uploaded" } };
-
-  it("the actor's own stale pending row is replaced and the retry succeeds", async () => {
-    const { db, fns, calls } = fakeDb({
-      create_source: [conflict, { data: S }],
-      stale_pending_source: { data: STALE },
-      remove_source: { data: rawSourcePath(H, STALE) },
-    });
-    const admin = fakeStorage();
-    const t = await createSourceUpload(db, actor, fakeStorage().storage, request(), admin.storage);
-    assert.equal(t.sourceId, S);
-    assert.deepEqual(fns(), ["create_source", "stale_pending_source", "remove_source", "mark_source_raw_deleted", "create_source"]);
-    assert.deepEqual(calls[1].args, { p_actor_profile_id: USER, p_handover_id: H, p_sha256_hex: SHA });
-    assert.deepEqual(admin.ops, [{ op: "remove", path: [rawSourcePath(H, STALE)] }], "any partial object of the stale upload is deleted");
-  });
-
-  it("without admin storage the stale row is still replaced; its raw path is left for the sweep", async () => {
-    const { db, fns } = fakeDb({
-      create_source: [conflict, { data: S }],
-      stale_pending_source: { data: STALE },
-      remove_source: { data: rawSourcePath(H, STALE) },
-    });
-    await createSourceUpload(db, actor, fakeStorage().storage, request());
-    assert.deepEqual(fns(), ["create_source", "stale_pending_source", "remove_source", "create_source"]);
-  });
-
-  it("a real duplicate (uploaded, parsed or another member's) still fails with conflict and removes nothing", async () => {
-    const { db, fns } = fakeDb({ create_source: conflict, stale_pending_source: { data: null } });
-    await assert.rejects(createSourceUpload(db, actor, fakeStorage().storage, request()), isCode("conflict"));
-    assert.deepEqual(fns(), ["create_source", "stale_pending_source"]);
-  });
-
-  it("a retryable serialization conflict is not treated as a duplicate", async () => {
-    const { db, fns } = fakeDb({ create_source: { error: { code: "40001", message: "serialization" } } });
-    await assert.rejects(createSourceUpload(db, actor, fakeStorage().storage, request()), isCode("conflict"));
-    assert.deepEqual(fns(), ["create_source"]);
-  });
-
-  it("other create failures (source limit, lifecycle) are passed through untouched", async () => {
-    for (const code of ["BTPF0", "BTIT0", "BTFB0", "BTNF0"]) {
+describe("R3 D2: duplicate checksum", () => {
+  // Reusing a stale pending_upload row for an interrupted upload is create_source's job (Agent 2, C2/C3);
+  // the storage helper must pass every create failure through unchanged and create nothing else.
+  it("conflict and other create failures are passed through untouched; nothing is signed", async () => {
+    for (const code of ["BTCF0", "40001", "BTPF0", "BTIT0", "BTFB0", "BTNF0"]) {
       const { db, fns } = fakeDb({ create_source: { error: { code, message: "x" } } });
-      await assert.rejects(createSourceUpload(db, actor, fakeStorage().storage, request()), (e: unknown) => e instanceof DbError);
+      const { storage, ops } = fakeStorage();
+      await assert.rejects(createSourceUpload(db, actor, storage, request()), (e: unknown) => e instanceof DbError);
       assert.deepEqual(fns(), ["create_source"]);
+      assert.deepEqual(ops, []);
     }
+  });
+  it("a duplicate checksum surfaces as conflict", async () => {
+    const { db } = fakeDb({ create_source: { error: { code: "BTCF0", message: "this file was already uploaded" } } });
+    await assert.rejects(createSourceUpload(db, actor, fakeStorage().storage, request()), isCode("conflict"));
   });
 });
 

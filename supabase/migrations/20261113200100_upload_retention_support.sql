@@ -1,41 +1,6 @@
--- Round 3 (Agent 3, D2/D3): upload-retry support and READ-ONLY orphan detection. Additive only:
--- no table, trigger or existing function changes, and nothing here deletes or updates anything.
--- Both functions are server-only (service_role); browser roles get nothing.
-
--- ── D2: retry after an interrupted upload ─────────────────────────────────────
--- create_source refuses a second live row with the same (handover_id, sha256) (unique index
--- sources_handover_sha256_key). When the first attempt never finished (tab closed, network drop,
--- signing failure), that row is still 'pending_upload' and blocks the retry with 'already uploaded'.
--- This returns the id of such a row ONLY when it is the actor's own unfinished upload of the same
--- file in a live handover the actor manages; the caller removes it with remove_source and creates a
--- fresh row. Anything else (uploaded, parsed, failed, someone else's) returns NULL, so a real
--- duplicate still fails with conflict.
-create function public.stale_pending_source(p_actor_profile_id uuid, p_handover_id uuid, p_sha256_hex text)
-returns uuid
-language plpgsql
-stable
-security definer
-set search_path = ''
-as $$
-declare
-  v_actor uuid := public._require_actor(p_actor_profile_id);
-  v_id uuid;
-begin
-  perform public._require_source_manager(v_actor, p_handover_id);
-  if p_sha256_hex is null or p_sha256_hex !~ '^[a-f0-9]{64}$' then
-    raise exception 'invalid checksum' using errcode = 'BTVF0';
-  end if;
-  select s.id into v_id
-    from public.sources s
-    join public.handovers h on h.id = s.handover_id
-   where s.handover_id = p_handover_id
-     and s.sha256 = decode(p_sha256_hex, 'hex')
-     and s.deleted_at is null
-     and s.state = 'pending_upload'
-     and s.uploaded_by = v_actor
-     and h.deleted_at is null;
-  return v_id;
-end $$;
+-- Round 3 (Agent 3, D3): READ-ONLY orphan-upload detection. Additive only: no table, trigger or existing
+-- function changes, and nothing here deletes or updates anything. Server-only (service_role).
+-- (Reusing a stale pending_upload row on retry is Agent 2's create_source change, not this migration.)
 
 -- ── D3: orphan-upload and raw-retention candidates (detection only) ──────────
 -- One row per source whose raw upload (or upload slot) has outlived its purpose, with the reason.
@@ -108,7 +73,5 @@ begin
       ) c), '[]'::jsonb);
 end $$;
 
-revoke execute on function public.stale_pending_source(uuid, uuid, text) from public, anon, authenticated, service_role;
 revoke execute on function public.list_orphan_upload_candidates(interval, interval, int) from public, anon, authenticated, service_role;
-grant execute on function public.stale_pending_source(uuid, uuid, text) to service_role;
 grant execute on function public.list_orphan_upload_candidates(interval, interval, int) to service_role;
