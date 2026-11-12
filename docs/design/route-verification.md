@@ -270,3 +270,5 @@ Shell checks for every workspace route:
 | `app/not-found.tsx` | `/does-not-exist` | Logo, "404" eyebrow, serif h1 "This page isn't here", buttons for the dashboard and home. | | |
 | `app/(workspace)/error.tsx` | Throw in a workspace page (dev) | "Something went wrong on this page" with Try again (re-renders) and Back to dashboard. Shows a reference digest. | | |
 | `app/(token)/error.tsx`, `app/(marketing)/error.tsx` | Same, in those groups | Same pattern, with home links. | | |
+| `app/(auth)/error.tsx` | Throw in /login (dev) | Same pattern; home link. | | |
+| `app/global-error.tsx` | Throw in the root layout (dev) | Own `<html>/<body>`, tokens loaded, serif "Something went wrong", Try again + Baton home, digest only (no raw message). | | |
