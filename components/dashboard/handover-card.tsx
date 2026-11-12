@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { HandoverSummary } from "@/lib/contracts/dto";
 import { cn } from "@/lib/utils";
 
+/** DraftRow lives in ./draft-row (the dashboards import it there); re-exported for older importers. */
+export { DraftRow } from "./draft-row";
+
 export interface HandoverCardData {
   handover: HandoverSummary;
   /** Readiness score for review roles; null when not available to the viewer. */

@@ -8,7 +8,8 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { formatDate, formatDateRange, formatDateTime, formatShortDate } from "../../handover/format";
-import { firstWeekStorageKey, parseTicks } from "../../published/first-week";
+import { buildFirstWeek, firstWeekStorageKey, parseTicks } from "../../published/first-week";
+import type { PublishedHandover } from "../../../lib/contracts/dto";
 import { formatDayOrRaw } from "../key-facts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -61,6 +62,24 @@ describe("first-week ticks read from browser storage", () => {
   });
 });
 
+describe("first-week due dates (QA-R3-12-R1)", () => {
+  const detail = (dueDate: unknown) =>
+    buildFirstWeek({
+      sections: [{ category: "open_task", points: [{ id: "p1", content: { title: "Renew domain", statement: "", attributes: { dueDate, assigneeLabel: "Ravi" }, isKnownGap: false } }] }],
+    } as unknown as PublishedHandover).flatMap((d) => d.items)[0];
+
+  it("formats a real day and shows anything else as written, never rolled over or guessed", () => {
+    assert.equal(detail("2026-11-30")?.detail, "Due 30 Nov 2026");
+    assert.equal(detail("2026-02-30")?.detail, "Due 2026-02-30");
+    assert.equal(detail("March 5")?.detail, "Due March 5");
+    assert.equal(detail("1")?.detail, "Due 1");
+  });
+
+  it("a blank due date reads as undated", () => {
+    assert.doesNotMatch(String(detail("   ")?.detail ?? ""), /^Due/);
+  });
+});
+
 describe("dashboard draft rows", () => {
   it("DraftRow lives in its own module and both dashboards import it from there", () => {
     assert.match(read("components/dashboard/draft-row.tsx"), /export function DraftRow\(/);
@@ -69,7 +88,10 @@ describe("dashboard draft rows", () => {
       assert.match(src, /import \{ DraftRow \} from "@\/components\/dashboard\/draft-row";/, page);
       assert.doesNotMatch(src, /DraftRow[^;]*from "@\/components\/dashboard\/handover-card"/, page);
     }
-    assert.doesNotMatch(read("components/dashboard/handover-card.tsx"), /DraftRow|discard-draft-button/);
+    // handover-card only re-exports it (no second definition, no direct client-component import).
+    const card = read("components/dashboard/handover-card.tsx");
+    assert.doesNotMatch(card, /function DraftRow|discard-draft-button/);
+    assert.ok(card.includes('export { DraftRow } from "./draft-row";'));
   });
 });
 
