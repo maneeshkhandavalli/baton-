@@ -99,7 +99,7 @@ begin
   perform tests.throws(format($q$select public.insert_extracted_point(%L, %L, 'decision', 't', 's', '{}', null, 'everyone', '{"p":1}')$q$,
                               tests.id('h'), v_old_run), 'BTIT0', 'N3: extraction cannot write against a finished run');
   perform tests.as_user('oli');
-  v_run := public.start_processing(tests.actor(), tests.id('h'), '1', '{"provider":"fake"}', '[]');
+  v_run := public.start_processing(tests.actor(), tests.id('h'), '1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x'))));
   perform tests.as_service();
   perform tests.throws(format($q$select public.insert_extracted_point(%L, %L, 'decision', 't', 's', '{}', null, 'everyone', '{"p":1}')$q$,
                               tests.id('h'), v_old_run), 'BTIT0', 'N3: extraction cannot write against another (old) run');

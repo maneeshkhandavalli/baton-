@@ -9,7 +9,7 @@ select tests.handover('h2', 'bob', 'outgoing');
 select tests.source('h2', 's2');
 
 select tests.as_user('ann');
-select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', '[]'));
+select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x')))));
 
 select tests.as_service();
 select tests.put('p1', public.insert_extracted_point(tests.id('h'), tests.id('run'), 'decision', 'T1', 'S1', '{}', null, 'everyone', '{"provider":"fake"}'));
