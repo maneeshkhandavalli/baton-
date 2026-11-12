@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { categoryLabel } from "@/components/handover/labels";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,19 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
   const { run, isPending, error } = useAction();
   const [draft, setDraft] = useState<Draft>({ name: "", answers: {} });
   const [index, setIndex] = useState(-1); // -1 = intro, questions.length = review
+  // After moving between questions, focus the new heading so keyboard/screen-reader users start there.
+  // The flag is set with the navigation itself, because the heading's ref runs before any effect.
+  const moved = useRef(false);
+  const goTo = (i: number) => {
+    moved.current = true;
+    setIndex(i);
+  };
+  const focusOnArrival = (el: HTMLHeadingElement | null) => {
+    if (el && moved.current) {
+      moved.current = false;
+      el.focus();
+    }
+  };
   const [done, setDone] = useState<{ submitted: number; skipped: number } | null>(null);
   const qs = data.questions;
 
@@ -135,7 +148,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                 <Input id="answerer" value={draft.name} maxLength={80} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="So the team knows who answered" aria-invalid={!!error?.fieldErrors?.answererLabel} />
                 {error?.fieldErrors?.answererLabel && <p className="text-xs text-destructive-fg">{error.fieldErrors.answererLabel[0]}</p>}
               </div>
-              <Button size="lg" disabled={!draft.name.trim()} onClick={() => setIndex(0)}>
+              <Button size="lg" disabled={!draft.name.trim()} onClick={() => goTo(0)}>
                 Start
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>
@@ -150,7 +163,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                 </Badge>
                 {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
               </div>
-              <h2 className="type-section-title"><MaskedText text={q.question} /></h2>
+              <h2 ref={focusOnArrival} tabIndex={-1} className="type-section-title outline-none"><MaskedText text={q.question} /></h2>
               {q.context && <p className="text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}
               <Label htmlFor={`a-${q.id}`} className="sr-only">
                 Your answer
@@ -166,17 +179,17 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                 className="min-h-32"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button variant="ghost" onClick={() => setIndex(index - 1)}>
+                <Button variant="ghost" onClick={() => goTo(index - 1)}>
                   <ArrowLeft aria-hidden="true" data-icon="inline-start" />
                   Back
                 </Button>
                 <div className="flex gap-2">
                   {!(draft.answers[q.id] ?? "").trim() && (
-                    <Button variant="outline" onClick={() => setIndex(index + 1)}>
+                    <Button variant="outline" onClick={() => goTo(index + 1)}>
                       Skip
                     </Button>
                   )}
-                  <Button disabled={!(draft.answers[q.id] ?? "").trim()} onClick={() => setIndex(index + 1)}>
+                  <Button disabled={!(draft.answers[q.id] ?? "").trim()} onClick={() => goTo(index + 1)}>
                     {index === qs.length - 1 ? "Review" : "Next"}
                     <ArrowRight aria-hidden="true" data-icon="inline-end" />
                   </Button>
@@ -187,7 +200,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
 
           {index === qs.length && (
             <div className="space-y-5">
-              <h2 className="type-title">Review and send</h2>
+              <h2 ref={focusOnArrival} tabIndex={-1} className="type-title outline-none">Review and send</h2>
               <ol className="space-y-3">
                 {qs.map((x, i) => {
                   const a = (draft.answers[x.id] ?? "").trim();
@@ -195,7 +208,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                     <li key={x.id} className="rounded-lg border border-border p-3">
                       <p className="text-sm font-medium">{x.question}</p>
                       <p className={cn("mt-1 text-sm whitespace-pre-line", a ? "text-foreground/85" : "text-muted-foreground italic")}>{a || "Skipped"}</p>
-                      <button type="button" className="mt-1 text-xs font-medium text-primary hover:underline" onClick={() => setIndex(i)}>
+                      <button type="button" className="mt-1 inline-flex min-h-8 items-center rounded-sm text-caption font-medium text-primary-fg hover:underline max-sm:min-h-10" onClick={() => goTo(i)}>
                         {a ? "Edit" : "Answer"}
                       </button>
                     </li>
@@ -203,7 +216,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                 })}
               </ol>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button variant="ghost" onClick={() => setIndex(qs.length - 1)}>
+                <Button variant="ghost" onClick={() => goTo(qs.length - 1)}>
                   <ArrowLeft aria-hidden="true" data-icon="inline-start" />
                   Back
                 </Button>

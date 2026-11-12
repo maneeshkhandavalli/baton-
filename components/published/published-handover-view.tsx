@@ -35,6 +35,9 @@ interface PublishedHandoverViewProps {
 type Point = { id: string; content: PublishedPointContent; category: PointCategory };
 
 /**
+ * Rendered under the page's own h1 (handover header or demo title), so the document title is an h2,
+ * sections h3 and points h4.
+ *
  * The handover as the incoming member reads it: an editorial document. Summary and "at a glance"
  * first, then the first-week checklist (what to do), then the sections (what to know), open
  * questions (what nobody knew) and the acknowledgement.
@@ -80,7 +83,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
               {handover.teamName}
               {handover.roleTitle && ` · ${handover.roleTitle}`}
             </p>
-            <h1 className="type-page-title break-words">{handover.title}</h1>
+            <h2 className="type-page-title break-words">{handover.title}</h2>
             <p className="text-caption text-muted-foreground">
               Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} (
               {memberRoleLabel[viewerRole].toLowerCase()})
@@ -142,10 +145,10 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
 
         {groups.map((g) => (
           <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="space-y-5">
-            <h2 id={`${g.id}-h`} className="type-section-title">
+            <h3 id={`${g.id}-h`} className="type-section-title">
               {g.label}
               <span className="ml-3 align-middle font-sans text-sm text-muted-foreground tabular-nums">{g.points.length}</span>
-            </h2>
+            </h3>
             {g.id === "open_work" && <OpenWorkSummary points={g.points} />}
             <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
               {g.points.map((p) => (
@@ -160,9 +163,9 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         {gaps.length > 0 && (
           <section id="open-questions" aria-labelledby="oq-h" className="space-y-5">
             <div className="space-y-1.5">
-              <h2 id="oq-h" className="type-section-title">
+              <h3 id="oq-h" className="type-section-title">
                 Open questions
-              </h2>
+              </h3>
               <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 Known gaps. Nobody could answer these before the handover, so treat them as things to find out, not facts.
               </p>
@@ -222,9 +225,9 @@ function PublishedPoint({ point }: { point: Point }) {
         {c.evidenceStatus !== "sourced" && <StatusBadge status={c.evidenceStatus} size="sm" />}
         {c.isPotentiallyOutdated && <OutdatedBadge className="ml-auto" />}
       </div>
-      <h3 className="mt-1.5 type-heading [overflow-wrap:anywhere]">
+      <h4 className="mt-1.5 type-heading [overflow-wrap:anywhere]">
         <MaskedText text={c.title} />
-      </h3>
+      </h4>
       <KeyFactsStrip facts={facts} className="mt-2" />
       <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-foreground/80 [overflow-wrap:anywhere]">
         <MaskedText text={c.statement} />
@@ -326,9 +329,9 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
     <section id="first-week" aria-labelledby="fw-h" className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1.5">
-          <h2 id="fw-h" className="type-section-title">
+          <h3 id="fw-h" className="type-section-title">
             Your first 7 days
-          </h2>
+          </h3>
           <p className="text-sm text-muted-foreground">Built from the handover. Ticks are saved on this device only.</p>
         </div>
         <p className="type-numeric text-sm" aria-live="polite">
@@ -348,7 +351,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
       <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border shadow-soft md:grid-cols-3">
         {days.map((d) => (
           <div key={d.label} className="bg-card p-4 sm:p-5">
-            <h3 className="mb-3 type-eyebrow text-muted-foreground">{d.label}</h3>
+            <h4 className="mb-3 type-eyebrow text-muted-foreground">{d.label}</h4>
             <ul className="space-y-1">
               {d.items.map((item) => {
                 const checked = done.includes(item.id);
@@ -388,17 +391,17 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
         <div className="flex items-start gap-3">
           <CheckCircle2 aria-hidden="true" className="mt-1 size-6 shrink-0 text-status-sourced" />
           <div>
-            <h2 id="ack-h" className="type-section-title">
+            <h3 id="ack-h" className="type-section-title">
               You&rsquo;ve acknowledged this handover
-            </h2>
+            </h3>
             <p className="mt-1.5 text-sm text-inverse-muted">On {formatDate(acked)}. If a new version is published, you&rsquo;ll be asked to acknowledge it again.</p>
           </div>
         </div>
       ) : viewerRole !== "incoming" || preview ? (
         <div>
-          <h2 id="ack-h" className="type-section-title">
+          <h3 id="ack-h" className="type-section-title">
             Acknowledgement
-          </h2>
+          </h3>
           <p className="mt-1.5 text-sm text-inverse-muted">
             {preview ? "In the real handover, the incoming member confirms here that they've read it." : "Only incoming members acknowledge a handover."}
           </p>
@@ -406,9 +409,9 @@ function Acknowledge({ handover, viewerRole, preview }: { handover: PublishedHan
       ) : (
         <div className="space-y-5">
           <div className="space-y-1.5">
-            <h2 id="ack-h" className="type-section-title">
+            <h3 id="ack-h" className="type-section-title">
               Acknowledge the handover
-            </h2>
+            </h3>
             <p className="text-sm text-inverse-muted">This tells the outgoing team you have it. You can still come back and read it any time.</p>
           </div>
           <label className="flex max-w-2xl cursor-pointer items-start gap-3 text-sm leading-relaxed">

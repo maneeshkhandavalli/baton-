@@ -79,7 +79,8 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   const toReview = points.filter((p) => p.reviewState === "pending").length;
 
   useEffect(() => {
-    if (selected) cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (selected) cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
   }, [selected]);
 
   function move(delta: number) {
@@ -92,7 +93,11 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   function advanceFrom(id: string) {
     const i = visible.findIndex((p) => p.id === id);
     const next = visible.slice(i + 1).find((p) => p.reviewState === "pending") ?? visible.find((p) => p.reviewState === "pending" && p.id !== id);
-    if (next) setSelectedId(next.id);
+    if (next) {
+      setSelectedId(next.id);
+      // Keyboard and screen-reader users continue on the next point instead of a stale control.
+      requestAnimationFrame(() => cardRefs.current.get(next.id)?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true }));
+    }
   }
 
   async function submit(input: ReviewPointInput): Promise<boolean> {

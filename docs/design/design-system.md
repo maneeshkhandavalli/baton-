@@ -347,3 +347,11 @@ Pages were not restructured in milestone 1; they inherit the new tokens, control
 | Gaps, interview, settings, account | `feat(ui): gaps manager…` | NativeSelect, tags/pills, hairline settings groups, framed danger zone |
 | Marketing, demo, login, token | `feat(ui): homepage…` | type-display hero, shared Tabs, Alerts in login |
 | Sweep | `refactor(ui): app-wide token sweep…` | No `text-[…]` sizes left except the masked-token `em` chips |
+
+## 11. Hardening (round 3, after milestone 2)
+- **Touch:** below `sm` every button, input, select, segmented tab, filter chip and jump link is ≥ 40px tall (`max-sm:h-10`); drawer items ≥ 40px below `lg`.
+- **Overflow:** `body { overflow-wrap: break-word }`; titles, quotes, file errors and previews use `[overflow-wrap:anywhere]`; `Table` stacks rows below `sm` (`label` per cell).
+- **Sticky bars:** `scroll-padding-top/bottom` keep focused fields clear of the mobile top bar and the wizard action bar; the action bar respects `env(safe-area-inset-bottom)`.
+- **Decisions & action items:** `keyFacts()` + `KeyFactsStrip` (owner · due · status, flags Unassigned / No date / overdue) on review cards and published points; Open work shows "N items · M unassigned".
+- **Loading/error:** layout-matched skeletons (`components/shared/skeletons.tsx`) as `loading.tsx` and Suspense fallbacks on every route; `error.tsx` for workspace, token and marketing groups.
+- **A11y:** one h1 per page (published document title is h2 under the page h1; invitation page has an sr-only h1); SaveIndicator is a live status (alert for errors/conflicts); upload transitions announced once in a polite live region; focus moves to the new step heading (wizard, gap interview) and to the next point after approve/reject; Base UI dialogs restore focus to their trigger; JS smooth scrolling honours reduced motion.

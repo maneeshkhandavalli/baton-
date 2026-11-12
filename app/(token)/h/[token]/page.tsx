@@ -4,7 +4,7 @@ import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { ListSkeleton } from "@/components/shared/skeletons";
 import { Button } from "@/components/ui/button";
 import { getSessionUser } from "@/lib/supabase/auth";
 
@@ -20,7 +20,8 @@ export const metadata: Metadata = { title: "Handover invitation" };
 export default function InvitationPage({ params, searchParams }: PageProps<"/h/[token]">) {
   return (
     <PageContainer width="default">
-      <Suspense fallback={<LoadingState label="Opening the invitation…" className="min-h-96" />}>
+      <h1 className="sr-only">Handover invitation</h1>
+      <Suspense fallback={<ListSkeleton label="Opening the invitation…" rows={1} />}>
         <InvitationContent params={params} searchParams={searchParams} />
       </Suspense>
     </PageContainer>

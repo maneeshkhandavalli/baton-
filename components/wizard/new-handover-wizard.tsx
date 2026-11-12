@@ -162,7 +162,12 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const { run, isPending } = useAction();
   const resumed = !!initial;
   const initialConsented = !!initial?.sources.some((s) => s.consentRecordedAt);
-  const [step, setStep] = useState(() => Math.min(Math.max(initial?.step ?? 0, 0), LAST_STEP));
+  const [step, setStepState] = useState(() => Math.min(Math.max(initial?.step ?? 0, 0), LAST_STEP));
+  /** Every step change moves focus to the new step's heading (see StepHeading). */
+  const setStep = useCallback((next: number) => {
+    focusNextStep.current = true;
+    setStepState(next);
+  }, []);
   const [details, setDetails] = useState<Details>({
     title: initial?.details.title ?? "",
     teamName: initial?.details.teamName ?? "",
@@ -295,6 +300,8 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   }, [initial, initialConsented, consentAndPreview, applyPreview]);
 
   // Returning to Details on an existing draft: fetch the latest version so autosave starts from it.
+  // Any step change moves focus to the new step's heading (StepHeading), so keyboard and screen-reader
+  // users land at the top of the new step instead of on a button that no longer exists.
   const prevStep = useRef(step);
   useEffect(() => {
     if (step === 0 && prevStep.current !== 0 && handoverId) router.refresh();
@@ -784,13 +791,27 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   );
 }
 
+/** Set when the step changes; the next StepHeading to mount takes focus (then clears it). */
+const focusNextStep = { current: false };
+
 function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
   return (
     <header className="space-y-2">
       <p className="type-eyebrow text-muted-foreground">
         Step {index + 1} of {STEPS.length}
       </p>
-      <h2 className="type-section-title">{title}</h2>
+      <h2
+        tabIndex={-1}
+        className="type-section-title outline-none"
+        ref={(el) => {
+          if (el && focusNextStep.current) {
+            focusNextStep.current = false;
+            el.focus();
+          }
+        }}
+      >
+        {title}
+      </h2>
       <p className="max-w-2xl type-body text-muted-foreground">{description}</p>
     </header>
   );

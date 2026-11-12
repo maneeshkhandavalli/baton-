@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, Check, CopyX, FileText, Loader2, MessageCircle, RotateCcw, Trash2, TriangleAlert, Upload } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { formatBytes, formatCount } from "@/components/handover/format";
 import { sourceKindLabel } from "@/components/handover/labels";
@@ -29,9 +29,13 @@ interface SourcesStepProps {
 export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, onSwitchKind, full }: SourcesStepProps) {
   const uid = useId();
   const readyCount = sources.filter((s) => s.status === "ready").length;
+  const announcement = useUploadAnnouncements(sources);
   const problems = sources.filter((s) => s.status === "error").length;
   return (
     <div className="space-y-6">
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <DropZone
           id={`${uid}-chat`}
@@ -72,6 +76,25 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
       )}
     </div>
   );
+}
+
+/** "WhatsApp Chat.txt is ready." / "notes.pdf: Upload failed." — once per transition into a final state. */
+function useUploadAnnouncements(sources: DraftSource[]) {
+  const seen = useRef(new Map<string, UploadPhase>());
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    const parts: string[] = [];
+    for (const s of sources) {
+      const phase = phaseOf(s);
+      const before = seen.current.get(s.localId);
+      seen.current.set(s.localId, phase);
+      if (phase === before || uploadPhaseMeta[phase].busy) continue;
+      parts.push(phase === "ready" ? `${s.name} is ready.` : `${s.name}: ${uploadPhaseMeta[phase].label}.`);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- live-region text derived from upload transitions
+    if (parts.length) setMessage(parts.join(" "));
+  }, [sources]);
+  return message;
 }
 
 const TONE_ICON: Record<UploadPhase, { icon: React.ReactNode; className: string }> = {
