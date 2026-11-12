@@ -135,7 +135,10 @@ hourly. Per run, with a time budget and `limit` 100 per page:
    not `processing`, source not `parsing`), applies the row change for the reason (`pending_upload` →
    `removed`; `uploaded`/`failed` past ceiling → `failed`/`raw_expired`), and returns the path. It closes
    the race where a user starts processing between the listing and the delete.
-3. `deleteRawSource` (storage remove, then `mark_source_raw_deleted`). Failure: leave the path set; the
+3. `deleteRawSource` (storage remove, then `mark_source_raw_deleted`). Since QA-L1 (migration
+   `20261113200300`) that marker only accepts parsed or removed sources and sources of a soft-deleted
+   handover, so for `raw_ceiling` the claim function must first move the source out of
+   `uploaded`/`failed` (or record the deletion itself). Failure: leave the path set; the
    next run retries.
 4. Log counts per reason only (no paths, names or content); alert if `removed_raw_pending` or
    `parsed_raw_pending` keep growing (Storage failing).
