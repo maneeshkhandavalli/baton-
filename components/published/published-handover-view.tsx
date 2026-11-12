@@ -78,7 +78,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
               {handover.teamName}
               {handover.roleTitle && ` · ${handover.roleTitle}`}
             </p>
-            <h1 className="type-page-title">{handover.title}</h1>
+            <h1 className="type-page-title break-words">{handover.title}</h1>
             <p className="text-caption text-muted-foreground">
               Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} (
               {memberRoleLabel[viewerRole].toLowerCase()})
@@ -126,7 +126,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
             <ul className="flex gap-2">
               {toc.map((t) => (
                 <li key={t.id}>
-                  <a href={`#${t.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium whitespace-nowrap text-muted-foreground hover:text-foreground">
+                  <a href={`#${t.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 max-sm:h-10 text-xs font-medium whitespace-nowrap text-muted-foreground hover:text-foreground">
                     {t.label}
                     {t.count !== null && <span className="tabular-nums">{t.count}</span>}
                   </a>
@@ -203,10 +203,10 @@ function PublishedPoint({ point }: { point: Point }) {
         {c.evidenceStatus !== "sourced" && <StatusBadge status={c.evidenceStatus} size="sm" />}
         {c.isPotentiallyOutdated && <OutdatedBadge className="ml-auto" />}
       </div>
-      <h3 className="mt-1.5 type-heading">
+      <h3 className="mt-1.5 type-heading [overflow-wrap:anywhere]">
         <MaskedText text={c.title} />
       </h3>
-      <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-foreground/80">
+      <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-foreground/80 [overflow-wrap:anywhere]">
         <MaskedText text={c.statement} />
       </p>
 
@@ -247,7 +247,7 @@ function PublishedPoint({ point }: { point: Point }) {
             aria-expanded={open}
             aria-controls={panelId}
             onClick={() => setOpen(!open)}
-            className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-primary-fg outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/40"
+            className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-primary-fg max-sm:h-10 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/40"
           >
             <ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
             {open ? "Hide" : "Show"} {evidence.length === 1 ? "the source" : `${evidence.length} sources`}

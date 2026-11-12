@@ -413,6 +413,13 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
+    /* Long names, URLs and file names wrap instead of pushing the page wider. */
+    overflow-wrap: break-word;
+  }
+  /* Focus and anchor scrolling stop clear of the sticky top bar (mobile) and the wizard's action bar. */
+  html {
+    scroll-padding-top: 4.5rem;
+    scroll-padding-bottom: 6rem;
   }
   ::selection {
     background-color: color-mix(in srgb, var(--primary) 18%, transparent);
@@ -422,9 +429,6 @@
   :where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-  }
-  [id] {
-    scroll-margin-top: 5rem;
   }
 }
 

@@ -48,7 +48,7 @@ function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
       className={cn(
         "inline-flex shrink-0 items-center gap-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground [&_svg]:size-4 [&_svg]:shrink-0",
         variant === "underline" && "-mb-px h-11 border-b-2 border-transparent rounded-none focus-visible:rounded-sm data-active:border-primary",
-        variant === "segmented" && "h-8 rounded-md px-3 data-active:bg-card data-active:shadow-xs",
+        variant === "segmented" && "h-8 rounded-md px-3 max-sm:h-10 data-active:bg-card data-active:shadow-xs",
         className
       )}
       {...props}

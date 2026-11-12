@@ -91,7 +91,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
       </header>
 
       <button type="button" onClick={stop(onSelect)} className="mt-3 block rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
-        <h3 id={`point-${point.id}-title`} className={cn("type-heading text-foreground", rejected && "text-muted-foreground line-through decoration-1")}>
+        <h3 id={`point-${point.id}-title`} className={cn("type-heading text-foreground [overflow-wrap:anywhere]", rejected && "text-muted-foreground line-through decoration-1")}>
           <MaskedText text={point.title} />
         </h3>
       </button>

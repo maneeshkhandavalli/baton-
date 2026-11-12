@@ -136,7 +136,7 @@ function FileRow({
               {meta.label}
             </span>
           </div>
-          <p className={cn("mt-0.5 text-caption", meta.tone === "danger" ? "text-destructive-fg" : "text-muted-foreground")} role={meta.tone === "danger" ? "alert" : undefined}>
+          <p className={cn("mt-0.5 text-caption [overflow-wrap:anywhere]", meta.tone === "danger" ? "text-destructive-fg" : "text-muted-foreground")} role={meta.tone === "danger" ? "alert" : undefined}>
             {detail}
           </p>
           {progress && (
@@ -173,7 +173,7 @@ function FileRow({
                 aria-pressed={s.kind === kind}
                 onClick={() => onSwitchKind(s, kind)}
                 className={cn(
-                  "h-7 rounded-sm px-2 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+                  "h-7 rounded-sm px-2 text-xs font-medium transition-colors max-sm:h-9 max-sm:px-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
                   s.kind === kind ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
                 )}
               >

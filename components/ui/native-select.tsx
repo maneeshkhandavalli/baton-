@@ -11,7 +11,7 @@ import { controlClassName } from "@/components/ui/input"
 function NativeSelect({ className, children, ...props }: React.ComponentProps<"select">) {
   return (
     <span data-slot="native-select" className={cn("relative block", className)}>
-      <select className={cn(controlClassName, "h-9 appearance-none py-1 pr-9 pl-3")} {...props}>
+      <select className={cn(controlClassName, "h-9 appearance-none py-1 pr-9 pl-3 max-sm:h-10")} {...props}>
         {children}
       </select>
       <ChevronDown

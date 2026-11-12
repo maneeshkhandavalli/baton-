@@ -12,7 +12,7 @@ export interface WorkspaceNavListProps {
 }
 
 const itemClass =
-  "flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40";
+  "flex h-9 w-full items-center gap-2.5 max-lg:h-10 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40";
 
 function isActive(pathname: string | null, href: string) {
   return pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));

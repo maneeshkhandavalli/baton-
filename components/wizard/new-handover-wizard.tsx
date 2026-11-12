@@ -757,7 +757,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
         </motion.div>
       </AnimatePresence>
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 py-4 backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">
           <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
             <ArrowLeft aria-hidden="true" data-icon="inline-start" />

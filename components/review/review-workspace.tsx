@@ -406,7 +406,7 @@ function FilterChip({ active, className, ...props }: React.ComponentProps<"butto
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium max-sm:h-10 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
         active ? "border-foreground/25 bg-card text-foreground shadow-xs ring-1 ring-foreground/10" : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}

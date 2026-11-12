@@ -18,7 +18,7 @@ export async function HandoverHeader({ params }: { params: Promise<{ id: string 
     <div className="flex flex-col gap-3 pt-6 pb-4 sm:flex-row sm:items-end sm:justify-between sm:pt-8">
       <div className="min-w-0 space-y-1">
         <p className="type-eyebrow text-muted-foreground">{h.teamName}</p>
-        <h1 className="type-page-title text-foreground">{h.title}</h1>
+        <h1 className="type-page-title break-words text-foreground">{h.title}</h1>
       </div>
       <div className="flex shrink-0 items-center gap-2.5 text-caption text-muted-foreground">
         <span>

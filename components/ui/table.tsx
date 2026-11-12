@@ -8,10 +8,24 @@ import { cn } from "@/lib/utils"
  * tables a stacked alternative or keep them to ≤3 columns; the wrapper scrolls horizontally as a
  * last resort only.
  */
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * `stacked` (default true): below `sm` every row becomes a stacked block and the header is visually
+ * hidden; give each cell a `label` so the column name is shown inline on phones.
+ */
+function Table({ className, stacked = true, ...props }: React.ComponentProps<"table"> & { stacked?: boolean }) {
   return (
     <div data-slot="table-container" className="relative w-full overflow-x-auto">
-      <table data-slot="table" className={cn("w-full caption-bottom text-sm", className)} {...props} />
+      <table
+        data-slot="table"
+        data-stacked={stacked ? "true" : undefined}
+        className={cn(
+          "group/table w-full caption-bottom text-sm",
+          stacked &&
+            "max-sm:block max-sm:[&_tbody]:block max-sm:[&_thead]:sr-only max-sm:[&_tr]:flex max-sm:[&_tr]:flex-col max-sm:[&_tr]:gap-1 max-sm:[&_tr]:py-3 max-sm:[&_td]:p-0",
+          className
+        )}
+        {...props}
+      />
     </div>
   )
 }
@@ -38,8 +52,13 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
-  return <td data-slot="table-cell" className={cn("px-3 py-3 align-middle first:pl-0 last:pr-0", className)} {...props} />
+function TableCell({ className, label, children, ...props }: React.ComponentProps<"td"> & { label?: React.ReactNode }) {
+  return (
+    <td data-slot="table-cell" className={cn("px-3 py-3 align-middle first:pl-0 last:pr-0", className)} {...props}>
+      {label && <span className="mr-2 hidden type-eyebrow text-muted-foreground group-data-[stacked=true]/table:max-sm:inline">{label}</span>}
+      {children}
+    </td>
+  )
 }
 
 function TableCaption({ className, ...props }: React.ComponentProps<"caption">) {

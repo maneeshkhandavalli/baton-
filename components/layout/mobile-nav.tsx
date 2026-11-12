@@ -14,7 +14,7 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="icon" aria-label="Open navigation" />}>
+      <DialogTrigger render={<Button variant="ghost" size="icon-lg" aria-label="Open navigation" />}>
         <Menu aria-hidden="true" />
       </DialogTrigger>
       <DialogContent side="left" className="bg-sidebar text-sidebar-foreground">

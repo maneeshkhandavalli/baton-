@@ -46,7 +46,7 @@ export function EvidenceQuote({
         className,
       )}
     >
-      <blockquote className={cn("text-sm leading-relaxed text-foreground", clamp && "line-clamp-3")}>
+      <blockquote className={cn("text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]", clamp && "line-clamp-3")}>
         <span aria-hidden="true" className="mr-0.5 font-display text-base leading-none text-muted-foreground">“</span>
         <MaskedText text={quote} />
       </blockquote>

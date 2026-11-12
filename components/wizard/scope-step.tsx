@@ -91,7 +91,7 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
                                 onChange={() => update(s.localId, { excludedConversations: toggle(s.excludedConversations, c.localId) })}
                               />
                               <span className="min-w-0">
-                                <MaskedText text={c.preview} className={cn("block type-quote", !included && "line-through")} />
+                                <MaskedText text={c.preview} className={cn("block type-quote [overflow-wrap:anywhere]", !included && "line-through")} />
                                 <span className="text-caption text-muted-foreground">
                                   {formatDate(c.startedAt)} – {formatDate(c.endedAt)} · {formatCount(c.messageCount)} messages
                                 </span>
@@ -115,7 +115,7 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
                             key={person.localId}
                             title={identityKindLabel[person.identityKind].label}
                             className={cn(
-                              "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-caption transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/35",
+                              "inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 rounded-full border px-3 text-caption max-sm:min-h-10 transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/35",
                               included ? "border-border-strong bg-card" : "border-warning/30 bg-warning-soft text-warning-fg",
                             )}
                           >
@@ -125,7 +125,7 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
                               checked={included}
                               onChange={() => update(s.localId, { excludedParticipants: toggle(s.excludedParticipants, person.localId) })}
                             />
-                            <span className={cn(!included && "line-through")}>{person.displayLabel}</span>
+                            <span className={cn("min-w-0 truncate", !included && "line-through")}>{person.displayLabel}</span>
                             <span className="text-muted-foreground tabular-nums">{formatCount(person.messageCount)}</span>
                             {!included && <span className="sr-only">(will be left out)</span>}
                           </label>

@@ -37,7 +37,7 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
         </p>
         <HandoverStateBadge state={h.state} size="sm" />
       </div>
-      <h3 className="mt-2 type-title">
+      <h3 className="mt-2 type-title [overflow-wrap:anywhere]">
         <Link href={href} className="outline-none after:absolute after:inset-0 after:rounded-xl">
           {h.title}
         </Link>
@@ -106,7 +106,7 @@ export function DraftRow({ data }: { data: HandoverCardData }) {
     <li className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:gap-6 sm:px-5">
       <div className="min-w-0 flex-1 space-y-1.5">
         <p className="min-w-0 truncate type-eyebrow text-muted-foreground">{h.teamName}</p>
-        <h3 className="type-heading">
+        <h3 className="type-heading [overflow-wrap:anywhere]">
           <Link href={href} className="rounded-sm hover:underline hover:underline-offset-4">
             {h.title}
           </Link>
