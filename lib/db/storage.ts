@@ -5,6 +5,17 @@
  * Security fix M5: the client's declared size and SHA-256 are never trusted. The server downloads the
  * object, measures it, and the database compares the measurement with the declared values and with the
  * size Storage recorded. The parse job re-verifies the bytes before using them.
+ *
+ * Round 3 (D2) robustness:
+ *  - the upload request is checked before any row exists: size (0 < n ≤ 25 MB), lowercase SHA-256, a
+ *    file-name extension that fits the kind and a MIME type plausible for it (`checkSourceUploadRequest`);
+ *  - a retry after an interrupted upload replaces the actor's own stale `pending_upload` row for the same
+ *    file instead of failing on the duplicate-checksum index (`stale_pending_source`); a real duplicate
+ *    still fails with `conflict`;
+ *  - if signing fails after the row was created, the row is removed again (no orphan for a live draft);
+ *  - confirm is idempotent (a lost response followed by a retry succeeds) and removes an oversized or
+ *    mismatching object so the user can upload again (an empty object is a size mismatch);
+ *  - every raw path read or deleted must have the raw/{handover}/{source} shape and belong to the source.
  */
 
 import type { SourceUploadTicket } from "../contracts/dto";
@@ -12,7 +23,7 @@ import type { DateOrder, SourceKind } from "../contracts/enums";
 import type { VerifiedActor } from "./actor-rules";
 import type { DbClient } from "./client";
 import { DbError } from "./errors";
-import { createSource } from "./mutations";
+import { createSource, removeSource } from "./mutations";
 import { callRpc } from "./rpc";
 
 export const SOURCE_BUCKET = "source-uploads";
@@ -35,8 +46,9 @@ export interface StorageClient {
 /**
  * UNVERIFIED on Supabase: the signed upload URL lifetime (assumed 2 hours) and that the upload is
  * authorised by the storage INSERT policy for the signing user. Both must be checked in a dev project.
+ * The orphan-detection grace (list_orphan_upload_candidates) must never be shorter than this.
  */
-const SIGNED_UPLOAD_TTL_MS = 2 * 60 * 60 * 1000;
+export const SIGNED_UPLOAD_TTL_MS = 2 * 60 * 60 * 1000;
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -48,6 +60,91 @@ export async function measureBytes(bytes: Uint8Array): Promise<{ sizeBytes: numb
   return { sizeBytes: bytes.byteLength, sha256: toHex(new Uint8Array(digest)) };
 }
 
+// ── Upload request checks (R3 D2) ────────────────────────────────────────────
+
+/** File-name extensions accepted per kind (the upload UI's accept lists, plus `.text` for plain text). */
+export const SOURCE_KIND_EXTENSIONS: Readonly<Record<SourceKind, readonly string[]>> = {
+  whatsapp_export: ["txt", "zip"],
+  pdf: ["pdf"],
+  docx: ["docx"],
+  markdown: ["md", "markdown"],
+  text: ["txt", "text"],
+};
+
+/**
+ * MIME types browsers report for each kind. Empty and `application/octet-stream` are always accepted
+ * (browsers often know nothing better); the bytes are checked again at confirm and by the parser.
+ */
+const GENERIC_MIME = ["", "application/octet-stream"];
+export const SOURCE_KIND_MIME_TYPES: Readonly<Record<SourceKind, readonly string[]>> = {
+  whatsapp_export: ["text/plain", "application/zip", "application/x-zip-compressed", "application/x-zip", "multipart/x-zip", ...GENERIC_MIME],
+  pdf: ["application/pdf", "application/x-pdf", ...GENERIC_MIME],
+  docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", ...GENERIC_MIME],
+  markdown: ["text/markdown", "text/x-markdown", "text/plain", ...GENERIC_MIME],
+  text: ["text/plain", ...GENERIC_MIME],
+};
+
+export interface SourceUploadRequest {
+  handoverId: string;
+  kind: SourceKind;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+/** The lowercased extension after the last dot, or null when the name has none (e.g. after masking). */
+function extensionOf(fileName: string): string | null {
+  const m = /\.([A-Za-z0-9]{1,10})$/.exec(fileName.trim());
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Rejects (validation_failed) an upload request that cannot be a valid source, before any row or signed
+ * URL exists: empty or oversized files, a malformed checksum, an extension that names another type, or a
+ * MIME type that is clearly not this kind. A name with no extension is allowed: the file name is masked
+ * before it gets here (a phone number or email in it becomes a token), and the parser checks the bytes.
+ */
+export function checkSourceUploadRequest(input: SourceUploadRequest): void {
+  if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0 || input.sizeBytes > MAX_SOURCE_BYTES) {
+    throw new DbError("validation_failed");
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.sha256)) throw new DbError("validation_failed");
+  const allowedExt = SOURCE_KIND_EXTENSIONS[input.kind];
+  if (!allowedExt) throw new DbError("validation_failed");
+  const ext = extensionOf(input.fileName);
+  if (ext !== null && !allowedExt.includes(ext)) throw new DbError("validation_failed");
+  const mime = input.mimeType.split(";")[0].trim().toLowerCase();
+  if (!SOURCE_KIND_MIME_TYPES[input.kind].includes(mime)) throw new DbError("validation_failed");
+}
+
+// ── Raw path ownership (R3 D2) ───────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The private object path of a source's raw upload (§11.2). */
+export function rawSourcePath(handoverId: string, sourceId: string): string {
+  return `raw/${handoverId}/${sourceId}`;
+}
+
+/**
+ * True if `path` is a raw-upload path that belongs to `sourceId`: exactly raw/{handover}/{source}, plain
+ * segments (no traversal, no extra levels), and, whenever the last segment is a UUID, that UUID is the
+ * source's. Storage is never asked to read or delete anything else, whatever the database row says.
+ */
+export function isOwnedRawPath(path: unknown, sourceId: string): path is string {
+  if (typeof path !== "string") return false;
+  const m = /^raw\/([0-9A-Za-z-]{1,64})\/([0-9A-Za-z-]{1,64})$/.exec(path);
+  if (!m) return false;
+  const last = m[2];
+  return !(UUID_RE.test(last) && UUID_RE.test(sourceId)) || last.toLowerCase() === sourceId.toLowerCase();
+}
+
+function requireOwnedRawPath(path: unknown, sourceId: string): string {
+  if (!isOwnedRawPath(path, sourceId)) throw new DbError("internal");
+  return path;
+}
+
 async function download(storage: StorageClient, path: string): Promise<Uint8Array> {
   const { data, error } = await storage.from(SOURCE_BUCKET).download(path);
   if (error || !data) throw new DbError("not_found");
@@ -55,34 +152,96 @@ async function download(storage: StorageClient, path: string): Promise<Uint8Arra
   return new Uint8Array(await data.arrayBuffer());
 }
 
+/** Best-effort removal; failures are left to the retention sweep (docs/proposals/retention.md). */
+async function removeQuietly(storage: StorageClient, path: string): Promise<void> {
+  try {
+    await storage.from(SOURCE_BUCKET).remove([path]);
+  } catch {
+    // retried by the retention sweep
+  }
+}
+
+// ── Step 1: create the row and sign the upload ───────────────────────────────
+
 /**
  * Step 1 of §10: create the source row with the service role and the verified actor (role, lifecycle
  * and the 10-source limit are checked in SQL), then sign a direct-to-storage upload with the USER's
  * storage client, so the bucket's INSERT policy applies to that user. The file never passes through a
  * server action body.
+ *
+ * Retry after an interrupted upload (R3 D2): if the checksum already belongs to the actor's OWN
+ * unfinished upload in this handover, that stale row is removed and a fresh one created, so choosing the
+ * same file again works. Any other duplicate still fails with `conflict`. With `adminStorage` the stale
+ * row's object (a partial upload, if any) is deleted at once; without it the row keeps its raw path and
+ * the retention sweep removes it (list_orphan_upload_candidates: removed_raw_pending).
  */
 export async function createSourceUpload(
   db: DbClient,
   actor: VerifiedActor,
   userStorage: StorageClient,
-  input: Parameters<typeof createSource>[2],
+  input: SourceUploadRequest,
+  adminStorage?: StorageClient,
 ): Promise<SourceUploadTicket> {
-  const sourceId = await createSource(db, actor, input);
-  const path = `raw/${input.handoverId}/${sourceId}`;
-  const { data, error } = await userStorage.from(SOURCE_BUCKET).createSignedUploadUrl(path);
-  if (error || !data) throw new DbError("internal");
+  checkSourceUploadRequest(input);
+  const sourceId = await createSourceReplacingStale(db, actor, input, adminStorage);
+  const path = rawSourcePath(input.handoverId, sourceId);
+  let signed: { signedUrl: string; token: string; path: string } | null = null;
+  try {
+    const { data, error } = await userStorage.from(SOURCE_BUCKET).createSignedUploadUrl(path);
+    if (!error && data && (data.path === undefined || data.path === path)) signed = data;
+  } catch {
+    signed = null;
+  }
+  if (!signed) {
+    // No ticket reaches the user, so nobody could ever finish or remove this row: undo it now. No signed
+    // URL was issued, so no object exists at the path; record that so the row is not a sweep candidate.
+    try {
+      await removeSource(db, actor, sourceId);
+      await callRpc(db, "mark_source_raw_deleted", { p_source_id: sourceId });
+    } catch {
+      // left for the retention sweep (pending_upload_expired / removed_raw_pending)
+    }
+    throw new DbError("internal");
+  }
   return {
     sourceId,
-    signedUploadUrl: data.signedUrl,
-    token: data.token,
+    signedUploadUrl: signed.signedUrl,
+    token: signed.token,
     expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString(),
   };
 }
 
+async function createSourceReplacingStale(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: SourceUploadRequest,
+  adminStorage: StorageClient | undefined,
+): Promise<string> {
+  try {
+    return await createSource(db, actor, input);
+  } catch (error) {
+    if (!(error instanceof DbError) || error.code !== "conflict" || error.retryable) throw error;
+    const staleId = (await callRpc(db, "stale_pending_source", {
+      p_actor_profile_id: actor.profileId,
+      p_handover_id: input.handoverId,
+      p_sha256_hex: input.sha256,
+    })) as string | null;
+    if (typeof staleId !== "string") throw error; // a real duplicate (uploaded, parsed, someone else's)
+    const stalePath = await removeSource(db, actor, staleId);
+    if (stalePath && adminStorage) {
+      await deleteRawSource(db, adminStorage, staleId, stalePath).catch(() => undefined); // else: the sweep
+    }
+    return createSource(db, actor, input);
+  }
+}
+
+// ── Step 2: confirm (M5) ─────────────────────────────────────────────────────
+
 /**
  * confirmSourceUploaded (M5). Downloads the object with the service role, measures it, and lets the
  * database compare. On a mismatch the object is deleted, so the user can upload the right file again,
- * and the error (validation_failed) is rethrown.
+ * and the error (validation_failed) is rethrown. R3: an oversized object is removed the same way, and a
+ * repeated confirm of an already-confirmed source succeeds (idempotent: the first response was lost).
  */
 export async function confirmSourceUpload(
   db: DbClient,
@@ -90,18 +249,28 @@ export async function confirmSourceUpload(
   actor: VerifiedActor,
   sourceId: string,
 ): Promise<void> {
-  const target = (await callRpc(db, "source_upload_target", {
-    p_actor_profile_id: actor.profileId,
-    p_source_id: sourceId,
-  })) as { raw_storage_path: string; size_bytes: number; sha256: string };
-
-  let measured: { sizeBytes: number; sha256: string };
+  let target: { raw_storage_path: string; size_bytes: number; sha256: string };
   try {
-    measured = await measureBytes(await download(adminStorage, target.raw_storage_path));
+    target = (await callRpc(db, "source_upload_target", {
+      p_actor_profile_id: actor.profileId,
+      p_source_id: sourceId,
+    })) as typeof target;
   } catch (error) {
-    if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed"); // not uploaded yet
+    // source_upload_target checks the actor BEFORE the state, so invalid_transition means a manager asked.
+    if (error instanceof DbError && error.code === "invalid_transition" && (await alreadyConfirmed(db, sourceId))) return;
     throw error;
   }
+  const path = requireOwnedRawPath(target.raw_storage_path, sourceId);
+
+  let bytes: Uint8Array;
+  try {
+    bytes = await download(adminStorage, path);
+  } catch (error) {
+    if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed"); // not uploaded yet
+    if (error instanceof DbError && error.code === "validation_failed") await removeQuietly(adminStorage, path); // oversized
+    throw error;
+  }
+  const measured = await measureBytes(bytes);
 
   try {
     await callRpc(db, "confirm_source_uploaded", {
@@ -112,11 +281,19 @@ export async function confirmSourceUpload(
     });
   } catch (error) {
     if (error instanceof DbError && error.code === "validation_failed") {
-      await adminStorage.from(SOURCE_BUCKET).remove([target.raw_storage_path]);
+      await adminStorage.from(SOURCE_BUCKET).remove([path]);
     }
+    if (error instanceof DbError && error.code === "invalid_transition" && (await alreadyConfirmed(db, sourceId))) return;
     throw error;
   }
 }
+
+async function alreadyConfirmed(db: DbClient, sourceId: string): Promise<boolean> {
+  const row = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId }).catch(() => null)) as { state?: string } | null;
+  return row?.state === "uploaded";
+}
+
+// ── Step 3: parse job and preview reads ──────────────────────────────────────
 
 /**
  * Parse job (service role): the raw bytes, re-verified against the confirmed size and SHA-256 (M5).
@@ -143,7 +320,7 @@ export async function downloadVerifiedRawSourceWithMeta(
 ): Promise<RawSourceMeta & { bytes: Uint8Array }> {
   const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as RawSourceRow | null;
   if (!source || !source.raw_storage_path) throw new DbError("not_found");
-  const bytes = await download(adminStorage, source.raw_storage_path);
+  const bytes = await download(adminStorage, requireOwnedRawPath(source.raw_storage_path, sourceId));
   const measured = await measureBytes(bytes);
   if (measured.sizeBytes !== Number(source.size_bytes) || measured.sha256 !== source.sha256.toLowerCase()) {
     await callRpc(db, "mark_source_parse_failed", { p_source_id: sourceId, p_error_code: "integrity_mismatch" });
@@ -170,7 +347,7 @@ export async function loadRawSourceForPreview(
   if (!target || !target.raw_storage_path) throw new DbError("not_found");
   let bytes: Uint8Array;
   try {
-    bytes = await download(adminStorage, target.raw_storage_path);
+    bytes = await download(adminStorage, requireOwnedRawPath(target.raw_storage_path, sourceId));
   } catch (error) {
     if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed");
     throw error;
@@ -202,14 +379,14 @@ function rawMeta(row: RawSourceRow): RawSourceMeta {
   };
 }
 
+// ── Step 4: raw deletion ─────────────────────────────────────────────────────
+
 /**
- * §10.3 step 4: only AFTER the parse transaction committed (or after removeSource). If the storage delete
- * fails, raw_storage_path stays set and the retention sweep retries it.
- */
-/**
- * The parse job's raw delete (§10.3 step 4, D14, QA-L1). Reads path and state from the database instead of
- * trusting the caller, and refuses unless the source is `parsed`, so an ordering bug can never delete the
- * raw upload of an uploaded or failed source that still needs it for a retry.
+ * The parse job's raw delete (§10.3 step 4, D14, QA-L1). Only AFTER the parse transaction committed.
+ * Reads path and state from the database instead of trusting the caller, and refuses unless the source
+ * is `parsed`, so an ordering bug can never delete the raw upload of an uploaded or failed source that
+ * still needs it for a retry. If the storage delete fails, raw_storage_path stays set and the retention
+ * sweep retries it.
  */
 export async function deleteParsedRawSource(db: DbClient, adminStorage: StorageClient, sourceId: string): Promise<void> {
   const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as
@@ -221,8 +398,14 @@ export async function deleteParsedRawSource(db: DbClient, adminStorage: StorageC
   await deleteRawSource(db, adminStorage, sourceId, source.raw_storage_path);
 }
 
+/**
+ * Deletes the raw object, then records it (`mark_source_raw_deleted`). Idempotent: Storage reports no
+ * error for an object that is already gone. Refuses (internal) a path that is not this source's raw
+ * path, so a bad row or caller can never delete another object.
+ */
 export async function deleteRawSource(db: DbClient, adminStorage: StorageClient, sourceId: string, path: string): Promise<void> {
-  const { error } = await adminStorage.from(SOURCE_BUCKET).remove([path]);
+  const owned = requireOwnedRawPath(path, sourceId);
+  const { error } = await adminStorage.from(SOURCE_BUCKET).remove([owned]);
   if (error) throw new DbError("internal");
   await callRpc(db, "mark_source_raw_deleted", { p_source_id: sourceId });
 }
