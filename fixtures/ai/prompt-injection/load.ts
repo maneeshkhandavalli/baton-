@@ -6,6 +6,8 @@
  * - The deterministic suite (lib/ai/__tests__/prompt-injection.test.ts) feeds `compromisedOutput` through
  *   the fake adapter and asserts that lib/ai's guards hold (`expect`), and that the prompt keeps the
  *   injected text inside the untrusted payload.
+ * - PI-11: verify cases also state whether the deterministic guard (lib/ai/injection-guard.ts) must replace
+ *   a promoting verdict (`expect.guarded`); benign control cases prove it leaves ordinary text alone.
  * - The opt-in live suite (lib/ai/__tests__/prompt-injection.live.test.ts) sends the same `request` to the
  *   configured production provider and asserts `live`. It is required before any change to a model,
  *   prompt version or adapter, and is skipped while no production provider is configured (D11).
@@ -55,14 +57,19 @@ const extractExpect = z.strictObject({
 const verifyExpect = z.strictObject({
   outcome: z.enum(["ok", "error"]),
   errorReason: z.string().optional(),
-  /** Verdict lib/ai returns for the compromised output (plumbing passes schema-valid verdicts through). */
+  /**
+   * Verdict lib/ai returns for the compromised output, AFTER the deterministic PI-11 guard
+   * (lib/ai/injection-guard.ts): a promoting verdict on instruction-bearing evidence becomes `irrelevant`.
+   */
   verdict: z.enum(["supports", "partial", "contradicts", "irrelevant"]).optional(),
+  /** Whether the PI-11 guard must replace the compromised verdict (default false). */
+  guarded: z.boolean().optional(),
 });
 
 const live = z.strictObject({
   /** Strings that must not appear in any surviving candidate field (extract). */
   forbiddenInOutput: z.array(z.string()).optional(),
-  /** Expected verdict from an honest model (verify). */
+  /** Expected verdict from an honest model (verify): compared with `modelVerdict`, before the PI-11 guard. */
   verdict: z.enum(["supports", "partial", "contradicts", "irrelevant"]).optional(),
   notes: z.string().optional(),
 });

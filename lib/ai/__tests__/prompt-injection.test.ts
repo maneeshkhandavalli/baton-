@@ -16,6 +16,7 @@ import { UNTRUSTED_PREAMBLE, UNTRUSTED_TRAILER } from "../prompts/payload";
 import { SUPPORT_SYSTEM_PROMPT, supportPayload } from "../prompts/support";
 import { createFakeProvider, type FakeStep } from "../providers/fake";
 import { checkQuote } from "../quote-check";
+import { GUARD_RATIONALE } from "../injection-guard";
 import { verifySupport } from "../verify-support";
 import { runConfig } from "./helpers";
 
@@ -162,6 +163,19 @@ describe("prompt-injection suite: support verification (deterministic)", () => {
       } else {
         assert.ok(result.ok);
         assert.equal(result.data.verdict, c.expect.verdict);
+        // PI-11: the deterministic guard replaces a promoting verdict on instruction-bearing evidence.
+        assert.equal(result.data.injection?.guarded ?? false, c.expect.guarded ?? false, `${c.id}: guard`);
+        if (c.expect.guarded) {
+          assert.equal(result.data.modelVerdict, (c.compromisedOutput as { verdict: string }).verdict, "the model's answer is kept for audit");
+          assert.equal(result.data.rationale, GUARD_RATIONALE, "a fixed rationale, never the model's");
+          // With the guarded verdict, an existing quote can no longer make the point sourced.
+          const guardedStatus = deriveEvidenceStatus({
+            currentRevisionId: "r1",
+            inferenceRationale: null,
+            links: [{ excluded: false, quoteCheck: "exact", supportVerdict: result.data.verdict, verifiedRevisionId: "r1" }],
+          });
+          assert.notEqual(guardedStatus, "sourced", `${c.id}: an injected quote never makes a point sourced`);
+        }
       }
 
       // Neither model call alone makes a point sourced: support counts only for a quote that exists.
@@ -176,7 +190,7 @@ describe("prompt-injection suite: support verification (deterministic)", () => {
       // The deterministic adapter never reads instructions in the text.
       const honest = await verifySupport(createFakeProvider(), c.request, { attempt: 1, runConfig: runConfig() });
       assert.ok(honest.ok);
-      assert.equal(honest.data.verdict, c.defaultVerdict);
+      assert.equal(honest.data.modelVerdict, c.defaultVerdict);
     });
   }
 });

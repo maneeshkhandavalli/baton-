@@ -8,6 +8,8 @@
  *   `VERIFY_REQUEST_LIMITS`; a pair that still does not fit is left unchecked (the point stays inferred).
  * - `recordSupportVerdict` is given the exact quote text the verifier saw; a conflict means the evidence
  *   changed meanwhile (privacy redaction) and the verdict is discarded (§5.5 T6).
+ * - PI-11: lib/ai already replaced a promoting verdict on instruction-bearing evidence (injection-guard.ts);
+ *   the stage records the guarded verdict and logs only the count.
  * - Per-run budget: ≤ 2000 calls. `progress_done` counts calls, so the budget survives yields and retries.
  * - The provider is only resolved when there is something to verify.
  */
@@ -51,7 +53,7 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
   let calls = Math.max(0, ctx.job.job.progressDone ?? 0);
   const callsAtStart = calls;
   const skip = new Set<string>();
-  const counts = { verdicts: 0, tooLarge: 0, discarded: 0 };
+  const counts = { verdicts: 0, tooLarge: 0, discarded: 0, injectionGuarded: 0 };
   let ai: { provider: AiProvider; runConfig: AiRunConfig } | null = null;
   let lastAttempt: AttemptRecord | undefined;
   const withAttempt = () => (lastAttempt ? { attemptRecord: lastAttempt } : {});
@@ -104,6 +106,7 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
           verifiedQuoteText: link.quote.text,
         });
         counts.verdicts += 1;
+        if (result.data.injection?.guarded) counts.injectionGuarded += 1; // PI-11: count only, never the text
       } catch (e) {
         if (!(e instanceof DbError && e.code === "conflict" && !e.retryable)) throw e;
         skip.add(link.pointEvidenceId); // evidence text changed since the call: discard the verdict
