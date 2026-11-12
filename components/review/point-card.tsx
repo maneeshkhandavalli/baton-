@@ -5,6 +5,8 @@ import { forwardRef } from "react";
 
 import { AccessBadge, OutdatedBadge } from "@/components/handover/badges";
 import { categoryLabel } from "@/components/handover/labels";
+import { keyFacts } from "@/components/shared/key-facts";
+import { KeyFactsStrip } from "@/components/shared/key-facts-strip";
 import { MaskedText } from "@/components/shared/masked-text";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +100,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
       <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
         <MaskedText text={point.statement} />
       </p>
+      {!rejected && <KeyFactsStrip facts={keyFacts(point.category, point.attributes)} className="mt-3" />}
 
       {!rejected && (
         <div className="mt-4 space-y-2.5">

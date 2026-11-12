@@ -8,6 +8,8 @@ import { attributeRows } from "@/components/handover/attributes";
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS, categoryLabel, memberRoleLabel } from "@/components/handover/labels";
 import { EvidenceQuote } from "@/components/review/evidence-quote";
+import { KEY_FACT_LABELS, keyFacts } from "@/components/shared/key-facts";
+import { KeyFactsStrip } from "@/components/shared/key-facts-strip";
 import { MaskedText } from "@/components/shared/masked-text";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
@@ -144,6 +146,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
               {g.label}
               <span className="ml-3 align-middle font-sans text-sm text-muted-foreground tabular-nums">{g.points.length}</span>
             </h2>
+            {g.id === "open_work" && <OpenWorkSummary points={g.points} />}
             <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
               {g.points.map((p) => (
                 <li key={p.id}>
@@ -188,10 +191,26 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
   );
 }
 
+/** "5 action items · 2 unassigned · 1 without a date" — what needs picking up first. */
+function OpenWorkSummary({ points }: { points: Point[] }) {
+  const facts = points.map((p) => keyFacts(p.category, p.content.attributes));
+  const unassigned = facts.filter((f) => f.some((x) => x.kind === "person" && x.tone === "warning")).length;
+  const undated = facts.filter((f) => f.some((x) => x.kind === "date" && x.value === "No date")).length;
+  return (
+    <p className="-mt-2 text-sm text-muted-foreground">
+      {points.length} {points.length === 1 ? "item" : "items"} to pick up
+      {unassigned > 0 && <span className="font-medium text-warning-fg"> · {unassigned} unassigned</span>}
+      {undated > 0 && <span> · {undated} without a date</span>}
+    </p>
+  );
+}
+
 function PublishedPoint({ point }: { point: Point }) {
   const [open, setOpen] = useState(false);
   const c = point.content;
-  const rows = attributeRows(point.category, c.attributes);
+  const facts = keyFacts(point.category, c.attributes);
+  // Facts already in the strip aren't repeated in the detail list.
+  const rows = attributeRows(point.category, c.attributes).filter(([k]) => !KEY_FACT_LABELS.has(k));
   const evidence = c.evidence.filter((e) => !e.redacted);
   const redacted = c.evidence.length - evidence.length;
   const panelId = `evidence-${point.id}`;
@@ -206,7 +225,8 @@ function PublishedPoint({ point }: { point: Point }) {
       <h3 className="mt-1.5 type-heading [overflow-wrap:anywhere]">
         <MaskedText text={c.title} />
       </h3>
-      <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-foreground/80 [overflow-wrap:anywhere]">
+      <KeyFactsStrip facts={facts} className="mt-2" />
+      <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-foreground/80 [overflow-wrap:anywhere]">
         <MaskedText text={c.statement} />
       </p>
 
