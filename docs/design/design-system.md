@@ -1,6 +1,6 @@
 # Baton design system (Round 3)
 
-Owner: Agent 1 (UI/UX). Status: **milestone 1 — proposal + foundation implemented, awaiting lead review**.
+Owner: Agent 1 (UI/UX). Status: **milestone 2 — every route moved onto the system (first pass); lead reviews asynchronously from pushed commits**.
 Tokens live in `app/globals.css`; primitives in `components/ui/**`; product-level building blocks in
 `components/shared/**`; frames in `components/layout/**`. This document is the contract every page follows
 in milestone 2.
@@ -136,7 +136,7 @@ Use the role utilities (defined with `@utility` in `globals.css`), not ad-hoc si
 | Caption | `type-caption` / `text-caption` | 13px | Hints, meta lines, small buttons |
 | Eyebrow | `type-eyebrow` | Inter 11px/600, 0.14em, uppercase | Labels above titles, table heads |
 | Badge | `text-2xs` | 11px | Badges only |
-| Quote | `type-quote` | mono 13px/1.6 | Evidence quotes, masked tokens |
+| Quote | `type-quote` | mono 13px/1.6 | Raw excerpts (conversation previews, the group notice). Evidence quotes use sans 14px with a serif open-quote for readability |
 | Numerals | `type-numeric` | mono tabular | Counts, percentages |
 
 Measure: running text ≤ 70ch (`max-w-2xl` for descriptions, `prose` width for documents).
@@ -334,3 +334,16 @@ They never share a colour, icon or action label.
 - Tests: `components/shared/__tests__/design-states.test.ts` (save state, upload phases, steps).
 
 Pages were not restructured in milestone 1; they inherit the new tokens, controls and shell.
+
+## 10. Milestone 2 (pages) — what changed where
+| Area | Commit subject prefix | Notes |
+|---|---|---|
+| Shell, errors | `feat(ui): shell error boundaries…` | `error.tsx` for workspace + token groups, 404 |
+| Dashboard | `feat(ui): dashboard…` | Drafts-to-finish rows (last saved, next step, Continue, discard) above the card grid; offers/reviews first |
+| Wizard | `feat(ui): new-handover wizard…`, `…upload robustness…` | Editable details with debounced single-flight autosave (`use-details-autosave.ts`, `details-save.ts`), SaveIndicator, clickable Stepper, sticky action bar with the reason Continue is disabled, per-file phases incl. duplicate/too large/unsupported, confirm retries, cleanup errors, .txt chat vs plain text |
+| Review | `feat(ui): review workspace…` | Evidence-status rail, conflict block vs gap block, success Approve / destructive-outline Reject, decided pills + Undo |
+| Published | `feat(ui): published handover…` | Editorial document, at-a-glance, first week, one sheet per section, open questions, inverse acknowledge band |
+| Processing | `feat(ui): processing…` | Live eyebrow, failure Alert, one summary sheet |
+| Gaps, interview, settings, account | `feat(ui): gaps manager…` | NativeSelect, tags/pills, hairline settings groups, framed danger zone |
+| Marketing, demo, login, token | `feat(ui): homepage…` | type-display hero, shared Tabs, Alerts in login |
+| Sweep | `refactor(ui): app-wide token sweep…` | No `text-[…]` sizes left except the masked-token `em` chips |
