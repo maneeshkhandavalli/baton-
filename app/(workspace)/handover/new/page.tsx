@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { LoadingState } from "@/components/shared/loading-state";
+import { FormSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { resumeStep } from "@/components/wizard/draft-state";
 import { NewHandoverWizard, type WizardInitial } from "@/components/wizard/new-handover-wizard";
@@ -25,7 +25,7 @@ export default function NewHandoverPage({ searchParams }: PageProps<"/handover/n
         description="Who is involved, consent, the chats and documents that hold the knowledge, and what Baton may read. Your draft saves as you go."
         divider={false}
       />
-      <Suspense fallback={<LoadingState label="Opening your draft…" className="min-h-64" />}>
+      <Suspense fallback={<FormSkeleton label="Opening your draft…" />}>
         <WizardLoader searchParams={searchParams} />
       </Suspense>
     </PageContainer>

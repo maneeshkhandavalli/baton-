@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { GapInterview } from "@/components/gap-interview/gap-interview";
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { getQueries } from "@/lib/data";
 
@@ -15,7 +15,7 @@ export default function ContributorGapsPage({ params }: PageProps<"/g/[token]">)
   return (
     <PageContainer width="prose" className="space-y-8">
       <PageHeader eyebrow="Gap Interview" title="Help fill the gaps" description="A few questions only you can answer, so the next person starts with what matters." />
-      <Suspense fallback={<LoadingState label="Opening your questions…" />}>
+      <Suspense fallback={<ListSkeleton label="Opening your questions…" rows={1} />}>
         <InterviewContent params={params} />
       </Suspense>
     </PageContainer>

@@ -8,7 +8,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { loadReview } from "@/components/review/load-review";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { WorkspaceSkeleton } from "@/components/shared/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Review" };
 export default function ReviewPage({ params }: PageProps<"/handover/[id]/review">) {
   return (
     <PageContainer width="wide" className="lg:py-8">
-      <Suspense fallback={<LoadingState label="Loading the review…" className="min-h-96" />}>
+      <Suspense fallback={<WorkspaceSkeleton />}>
         <ReviewContent params={params} />
       </Suspense>
     </PageContainer>

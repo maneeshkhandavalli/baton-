@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { ProcessingView } from "@/components/processing/processing-view";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { ProcessingSkeleton } from "@/components/shared/skeletons";
 import { getQueries } from "@/lib/data";
 import { connection } from "next/server";
 
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Processing" };
 export default function ProcessingPage({ params }: PageProps<"/handover/[id]/processing">) {
   return (
     <PageContainer width="wide" className="lg:py-8">
-      <Suspense fallback={<LoadingState label="Loading processing status…" className="min-h-96" />}>
+      <Suspense fallback={<ProcessingSkeleton />}>
         <ProcessingContent params={params} />
       </Suspense>
     </PageContainer>

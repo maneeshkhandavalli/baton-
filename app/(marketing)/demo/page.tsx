@@ -7,7 +7,7 @@ import { DemoTabs } from "@/components/marketing/demo-tabs";
 import { PublishedHandoverView } from "@/components/published/published-handover-view";
 import { loadReview } from "@/components/review/load-review";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
-import { LoadingState } from "@/components/shared/loading-state";
+import { WorkspaceSkeleton } from "@/components/shared/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import { CODECELL_ID } from "@/lib/mocks/fixtures/codecell";
 import { PROFILES } from "@/lib/mocks/fixtures/profiles";
@@ -41,7 +41,7 @@ export default function DemoPage() {
         <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         Everyone and everything here is fictional. Press J and K to move between points.
       </p>
-      <Suspense fallback={<LoadingState label="Loading the demo…" className="min-h-96" />}>
+      <Suspense fallback={<WorkspaceSkeleton label="Loading the demo…" />}>
         <DemoContent />
       </Suspense>
     </div>

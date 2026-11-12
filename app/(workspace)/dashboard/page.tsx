@@ -4,13 +4,13 @@ import { connection } from "next/server";
 import { FilePlus2, Inbox } from "lucide-react";
 import { Suspense } from "react";
 
-import { DraftRow, HandoverCard, HandoverCardSkeleton, type HandoverCardData } from "@/components/dashboard/handover-card";
+import { DraftRow, HandoverCard, type HandoverCardData } from "@/components/dashboard/handover-card";
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionHeading } from "@/components/shared/section-heading";
+import { DashboardSkeleton } from "@/components/shared/skeletons";
 import { buttonVariants } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { HandoverSummary } from "@/lib/contracts/dto";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
@@ -37,21 +37,6 @@ export default function DashboardPage() {
         <HandoverList newHandoverLink={newHandoverLink} />
       </Suspense>
     </PageContainer>
-  );
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-10" aria-busy="true" aria-label="Loading your handovers">
-      <div className="space-y-4">
-        <Skeleton className="h-4 w-40" />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <HandoverCardSkeleton />
-          <HandoverCardSkeleton />
-          <HandoverCardSkeleton />
-        </div>
-      </div>
-    </div>
   );
 }
 

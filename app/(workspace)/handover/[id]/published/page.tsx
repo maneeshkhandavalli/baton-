@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { PublishedHandoverView } from "@/components/published/published-handover-view";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { DocumentSkeleton } from "@/components/shared/skeletons";
 import { getQueries } from "@/lib/data";
 import { connection } from "next/server";
 
@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Published handover" };
 export default function PublishedPage({ params }: PageProps<"/handover/[id]/published">) {
   return (
     <PageContainer width="default">
-      <Suspense fallback={<LoadingState label="Opening the handover…" className="min-h-96" />}>
+      <Suspense fallback={<DocumentSkeleton />}>
         <PublishedContent params={params} />
       </Suspense>
     </PageContainer>

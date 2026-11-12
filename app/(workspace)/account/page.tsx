@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { AccountDeletion, type OutgoingOffer } from "@/components/account/account-deletion";
 import { CreatorOffers } from "@/components/account/creator-offers";
 import { PageContainer } from "@/components/layout/page-container";
-import { LoadingState } from "@/components/shared/loading-state";
+import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { getAccountDeletionBlockers } from "@/lib/actions/account";
 import { getQueries } from "@/lib/data";
@@ -16,7 +16,7 @@ export default function AccountPage() {
   return (
     <PageContainer width="narrow" className="space-y-8">
       <PageHeader eyebrow="Workspace" title="Account" description="Creatorship offers and account deletion." />
-      <Suspense fallback={<LoadingState label="Loading your account…" />}>
+      <Suspense fallback={<ListSkeleton label="Loading your account…" rows={2} />}>
         <AccountContent />
       </Suspense>
     </PageContainer>
