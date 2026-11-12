@@ -6,20 +6,21 @@ import { routes } from "@/lib/routes";
 
 export default function NotFound() {
   return (
-    <main
-      id="main"
-      className="flex min-h-dvh flex-col items-center justify-center gap-6 px-4 text-center"
-    >
+    <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 py-16 text-center">
       <BatonLogo />
-      <div className="space-y-2">
-        <h1 className="font-serif text-4xl">Page not found</h1>
-        <p className="text-sm text-muted-foreground">
-          This page doesn&rsquo;t exist, or the link has expired.
-        </p>
+      <p className="mt-12 type-eyebrow text-muted-foreground">404</p>
+      <h1 className="mt-3 type-page-title">This page isn&rsquo;t here</h1>
+      <p className="mt-3 max-w-md type-body text-muted-foreground">
+        The link may be mistyped, or the handover was removed or isn&rsquo;t shared with you. Private links can also expire.
+      </p>
+      <div className="mt-8 flex flex-wrap justify-center gap-2">
+        <Link href={routes.dashboard} className={buttonVariants({ size: "lg" })}>
+          Go to your dashboard
+        </Link>
+        <Link href={routes.home} className={buttonVariants({ size: "lg", variant: "outline" })}>
+          Baton home
+        </Link>
       </div>
-      <Link href={routes.home} className={buttonVariants({ variant: "outline", size: "lg" })}>
-        Back to Baton
-      </Link>
     </main>
   );
 }
