@@ -424,3 +424,39 @@ describe("R3-D5: raw cleanup on discard (deleteHandoverRawObjects)", () => {
     assert.deepEqual(await deleteHandoverRawObjects(retry.db, storageFailingFor().storage, actor, H), { deleted: 1, failed: 0 });
   });
 });
+
+describe("QA-R3-06: the handover segment of a raw path is checked", () => {
+  const OTHER_H = "22222222-2222-4222-8222-222222222222";
+  it("bound to the handover when the caller knows it", () => {
+    assert.ok(isOwnedRawPath(rawSourcePath(H, S), S, H));
+    assert.ok(isOwnedRawPath(rawSourcePath(H, S), S, H.toUpperCase()), "UUID case is not significant");
+    assert.ok(!isOwnedRawPath(rawSourcePath(OTHER_H, S), S, H), "same source id under another handover");
+    assert.ok(!isOwnedRawPath(`raw/h/${S}`, S, H), "placeholder handover segment");
+  });
+  it("without a handover id, a real (UUID) source path needs a UUID handover segment", () => {
+    assert.ok(isOwnedRawPath(rawSourcePath(OTHER_H, S), S), "shape only: any UUID handover");
+    for (const seg of ["h", "x", "0", "raw", "11111111-1111-4111-8111"]) assert.ok(!isOwnedRawPath(`raw/${seg}/${S}`, S), seg);
+  });
+  it("deleteHandoverRawObjects never touches a path under another handover", async () => {
+    const { db } = fakeDb({ list_deleted_handover_raw_paths: { data: [{ sourceId: S, rawStoragePath: rawSourcePath(OTHER_H, S) }] } });
+    const removed: string[][] = [];
+    const storage: StorageClient = {
+      from: () => ({
+        createSignedUploadUrl: async () => ({ data: null, error: null }),
+        download: async () => ({ data: null, error: null }),
+        remove: async (paths) => {
+          removed.push(paths);
+          return { data: [], error: null };
+        },
+      }),
+    };
+    assert.deepEqual(await deleteHandoverRawObjects(db, storage, actor, H), { deleted: 0, failed: 1 });
+    assert.deepEqual(removed, []);
+  });
+  it("deleteRawSource and the parse job refuse a placeholder handover segment on a real source path", async () => {
+    const { db, fns } = fakeDb({ raw_source_for_processing: { data: { raw_storage_path: `raw/x/${S}`, size_bytes: 1, sha256: "00", kind: "text" } } });
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, fakeStorage().storage, S), isCode("internal"));
+    await assert.rejects(deleteRawSource(db, fakeStorage().storage, S, `raw/x/${S}`), isCode("internal"));
+    assert.deepEqual(fns(), ["raw_source_for_processing"]);
+  });
+});

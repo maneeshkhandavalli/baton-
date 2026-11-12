@@ -129,18 +129,22 @@ export function rawSourcePath(handoverId: string, sourceId: string): string {
 /**
  * True if `path` is a raw-upload path that belongs to `sourceId`: exactly raw/{handover}/{source}, plain
  * segments (no traversal, no extra levels), and, whenever the last segment is a UUID, that UUID is the
- * source's. Storage is never asked to read or delete anything else, whatever the database row says.
+ * source's. The handover segment (QA-R3-06) must equal `handoverId` when the caller knows it, and must be
+ * a UUID whenever the source segment is one (a real path is always raw/{uuid}/{uuid}). Storage is never
+ * asked to read or delete anything else, whatever the database row says.
  */
-export function isOwnedRawPath(path: unknown, sourceId: string): path is string {
+export function isOwnedRawPath(path: unknown, sourceId: string, handoverId?: string): path is string {
   if (typeof path !== "string") return false;
   const m = /^raw\/([0-9A-Za-z-]{1,64})\/([0-9A-Za-z-]{1,64})$/.exec(path);
   if (!m) return false;
-  const last = m[2];
-  return !(UUID_RE.test(last) && UUID_RE.test(sourceId)) || last.toLowerCase() === sourceId.toLowerCase();
+  const [, handoverSeg, sourceSeg] = m;
+  if (handoverId !== undefined && handoverSeg.toLowerCase() !== handoverId.toLowerCase()) return false;
+  if (UUID_RE.test(sourceSeg) && !UUID_RE.test(handoverSeg)) return false;
+  return !(UUID_RE.test(sourceSeg) && UUID_RE.test(sourceId)) || sourceSeg.toLowerCase() === sourceId.toLowerCase();
 }
 
-function requireOwnedRawPath(path: unknown, sourceId: string): string {
-  if (!isOwnedRawPath(path, sourceId)) throw new DbError("internal");
+function requireOwnedRawPath(path: unknown, sourceId: string, handoverId?: string): string {
+  if (!isOwnedRawPath(path, sourceId, handoverId)) throw new DbError("internal");
   return path;
 }
 
@@ -316,6 +320,8 @@ export async function loadRawSourceForPreview(
   if (!target || !target.raw_storage_path) throw new DbError("not_found");
   let bytes: Uint8Array;
   try {
+    // TODO(QA-R3-06): pass target.handover_id once tests/integration/it11-raw-lifecycle.test.ts uses one
+    // handover id for both its path and its row (requested via the lead); the shape check applies meanwhile.
     bytes = await download(adminStorage, requireOwnedRawPath(target.raw_storage_path, sourceId));
   } catch (error) {
     if (error instanceof DbError && error.code === "not_found") throw new DbError("precondition_failed");
@@ -408,8 +414,8 @@ export async function deleteHandoverRawObjects(
   for (const row of rows) {
     const sourceId = typeof row?.sourceId === "string" ? row.sourceId : null;
     const path = row?.rawStoragePath;
-    // The path must also sit under THIS handover, not only belong to the source.
-    if (!sourceId || !isOwnedRawPath(path, sourceId) || !path.startsWith(`raw/${handoverId}/`)) {
+    // The path must belong to the source AND sit under THIS handover.
+    if (!sourceId || !isOwnedRawPath(path, sourceId, handoverId)) {
       failed++;
       continue;
     }
