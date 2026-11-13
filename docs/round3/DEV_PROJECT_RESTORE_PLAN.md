@@ -1,4 +1,4 @@
-# Restore plan: original dev project → `baton-dev` (xnwpppnzvrpthukxjfojj)
+# Restore plan: original dev project → `baton-dev` (xnwppnzvrpthukxjfojj)
 
 Status: **REHEARSED LOCALLY (both variants 27/27); NOT executed on any hosted project.** Source: verified backup
 `baton-multiagent/backup/20261113T063630Z/` (SHA-256 manifest re-checked: all 9 files OK). The original project
@@ -84,7 +84,7 @@ and auth metadata: keep them private and delete them after the restore.**
 ### Hosted sequence (each step needs explicit approval; verification between steps)
 | # | Command (in `restore-dev/`) | Writes? | Expected (anything else: stop) |
 |---|---|---|---|
-| 0 | user creates `backup/secrets/baton-dev.env` with one line `SUPABASE_DB_URL=postgresql://postgres.xnwpppnzvrpthukxjfojj:<pw>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres` | — | never printed; split into PG* variables in a 0600 temp file deleted on exit |
+| 0 | user creates `backup/secrets/baton-dev.env` with one line `SUPABASE_DB_URL=postgresql://postgres.xnwppnzvrpthukxjfojj:<pw>@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres` | — | never printed; split into PG* variables in a 0600 temp file deleted on exit |
 | 1 | `bash run-hosted.sh precheck` | no | `public_tables 0`, `history_table_exists 0`, `auth_users 0`, `source_uploads_bucket 0` |
 | 2 | `bash run-hosted.sh probe` | no (`begin; set local …; rollback`) | records `replica` or `noreplica` for phases 2–3 |
 | 3 | `bash run-hosted.sh phase1` | yes, 1 txn | `phase 1 committed` (any error: whole phase rolled back, project still empty) |
@@ -154,7 +154,7 @@ policy governs signed uploads by app users afterwards.
 
 ## 8. Application configuration for baton-dev
 - New file `baton-lead/.env.baton-dev` (ignored by the `.gitignore` rule `.env*`), created **by the user** after the
-  restore: baton-dev's `NEXT_PUBLIC_SUPABASE_URL=https://xnwpppnzvrpthukxjfojj.supabase.co`,
+  restore: baton-dev's `NEXT_PUBLIC_SUPABASE_URL=https://xnwppnzvrpthukxjfojj.supabase.co`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and **copies of the current** `IDENTITY_PEPPER`,
   `IDENTITY_PEPPER_VERSION=p1`, `IDENTITY_PEPPER_CANARY`, plus `CRON_SECRET`, `BATON_SITE_URL=http://localhost:3000`,
   `AI_PROVIDER=fake`, `BATON_ALLOW_FAKE_AI=1`.
