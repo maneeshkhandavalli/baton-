@@ -5,7 +5,7 @@
 // throw RangeError (review card and published view fell into the error boundary), and "2026-02-31" was
 // silently shown as 3 Mar. HARD since the fix.
 import assert from "node:assert/strict";
-import { describe, it, type TestContext } from "node:test";
+import { describe, it } from "node:test";
 
 import { buildFirstWeek } from "../../components/published/first-week";
 import { keyFacts } from "../../components/shared/key-facts";
@@ -36,19 +36,11 @@ describe("key facts never break a page on odd attribute values", () => {
   });
 });
 
-// QA-R3-12-R1 (P3, Agent 1, defence in depth): the first-week checklist formats a task's due date with
+// QA-R3-12-R1 (P3, Agent 1; fixed in aa9446f, HARD since): the first-week checklist formats a task's due date with
 // components/handover/format.ts#formatDate, which lets V8 roll an impossible day over ("2026-02-30" → 2 Mar)
 // and reads bare words as dates in 2001 ("March 5" → 5 Mar 2001). dueDate is z.iso.date() when written, but
-// published attributes are not re-validated on read (lib/db/mappers.ts mapPublishedHandover). Use
-// formatDayOrRaw there. PENDING until fixed; prints NOW HOLDS then.
-function pendingUntilFixed(t: TestContext, finding: string, check: () => void): void {
-  try {
-    check();
-    t.diagnostic(`NOW HOLDS ${finding}: make this a hard assertion (tests/integration/r3-key-facts.test.ts)`);
-  } catch (error) {
-    t.todo(`open ${finding}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
-  }
-}
+// published attributes are not re-validated on read (lib/db/mappers.ts mapPublishedHandover). The fix uses
+// formatDayOrRaw there.
 
 describe("first-week checklist due dates", () => {
   const handoverWithDue = (dueDate: string) =>
@@ -62,8 +54,8 @@ describe("first-week checklist due dates", () => {
   });
 
   for (const [dueDate, wrong] of [["2026-02-30", /Mar/], ["March 5", /2001/]] as const) {
-    it(`QA-R3-12-R1 (pending): due date ${JSON.stringify(dueDate)} is not shown as another date`, (t) => {
-      pendingUntilFixed(t, "QA-R3-12-R1", () => assert.doesNotMatch(detail(dueDate), wrong, `shown as "${detail(dueDate)}"`));
+    it(`QA-R3-12-R1: due date ${JSON.stringify(dueDate)} is not shown as another date`, () => {
+      assert.doesNotMatch(detail(dueDate), wrong, `shown as "${detail(dueDate)}"`);
     });
   }
 });

@@ -11,7 +11,7 @@
 // server, not from the component the real routes share. The browser check (tests/browser/run.mjs) stays
 // the authority for the real routes.
 import assert from "node:assert/strict";
-import { after, describe, it, type TestContext } from "node:test";
+import { after, describe, it } from "node:test";
 
 import { createElement, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -106,14 +106,6 @@ describe("QA: shared trees behind the preview runtime errors render deterministi
 
 // PI-11 guarded evidence (Agent 4 f52cfa6: PointDetail evidence carries guarded / modelVerdict). The review detail
 // panel is where a reviewer sees it; the published view never carries a verdict, so the guard has no surface there.
-function pendingUntilFixed(t: TestContext, finding: string, check: () => void): void {
-  try {
-    check();
-    t.diagnostic(`NOW HOLDS ${finding}: make this a hard assertion (tests/integration/r3-render-determinism.test.ts)`);
-  } catch (error) {
-    t.todo(`open ${finding}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
-  }
-}
 
 describe("QA: guarded evidence in the review detail panel", () => {
   const guardedPoint = (rationale: string) =>
@@ -152,11 +144,9 @@ describe("QA: guarded evidence in the review detail panel", () => {
     assert.doesNotMatch(html, />Supports</, "the replaced model verdict must not read as the verdict");
   });
 
-  it("QA-R3-21 (pending): the notice follows the guarded flag, not the rationale text", (t) => {
-    // Agent 1's isGuardedVerdict (components/shared/support-guard.ts:11) matches GUARD_RATIONALE's prefix because
-    // the DTO had no flag; now that e.guarded exists, a rewording of the server sentence must not hide the notice.
-    pendingUntilFixed(t, "QA-R3-21", () =>
-      assert.match(renderToString(panelElement("Not counted: instructions to an automated checker.")), /Possible instructions to an automated checker/),
-    );
+  it("QA-R3-21 (fixed in 507eedb): the notice follows the guarded flag, not the rationale text", () => {
+    // isGuardedVerdict used to match GUARD_RATIONALE's prefix (the DTO had no flag); since 507eedb it follows
+    // e.guarded, so a rewording of the server sentence cannot hide the notice.
+    assert.match(renderToString(panelElement("Not counted: instructions to an automated checker.")), /Possible instructions to an automated checker/);
   });
 });

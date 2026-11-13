@@ -2,8 +2,11 @@
 // Baton headless browser checks (Round 3, QA). NOT part of `npm test`: the lead runs it against the local dev
 // server. No dependencies beyond Node 22+ (global fetch + WebSocket) and an installed Chrome.
 //
-//   node tests/browser/run.mjs <outDir> <baseUrl> name:/path [name:/path ...] [--widths=1440,1024,390] [--no-keyboard] [--expect-404]
-//   --expect-404: every route must answer HTTP 404 (use it for the dev-only /preview routes against `next start`).
+//   node tests/browser/run.mjs <outDir> <baseUrl> name:/path[@status] [...] [--widths=1440,1024,390] [--no-keyboard] [--expect-404]
+//   name:/path@404: that route must answer exactly that HTTP status (e.g. notfound:/nope@404), so one run can mix
+//     normal routes and intentional error pages. Without a suffix, any status >= 400 fails.
+//   --expect-404: the default for routes without a suffix becomes 404 (the dev-only /preview routes against
+//     `next start`). A route that expects an error status skips the <h1> and "focusable element" checks.
 //   e.g. node tests/browser/run.mjs ./out/browser http://localhost:3000 home:/ login:/login demo:/demo
 //
 // For every route × width (1440x900, 1024x768, 390x844 mobile dpr 2) it records: final URL, horizontal overflow
@@ -33,7 +36,7 @@ const TAB_STOPS = 15;
 
 function usage(msg) {
   if (msg) console.error(`error: ${msg}`);
-  console.error("usage: node tests/browser/run.mjs <outDir> <baseUrl> name:/path [...] [--widths=1440,1024,390] [--no-keyboard] [--expect-404]");
+  console.error("usage: node tests/browser/run.mjs <outDir> <baseUrl> name:/path[@status] [...] [--widths=1440,1024,390] [--no-keyboard] [--expect-404]");
   process.exit(2);
 }
 
@@ -54,14 +57,15 @@ if (!outArg || !base || routeArgs.length === 0) usage();
 if (!isLocal(base)) usage(`refusing non-localhost base URL ${base}`);
 const routes = routeArgs.map((r) => {
   const i = r.indexOf(":");
-  if (i <= 0) usage(`route must be name:/path, got ${r}`);
+  if (i <= 0) usage(`route must be name:/path[@status], got ${r}`);
   const name = r.slice(0, i);
-  const path = r.slice(i + 1);
+  const statusSuffix = /@([1-5]dd)$/.exec(r.slice(i + 1));
+  const path = statusSuffix ? r.slice(i + 1, -statusSuffix[0].length) : r.slice(i + 1);
   if (!/^[A-Za-z0-9_-]+$/.test(name)) usage(`route name must be [A-Za-z0-9_-]: ${name}`);
   if (!path.startsWith("/")) usage(`route path must start with "/": ${path}`);
   const url = new URL(path, base).href;
   if (!isLocal(url)) usage(`refusing non-localhost route ${url}`);
-  return { name, url };
+  return { name, url, expectStatus: statusSuffix ? Number(statusSuffix[1]) : null };
 });
 const widthsFlag = flags.find((f) => f.startsWith("--widths="));
 const widths = (widthsFlag ? widthsFlag.slice(9).split(",") : ["1440", "1024", "390"]).map((w) => {
@@ -70,6 +74,7 @@ const widths = (widthsFlag ? widthsFlag.slice(9).split(",") : ["1440", "1024", "
 });
 const keyboard = !flags.includes("--no-keyboard");
 const expect404 = flags.includes("--expect-404");
+for (const r of routes) r.expectStatus ??= expect404 ? 404 : null;
 const CHROME = process.env.BATON_CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 if (!existsSync(CHROME)) usage(`Chrome not found at ${CHROME} (set BATON_CHROME)`);
 const outDir = resolve(outArg);
@@ -255,14 +260,17 @@ try {
         consoleErrors, blockedRequests: blocked, screenshot: file,
         keyboard: keyboard ? { stops: stops.length, missingIndicator: stops.filter((s) => !s.indicator && s.tag !== "nextjs-portal") /* Next.js dev overlay, not app UI */, detail: stops } : null,
       };
+      const expected = route.expectStatus; // per-route @status, or 404 under --expect-404, else null
+      const errorPage = expected !== null && expected >= 400;
+      result.expectedStatus = expected;
       result.problems = [
         !loadFired && "load event did not fire",
-        // --expect-404 (e.g. the dev-only /preview routes against a production build): any other status fails.
-        expect404 && layout.status !== 404 && `HTTP ${layout.status} (expected 404)`,
-        !expect404 && layout.status !== null && layout.status >= 400 && `HTTP ${layout.status}`,
+        // An expected status must match exactly (an unknown status, null, fails too); otherwise any >= 400 fails.
+        expected !== null && layout.status !== expected && `HTTP ${layout.status} (expected ${expected})`,
+        expected === null && layout.status !== null && layout.status >= 400 && `HTTP ${layout.status}`,
         !result.finalUrlLocal && "ended on a non-localhost URL",
         result.overflowPx > 0 && `horizontal overflow ${result.overflowPx}px`,
-        !expect404 && result.h1 !== 1 && `${result.h1} <h1> elements (expected 1)`,
+        !errorPage && result.h1 !== 1 && `${result.h1} <h1> elements (expected 1)`,
         // A too-wide element only matters when it actually makes the page scroll sideways (decorative backdrops are clipped).
         result.overflowPx > 0 && result.wide.length > 0 && `${result.wide.length} element(s) wider than the viewport`,
         // QA review of 38f0e98: if <html>/<body> clip horizontally, overflowPx is always 0 and real content that
@@ -270,7 +278,7 @@ try {
         result.overflowPx <= 0 && layout.clipsX && result.wide.length > 0 && `${result.wide.length} element(s) wider than the viewport, hidden by overflow-x clipping on html/body`,
         consoleErrors.length > 0 && `${consoleErrors.length} console error(s)`,
         blocked.length > 0 && `${blocked.length} non-localhost request(s) blocked`,
-        keyboard && !expect404 && stops.length === 0 && "no keyboard-focusable element reached",
+        keyboard && !errorPage && stops.length === 0 && "no keyboard-focusable element reached",
         keyboard && result.keyboard.missingIndicator.length > 0 && `${result.keyboard.missingIndicator.length} focus stop(s) without a visible indicator`,
       ].filter(Boolean);
       if (result.problems.length) failures++;
