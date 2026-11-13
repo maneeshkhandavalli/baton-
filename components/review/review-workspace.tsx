@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Keyboard, ListFilter, Lock, SearchX } from "lucide-react";
+import { Keyboard, ListFilter, Lock, Plus, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -25,6 +25,7 @@ import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
 import { cn } from "@/lib/utils";
 
+import { AddPointDialog } from "./add-point-dialog";
 import { PointCard, type PointAction } from "./point-card";
 import { PointDetailPanel } from "./point-detail-panel";
 import { ReadinessPanel, type SectionFilter } from "./readiness-panel";
@@ -61,6 +62,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   const [sheetOpen, setSheetOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [summary, setSummary] = useState("");
   const { run, isPending, error, clearError } = useAction();
   const cardRefs = useRef(new Map<string, HTMLElement>());
@@ -180,7 +182,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
     }
   }
 
-  const anyModal = dialog !== null || sheetOpen || publishOpen || helpOpen;
+  const anyModal = dialog !== null || sheetOpen || publishOpen || helpOpen || addOpen;
   useHotkeys(
     {
       j: () => move(1),
@@ -208,6 +210,15 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   }
 
   const canPublishNow = handover.viewerIsCreator && handover.state === "in_review" && !readOnly;
+  // P1-1: review roles add knowledge the AI missed (create_manual_point: in_review only).
+  const canAddPoint = !readOnly && handover.state === "in_review";
+  function openAddPoint() {
+    if (preview) {
+      toast.info("Preview only: actions are turned off and nothing is saved.");
+      return;
+    }
+    setAddOpen(true);
+  }
 
   const detail = selected && (
     <PointDetailPanel
@@ -290,7 +301,13 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
               </FilterChip>
             ))}
           </div>
-          <Button size="sm" variant="ghost" className="ml-auto hidden sm:inline-flex" onClick={() => setHelpOpen(true)}>
+          {canAddPoint && (
+            <Button size="sm" variant="outline" className="ml-auto" onClick={openAddPoint}>
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              Add a point
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className={cn("hidden sm:inline-flex", !canAddPoint && "ml-auto")} onClick={() => setHelpOpen(true)}>
             <Keyboard aria-hidden="true" data-icon="inline-start" />
             Shortcuts
           </Button>
@@ -357,6 +374,19 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       </Dialog>
 
       <ReviewDialogs state={dialog} onClose={() => setDialog(null)} onSubmit={submit} pending={isPending} fieldErrors={error?.fieldErrors} />
+      {canAddPoint && !preview && (
+        <AddPointDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          handoverId={handover.id}
+          onCreated={(point) => {
+            setSection("all");
+            setStatus("all");
+            setReview("all");
+            select(point.id);
+          }}
+        />
+      )}
 
       <Dialog open={publishOpen} onOpenChange={(o) => !isPending && setPublishOpen(o)}>
         <DialogContent>
