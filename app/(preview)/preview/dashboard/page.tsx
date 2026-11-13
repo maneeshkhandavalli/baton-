@@ -16,7 +16,8 @@ import type { HandoverSummary } from "@/lib/contracts/dto";
 import { MOCK_VIEWER_ID } from "@/lib/mocks/fixtures/profiles";
 import { createMockQueries } from "@/lib/mocks/queries";
 
-export const metadata: Metadata = { title: "Preview · Dashboard", robots: { index: false, follow: false } };
+// Titles only in development: a production 404 for this route must not name it.
+export const metadata: Metadata = { ...(process.env.NODE_ENV === "development" ? { title: "Preview · Dashboard" } : {}), robots: { index: false, follow: false } };
 
 /** Dev-only: the dashboard from synthetic data (lib/mocks). `?empty=1` shows the empty state. */
 export default function PreviewDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

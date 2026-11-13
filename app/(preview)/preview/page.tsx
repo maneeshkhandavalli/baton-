@@ -6,7 +6,8 @@ import { PageContainer } from "@/components/layout/page-container";
 import { PREVIEW_PAGES } from "@/components/preview/preview-chrome";
 import { PageHeader } from "@/components/shared/page-header";
 
-export const metadata: Metadata = { title: "Design previews", robots: { index: false, follow: false } };
+// Titles only in development: a production 404 for this route must not name it.
+export const metadata: Metadata = { ...(process.env.NODE_ENV === "development" ? { title: "Design previews" } : {}), robots: { index: false, follow: false } };
 
 const VARIANTS: Record<string, Array<{ href: string; label: string }>> = {
   Dashboard: [

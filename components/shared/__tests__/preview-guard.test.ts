@@ -40,6 +40,13 @@ describe("dev-only preview routes", () => {
       assert.match(src, /robots:\s*\{\s*index:\s*false/);
     });
 
+    it(`${rel}: a title only in development (a production 404 must not name the preview)`, () => {
+      const meta = /export const metadata: Metadata = (.*);/.exec(src)?.[1] ?? "";
+      assert.ok(meta, "metadata export not found");
+      const unconditional = meta.replace(/\.\.\.\(process\.env\.NODE_ENV === "development" \? \{ title: "[^"]*" \} : \{\}\)/, "");
+      assert.doesNotMatch(unconditional, /title/, "unconditional metadata title");
+    });
+
     it(`${rel}: no server actions, Supabase or live queries`, () => {
       assert.doesNotMatch(src, /@\/lib\/actions|@\/lib\/supabase|@\/lib\/data["/]/);
     });

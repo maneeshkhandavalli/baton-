@@ -12,7 +12,8 @@ import { CODECELL_ID } from "@/lib/mocks/fixtures/codecell";
 import { PROFILES } from "@/lib/mocks/fixtures/profiles";
 import { createMockQueries } from "@/lib/mocks/queries";
 
-export const metadata: Metadata = { title: "Preview · Review", robots: { index: false, follow: false } };
+// Titles only in development: a production 404 for this route must not name it.
+export const metadata: Metadata = { ...(process.env.NODE_ENV === "development" ? { title: "Preview · Review" } : {}), robots: { index: false, follow: false } };
 
 /**
  * Dev-only: the review workspace on the CodeCell fixture with live-looking actions (they only show a

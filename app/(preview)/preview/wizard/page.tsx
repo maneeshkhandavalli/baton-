@@ -11,7 +11,8 @@ import { blankSource, type DraftSource } from "@/components/wizard/draft-state";
 import type { MaskKind } from "@/lib/contracts/enums";
 import { mockPreview } from "@/lib/mocks/fixtures/preview";
 
-export const metadata: Metadata = { title: "Preview · New handover", robots: { index: false, follow: false } };
+// Titles only in development: a production 404 for this route must not name it.
+export const metadata: Metadata = { ...(process.env.NODE_ENV === "development" ? { title: "Preview · New handover" } : {}), robots: { index: false, follow: false } };
 
 const NOW = Date.parse("2026-11-01T09:00:00Z");
 const TZ = "Asia/Kolkata";

@@ -6,7 +6,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { OutdatedBadge } from "@/components/handover/badges";
 import { attributeRows } from "@/components/handover/attributes";
 import { formatDate } from "@/components/handover/format";
-import { HANDOVER_SECTIONS, categoryLabel, memberRoleLabel } from "@/components/handover/labels";
+import { HANDOVER_SECTIONS, categoryLabel, memberRoleLabel, type HandoverSectionId } from "@/components/handover/labels";
 import { EvidenceQuote } from "@/components/review/evidence-quote";
 import { KEY_FACT_LABELS, keyFacts } from "@/components/shared/key-facts";
 import { KeyFactsStrip } from "@/components/shared/key-facts-strip";
@@ -35,6 +35,9 @@ interface PublishedHandoverViewProps {
 }
 
 type Point = { id: string; content: PublishedPointContent; category: PointCategory };
+
+/** Shorter labels for the narrow "at a glance" cells (the section headings keep the full label). */
+const STAT_LABEL: Partial<Record<HandoverSectionId, string>> = { risks: "Risks", access: "Access" };
 
 /**
  * Rendered under the page's own h1 (handover header or demo title), so the document title is an h2,
@@ -99,11 +102,12 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
 
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
             {[
-              ...groups.slice(0, 3).map((g) => ({ id: g.id, label: g.label, value: g.points.length })),
+              ...groups.slice(0, 3).map((g) => ({ id: g.id, label: STAT_LABEL[g.id] ?? g.label, value: g.points.length })),
               { id: "open-questions", label: "Open questions", value: gaps.length },
             ].map((s) => (
-              <div key={s.id} className="bg-card px-4 py-3">
-                <dt className="type-eyebrow text-muted-foreground">{s.label}</dt>
+              <div key={s.id} className="min-w-0 bg-card px-4 py-3">
+                {/* Wrap between words only: a long uppercase label never splits mid-word. */}
+                <dt className="type-eyebrow text-muted-foreground [overflow-wrap:normal]">{s.label}</dt>
                 <dd className="mt-1 font-display text-3xl leading-none tabular-nums">
                   {s.value > 0 ? (
                     <a href={`#${s.id}`} className="rounded-sm hover:text-primary-fg">
