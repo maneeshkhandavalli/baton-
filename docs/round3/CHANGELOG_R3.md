@@ -111,20 +111,23 @@ worker commit it was cherry-picked from (`lead` = lead commit). Verification is 
 | 98 | `57b9461` | `aa9446f` | fix(ui): QA-R3-12-R1 — first-week due dates never roll over or guess | |
 | 99 | `c9797ac` | `507eedb` | feat(ui): PI-11 — review reads EvidenceItem.guarded instead of the rationale text | |
 | 100 | `186d070` | `283f2fb` | fix(ui): QA-R3-16 — confirm validation_failed messages follow details.reason | |
+| 101 | `41f6dc6` | `1b3a54f` | fix(ui): preview titles dev-only; published stat labels wrap between words | |
+| 102 | `dcfc98e` | `f391a16` | test(qa-r3): QA-R3-12-R1 and QA-R3-21 hard; QA-R3-16 action-level check; harness per-route status | |
+| 103 | `351423c` | `62176fa` | docs(round3): add migration #18 (api_get_point guard fields) to the hosted-apply plan; upgrade test covers it | |
+| 104 | `1e678b8` | `lead` | fix(round3): evidence guard fields stay undefined when the read lacks them (UI rationale fallback) | |
 
-## Verification (integration HEAD 186d070)
-- `npm test`: contracts 104, db 235, parsers+privacy 581, ui 147, ai 238, actions 152, pipeline 118, integration 338 (0 fail; 1 todo = D11-LIVE-1, a live-suite case by design)
-- SQL (Docker): PG17 20/20, PG15 20/20 · integration SQL 10/10 (0 open findings) · Tier E E2E 4/4
-- Upgrade-path test (populated DB, all 18 R3 migrations in order): 19/19 PASS incl. verify.sql
-- `tsc --noEmit` 0 · `eslint .` clean · `next build` PASS at 186d070
-- Production (`next start`): every /preview route returns 404, no mock data in the response (P3: the /preview index title remains in the 404 payload)
-- Browser harness (clean dev server, 1440/1024/390): home, login, demo, all /preview routes (dashboard, wizard 1–4, review, published, processing running/partial/failed/schema) PASS: 0 overflow, 1 h1, visible keyboard focus, no console errors
+## Verification (integration HEAD 1e678b8)
+- `npm test` suites: contracts 104, db 235, parsers+privacy 581, ui 154, ai 238, actions 152, pipeline 118, integration 349 (0 fail; 1 todo = D11-LIVE-1, a live-suite case by design)
+- SQL (Docker, at 186d070, no SQL changed since): PG17 20/20, PG15 20/20 · integration SQL 10/10 (0 open findings) · Tier E E2E 4/4
+- Upgrade-path test (populated DB, all 18 R3 migrations in order, api_get_point snapshot included): PG17 PASS (Agent 2), PG15 19/19 PASS (lead, 1e678b8)
+- `tsc --noEmit` 0 · `eslint .` clean · `next build` PASS at 186d070 (re-run pending: host memory critically low)
+- Production (`next start`, 186d070): every /preview route 404 with no mock data; titles now dev-only (41f6dc6)
+- Browser harness (clean dev server, 1440/1024/390, 186d070): home, login, demo, all /preview routes PASS
   Screenshots: baton-multiagent/verification/browser-public, browser-preview-2, browser-final
+- Dev server stopped by Claude Code under memory pressure; final browser pass + build re-run pending a restart
 
 ## Implemented, not integrated
-- Agent 1: published stat-label wrap at 1024; generic preview metadata (in progress)
-- Agent 2: migration plan #18 (300900) + verify.sql coverage (in progress)
-- Agent 5: flips QA-R3-12-R1/QA-R3-21; harness per-route expected status; QA-R3-16 action-level check (in progress)
+- (none: every worker commit is integrated; agent 2's local merge 980bfb7 holds no changes)
 
 ## Not yet implemented / open
 - Live browser verification (Chrome extension not connected) — authenticated routes at 390/1024/1440
