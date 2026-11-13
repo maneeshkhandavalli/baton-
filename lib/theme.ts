@@ -7,6 +7,10 @@
  * flashes light; the root layout marks <html> with suppressHydrationWarning because that class is added
  * before React hydrates.
  *
+ * The script is served as a static file (`THEME_INIT_SRC`, public/theme-init.js) and loaded with a blocking
+ * <script src>, not inlined: rendering code never uses raw-HTML escape hatches (IT-04). The public file is
+ * generated from `themeInitScript` and a test keeps the two byte-identical.
+ *
  * Isomorphic: nothing here touches the DOM at import time, so server layouts and node tests can use it.
  */
 
@@ -25,11 +29,16 @@ export function parseTheme(value: unknown): Theme {
   return value === "dark" ? "dark" : DEFAULT_THEME;
 }
 
+/** Where the init script is served from (public/theme-init.js). */
+export const THEME_INIT_SRC = "/theme-init.js";
+
 /**
- * Blocking inline script for <head>. Kept tiny and dependency-free: it must run before the body
- * paints. Storage can throw (private mode, blocked site data); then the page simply stays light.
+ * Source of truth for public/theme-init.js, a blocking script in <head>. Kept tiny and dependency-free:
+ * it must run before the body paints. Storage can throw (private mode, blocked site data); then the page
+ * simply stays light. After changing it, regenerate the file:
+ *   node --import ./lib/mocks/__tests__/resolve-ui.mjs -e "import('@/lib/theme').then(m=>require('fs').writeFileSync('public/theme-init.js',m.themeInitScript+'\n'))"
  */
-export const themeInitScript = `(function(){try{if(localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)})==="dark"){document.documentElement.classList.add("dark");document.addEventListener("DOMContentLoaded",function(){var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",${JSON.stringify(THEME_COLOR.dark)})})}}catch(e){}})();`;
+export const themeInitScript = `(function(){try{if(localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)})==="dark"){document.documentElement.classList.add("dark");document.addEventListener("DOMContentLoaded",function(){var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",${JSON.stringify(THEME_COLOR.dark)})})}}catch{}})();`;
 
 /** Applies a theme to the live document. Client only. */
 export function applyTheme(theme: Theme, { animate = false }: { animate?: boolean } = {}): void {

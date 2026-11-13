@@ -1,0 +1,1 @@
+(function(){try{if(localStorage.getItem("baton-theme")==="dark"){document.documentElement.classList.add("dark");document.addEventListener("DOMContentLoaded",function(){var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content","#0f1320")})}}catch{}})();
