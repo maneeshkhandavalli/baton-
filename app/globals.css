@@ -17,8 +17,9 @@
  *                            — how well a handover point is backed. Only for evidence.
  * Each tone has: base (marks, dots, solid fills), -fg (text on paper/soft), -soft (tints).
  *
- * Dark mode: the `.dark` block below is complete; it is opt-in (class on <html>) until every
- * route has been verified in dark (see the design doc, "Dark mode").
+ * Dark mode: the `.dark` block below is switched on by the `dark` class on <html>. Light is the
+ * default; the visitor's choice is stored on the device and applied before first paint
+ * (lib/theme.ts, components/shared/theme-toggle.tsx; design doc 3.2).
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -257,9 +258,11 @@
   --input: #5f6782;
   --ring: #8d9cf7;
   --overlay: rgb(5 7 14 / 0.6);
-  --inverse: #f3efe7;
-  --inverse-foreground: #151c33;
-  --inverse-muted: #5a6177;
+  /* Bands (marketing privacy band, acknowledge band) stay dark in dark mode: a lifted navy panel
+     rather than a cream slab that would glare against the night paper. */
+  --inverse: #1d2542;
+  --inverse-foreground: #eef0f6;
+  --inverse-muted: #a9b1c7;
 
   --primary: #8d9cf7;
   --primary-hover: #a5b1fa;

@@ -3,17 +3,20 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
+import { useTheme } from "@/hooks/use-theme"
+
 /**
  * Toasts confirm the result of an action the user just took ("Point approved", "Draft
  * discarded"). They are never the only place an error or a persistent state is shown:
  * inline messages carry anything the user must act on (docs/design/design-system.md → Toasts).
  *
- * Baton ships light by default; pass `theme` when dark mode is turned on.
+ * Follows the app theme (hooks/use-theme.ts) unless `theme` is passed.
  */
-const Toaster = ({ theme = "light", ...props }: ToasterProps) => {
+const Toaster = ({ theme, ...props }: ToasterProps) => {
+  const { theme: appTheme } = useTheme()
   return (
     <Sonner
-      theme={theme}
+      theme={theme ?? appTheme}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4 text-success" />,

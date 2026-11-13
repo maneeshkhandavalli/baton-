@@ -1,17 +1,22 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { fontVariables } from "@/lib/fonts";
+import { applyTheme, readStoredTheme } from "@/lib/theme";
 
 import "./globals.css";
 
 /**
  * Last-resort boundary when the root layout itself fails (QA-R3-15). It replaces the whole
- * document, so it renders its own <html>/<body> and loads the tokens itself. It never shows the
- * raw error message; the digest is a support reference only.
+ * document, so it renders its own <html>/<body> and loads the tokens itself, and re-applies the saved
+ * theme (the root layout's theme script is gone). It never shows the raw error message; the digest is
+ * a support reference only.
  */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => applyTheme(readStoredTheme()), []);
   return (
-    <html lang="en" className={`${fontVariables} h-full`}>
+    <html lang="en" className={`${fontVariables} h-full`} suppressHydrationWarning>
       <body className="min-h-full bg-background font-sans text-foreground">
         <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 py-16 text-center">
           <p className="type-eyebrow text-muted-foreground">Baton</p>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BatonLogo } from "@/components/shared/baton-logo";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ export function SiteHeader() {
           <Link href={routes.login} className={cn(buttonVariants({ variant: "ghost" }), "px-2.5 sm:px-3")}>
             Sign in
           </Link>
+          <ThemeToggle />
           <Link href={routes.dashboard} className={cn(buttonVariants(), "hidden sm:inline-flex")}>
             Open workspace
           </Link>

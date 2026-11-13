@@ -113,9 +113,19 @@ All `-fg` on `-soft` pairs are ≥ 5.4:1; solid buttons ≥ 5.3:1 with white tex
 ### 3.2 Colour — dark
 
 Complete parallel set in `.dark` (deep navy `#0f1320` paper, `#161b2b` sheets, `#e9ebf2` ink, lifted tones
-e.g. primary `#8d9cf7` with ink text, conflicting `#e06aa6`, all fg/soft pairs ≥ 7:1). **Opt-in** (class
-on `<html>`), not switched on in Round 3: turning it on needs every route checked in dark plus a theme
-toggle — proposed for after milestone 2.
+e.g. primary `#8d9cf7` with ink text, conflicting `#e06aa6`, all fg/soft pairs ≥ 7:1). Inverse bands stay
+dark in dark mode: a lifted navy panel (`#1d2542`, ink `#eef0f6`, muted `#a9b1c7`), never a cream slab.
+
+**Switching.** Light is the default. The visitor's choice is stored on the device only
+(`localStorage["baton-theme"]`: no cookie, no database column) and applied as the `dark` class on `<html>`
+by a blocking `<head>` script before first paint, so a saved dark choice never flashes light
+(`lib/theme.ts`; `<html suppressHydrationWarning>` in `app/layout.tsx`). `hooks/use-theme.ts` reads the class,
+keeps every toggle and the toaster in step, and follows a change made in another tab.
+
+**Toggle** (`components/shared/theme-toggle.tsx`, a toggle button labelled "Dark theme" with `aria-pressed`;
+moon/sun icon chosen by CSS so it is right before hydration): workspace sidebar logo row (desktop),
+workspace top bar (below `lg`), marketing header, top-right corner of the sign-in page, and the private-link
+header (`/g`, `/h`).
 
 ### 3.3 Typography
 

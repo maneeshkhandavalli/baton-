@@ -20,7 +20,7 @@ const badgeVariants = cva(
         success: "border-success/20 bg-success-soft text-success-fg",
         warning: "border-warning/25 bg-warning-soft text-warning-fg",
         danger: "border-destructive/20 bg-destructive-soft text-destructive-fg",
-        inverse: "border-inverse bg-inverse text-inverse-foreground",
+        inverse: "border-inverse bg-inverse text-inverse-foreground dark:border-inverse-muted/45",
         sourced: "border-status-sourced/20 bg-status-sourced-soft text-status-sourced-fg",
         inferred: "border-status-inferred/25 bg-status-inferred-soft text-status-inferred-fg",
         conflicting: "border-status-conflicting/20 bg-status-conflicting-soft text-status-conflicting-fg",
