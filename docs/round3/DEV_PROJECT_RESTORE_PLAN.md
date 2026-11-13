@@ -144,7 +144,11 @@ The restore scripts never write `storage.*`; the object is uploaded only through
 created by baseline migration `20261111001000_storage.sql` (`insert into storage.buckets … on conflict` and
 `create policy … on storage.objects`), exactly as on the original project, because phase 1 replays the migrations
 verbatim. If you prefer the bucket to be created through the Storage API too, it can be created via the API before
-phase 1; the migration's `on conflict` then only re-asserts `public = false` and the 25 MB limit. **Please choose.**
+phase 1; the migration's `on conflict` then only re-asserts `public = false` and the 25 MB limit.
+
+**DECISION (user, 2026-11-13): option A.** The baseline migration is replayed unchanged, including its creation and
+configuration of `source-uploads` through `storage.buckets`. The bucket is NOT created through the Storage API
+beforehand. The Storage object is uploaded only through the Storage API, after the database restoration (step 8).
 Access: the service-role key bypasses RLS for the restore upload; the migration's `baton_source_uploads_insert`
 policy governs signed uploads by app users afterwards.
 
@@ -172,7 +176,7 @@ policy governs signed uploads by app users afterwards.
 3. The restored auth row keeps the old password-hash/confirmation fields; sign-in is by magic link, so this is inert;
    old sessions are intentionally not restored.
 4. The data is the 12:06 IST snapshot of the original project.
-5. Bucket creation via migration SQL (decision in §7).
+5. Bucket creation via migration SQL: decided (option A, §7).
 
 ## 10. Rollback
 baton-dev is new and isolated; no script can contact the original project (the runner refuses its ref).
