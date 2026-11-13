@@ -3,7 +3,7 @@
 Owner: Agent 2 (R3-C8). Status: **LOCAL ONLY. Nothing in this document has been applied to hosted Supabase.**
 **Every migration below needs approval before it is applied to a hosted project.**
 
-This document covers all 17 Round 3 migrations, from every worker. For each one it gives:
+This document covers all 18 Round 3 migrations, from every worker. For each one it gives:
 - where it sits in the global apply order;
 - what kind of change it is;
 - what it depends on;
@@ -12,7 +12,7 @@ This document covers all 17 Round 3 migrations, from every worker. For each one 
 - which app code needs it.
 
 §5 is the hosted-apply runbook. All of it was checked with `supabase/tests/upgrade/run.sh`. That test applies the baseline,
-loads realistic data, then applies Round 3 on top. It passed on Docker PG 17 and PG 15.
+loads realistic data, then applies Round 3 on top. It passed on Docker PG 17 (18 migrations) and PG 15 (17 migrations; the PG 15 re-run with #18 is pending, §4).
 
 ## 1. Global apply order
 
@@ -37,12 +37,14 @@ Migrations apply in file-name order. The Supabase CLI and both local runners do 
 | 15 | `20261113300600_revoke_mark_source_parse_failed.sql` | Agent 4 | **revoke**: `mark_source_parse_failed` |
 | 16 | `20261113300700_processing_status_partial.sql` | Agent 4 | replace, same signature (`api_get_processing_status`); **changes stage-status values** |
 | 17 | `20261113300800_claim_generation.sql` | Agent 4 | additive column (backfilled); replace, same signature (`_remember_claim_progress`, `_pipeline_claim`, `heartbeat_processing_job`); 8 new `pipeline_*` overloads; **tightens the attempt-only fence and the heartbeat** |
+| 18 | `20261113300900_point_evidence_guard_fields.sql` | Agent 4 | replace, same signature (`api_get_point`); adds two JSON keys per evidence item |
 
 Every replacement keeps its signature, so `CREATE OR REPLACE` keeps the existing grants. Every new API-callable
 function is `SECURITY DEFINER` with `set search_path = ''` and is granted to `service_role` only; browser roles get
 nothing. (#17's internal helper `_pipeline_use_generation` is executable by no API role at all; only the
-`SECURITY DEFINER` overloads call it, as its owner.) Three read functions stay `SECURITY INVOKER`, so RLS still
-controls what they return: #4 (`api_list_my_handovers`, `api_get_handover`) and #16 (`api_get_processing_status`).
+`SECURITY DEFINER` overloads call it, as its owner.) Four read functions stay `SECURITY INVOKER`, so RLS still
+controls what they return: #4 (`api_list_my_handovers`, `api_get_handover`), #16 (`api_get_processing_status`) and
+#18 (`api_get_point`).
 No migration changes or drops a table, column or policy. There are two schema additions:
 - #11 adds a nullable column, with no rewrite and no row writes.
 - #17 adds `processing_jobs.claim_generation bigint not null default 0`. On PG 11+ that is a metadata-only change,
@@ -101,6 +103,19 @@ Order matters only in the cases below. Everything else can go in any order.
      `db_schema_outdated`. Run `notify pgrst, 'reload schema';` after the apply if in doubt.
 7. **These are safe in either order relative to the app:**
    - #4: the mapper treats a missing `description` as `null`.
+   - #18 (checked in `lib/db/mappers.ts`):
+     - Every app build tolerates the two new keys. `pointDetailRow` (`mappers.ts:438`) and its evidence item
+       (`mappers.ts:462-482`) are plain `z.object`, which drops unknown keys. The same was true before PI-11
+       (`f52cfa6^`), so an older build ignores `guarded` / `model_verdict`.
+     - The PI-11 build accepts their absence: `guarded: z.boolean().optional()` and
+       `model_verdict: z.enum(["supports", "partial"]).nullable().optional()` (`mappers.ts:476-477`).
+     - **Minor gap.** Without #18, the PI-11 build shows a guarded verdict as not guarded. The cause:
+       - `mappers.ts:537` maps a missing `guarded` to `false`, not `undefined`;
+       - so `isGuardedVerdict` (`components/shared/support-guard.ts:12`) never reaches its rationale-text
+         fallback.
+
+       The guard rationale text is still displayed. Production has no AI provider, so no guarded verdict exists
+       there yet. This is not a blocker.
    - #7: `deleteHandover` ignores a failed raw cleanup.
    - #9: `storage.ts` treats `kind` as optional.
    - #8: app code only marks a raw delete after a parse, a remove, or a discard.
@@ -415,6 +430,36 @@ Order matters only in the cases below. Everything else can go in any order.
      and not has_function_privilege('authenticated', 'public.heartbeat_processing_job(uuid,integer,integer,integer,integer)', 'EXECUTE');
   ```
 
+### #18 `20261113300900_point_evidence_guard_fields.sql` (Agent 4, PI-11; lead-approved additive contract change)
+- **Changes:** replaces `api_get_point(uuid)`. The signature, the `authenticated` grant, `SECURITY INVOKER`
+  (so RLS) and every existing key are unchanged. Each evidence item gains two keys:
+  - **`guarded`** (boolean): true only while `support_verdict = 'irrelevant'` and
+    `verifier_provenance -> 'injectionGuard' ->> 'guarded'` is the JSON `true`.
+  - **`model_verdict`** (`'supports'` | `'partial'` | null): the verdict the model gave before the guard. It is set
+    only when `guarded` is true, and any other value reads as null.
+
+  Both are derived at read time from the provenance the verify_support stage already stores, which holds pattern
+  ids and verdicts only. No pattern id or raw provenance reaches the read. A later reset or a new verdict clears
+  both.
+- **Depends on:** the baseline only (`point_evidence.verifier_provenance` exists since the baseline). It writes
+  nothing, and no table, column, grant or RLS changes.
+- **Data note:** a verdict guarded before the apply is exposed as soon as #18 is applied, because the marker is
+  already in its stored provenance. The upgrade test seeds one (`seed.sql`, pr2).
+- **Needed by / coupling:** the review UI (`components/shared/support-guard.ts`, PI-11 `c9797ac`) via
+  `EvidenceItem.guarded` / `modelVerdict` (`lib/contracts/dto.ts:205-207`, `lib/db/mappers.ts:476-477,537-538`).
+  Safe in either order relative to the app (§2.7). See §2.7 for the minor gap when the PI-11 build runs without
+  #18.
+- **Rollback:** re-run `api_get_point` from `20261111000900_read_api.sql` (line 160) as `create or replace`. The
+  grants are kept. The app then reads `guarded = false` and `modelVerdict = null` for every item.
+- **Verify:**
+  ```sql
+  select pg_get_functiondef('public.api_get_point(uuid)'::regprocedure) like '%''model_verdict''%'
+     and pg_get_functiondef('public.api_get_point(uuid)'::regprocedure) like '%''guarded''%'
+     and not (select prosecdef from pg_proc where oid = 'public.api_get_point(uuid)'::regprocedure)
+     and has_function_privilege('authenticated', 'public.api_get_point(uuid)', 'EXECUTE')
+     and not has_function_privilege('anon', 'public.api_get_point(uuid)', 'EXECUTE');
+  ```
+
 ## 4. Upgrade-path test
 
 `supabase/tests/upgrade/run.sh` runs in Docker only, never against a hosted project. It does four things:
@@ -428,10 +473,13 @@ Order matters only in the cases below. Everything else can go in any order.
    - a discarded draft whose upload is still in Storage;
    - a run with mixed stage outcomes.
 
-   It then snapshots every read through RLS: 4 users × 5 handovers × 6 read functions, plus each user's list.
+   It then snapshots every read through RLS: 4 users × 5 handovers × 6 read functions, each user's list, and
+   `api_get_point` for the 4 pre-upgrade points. One of those points carries a verdict that the PI-11 guard
+   demoted before the upgrade.
    The mixed-outcome run is recorded separately, because #16 changes its reads on purpose.
 3. **Apply and compare.** Applies each Round 3 migration **one at a time**. After each one it diffs every read
-   against the snapshot, ignoring only the `description` key that #4 adds.
+   against the snapshot. It ignores only the keys added on purpose: `description` (#4) on handover objects, and
+   `guarded` / `model_verdict` (#18) on evidence items. `verify.sql` checks their values instead.
 4. **Verify.** `verify.sql` checks every grant and signature, then exercises the new behaviour on rows that existed
    before the upgrade:
    - #1: editing the old draft;
@@ -454,6 +502,16 @@ Order matters only in the cases below. Everything else can go in any order.
      - a heartbeat renews a live lease and returns `'lost'` on an expired one, which stays expired;
      - all 8 overloads are granted to `service_role` and nothing else, the 7 attempt-only writers stay granted,
        and `_pipeline_use_generation` / `_pipeline_claim` have no API grant;
+   - #18:
+     - each pre-upgrade point's `api_get_point` read is unchanged apart from the two new keys (it is now part of
+       the snapshot and the per-migration diff);
+     - every evidence item has both keys;
+     - the verdict guarded before the upgrade reads `guarded = true`, `model_verdict = 'supports'`, and its
+       stored verdict is still `irrelevant`;
+     - every other item reads `false` / null;
+     - no provenance or pattern id leaks;
+     - RLS, grants and `SECURITY INVOKER` are unchanged;
+     - a reset verdict reads unguarded again;
    - the old publication is still readable.
 
 ```bash
@@ -462,19 +520,23 @@ BATON_PG_IMAGE=postgres:15-alpine bash supabase/tests/upgrade/run.sh     # PG 15
 BATON_UPGRADE_EXTRA_DIR=/path/with/extra/migrations bash supabase/tests/upgrade/run.sh   # not-yet-merged files
 ```
 
-**Latest result (2026-11-12, all 17 migrations, integration at `4bb8fef`, which includes Agent 4's `0bb1b96`):**
-- PG 17 and PG 15.19 both passed.
+**Latest result (2026-11-13, all 18 migrations, integration at `186d070`, which includes Agent 4's `0bb1b96` and the
+#18 migration):**
+- **PG 17: passed** with the #18 snapshot and checks.
+- **PG 15: not re-run with #18 yet**, because host memory was too low. The lead will run it. The previous
+  PG 15.19 run (all 17 migrations, at `4bb8fef`) passed.
 - Every migration applied cleanly on the populated database, #17's backfill included.
-- After each step, every pre-upgrade read was unchanged. #17 changes no read. The only changes were the intended
-  ones (#4's key, #16 on mixed runs).
-- `verify.sql` passed, including the #17 checks listed above.
-- On the upgraded PG 15 database, all 17 §3 Verify blocks returned `true` (18 rows, because #4's block returns two),
-  and so did the §5 pre-check function count.
+- After each step, every pre-upgrade read was unchanged, `api_get_point` included. #17 changes no read. The only
+  changes were the intended ones (#4's key, #16 on mixed runs, #18's two evidence keys).
+- `verify.sql` passed, including the #17 and #18 checks listed above.
+- On the upgraded PG 17 database, all 18 §3 Verify blocks returned `true` (19 rows, because #4's block returns two),
+  and so did the §5 pre-check function count (15).
 - Tamper checks:
   - granting a #17 overload to `authenticated`, or setting one job's `claim_generation` below its `attempt`, turns
     #17's Verify query `false`;
   - the same grant makes `verify.sql` fail;
   - an earlier run tampered with one title to confirm the diff detector catches a changed read.
+  - these #17 tamper checks ran on PG 15 at `4bb8fef`.
 - The #10 Verify query now excludes the #17 overloads; without that change it would return `false` after #17.
 
 **No migration failed on populated data.**
@@ -496,8 +558,8 @@ select version from supabase_migrations.schema_migrations order by version desc 
 select status, count(*) from public.processing_jobs where status in ('queued', 'running') group by status;
 -- the functions about to be replaced exist with the expected signatures
 -- (#17 also replaces _pipeline_claim and _remember_claim_progress, which #10/#11 create in this same apply)
-select count(*) = 14 from (values
-  ('public.heartbeat_processing_job(uuid,integer,integer,integer,integer)'),
+select count(*) = 15 from (values
+  ('public.heartbeat_processing_job(uuid,integer,integer,integer,integer)'), ('public.api_get_point(uuid)'),
   ('public.create_handover(uuid,text,text,text,text,text)'), ('public.create_source(uuid,uuid,text,text,text,bigint,text,text)'),
   ('public.api_list_my_handovers()'), ('public.api_get_handover(uuid)'),
   ('public.erase_participant(uuid,uuid,text,bytea,text,uuid,uuid)'), ('public.purge_handover(uuid,uuid,uuid)'),
@@ -515,13 +577,13 @@ select count(*) = 14 from (values
 | A | Apply #1–#13 (`20261113100100` … `20261113300400`), in file order, as one `supabase db push` | Additive changes or same-signature replacements; the current app tolerates all of them (§2.7) |
 | B | Deploy the Round 3 app build: wizard autosave, the mapper with `partial`, and the worker that uses only `pipeline_*`, passes its claim, and sends its claim generation when the row has one (`0bb1b96` or later) | Needs #1 and #10–#12 (§2.2, §2.4). Without #17 this worker falls back to the attempt-only writers (§2.6) |
 | C | Smoke-check: edit a draft's details, confirm an upload, and open an existing run's processing page | Confirms B against A (production has no AI provider, so no new run) |
-| D | Confirm that no job is `running` (re-run the pre-check's job query), then apply #14–#17 (`20261113300500` … `20261113300800`). Then run `notify pgrst, 'reload schema';` | The revokes need B's worker with the required claim (`parse.ts:73`, `b5d3480`; §2.3). #16 needs B's mapper (`mappers.ts:374`; §2.5). #17 needs B's generation-aware worker, and an older worker is refused on every job that has yielded (§2.6). PostgREST must see #17's overloads (§2.6) |
+| D | Confirm that no job is `running` (re-run the pre-check's job query), then apply #14–#18 (`20261113300500` … `20261113300900`). Then run `notify pgrst, 'reload schema';` | The revokes need B's worker with the required claim (`parse.ts:73`, `b5d3480`; §2.3). #16 needs B's mapper (`mappers.ts:374`; §2.5). #17 needs B's generation-aware worker, and an older worker is refused on every job that has yielded (§2.6). PostgREST must see #17's overloads (§2.6). #18 is app-tolerant (§2.7) and is applied here only because it sorts last by file name |
 
-Do not apply #14–#17 before step B. Do not deploy B before step A. Never run a worker older than `0bb1b96` against a
+Do not apply #14–#18 before step B. Do not deploy B before step A. Never run a worker older than `0bb1b96` against a
 database that has #17.
 
 **3. Post-apply verification:** run every **Verify** query in §3. All must return `true`. Then run the pre-check
-again; the newest version should be `20261113300800`.
+again; the newest version should be `20261113300900`.
 
 **4. Rollback triggers.** Roll back the specific migration (its §3 Rollback) if any of these happens:
 - any Verify query returns `false`;
@@ -537,6 +599,8 @@ again; the newest version should be `20261113300800`.
 - after #17, long stages lose their claim (heartbeat `'lost'`) where they did not before. A gap between heartbeats
   went past the 300 s lease. Roll back #17's heartbeat only (rollback step 3), or shorten that stage's heartbeat
   interval;
+- the review page's point detail returns `internal`, or shows guard fields wrongly, after #18. #18 is
+  read-only, so roll back `api_get_point` to its `20261111000900_read_api.sql:160` definition;
 - the wizard autosave returns `internal` (#1 missing).
 
 Roll back in reverse file order and only as far as needed. The app-tolerant migrations (§2.7) do not need to be

@@ -46,7 +46,13 @@ select tests.as_owner();
 select tests.point('hr', 'pr1', 'decision');
 select tests.cite('pr1', 'sr1', 'alice', 1);
 select tests.point('hr', 'pr2', 'owner');
-select tests.cite('pr2', 'sr1', 'bob', 2, 'unchecked');
+select tests.put('pr2_link', tests.cite('pr2', 'sr1', 'bob', 2, 'unchecked'));
+-- pr2's link: a verdict the PI-11 injection guard demoted to 'irrelevant' BEFORE the upgrade (the worker
+-- records the guard marker in verifier_provenance; 20261113300900 only starts exposing it in api_get_point)
+select public.record_support_verdict(tests.id('pr2_link'), (select current_revision_id from public.handover_points where id = tests.id('pr2')),
+  'irrelevant', 'Not counted as support: the evidence contains instructions addressed to an automated checker.',
+  '{"provider":"fake","injectionGuard":{"guarded":true,"modelVerdict":"supports","patterns":["addressed_to_ai"],"fields":["quote"]}}',
+  sha256(convert_to('bob message 2', 'UTF8')));
 select tests.point('hr', 'pr3', 'contact');
 select tests.ok((select state from public.handovers where id = tests.id('hr')) = 'in_review', 'seed: hr is in review');
 
@@ -99,8 +105,8 @@ update public.processing_jobs set next_attempt_at = now() + interval '1 day'
 create schema upgrade;
 grant usage on schema upgrade to anon, authenticated, service_role;
 
--- Removes keys that a Round 3 migration ADDS on purpose (HandoverSummary.description, 20261113100400) from
--- handover objects, so the remaining read is compared byte for byte.
+-- Removes keys that a Round 3 migration ADDS on purpose (HandoverSummary.description, 20261113100400, from
+-- handover objects; EvidenceItem guarded/model_verdict, 20261113300900, from api_get_point evidence items), so the remaining read is compared byte for byte.
 create function upgrade.strip(j jsonb) returns jsonb language plpgsql immutable as $$
 declare
   k text;
@@ -112,6 +118,8 @@ begin
     out := '{}'::jsonb;
     for k in select jsonb_object_keys(j) loop
       if k = 'description' and j ? 'viewer_role' then continue; end if;
+      -- PI-11 guard fields that 20261113300900 adds to each api_get_point evidence item (checked in verify.sql)
+      if k in ('guarded', 'model_verdict') and j ? 'point_evidence_id' then continue; end if;
       out := out || jsonb_build_object(k, upgrade.strip(j -> k));
     end loop;
     return out;
@@ -136,6 +144,9 @@ begin
         u || ':' || h || ':status', tests.read(format('select public.api_get_processing_status(%L)', tests.id(h))),
         u || ':' || h || ':points', tests.read(format('select public.api_list_points(%L, null, null, null)', tests.id(h))),
         u || ':' || h || ':published', tests.read(format('select public.api_get_published_handover(%L)', tests.id(h))));
+    end loop;
+    foreach h in array array['pr1', 'pr2', 'pr3', 'ppub1'] loop
+      r := r || jsonb_build_object(u || ':' || h || ':point', tests.read(format('select public.api_get_point(%L)', tests.id(h))));
     end loop;
   end loop;
   perform tests.as_owner();
@@ -170,3 +181,11 @@ select tests.ok((select (reads -> 'inc:hpub:published') is not null and (reads -
                 'inc reads the publication');
 select tests.ok((select jsonb_array_length(reads -> 'rev:hr:points') from upgrade.snapshot where id = 1) = 3, 'rev reads hr''s points');
 select tests.ok((select reads -> 'eve:hr:get' = 'null'::jsonb from upgrade.snapshot where id = 1), 'eve reads nothing');
+select tests.ok((select reads -> 'rev:pr2:point' -> 'evidence' -> 0 ->> 'support_verdict' = 'irrelevant' from upgrade.snapshot where id = 1),
+                'the snapshot holds pr2''s guarded (irrelevant) verdict');
+select tests.as_user('rev');
+select tests.ok(not (tests.read(format('select public.api_get_point(%L)', tests.id('pr2'))) -> 'evidence' -> 0 ? 'guarded'),
+                'before the upgrade api_get_point has no guard fields');
+select tests.as_owner();
+select tests.ok((select reads -> 'rev:ppub1:point' <> 'null'::jsonb and reads -> 'eve:pr1:point' = 'null'::jsonb from upgrade.snapshot where id = 1),
+                'point reads are in the snapshot (and RLS hides them from a non-member)');

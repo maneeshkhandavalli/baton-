@@ -3,12 +3,50 @@
 -- upgrade. LOCAL DOCKER ONLY. Synthetic data only.
 \set ON_ERROR_STOP 1
 
--- ── reads: unchanged except the added HandoverSummary.description ───────────
-select tests.eq(upgrade.diff(), '{}'::text[], 'every pre-upgrade read is unchanged (except the added description key)');
+-- ── reads: unchanged except the added HandoverSummary.description and EvidenceItem guard fields ─────
+select tests.eq(upgrade.diff(), '{}'::text[], 'every pre-upgrade read (incl. api_get_point of pr1-pr3, ppub1) is unchanged except the added keys');
 select tests.as_user('ann');
 select tests.ok(tests.read(format('select public.api_get_handover(%L)', tests.id('hd'))) ? 'description', '100400: api_get_handover returns description');
 select tests.ok((select bool_and(e ? 'description') from jsonb_array_elements(tests.read('select public.api_list_my_handovers()')) e),
                 '100400: api_list_my_handovers returns description');
+select tests.as_owner();
+
+-- 300900: every evidence item of the pre-upgrade points now carries guarded / model_verdict
+select tests.as_user('rev');
+select coalesce(jsonb_agg(e), '[]'::jsonb) as v18_ev
+  from unnest(array['pr1', 'pr2', 'pr3', 'ppub1']) p,
+       jsonb_array_elements(tests.read(format('select public.api_get_point(%L)', tests.id(p))) -> 'evidence') e \gset
+select tests.as_owner();
+create temp table v18_ev as select e from jsonb_array_elements(:'v18_ev'::jsonb) e;
+select tests.ok((select count(*) >= 3 from v18_ev), '300900: the reviewer still reads the pre-upgrade points'' evidence');
+select tests.ok((select bool_and(e ? 'guarded' and e ? 'model_verdict') from v18_ev), '300900: every evidence item has guarded and model_verdict');
+-- the verdict the guard demoted BEFORE the upgrade (seed.sql, pr2) is exposed from its stored provenance
+select tests.eq((select e -> 'guarded' from v18_ev where e ->> 'point_evidence_id' = tests.id('pr2_link')::text), 'true'::jsonb,
+                '300900: a pre-upgrade guarded verdict reads guarded = true');
+select tests.eq((select e ->> 'model_verdict' from v18_ev where e ->> 'point_evidence_id' = tests.id('pr2_link')::text), 'supports',
+                '300900: and exposes the model''s verdict before the guard');
+select tests.eq((select e ->> 'support_verdict' from v18_ev where e ->> 'point_evidence_id' = tests.id('pr2_link')::text), 'irrelevant',
+                '300900: the stored verdict is unchanged');
+select tests.ok((select bool_and(not (e ? 'injectionGuard') and e::text not like '%addressed_to_ai%') from v18_ev),
+                '300900: no raw provenance or pattern id reaches the read');
+select tests.ok((select bool_and(e -> 'guarded' = 'false'::jsonb and e -> 'model_verdict' = 'null'::jsonb) from v18_ev
+                  where e ->> 'point_evidence_id' <> tests.id('pr2_link')::text),
+                '300900: every other pre-upgrade verdict reads guarded = false, model_verdict = null');
+-- RLS, grants and security mode unchanged
+select tests.as_user('eve');
+select tests.ok(tests.read(format('select public.api_get_point(%L)', tests.id('pr2'))) is null, '300900: a non-member still reads nothing');
+select tests.as_owner();
+select tests.ok(has_function_privilege('authenticated', 'public.api_get_point(uuid)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.api_get_point(uuid)', 'EXECUTE')
+                and not (select prosecdef from pg_proc where oid = 'public.api_get_point(uuid)'::regprocedure),
+                '300900: api_get_point keeps its grants and stays SECURITY INVOKER');
+-- a later reset of the guarded verdict clears the fields (the provenance stays behind)
+update public.point_evidence set support_verdict = 'unchecked', verified_revision_id = null, verdict_rationale = null
+ where id = tests.id('pr2_link');
+select tests.as_user('rev');
+select tests.ok((select e -> 'guarded' = 'false'::jsonb and e -> 'model_verdict' = 'null'::jsonb
+                   from jsonb_array_elements(tests.read(format('select public.api_get_point(%L)', tests.id('pr2'))) -> 'evidence') e
+                  where e ->> 'point_evidence_id' = tests.id('pr2_link')::text), '300900: a reset verdict is no longer guarded');
 select tests.as_owner();
 
 -- ── every Round 3 function exists with its signature and grants ─────────────
