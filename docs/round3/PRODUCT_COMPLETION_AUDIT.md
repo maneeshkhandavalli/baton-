@@ -125,7 +125,8 @@ change materially since. Unit tests alone never count as COMPLETE.
 - Order and dependencies documented in `docs/round3/migrations.md` (#1–#18, kind, dependency, rollback with
   the old definition's file:line, a Verify query each, and a two-phase hosted runbook).
 - Compatibility: 17 are additive or replace-same-signature (grants carried); #14–#15 only revoke grants.
-  No table/column/policy/row is dropped. #9 (300200) and #17 (300800) add one nullable column each.
+  No table/column/policy/row is dropped. #9 (300200) and #17 (300800) add one column each (#17's
+  `claim_generation` is `bigint not null default 0`, backfilled to `attempt`).
 - Upgrade behaviour: the populated-database upgrade test applies all 18 in order and diffs every pre-upgrade
   read after each step (PG17 + PG15 PASS), then `verify.sql` exercises the new behaviour on old rows.
 - Security: every new function is service_role-only or SECURITY INVOKER under RLS; verified by `verify.sql`
@@ -135,11 +136,18 @@ change materially since. Unit tests alone never count as COMPLETE.
 - **Recommendation: READY for application to the hosted *development* project**, following the runbook,
   after a backup/PITR marker. The deploy coupling is the real risk; on hosted *dev* a temporary mismatch
   only breaks processing, never data. Requires the user's explicit approval (not given).
+- **Update 2026-11-13: APPLIED to the isolated hosted dev project baton-dev (`xnwppnzvrpthukxjfojj`)**, with
+  the user's explicit approval for each phase. Phase A (#1–#13) first, then Phase D (#14–#18) at 16:54 UTC through
+  `supabase/hosted-apply/run-hosted.sh r3phaseD` (pinned checksums, gates re-run, one locked transaction). Result:
+  36 history rows, newest `20261113300900`, each Phase D version once; all **19/19** Verify rows `true`;
+  `claim_generation = attempt` on all 30 jobs; no job in flight. The original project was not touched; no
+  production project has these migrations. Record: `supabase/hosted-apply/README.md` → "Execution record".
 
 ## 3. Blockers (external)
 
-1. **Hosted dev migrations not applied** (user approval) — blocks any hosted browser verification of the
-   Round 3 app and the dev processing loop.
+1. ~~**Hosted dev migrations not applied**~~ — **resolved 2026-11-13**: all 18 Round 3 migrations are applied to
+   baton-dev (see §2 update). Still open: a live processing run on baton-dev after Phase D (the claim-generation
+   path is covered by the local rehearsal and `it17`, not yet by a hosted run).
 2. **Browser access to signed-in routes** (Chrome extension disconnected) — blocks the real-route UI
    verification. Alternative: the user signs in once in the browser the harness can use, or a local
    Supabase stack with a test account (needs ~2 GB free RAM).
@@ -154,6 +162,7 @@ change materially since. Unit tests alone never count as COMPLETE.
 Baton is a **feature-complete local prototype** of the brief: the entire journey (create → consent →
 upload → process → review → gaps → publish → invite → incoming read) exists in code, and every step is
 verified at the action/SQL/real-Postgres level. It is **not yet a verified usable product in its hosted
-dev environment**, because (a) the schema it needs is not applied there and (b) the redesigned signed-in
+dev environment**, because (a) the schema it needs was not applied there (resolved 2026-11-13: all 18 Round 3
+migrations are on baton-dev) and (b) the redesigned signed-in
 UI has not been walked through in a browser. The one brief feature that lacked UI (manually adding a point) was built after this audit (`9f528b5`). Launch
 additionally needs a real AI provider (D11) and email delivery.

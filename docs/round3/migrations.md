@@ -541,7 +541,14 @@ BATON_UPGRADE_EXTRA_DIR=/path/with/extra/migrations bash supabase/tests/upgrade/
 
 **No migration failed on populated data.**
 
-## 5. Hosted apply runbook (for the lead; nothing here has been run against hosted)
+## 5. Hosted apply runbook
+
+> **Status 2026-11-13: applied to baton-dev (`xnwppnzvrpthukxjfojj`) only**, with the user's explicit approval.
+> Phase A (#1–#13), then Phase D (#14–#18) through the pinned runner in `supabase/hosted-apply/` (one locked
+> transaction, in-transaction job/history guard; rehearsed locally 50/50 first). Result: 36 history rows, newest
+> `20261113300900`; all 19 §3 Verify blocks `true`. The original project and any production project are untouched.
+> Details and the full result: `supabase/hosted-apply/README.md` → "Execution record". The runbook below is
+> unchanged and still applies to any other project.
 
 **0. Preconditions**
 - Approval for every file in §1.
