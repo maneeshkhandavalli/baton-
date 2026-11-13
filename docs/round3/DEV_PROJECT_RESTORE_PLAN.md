@@ -1,6 +1,6 @@
 # Restore plan: original dev project → `baton-dev` (xnwpppnzvrpthukxjfojj)
 
-Status: **PROPOSED — nothing executed.** Source: verified backup
+Status: **REHEARSED LOCALLY (both variants 27/27); NOT executed on any hosted project.** Source: verified backup
 `baton-multiagent/backup/20261113T063630Z/` (SHA-256 manifest re-checked: all 9 files OK). The original project
 (`enalguyitewjojgrgzxv`, "baton-") is never contacted by any step below. No Round 3 migration is applied here; the
 target ends at the baseline `20261112000500`, exactly like the source.
@@ -50,102 +50,133 @@ would silently miss them:
 
 **Encryption / special setup:** no Supabase Vault, no pgsodium, no `pgcrypto`, no encrypted columns, no custom roles
 (no `create role` in any migration). The only non-default extension is `citext` (in `extensions`). Hashed identity
-values depend on the app's `IDENTITY_PEPPER` (an app secret, not a database feature) — see §6.
+values depend on the app's `IDENTITY_PEPPER` (an app secret, not a database feature) — see §8.
 
-## 3. Chosen approach
-**Rebuild the schema by replaying the 18 baseline migration files, then load the data.** Rationale: the migrations are
-the source of truth and recreate everything in §2 (extension, auth trigger, bucket, storage policy, default
-privileges) with the exact grants, without touching Supabase-owned objects. Restoring `public.dump`'s schema instead
-would need manual re-creation of §2 and filtering of `supabase_admin` ACLs and `CREATE SCHEMA public`.
+## 3. Approach
+Rebuild the schema by **replaying the 18 baseline migration files verbatim**, then load the data. The migrations are the
+source of truth and recreate everything in §2 with the original grants, without touching Supabase-owned objects.
+Data is loaded as plain `INSERT`s (ids, timestamps and relationships preserved). Two variants exist because hosted
+privileges cannot be proven locally (§6):
+- **replica**: `set local session_replication_role = replica` for the load (Supabase's documented restore pattern);
+- **noreplica fallback**: needs only table ownership — disables **user** triggers per table, defers the 2 deferrable
+  FKs, inserts in FK dependency order, then runs every deferred FK check and re-enables the triggers.
 
-The data is then loaded **as plain SQL `INSERT`s** with `session_replication_role = replica` (Supabase's documented
-data-restore pattern): FK checks and triggers are off during the load, so audit triggers don't fire, the auth trigger
-doesn't create a duplicate profile, and row ids/timestamps are kept exactly.
+The 87 FKs contain three cycles (handovers ↔ publications, handover_points ↔ point_revisions, handovers ↔ members).
+The first two are closed by the only 2 DEFERRABLE FKs; the third runs through `handovers.pending_creator_member_id`,
+which is NULL in every backed-up row, so it imposes no order.
 
-Two execution channels; both produce the same result:
-- **Channel S (SQL Editor, recommended):** no database password needed here. Files are pasted into baton-dev's
-  SQL Editor. All files are generated locally from the backup and rehearsed on a local Postgres first.
-- **Channel P (pooler, from this machine):** same files run with `psql` through baton-dev's Session pooler; needs a
-  `backup/secrets/baton-dev.env` written by the user (same handling as before; never printed). Also enables the
-  automated schema diff in §7.
+## 4. Final executable procedure
+All files live OUTSIDE the repository in `baton-multiagent/restore-dev/`. **The auth files contain the user's email
+and auth metadata: keep them private and delete them after the restore.**
 
-## 4. Database restore — exact sequence (baton-dev only)
-
-Prepared locally (no hosted access) into `baton-multiagent/restore-dev/`, then rehearsed end to end on a throwaway
-local Postgres 17 + Supabase shim:
-
-| File | Generated from | Contents |
+| File | SHA-256 (prefix) | Purpose |
 |---|---|---|
-| `10_baseline_schema.sql` | the 18 files `supabase/migrations/2026111{1,2}*.sql`, verbatim, in file order | `begin;` … 18 migrations … plus `create schema if not exists supabase_migrations` / `schema_migrations (version text primary key, statements text[], name text)` and one row per migration … `commit;` |
-| `20_auth_users.sql` | `auth_storage_data.dump` → local scratch DB → `pg_dump --data-only --column-inserts -t auth.users -t auth.identities` | 2 `INSERT`s (explicit column lists) |
-| `30_public_data.sql` | `public.dump` → local scratch DB → `pg_dump --data-only --column-inserts -n public` | `set session_replication_role = replica;` … all public rows … `set session_replication_role = origin;` + `setval` for the 2 sequences |
+| `10_baseline_schema.sql` | `8668c2d1` | Guard (abort unless `public` has no tables) → the 18 baseline migrations verbatim → the original 18 history rows (exact, incl. statements). One transaction |
+| `20_auth_users.sql` | `e8f65ae2` | `auth.users` + `auth.identities` only, replica mode (no auto-created profile). One transaction |
+| `20_auth_users_noreplica.sql` | `1c2fe348` | Same rows without replica mode (the auth trigger creates a provisional profile) |
+| `30_public_data.sql` | `498d6c55` | 379 rows, replica mode; guard aborts unless phase 2 ran. One transaction |
+| `30_public_data_noreplica.sql` | `c9a4a440` | Same rows, fallback mechanics (§3); replaces the provisional profile with the original. One transaction |
+| `verify.sql` | — | Read-only, one grid: history, auth, FKs, disabled triggers, RLS, citext, auth trigger, storage policy, bucket, object, jobs, every public row count |
+| `run-hosted.sh` | — | The only hosted runner; one phase per call; refuses the original project, the transaction pooler (6543) and the direct host; refuses to run if the SQL files differ from `SHA256SUMS` |
+| `storage-restore.mjs` | — | Storage API only: checks the bucket, uploads the one file to its original path with `x-upsert: false`, downloads it back and compares SHA-256 |
+| `gen.sh`, `rehearse.sh`, `SHA256SUMS` | — | Regenerate from the backup / rehearse locally / pin the rehearsed files |
 
-Order on baton-dev:
-1. **Pre-check (read-only):** `select count(*) from information_schema.tables where table_schema='public'` must be 0;
-   `select to_regclass('supabase_migrations.schema_migrations')` should be null (fresh project).
-2. Run `10_baseline_schema.sql` (one transaction). Expect `COMMIT`.
-3. Run `20_auth_users.sql` (before public data: `profiles.id → auth.users.id`).
-4. Run `30_public_data.sql`.
-5. Run the verification in §7.
+### Hosted sequence (each step needs explicit approval; verification between steps)
+| # | Command (in `restore-dev/`) | Writes? | Expected (anything else: stop) |
+|---|---|---|---|
+| 0 | user creates `backup/secrets/baton-dev.env` with one line `SUPABASE_DB_URL=postgresql://postgres.xnwpppnzvrpthukxjfojj:<pw>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres` | — | never printed; split into PG* variables in a 0600 temp file deleted on exit |
+| 1 | `bash run-hosted.sh precheck` | no | `public_tables 0`, `history_table_exists 0`, `auth_users 0`, `source_uploads_bucket 0` |
+| 2 | `bash run-hosted.sh probe` | no (`begin; set local …; rollback`) | records `replica` or `noreplica` for phases 2–3 |
+| 3 | `bash run-hosted.sh phase1` | yes, 1 txn | `phase 1 committed` (any error: whole phase rolled back, project still empty) |
+| 4 | `bash run-hosted.sh verify` | no | `history_rows 18`, `history_newest 20261112000500`, `history_round3_rows 0`, `citext 1`, `auth_user_trigger 1`, `storage_upload_policy 1`, `bucket_source_uploads false/26214400`, all public counts 0 |
+| 5 | `bash run-hosted.sh phase2` | yes, 1 txn | then `verify`: `auth_users 1`, `auth_identities 1` |
+| 6 | `bash run-hosted.sh phase3` | yes, 1 txn | `phase3 committed` |
+| 7 | `bash run-hosted.sh verify` | no | **public row counts EQUAL to the backup (26 tables)**, `profiles_joined_to_auth 1`, `fk_constraints 87`, `user_triggers_disabled 0`, `rls_policies_public 22`, `rls_enabled_tables 26`, `jobs_queued_running 0` |
+| 8 | `node storage-restore.mjs ../baton-lead/.env.baton-dev` | Storage API | `sha256Match: true`; then `verify` shows `storage_object_present 1` |
+| 9 | pre-check (`hosted-apply/01_precheck.sql`) | no | newest `20261112000500`, jobs `0`, functions `true`: baton-dev is ready for the Round 3 runbook |
+| 10 | delete `backup/secrets/baton-dev.env` and the `restore-dev/20_*` files | — | — |
 
-Never run: any `20261113*` migration, `auth_storage_data.dump` as a whole, `auth.schema_migrations`,
-`storage.migrations`, or a direct `INSERT` into `storage.objects`.
+## 5. Local rehearsal results (no network)
+Target: throwaway Postgres 17 + the repo's Supabase shim (its `auth.users` extended with the backup's column list).
+Phase 1 as superuser; phases 2–3 as superuser (replica) and as a **NOSUPERUSER role that owns every object in
+`public`** (noreplica fallback).
 
-## 5. Storage restore — exact sequence
-1. Bucket: already created by step 4.2 (`source-uploads`, private, 26,214,400 bytes). Verify with
-   `select id, public, file_size_limit from storage.buckets`.
-2. Upload the one file through the **Storage API** with baton-dev's service-role key, `upsert: false`, path
-   `raw/58053120-…/28820916-…`, `content-type: text/plain`. This creates the `storage.objects` row the way Supabase
-   expects (new object id; that's fine — Baton links sources by **path** only, `sources.raw_storage_path`).
-3. Download it back once and compare SHA-256 to `269eaf89…e567162`.
+| Check | replica | noreplica (non-superuser) |
+|---|---|---|
+| phase 1 commits; 18 history rows; newest `20261112000500`; 0 Round 3 rows; migrations seed 0 public rows | PASS | PASS |
+| phase 1 guard refuses a second run; phase 3 guard refuses before phase 2 and writes nothing | PASS | PASS |
+| a non-superuser cannot set `session_replication_role` (vanilla PG) | — | PASS (denied) |
+| `auth.users` 1, `auth.identities` 1 | PASS | PASS |
+| **public row counts equal the backup, all 26 tables** | PASS | PASS |
+| profile joins its auth user | PASS | PASS |
+| 0 orphan rows across all 87 FKs; 87 FKs present | PASS | PASS |
+| no user trigger left disabled; audit trigger active | PASS | PASS |
+| 22 RLS policies; 26 tables with RLS enabled | PASS | PASS |
+| default privileges: a new public table grants nothing to `anon`/`authenticated`/`service_role` | PASS | PASS |
+| `citext`; `on_auth_user_created` on `auth.users` and it still creates profiles for NEW users | PASS | PASS |
+| storage policy `baton_source_uploads_insert`; bucket private 25 MB; restored source points at the backed-up path | PASS | PASS |
+| migration pre-check on the restored copy: newest `20261112000500`, jobs 0, functions true | PASS | PASS |
+| schema diff vs the backup's `public_schema.sql` (normalised) | 1 line: `GRANT USAGE ON SCHEMA public TO postgres` (Supabase platform grant) | same, with the stand-in role name |
+| **total** | **27 / 27** | **27 / 27** |
 
-## 6. Application configuration (original credentials untouched)
-- Create `baton-lead/.env.baton-dev` (matched by `.gitignore` rule `.env*`; never committed) with **baton-dev's**
-  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and the **same**
-  `IDENTITY_PEPPER`, `IDENTITY_PEPPER_VERSION`, `IDENTITY_PEPPER_CANARY` as today (stored identity hashes depend on
-  them), plus `CRON_SECRET`, `BATON_SITE_URL=http://localhost:3000`, `AI_PROVIDER=fake`, `BATON_ALLOW_FAKE_AI=1`.
-  The user pastes the three Supabase values; I never print them.
-- Start the single dev server against baton-dev without editing `.env.local`:
-  `set -a; . ./.env.baton-dev; set +a; npm run dev` — shell variables take precedence over `.env.local` in Next.js.
-  `.env.local` (original project) stays as the fallback.
-- **baton-dev dashboard settings** (manual, before sign-in): Authentication → URL Configuration: Site URL
-  `http://localhost:3000`, Redirect URLs `http://localhost:3000/auth/callback`; email provider enabled (magic link);
-  default SMTP is rate-limited (Resend is Rithika's item). Storage: nothing to configure beyond the migration.
+`verify.sql` was also run against the rehearsed target: all values as expected (`storage_object_present 0` until step 8).
+`run-hosted.sh` guard test (test credentials file outside `backup/secrets`, no connection): refuses original-project
+credentials, the transaction pooler and the direct host.
 
-## 7. Verification (all must pass before baton-dev is used)
-1. `supabase_migrations.schema_migrations`: 18 rows, newest `20261112000500`, none `20261113*`.
-2. Row counts of every `public` table equal `backup/20261113T063630Z/row_counts.txt` (22 non-empty tables, e.g.
-   handovers 7, sources 17, handover_points 15, evidence_quotes 17, processing_jobs 30, profiles 1).
-3. `auth.users` = 1 and `auth.identities` = 1; the profile joins its user (`profiles p join auth.users u using (id)` = 1).
-4. Schema equality (Channel P): `pg_dump --schema-only -n public` of baton-dev, normalised, diffed against
-   `public_schema.sql` — expected: no differences except ownership/ACL lines of Supabase-internal roles.
-   (Channel S fallback: counts of functions 188, triggers on public tables, policies 22, FKs 87 via `pg_catalog`.)
-5. Objects outside public: `citext` installed; trigger `on_auth_user_created` on `auth.users`; policy
-   `baton_source_uploads_insert` on `storage.objects`; bucket `source-uploads` private.
-6. `hosted-apply/01_precheck.sql` on baton-dev: newest `20261112000500`, jobs queued/running `0`, functions_present
-   `true` — i.e. baton-dev is ready for the Round 3 runbook.
-7. Storage file present and SHA-256 equal (§5.3).
-8. App smoke (needs the user's browser): sign in by magic link as the restored user → dashboard lists the 7 handovers.
+Defects found and fixed during the rehearsal: multi-line history/data rows truncated by a line filter (now the whole
+`pg_dump` output is kept, minus its `\restrict` markers); auth values ordered by JSON key instead of column position;
+re-enabling triggers while deferred FK checks were pending (now `set constraints all immediate` first).
 
-## 8. Risks and mitigations
-| Risk | Mitigation |
-|---|---|
-| Accidentally targeting the original project | Every script checks the target ref `xnwpppnzvrpthukxjfojj` from the URL/env before connecting and refuses anything else; the original's credentials are never loaded by restore scripts |
-| Auth schema version differs between projects (column set) | `--column-inserts`; rehearsed; the two rows only use long-standing `auth.users`/`auth.identities` columns. If an insert fails, stop (nothing else depends on it until step 4.4) |
-| Magic-link sign-in fails for the restored user | The identity row is restored with the same provider id and email, so the same account signs in. If it still fails, stop and investigate (§7.8); do not create a second account, because the restored data belongs to the existing user id |
-| SQL Editor size limits | Largest file ≈ 0.5 MB (`10_…` with migration statements); split per migration if the editor rejects it |
-| Different `IDENTITY_PEPPER` | Exclusion/identity hashes would stop matching; §6 copies the existing values |
-| Data in the restored copy is a 12:06 IST snapshot | Expected; the original project stays the source of truth until we switch |
+## 6. Hosted-permission analysis (local results do NOT prove these)
+| Operation | Needed by | Evidence for hosted | If refused |
+|---|---|---|---|
+| the 18 baseline migrations (citext, trigger on `auth.users`, bucket insert, policy on `storage.objects`, default privileges) | phase 1 | They already ran successfully as `postgres` on the original hosted project | phase 1 rolls back; stop |
+| `set session_replication_role = replica` | replica phases | Supabase's restore guide uses it as `postgres`; not verified here | `probe` detects it without writing; the `_noreplica` files are used |
+| `alter table … disable/enable trigger user` on public tables | fallback phase 3 | `postgres` owns every public object (backup TOC) | phase 3 rolls back; stop |
+| `insert into auth.users / auth.identities` | phase 2 | Commonly done as `postgres` on Supabase; not verified here; the column set must exist in the target's Auth version | phase 2 rolls back; nothing depends on it yet |
 
-## 9. Rollback
-baton-dev is new and isolated, so rollback never touches the original:
-- Before 4.4: re-run is safe after `drop schema public cascade; create schema public;` + re-grant defaults — simpler:
-  **pause/delete and recreate the baton-dev project** (Free plan) and start from §4.1.
-- After a bad data load: `truncate` all public tables (`session_replication_role = replica`) and re-run 4.3–4.4.
-- Storage: delete the single uploaded object and re-upload.
-- App: unset the shell variables / stop the server; `.env.local` still points at the original project.
+Atomicity: every write phase is one explicit transaction run with `ON_ERROR_STOP`; a failure inside a phase leaves no
+partial rows. Between phases the state is consistent and re-checkable with `verify`. A failure in phase 3 after a
+successful phase 2 leaves only the 2 auth rows; fix the cause and re-run phase 3.
 
-## 10. Approvals needed before execution
-1. Generate the three restore files and run the local rehearsal (local only).
-2. Choose Channel S or P (P needs `backup/secrets/baton-dev.env`).
-3. Execute §4 → §5 → §7 on baton-dev; then the Round 3 runbook can target baton-dev instead of the original.
+## 7. Storage (API only) and a decision point
+The restore scripts never write `storage.*`; the object is uploaded only through the Storage API. The **bucket** is
+created by baseline migration `20261111001000_storage.sql` (`insert into storage.buckets … on conflict` and
+`create policy … on storage.objects`), exactly as on the original project, because phase 1 replays the migrations
+verbatim. If you prefer the bucket to be created through the Storage API too, it can be created via the API before
+phase 1; the migration's `on conflict` then only re-asserts `public = false` and the 25 MB limit. **Please choose.**
+Access: the service-role key bypasses RLS for the restore upload; the migration's `baton_source_uploads_insert`
+policy governs signed uploads by app users afterwards.
+
+## 8. Application configuration for baton-dev
+- New file `baton-lead/.env.baton-dev` (ignored by the `.gitignore` rule `.env*`), created **by the user** after the
+  restore: baton-dev's `NEXT_PUBLIC_SUPABASE_URL=https://xnwpppnzvrpthukxjfojj.supabase.co`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and **copies of the current** `IDENTITY_PEPPER`,
+  `IDENTITY_PEPPER_VERSION=p1`, `IDENTITY_PEPPER_CANARY`, plus `CRON_SECRET`, `BATON_SITE_URL=http://localhost:3000`,
+  `AI_PROVIDER=fake`, `BATON_ALLOW_FAKE_AI=1`.
+- **Why the pepper must be identical:** `identity_hash = HMAC-SHA256(IDENTITY_PEPPER, …)` (`lib/contracts/identity.ts`),
+  and the restored rows store those hashes with `*_identity_pepper_version = 'p1'` (`source_participants`,
+  `source_exclusions`, `source_messages`, …; the schema allows only `p1`). A different pepper silently breaks participant
+  exclusions and identity matches on restored data; the canary (`IDENTITY_PEPPER_CANARY`) lets the app refuse a pepper
+  that does not match it.
+- Run the single dev server against baton-dev without touching `.env.local`:
+  `cd baton-lead && set -a && . ./.env.baton-dev && set +a && npm run dev` (shell variables win over `.env.local`).
+- baton-dev dashboard: Authentication → URL Configuration: Site URL `http://localhost:3000`, Redirect URL
+  `http://localhost:3000/auth/callback`; email (magic link) enabled; default SMTP is rate-limited.
+
+## 9. Open risks
+1. Hosted `postgres` permissions for replica mode and for `auth.*` inserts are unproven (mitigated by `probe`, the
+   fallback, and per-phase transactions).
+2. The target's Auth version could differ in `auth.users`/`auth.identities` columns; the local stand-in cannot prove
+   it; phase 2 fails atomically if so.
+3. The restored auth row keeps the old password-hash/confirmation fields; sign-in is by magic link, so this is inert;
+   old sessions are intentionally not restored.
+4. The data is the 12:06 IST snapshot of the original project.
+5. Bucket creation via migration SQL (decision in §7).
+
+## 10. Rollback
+baton-dev is new and isolated; no script can contact the original project (the runner refuses its ref).
+- Failed phase: rolled back automatically; fix and re-run that phase.
+- Bad state after phase 3: recreate the baton-dev project (Free plan) and start again from step 1.
+- Storage: delete the single object in baton-dev and re-run step 8.
+- App: stop the server; `.env.local` still points at the original project.
