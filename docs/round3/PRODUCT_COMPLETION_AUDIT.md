@@ -100,7 +100,7 @@ change materially since. Unit tests alone never count as COMPLETE.
 | Review list, filters, approve/reject/reopen, inferred confirm | IMPLEMENTED, UNVERIFIED (redesign) | `reviewPoint` action + SQL 40; preview harness; R2 browser on old UI | Signed-in browser pass | Browser access | P1 |
 | Edit an extracted point | IMPLEMENTED, UNVERIFIED | `review-dialogs.tsx` uses `action: "edit"`; SQL + action tests | Browser pass | — | P1 |
 | Resolve conflicts (resolution note) | IMPLEMENTED, UNVERIFIED | dialog requires `resolutionNote`; Tier E asserts it | Browser pass | — | P1 |
-| **Add a point the AI missed (`createManualPoint`)** | **PARTIAL — no UI** | action + contract + SQL exist (§11.3); no caller in `components/**`/`app/**` | Build the review "Add a point" dialog | — | **P1** |
+| Add a point the AI missed (`createManualPoint`) | IMPLEMENTED, UNVERIFIED in browser (built in `9f528b5`) | `components/review/add-point-dialog.tsx` + `manual-point.ts`; 15 tests check every category's fields against the contract schema; SQL/action layer already tested | Browser run on a live in-review handover; typed-in direct contacts intentionally not offered | Browser access, hosted apply | P1 |
 | Gaps: create question, interview link, answers, review answer | IMPLEMENTED, UNVERIFIED (redesign) | gaps manager + `/g/[token]`; action/SQL tests; R2 browser | Browser pass | — | P1 |
 | PI-11 guard notice | COMPLETE | reads `e.guarded` with rationale fallback (1e678b8); render tests | — | — | — |
 
@@ -155,5 +155,5 @@ Baton is a **feature-complete local prototype** of the brief: the entire journey
 upload → process → review → gaps → publish → invite → incoming read) exists in code, and every step is
 verified at the action/SQL/real-Postgres level. It is **not yet a verified usable product in its hosted
 dev environment**, because (a) the schema it needs is not applied there and (b) the redesigned signed-in
-UI has not been walked through in a browser. One brief feature lacks UI (manually adding a point). Launch
+UI has not been walked through in a browser. The one brief feature that lacked UI (manually adding a point) was built after this audit (`9f528b5`). Launch
 additionally needs a real AI provider (D11) and email delivery.

@@ -12,7 +12,7 @@ Derived from `PRODUCT_COMPLETION_AUDIT.md` (HEAD `8e482d5`). Effort in focused d
 ## P1 — essential journeys
 | # | Item | Blocked on | Effort | Depends on |
 |---|---|---|---|---|
-| P1-1 | **"Add a point" in the review workspace (`createManualPoint`)**: dialog with category, title, statement, category attributes, optional testimony and access override; contacts with `directContact` need leads-only or reviewer-only access | — (unblocked) | 1 | — |
+| P1-1 | ✅ DONE `9f528b5` — **"Add a point" in the review workspace (`createManualPoint`)**: dialog with category, title, statement, category attributes, optional testimony and access override; contacts with `directContact` need leads-only or reviewer-only access | — (unblocked) | 1 | — |
 | P1-2 | Signed-in browser walkthrough of the redesigned journey at 1440/1024/390; fill `docs/design/route-verification.md` screenshots | Browser access + P0-1 | 1 | P0-1 |
 | P1-3 | Incoming-member journey with a second synthetic account: invite → `/h/[token]` → published view → acknowledgement; invalid/expired link states | Second account; SMTP for email (the copy-link path works without it) | 0.5 | P0-1, P1-2 |
 | P1-4 | Real-conflict and failed-job recovery walkthroughs in the browser (BS-02, BS-06) | Browser access | 0.5 | P0-1 |
@@ -38,7 +38,7 @@ Derived from `PRODUCT_COMPLETION_AUDIT.md` (HEAD `8e482d5`). Effort in focused d
 | P3-4 | Account deletion / erasure once D27 is decided | 2 |
 
 ## Suggested order
-1. **P1-1 now** (no dependency): this is the only brief feature without UI.
+1. ~~P1-1~~ done (`9f528b5`); verify it in the browser with P1-2.
 2. On approval: P0-1 → P1-2 → P1-3/P1-4 (one browser session, synthetic data only).
 3. P2-3 and P2-6 (unblocked) while decisions are pending.
 4. After decisions: P2-1, P2-2, P2-7, P3-1.
