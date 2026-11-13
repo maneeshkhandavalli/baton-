@@ -44,10 +44,10 @@ describe("PI-11 guard fields on PointDetail evidence", () => {
     assert.equal(e.modelVerdict, null);
   });
 
-  it("a database without migration 20261113300900 still parses (fields absent → false / null)", () => {
+  it("a database without migration 20261113300900 still parses (fields absent → undefined, so the UI falls back to the rationale)", () => {
     const e = mapPointDetail(row({})).evidence[0]!;
-    assert.equal(e.guarded, false);
-    assert.equal(e.modelVerdict, null);
+    assert.equal(e.guarded, undefined);
+    assert.equal(e.modelVerdict, undefined);
   });
 
   it("model_verdict is ignored unless guarded, and only promoting verdicts are accepted", () => {

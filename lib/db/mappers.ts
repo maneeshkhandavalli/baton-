@@ -534,8 +534,10 @@ export function mapPointDetail(raw: unknown): PointDetail {
       quoteCheck: e.quote_check,
       supportVerdict: e.support_verdict,
       verdictRationale: e.verdict_rationale,
-      guarded: e.guarded === true,
-      modelVerdict: e.guarded === true ? (e.model_verdict ?? null) : null,
+      // Absent on a database without migration 300900: leave undefined so the UI can fall back to the
+      // fixed guard rationale (components/shared/support-guard.ts#isGuardedVerdict).
+      guarded: typeof e.guarded === "boolean" ? e.guarded : undefined,
+      modelVerdict: e.guarded === true ? (e.model_verdict ?? null) : e.guarded === false ? null : undefined,
       isCurrentRevisionVerdict: e.is_current_revision_verdict,
       excluded: e.excluded,
       exclusionReason: e.exclusion_reason,
