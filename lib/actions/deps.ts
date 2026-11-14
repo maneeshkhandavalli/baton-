@@ -27,7 +27,12 @@ import type { ActionDeps } from "./core/types";
  */
 function aiRunConfig(): Result<AiRunConfig> {
   const config = getAiConfiguration();
-  if (!config.ok) return failWith("precondition_failed", { details: { reason: "provider_not_configured" } });
+  if (!config.ok) {
+    return failWith("precondition_failed", {
+      message: "AI processing isn't set up on this server yet. Ask the workspace admin.",
+      details: { reason: "provider_not_configured" },
+    });
+  }
   return { ok: true, data: config.runConfig };
 }
 

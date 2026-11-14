@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { AccessBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
-import { runReasonText, stageStatusMeta } from "@/components/shared/run-status";
+import { CONSENT_REQUIRED_REASON, runReasonText, sourcesNeedingConsent, stageStatusMeta } from "@/components/shared/run-status";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyConsent } from "@/components/wizard/consent";
@@ -33,6 +33,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
   const router = useRouter();
   const { run, isPending } = useAction();
   const [consent, setConsent] = useState(emptyConsent());
+  // Set when startProcessing refused with consent_required: consent exists but names another AI provider.
+  const [reconsentAll, setReconsentAll] = useState(false);
   const { run: r, handoverState, sources } = status;
   const active = r?.status === "queued" || r?.status === "running";
 
@@ -51,7 +53,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
     return acc;
   }, {});
   const totalMasked = Object.values(masking).reduce((a, b) => a + (b ?? 0), 0);
-  const needsConsent = sources.filter((s) => !s.consentRecordedAt);
+  const needsConsent = sourcesNeedingConsent(sources, reconsentAll);
 
   async function start() {
     for (const s of needsConsent) {
@@ -66,7 +68,15 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
       );
       if (!res.ok) return;
     }
-    await run(() => startProcessing({ handoverId }), { success: "Processing started" });
+    const started = await run(() => startProcessing({ handoverId }), {
+      success: "Processing started",
+      onError: (e) => {
+        if (e.details?.reason !== CONSENT_REQUIRED_REASON) return;
+        setReconsentAll(true);
+        setConsent(emptyConsent());
+      },
+    });
+    if (started.ok) setReconsentAll(false);
   }
 
   return (
@@ -187,7 +197,9 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
             {needsConsent.length > 0 && (
               <>
                 <p className="text-sm">
-                  {needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.
+                  {reconsentAll
+                    ? "Consent was recorded for a different AI provider. Confirm the statement below to record it again for every source."
+                    : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
                 </p>
                 <ConsentChecklist value={consent} onChange={setConsent} />
               </>

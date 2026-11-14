@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { RUN_SURFACED_AI_REASONS } from "@/lib/pipeline/finish";
 
-import { runReasonText, stageStatusMeta } from "../run-status";
+import { CONSENT_REQUIRED_REASON, runReasonText, sourcesNeedingConsent, stageStatusMeta } from "../run-status";
 
 describe("stage status", () => {
   it("partial has its own warning tone and an explicit label", () => {
@@ -44,5 +44,19 @@ describe("run reason copy", () => {
   it("passes human messages through", () => {
     assert.deepEqual(runReasonText("The source was removed."), { text: "The source was removed.", reference: null });
     assert.equal(runReasonText(null).reference, null);
+  });
+});
+
+describe("consent before (re)starting processing", () => {
+  const sources = [
+    { id: "a", consentRecordedAt: null },
+    { id: "b", consentRecordedAt: "2026-11-14T10:00:00.000Z" },
+  ];
+  it("normally asks only for sources without consent", () => {
+    assert.deepEqual(sourcesNeedingConsent(sources, false).map((s) => s.id), ["a"]);
+  });
+  it("after a consent_required refusal (consent for another provider) asks again for every source", () => {
+    assert.deepEqual(sourcesNeedingConsent(sources, true).map((s) => s.id), ["a", "b"]);
+    assert.equal(CONSENT_REQUIRED_REASON, "consent_required", "same literal as lib/actions/core/handovers.ts");
   });
 });

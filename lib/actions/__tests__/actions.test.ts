@@ -682,6 +682,24 @@ describe("startProcessing (I3)", () => {
     assert.deepEqual(badPlan.events, []);
   });
 
+  it("start_processing's consent refusal (e.g. consent recorded for another provider) is consent_required with an actionable message", async () => {
+    const f = startDeps({ rpc: { start_processing: { error: { code: "BTPF0", message: "every source needs consent for the configured AI provider" } } } });
+    const r = await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.ok(!r.ok);
+    assert.equal(r.error.code, "precondition_failed");
+    assert.equal(r.error.details?.reason, handovers.CONSENT_REQUIRED_REASON);
+    assert.equal(handovers.CONSENT_REQUIRED_REASON, "consent_required", "components/shared/run-status.ts uses the same literal");
+    assert.equal(r.error.message, handovers.CONSENT_REQUIRED_MESSAGE);
+    assert.ok(!r.error.message.includes("configured AI provider"), "the database message never reaches the client");
+    assert.deepEqual(f.events, ["start_processing"], "no drain");
+
+    const other = startDeps({ rpc: { start_processing: { error: { code: "BTCF0", message: "a run is already active" } } } });
+    const r2 = await handovers.startProcessing(other.deps, { handoverId: H });
+    assert.ok(!r2.ok);
+    assert.equal(r2.error.code, "conflict");
+    assert.equal(r2.error.details?.reason, undefined, "other refusals keep their own code");
+  });
+
   it("a throwing scheduleDrain never fails a started run", async () => {
     const f = startDeps({ scheduleDrainThrows: true });
     assert.deepEqual(await handovers.startProcessing(f.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });

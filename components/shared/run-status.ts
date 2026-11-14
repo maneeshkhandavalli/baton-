@@ -65,3 +65,15 @@ export function runReasonText(message: string | null | undefined): { text: strin
   if (TOKEN.test(message)) return { text: "Processing stopped before it finished.", reference: message };
   return { text: message, reference: null };
 }
+
+/** `startProcessing` failure reason when a source lacks consent for the configured AI provider (lib/actions/core/handovers.ts). */
+export const CONSENT_REQUIRED_REASON = "consent_required";
+
+/**
+ * Sources whose consent the processing page must (re-)record before starting. Normally only those without
+ * any consent; after startProcessing refused with `consent_required` (consent recorded for another AI
+ * provider, which the page cannot see), every source, since the server records the configured provider.
+ */
+export function sourcesNeedingConsent<S extends { consentRecordedAt: string | null }>(sources: readonly S[], reconsentAll: boolean): S[] {
+  return reconsentAll ? [...sources] : sources.filter((s) => !s.consentRecordedAt);
+}

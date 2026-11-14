@@ -28,6 +28,10 @@ import type { ActionDeps } from "./types";
 export const STALE_DRAFT_MESSAGE = "This draft was changed somewhere else. Reload it to see the latest details.";
 export const STALE_DRAFT_REASON = "stale_draft";
 
+/** startProcessing refused by the consent check: every source needs consent for the configured provider. */
+export const CONSENT_REQUIRED_REASON = "consent_required";
+export const CONSENT_REQUIRED_MESSAGE = "Every source needs consent for the current AI provider. Confirm the consent statement again, then start processing.";
+
 /**
  * R3 C2: a double-click or a retried submission with the same details returns the SAME draft (the database
  * reuses an untouched draft created by the same actor in the last 2 minutes), so the wizard never ends up
@@ -99,12 +103,23 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
       aiConfig: ai.data,
     });
     if (!plan.ok) return plan;
-    const { runId } = await mutations.startProcessing(deps.adminDb(), actor, {
-      handoverId: v.handoverId,
-      pipelineVersion: plan.data.pipelineVersion,
-      aiConfig: { ...plan.data.aiConfig },
-      jobs: plan.data.jobs,
-    });
+    let runId: string;
+    try {
+      ({ runId } = await mutations.startProcessing(deps.adminDb(), actor, {
+        handoverId: v.handoverId,
+        pipelineVersion: plan.data.pipelineVersion,
+        aiConfig: { ...plan.data.aiConfig },
+        jobs: plan.data.jobs,
+      }));
+    } catch (error) {
+      // The plan mirrors start_processing's source scope, so a precondition refusal here is its consent
+      // check: a source without consent, or with consent recorded for another AI provider (e.g. a source
+      // consented while the test adapter was configured). Tell the client to collect consent again.
+      if (isDbError(error) && error.code === "precondition_failed") {
+        return failWith("precondition_failed", { message: CONSENT_REQUIRED_MESSAGE, details: { reason: CONSENT_REQUIRED_REASON } });
+      }
+      throw error;
+    }
     try {
       deps.scheduleDrain();
     } catch {
