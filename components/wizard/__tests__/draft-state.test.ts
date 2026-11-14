@@ -81,3 +81,13 @@ describe("signedTarget", () => {
     assert.equal(signedTarget("not a url"), null);
   });
 });
+
+describe("fromSummary: prototype sample sources keep their Sample badge after a reload", () => {
+  it("a saved sample (title derived from its file name, with or without extension) is marked sample", () => {
+    assert.equal(fromSummary(src({ title: "Sample - CodeCell core team chat.txt" }), true).sample, true);
+    assert.equal(fromSummary(src({ title: "Sample - CodeCell infrastructure notes" }), true).sample, true);
+  });
+  it("the user's own files are never marked sample", () => {
+    assert.equal(fromSummary(src({ title: "WhatsApp Chat with CodeCell.txt" }), true).sample, undefined);
+  });
+});

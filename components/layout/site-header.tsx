@@ -11,6 +11,7 @@ const SECTIONS = [
   { href: `${routes.home}#how-it-works`, label: "How it works" },
   { href: `${routes.home}#evidence`, label: "Evidence" },
   { href: `${routes.home}#privacy`, label: "Privacy" },
+  { href: `${routes.home}#for-the-nerds`, label: "For the nerds" },
 ] as const;
 
 /** Public marketing header: translucent paper, sticky, one primary action. */
@@ -28,7 +29,7 @@ export function SiteHeader() {
           <BatonLogo />
         </Link>
         <nav aria-label="Main" className="flex items-center gap-1">
-          <ul className="mr-2 hidden items-center gap-1 md:flex">
+          <ul className="mr-2 hidden items-center gap-1 lg:flex">
             {SECTIONS.map((s) => (
               <li key={s.href}>
                 <Link href={s.href} className={cn(buttonVariants({ variant: "ghost" }), "px-3 text-muted-foreground hover:text-foreground")}>

@@ -1,7 +1,10 @@
 // Stub of the "@supabase/ssr" platform package. Only the auth surface is emulated:
 //   * auth.getUser() returns the user set with signInAs() (platform.ts), as the Supabase Auth server would
 //     after validating the session, so lib/db/actor.getVerifiedActor() mints actors through its real code;
-//   * auth.signInWithOtp() / exchangeCodeForSession() / verifyOtp() / signOut() are recorded, never sent.
+//   * auth.signInWithOtp() / signInWithOAuth() / signInWithPassword() / signUp() / resetPasswordForEmail() /
+//     updateUser() / exchangeCodeForSession() / verifyOtp() / signOut() are recorded,
+//     never sent. signInWithOAuth returns an authorize URL on NEXT_PUBLIC_SUPABASE_URL unless the test sets
+//     `oauth` ({ url?, error? }) on the platform state.
 // The user-scoped (RLS) client's `rpc` and `storage` forward to the user RecordingDb / RecordingStorage
 // installed with installBackends() (platform.ts); without them they throw. `from` is never emulated.
 
@@ -32,9 +35,36 @@ function client(kind) {
         record("signInWithOtp", args);
         return { data: {}, error: state().otpError ?? null };
       },
+      async signInWithOAuth(args) {
+        record("signInWithOAuth", args);
+        const o = state().oauth ?? {};
+        if (o.error) return { data: { provider: args?.provider, url: null }, error: o.error };
+        const url = o.url ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/authorize?provider=${args?.provider}`;
+        return { data: { provider: args?.provider, url }, error: null };
+      },
+      // Password auth: arguments are recorded with the password replaced, so no test log ever holds one.
+      // `state().password` ({ signIn?, signUp?, reset?, update? } each an error, plus signUpSession) shapes the result.
+      async signInWithPassword(args) {
+        record("signInWithPassword", { email: args?.email, password: args?.password ? "[set]" : "" });
+        return { data: {}, error: state().password?.signIn ?? null };
+      },
+      async signUp(args) {
+        record("signUp", { email: args?.email, password: args?.password ? "[set]" : "", options: args?.options });
+        const p = state().password ?? {};
+        if (p.signUp) return { data: { user: null, session: null }, error: p.signUp };
+        return { data: { user: { id: "stub-new-user" }, session: p.signUpSession ? { access_token: "stub" } : null }, error: null };
+      },
+      async resetPasswordForEmail(email, options) {
+        record("resetPasswordForEmail", { email, options });
+        return { data: {}, error: state().password?.reset ?? null };
+      },
+      async updateUser(attrs) {
+        record("updateUser", { password: attrs?.password ? "[set]" : undefined });
+        return { data: { user: state().user ?? null }, error: state().password?.update ?? null };
+      },
       async exchangeCodeForSession(code) {
         record("exchangeCodeForSession", { code });
-        return { data: {}, error: null };
+        return { data: {}, error: state().exchangeError ?? null };
       },
       async verifyOtp(args) {
         record("verifyOtp", args);

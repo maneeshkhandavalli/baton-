@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { FlaskConical } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { attributeLabel, enumOptions } from "@/components/handover/attributes";
 import { categoryLabel } from "@/components/handover/labels";
@@ -14,8 +15,10 @@ import { useAction } from "@/hooks/use-action";
 import { createManualPoint } from "@/lib/actions/review";
 import type { PointDetail } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel } from "@/lib/contracts/enums";
+import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 
 import { blankManualForm, buildManualPointInput, isPointCategory, MANUAL_FIELDS, type ManualPointForm } from "./manual-point";
+import { sampleForm, wouldOverwriteUserContent } from "./sample-point";
 
 const ACCESS_LABEL: Record<AccessLevel, string> = {
   everyone: "Everyone on the handover",
@@ -28,10 +31,12 @@ interface AddPointDialogProps {
   onOpenChange: (open: boolean) => void;
   handoverId: string;
   onCreated: (point: PointDetail) => void;
+  /** PROTOTYPE: start from a section's sample (the section's "Fill with sample data"). Nothing is saved until submit. */
+  initialSample?: ManualPointForm | null;
 }
 
 /** P1-1: add knowledge the AI missed (createManualPoint, §11.3). Text is masked on the server. */
-export function AddPointDialog({ open, onOpenChange, handoverId, onCreated }: AddPointDialogProps) {
+export function AddPointDialog({ open, onOpenChange, handoverId, onCreated, initialSample = null }: AddPointDialogProps) {
   const { run, isPending } = useAction();
   return (
     <Dialog open={open} onOpenChange={(o) => !isPending && onOpenChange(o)}>
@@ -39,6 +44,7 @@ export function AddPointDialog({ open, onOpenChange, handoverId, onCreated }: Ad
         {open && (
           <AddPointBody
             handoverId={handoverId}
+            initialSample={initialSample}
             pending={isPending}
             onCancel={() => onOpenChange(false)}
             onSubmit={async (input) => {
@@ -61,17 +67,35 @@ export function AddPointDialog({ open, onOpenChange, handoverId, onCreated }: Ad
 
 function AddPointBody({
   handoverId,
+  initialSample,
   pending,
   onCancel,
   onSubmit,
 }: {
   handoverId: string;
+  initialSample: ManualPointForm | null;
   pending: boolean;
   onCancel: () => void;
   onSubmit: (input: Parameters<typeof createManualPoint>[0]) => Promise<Record<string, string[]> | null>;
 }) {
-  const [form, setForm] = useState<ManualPointForm>(() => blankManualForm());
+  const [form, setForm] = useState<ManualPointForm>(() => initialSample ?? blankManualForm());
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+  // PROTOTYPE sample fill: the last sample put into the form (an untouched sample is not the user's writing),
+  // and a sample waiting for the user's "Replace" when the form already holds their own text.
+  const lastSample = useRef<ManualPointForm | null>(initialSample);
+  const [pendingSample, setPendingSample] = useState<ManualPointForm | null>(null);
+  const applySample = (next: ManualPointForm) => {
+    lastSample.current = next;
+    setPendingSample(null);
+    setErrors({});
+    setForm(next);
+  };
+  async function fillWithSample() {
+    const { CODECELL_SAMPLE_POINTS } = await import("@/lib/prototype/sample-data/codecell");
+    const next = { ...sampleForm(form.category, CODECELL_SAMPLE_POINTS[form.category]), accessOverride: form.accessOverride };
+    if (wouldOverwriteUserContent(form, lastSample.current)) setPendingSample(next);
+    else applySample(next);
+  }
   const set = (patch: Partial<ManualPointForm>) => setForm((f) => ({ ...f, ...patch }));
   const setField = (key: string, value: string) => setForm((f) => ({ ...f, fields: { ...f.fields, [key]: value } }));
 
@@ -110,6 +134,31 @@ function AddPointBody({
           void submit();
         }}
       >
+        {SAMPLE_DATA_ENABLED && (
+          <div className="space-y-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-caption text-muted-foreground">Prototype: prefill this point with invented CodeCell data. You can edit everything before adding it.</p>
+              <Button type="button" size="sm" variant="outline" onClick={() => void fillWithSample()} disabled={pending}>
+                <FlaskConical aria-hidden="true" data-icon="inline-start" />
+                Fill with sample data
+              </Button>
+            </div>
+            {pendingSample && (
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
+                <p className="text-caption font-medium">Replace what you&rsquo;ve written with the sample?</p>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setPendingSample(null)}>
+                    Keep mine
+                  </Button>
+                  <Button type="button" size="sm" onClick={() => applySample(pendingSample)}>
+                    Replace
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="mp-category">Kind of point</Label>
           <NativeSelect

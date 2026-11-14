@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Keyboard, ListFilter, Lock, Plus, SearchX } from "lucide-react";
+import { FlaskConical, Keyboard, ListFilter, Lock, Plus, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -23,13 +23,16 @@ import type { ReviewPointInput } from "@/lib/contracts/schemas";
 import { createGapQuestion } from "@/lib/actions/gaps";
 import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
+import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 import { cn } from "@/lib/utils";
 
 import { AddPointDialog } from "./add-point-dialog";
+import type { ManualPointForm } from "./manual-point";
 import { PointCard, type PointAction } from "./point-card";
 import { PointDetailPanel } from "./point-detail-panel";
 import { ReadinessPanel, type SectionFilter } from "./readiness-panel";
 import { ReviewDialogs, type ReviewDialogState } from "./review-dialogs";
+import { sampleForm } from "./sample-point";
 
 interface ReviewWorkspaceProps {
   handover: HandoverSummary;
@@ -63,6 +66,8 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   const [publishOpen, setPublishOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  // PROTOTYPE: the section sample the "Add a point" dialog opens with (null = a blank point).
+  const [addSample, setAddSample] = useState<ManualPointForm | null>(null);
   const [summary, setSummary] = useState("");
   const { run, isPending, error, clearError } = useAction();
   const cardRefs = useRef(new Map<string, HTMLElement>());
@@ -217,6 +222,18 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       toast.info("Preview only: actions are turned off and nothing is saved.");
       return;
     }
+    setAddSample(null);
+    setAddOpen(true);
+  }
+  // PROTOTYPE (lib/prototype/flags.ts): each handover section can open "Add a point" prefilled with its CodeCell
+  // sample. It only fills the form: nothing is saved until the user submits, existing points are never changed,
+  // and the new point is pending like any other (review and publish checks unchanged).
+  const sampleSection = SAMPLE_DATA_ENABLED ? HANDOVER_SECTIONS.find((x) => x.id === section) : undefined;
+  async function openSamplePoint() {
+    if (!sampleSection || preview) return;
+    const { CODECELL_SAMPLE_POINTS } = await import("@/lib/prototype/sample-data/codecell");
+    const category = sampleSection.categories[0];
+    setAddSample(sampleForm(category, CODECELL_SAMPLE_POINTS[category]));
     setAddOpen(true);
   }
 
@@ -301,8 +318,21 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
               </FilterChip>
             ))}
           </div>
+          {canAddPoint && sampleSection && !preview && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => void openSamplePoint()}
+              aria-label={`Fill ${sampleSection.label} with sample data`}
+              title="Prototype: opens Add a point with invented CodeCell data for this section"
+            >
+              <FlaskConical aria-hidden="true" data-icon="inline-start" />
+              Fill with sample data
+            </Button>
+          )}
           {canAddPoint && (
-            <Button size="sm" variant="outline" className="ml-auto" onClick={openAddPoint}>
+            <Button size="sm" variant="outline" className={cn(!(sampleSection && !preview) && "ml-auto")} onClick={openAddPoint}>
               <Plus aria-hidden="true" data-icon="inline-start" />
               Add a point
             </Button>
@@ -379,6 +409,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
           open={addOpen}
           onOpenChange={setAddOpen}
           handoverId={handover.id}
+          initialSample={addSample}
           onCreated={(point) => {
             setSection("all");
             setStatus("all");
