@@ -236,3 +236,9 @@ Phase B.
 2. Step 4 form: the published view in reviewer-preview mode vs. a filtered review workspace (with `handover`/`brand`).
 3. Whether to keep a lightweight "read-only tour" entry for visitors who only want to look (the current demo's value), or
    only the interactive sandbox.
+
+**Lead rulings (provisional, 2026-11-15; to be shown to the user at Checkpoint B):**
+1. Step 4 uses the published view in reviewer preview: the assembled handover with its decisions and tasks and their
+   evidence slips. Step 3 already covers the review.
+2. There is no separate read-only tour. One sandbox with a guided step rail, reset and a "skip to the finished handover"
+   link (= replay of the full canonical path, landing on Neha's v2). `/demo` stays the entry URL so existing links work.
