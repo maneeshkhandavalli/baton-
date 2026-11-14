@@ -15,12 +15,14 @@ import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyCons
 import { useAction } from "@/hooks/use-action";
 import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
 import type { MaskKind } from "@/lib/contracts/enums";
-import { cancelProcessing, startProcessing } from "@/lib/actions/handovers";
+import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 3_000; // D10
+/** Hosted (Vercel) has no background drain loop: while the run is active this page keeps it moving. */
+const NUDGE_MS = 20_000;
 
 interface ProcessingViewProps {
   handoverId: string;
@@ -41,8 +43,14 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => router.refresh(), POLL_MS);
-    return () => clearInterval(t);
-  }, [active, router]);
+    // Fire-and-forget: schedules one more fenced drain on the server; errors are ignored (the next tick retries).
+    const nudge = () => void continueProcessing({ handoverId }).catch(() => undefined);
+    const n = setInterval(nudge, NUDGE_MS);
+    return () => {
+      clearInterval(t);
+      clearInterval(n);
+    };
+  }, [active, router, handoverId]);
 
   const stages = r?.stages ?? [];
   const weights = stages.map((s) => (s.total ? s.done / s.total : 0));

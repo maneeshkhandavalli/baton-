@@ -129,6 +129,36 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
   });
 }
 
+/**
+ * Round 2 hosted preview: keeps an active run moving where no background loop exists (Vercel). The
+ * processing page calls this every ~20 s while its run is queued/running; it schedules ONE more fenced
+ * drain (`scheduleDrain`, the same `after()` drain startProcessing uses, with the same budget). Claim
+ * fencing, stage order, retries and backoff all still come from the database, so overlapping drains are
+ * safe. Membership is enforced by the RLS-scoped status read: a non-member gets that read's failure and
+ * nothing is scheduled. Writes nothing itself.
+ */
+export async function continueProcessing(deps: ActionDeps, input: { handoverId: string }): Promise<Result<{ active: boolean }>> {
+  return action(
+    deps,
+    handoverIdInput,
+    input,
+    async (_actor, v) => {
+      const status = await deps.queries.getProcessingStatus(v.handoverId);
+      if (!status.ok) return status;
+      const active = status.data.run?.status === "queued" || status.data.run?.status === "running";
+      if (active) {
+        try {
+          deps.scheduleDrain();
+        } catch {
+          // never fails the action
+        }
+      }
+      return ok({ active });
+    },
+    { refresh: false },
+  );
+}
+
 export async function cancelProcessing(deps: ActionDeps, input: { handoverId: string }): Promise<Result<null>> {
   return action(deps, handoverIdInput, input, async (actor, v) => {
     await mutations.cancelProcessing(deps.adminDb(), actor, v.handoverId);

@@ -13,7 +13,7 @@ const ACTION_FILES = ["handovers", "sources", "review", "gaps", "members", "priv
 /** §11.3 canonical placement. */
 const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
   handovers: [
-    "createHandover", "startProcessing", "cancelProcessing", "publishHandover", "startRevision", "deleteHandover",
+    "createHandover", "startProcessing", "continueProcessing", "cancelProcessing", "publishHandover", "startRevision", "deleteHandover",
     "offerCreatorTransfer", "respondToCreatorTransfer", "updateHandoverDetails",
   ],
   sources: ["createSourceUpload", "confirmSourceUploaded", "previewSource", "recordSourceConsent", "addExclusion", "confirmIdentityMatch", "removeSource"],
@@ -45,12 +45,12 @@ describe("lib/actions Server Function modules", () => {
     });
   }
 
-  it("covers every action the UI mocks export, plus createManualPoint (§11.3; not in the mocks)", () => {
+  it("covers every action the UI mocks export, plus createManualPoint (§11.3) and continueProcessing (Round 2 hosted drain nudge); neither is in the mocks", () => {
     const mock = new Set(asyncFunctionExports(read("lib/mocks/actions.ts")));
     const real = new Set(Object.values(EXPECTED).flat());
     assert.deepEqual([...mock].filter((n) => !real.has(n)), [], "every mock export exists under the same name");
     const missing = [...real].filter((n) => !mock.has(n));
-    assert.deepEqual(missing, ["createManualPoint"]);
+    assert.deepEqual(missing.sort(), ["continueProcessing", "createManualPoint"]);
   });
 
   it("deps.ts is server-only, exports only actionDeps, and offers no override", () => {

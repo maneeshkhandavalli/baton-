@@ -27,6 +27,11 @@ export async function startProcessing(input: { handoverId: string }): Promise<Re
   return core.startProcessing(actionDeps(), input);
 }
 
+/** Round 2 hosted preview: while a run is active, schedules one more fenced drain (no background loop on Vercel). */
+export async function continueProcessing(input: { handoverId: string }): Promise<Result<{ active: boolean }>> {
+  return core.continueProcessing(actionDeps(), input);
+}
+
 export async function cancelProcessing(input: { handoverId: string }): Promise<Result<null>> {
   return core.cancelProcessing(actionDeps(), input);
 }

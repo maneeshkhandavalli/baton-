@@ -803,3 +803,42 @@ describe("pass-through mutations use the verified actor and the parsed ids only"
     assert.deepEqual(f.calls, []);
   });
 });
+
+describe("continueProcessing (Round 2 hosted preview: keeps an active run moving)", () => {
+  const status = (runStatus: string | null) =>
+    okResult({ handoverState: "processing", run: runStatus === null ? null : { id: NEW_ID, status: runStatus, startedAt: null, finishedAt: null, stages: [], error: null }, sources: [] });
+
+  it("an active run (queued or running) schedules exactly one drain and writes nothing", async () => {
+    for (const s of ["queued", "running"]) {
+      const f = fakeDeps({ queries: { getProcessingStatus: status(s) } });
+      assert.deepEqual(await handovers.continueProcessing(f.deps, { handoverId: H }), { ok: true, data: { active: true } });
+      assert.deepEqual(f.events, ["scheduleDrain"], `${s}: one drain, no RPC`);
+      assert.deepEqual(f.calls, []);
+      assert.deepEqual(f.queryCalls, [{ name: "getProcessingStatus", args: [H] }]);
+    }
+  });
+
+  it("a finished, failed or absent run schedules nothing", async () => {
+    for (const s of ["succeeded", "failed", "cancelled", null]) {
+      const f = fakeDeps({ queries: { getProcessingStatus: status(s) } });
+      assert.deepEqual(await handovers.continueProcessing(f.deps, { handoverId: H }), { ok: true, data: { active: false } });
+      assert.deepEqual(f.events, [], String(s));
+    }
+  });
+
+  it("a handover the viewer cannot see (RLS read fails), no session or bad input schedules nothing", async () => {
+    const hidden = fakeDeps({ queries: {} });
+    const r = await handovers.continueProcessing(hidden.deps, { handoverId: H });
+    assert.equal(!r.ok && r.error.code, "not_found");
+    const anon = fakeDeps({ actor: null, queries: { getProcessingStatus: status("running") } });
+    assert.equal(((await handovers.continueProcessing(anon.deps, { handoverId: H })) as { error: { code: string } }).error.code, "unauthenticated");
+    const bad = fakeDeps({ queries: { getProcessingStatus: status("running") } });
+    assert.equal(((await handovers.continueProcessing(bad.deps, { handoverId: "x" })) as { error: { code: string } }).error.code, "validation_failed");
+    assert.deepEqual([...hidden.events, ...anon.events, ...bad.events], []);
+  });
+
+  it("a throwing scheduleDrain never fails the action", async () => {
+    const f = fakeDeps({ scheduleDrainThrows: true, queries: { getProcessingStatus: status("running") } });
+    assert.deepEqual(await handovers.continueProcessing(f.deps, { handoverId: H }), { ok: true, data: { active: true } });
+  });
+});
