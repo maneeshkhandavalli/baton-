@@ -65,8 +65,8 @@ Persistent left sidebar (keep the quiet, paper-toned idea; width and surface fro
 ### 1.4 Files
 `components/layout/{app-shell,app-sidebar,mobile-header,mobile-nav,workspace-nav,workspace-nav-list,workspace-navigation,page-container,shared-link-shell}.tsx`,
 new `components/layout/{page-band,skip-link,open-handovers,identity-menu,nav-match}.ts(x)`,
-`app/(workspace)/layout.tsx`, `config/navigation.ts` (**ownership request**, unowned today: `workspaceNav`/`accountNav`
-to me, `handoverNav` to `handover`, who asked for it; or handover moves its tabs into `components/handover/`).
+`app/(workspace)/layout.tsx`, `config/navigation.ts` (mine per lead ruling D8; `handoverNav` moves to `config/handover-navigation.ts`, owned by
+`handover`, as my first Phase C task).
 
 ---
 
@@ -331,6 +331,8 @@ plus my local scripts in `.claude/ui3/` (not committed).
 | R9 | Preview parity: mock data lacks failed-processing or offer cases. | Preview-local fixture overrides; any `lib/mocks` change agreed with handover + lead first. |
 
 ## 12. Order of work (Phase C, after Checkpoint B)
+0. **First (lead ruling D8):** move `handoverNav` (+ `HandoverNavItem`) out of `config/navigation.ts` into a new
+   `config/handover-navigation.ts` (owned by `handover` from then on), no behaviour change, coordinated with handover.
 1. Pure logic + tests: `nav-match`, `dashboard/model`, theme preference (no visual change).
 2. Theme System mode + no-flash (after brand applies the `app/layout.tsx` viewport change).
 3. Shell: sidebar/drawer structure, identity menu, active states, skip link, `PageBand`.

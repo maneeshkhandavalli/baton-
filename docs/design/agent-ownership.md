@@ -25,6 +25,9 @@ Start a dev server for a worktree with `node C:/Users/manee/Documents/programing
 - Public header/footer: `components/layout/site-header.tsx`, `site-footer.tsx`, `header-account.tsx`, `account-menu.tsx`
 - `docs/design/design-system.md`, `docs/design/research/**`, `public/**` brand assets, `app/icon*`, `app/opengraph-image*`
 - `config/status.ts` (evidence-label tones, labels and descriptions: part of the design system)
+- `lib/fonts.ts` (font definitions used by `app/layout.tsx`)
+- In `lib/theme.ts` and the generated `public/theme-init.js`: ONLY the `THEME_COLOR` values (they must equal `--background`,
+  a test pins them). The theme logic in those files stays `shell`'s.
 
 **Agent 2 `shell`**
 - `components/layout/**` except the four public header/footer files above (app shell, workspace nav, page container, …)

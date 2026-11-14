@@ -17,3 +17,4 @@ Phase A (audit, research, plan). No code edits.
 - 2026-11-15 `shell`: agreed H-1 to H-7 (role/state-aware tabs, `[id]/error.tsx`, no duplicate published title, `PageBand`, canonical `WIZARD_STEPS` in `components/wizard/steps.ts`, shared `SignInOptions`, collapsible sidebar rail on review). In plan §9.
 - 2026-11-15 to `main`: requests 1–3 in requests.md.
 - 2026-11-15 to `brand`: ready for Checkpoint A.
+- 2026-11-15 lead rulings (D8/D9): gap-interview is mine; `config/navigation.ts` stays with shell, and shell's first Phase C commit moves `handoverNav` to `config/handover-navigation.ts` (then mine; I rebase on shell's hash); `config/status.ts` goes to brand; the source-context server function is approved for Phase C. The two P0s (privacy review, preview polling a real action) are now at the top of plan.md.

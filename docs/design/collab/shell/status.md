@@ -13,7 +13,9 @@ Messages: flags sent to `handover` (H-1…H-7, **agreed** in reply, folded into 
 Checkpoint A).
 
 Waiting on: `brand` design-system draft (Checkpoint A) → I'll write `review-design-system.md`.
-Need from lead: ownership of `config/navigation.ts` (`workspaceNav`/`accountNav`) and `hooks/use-theme.ts`; additive
+Lead ruling D8: `config/navigation.ts` is mine; first Phase C task = move `handoverNav` to `config/handover-navigation.ts`
+(handover-owned), no behaviour change.
+Still need from lead: ownership of `hooks/use-theme.ts`; additive
 `routes.accountPassword`; confirm `lib/theme.ts` + `public/theme-init.js` are mine; test globs in `test:ui`; decision on
 default theme (System vs Light); OK for the sidebar "Open handovers" read.
 Blockers: none.

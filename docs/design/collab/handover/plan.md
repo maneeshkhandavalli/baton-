@@ -5,6 +5,26 @@ component treatments are chosen here.** Every visual need is written as a reques
 schema, auth, `lib/actions`, `lib/db` and `lib/contracts` are untouched. Every screen uses the existing actions and
 queries as they are; the one new server entry point is a thin read wrapper (§2.3), which needs `main`'s approval.
 
+## P0: first in Phase C (lead ruling, 2026-11-15)
+
+1. **The privacy review is a dead end** (audit X-1, R-5). Publish is blocked by `privacy_review_required` and no UI
+   calls `reviewPoint({ action: "resolve_privacy_review" })`. Fix: the hold marker, banner and privacy-review flow
+   in §3.4, plus a working "Go there" for that gate (§3.2), with the `privacy-review.test.ts` builder tests (§8).
+2. **`/preview/processing` polls the real `continueProcessing` action** (audit X-12, P-7). Fix: the pure
+   `ProcessingStatusView` (§5); the preview renders only the pure view, plus a static test that preview modules
+   never import `@/lib/actions`.
+
+Lead rulings recorded in agent-ownership.md and design-decisions.md (D8/D9):
+`components/gap-interview/**` is mine. `config/navigation.ts` stays with shell; at the start of Phase C shell moves
+`handoverNav` into `config/handover-navigation.ts`, which becomes mine (I coordinate the move with shell).
+`config/status.ts` belongs to brand. The source-context server function is **approved for Phase C**:
+`app/(workspace)/handover/[id]/review/source-context.ts`, read-only `"use server"`. It ONLY calls
+`getQueries().getSourceMessageContext`, validates `pointEvidenceId` with the contract's `uuidSchema` and clamps the
+window to `MESSAGE_CONTEXT_MAX` (from `lib/contracts/queries.ts`), relies on the verified session (RLS), makes no
+writes, and comes with tests.
+
+---
+
 Principle: **Baton's output is a document with provenance.** The review is an editor's desk, the published
 handover is a dossier, and every claim carries its evidence slip. Hierarchy comes from composition and type, not
 from boxing everything (X-15).
