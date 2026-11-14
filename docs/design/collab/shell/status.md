@@ -17,7 +17,9 @@ Checkpoint A: **done**. `review-design-system.md` (approve with changes: focus r
 Phase A complete; stopped. Next (Phase C, after Checkpoint B): handoverNav move commit first, then plan §12.
 Lead ruling D8: `config/navigation.ts` is mine; first Phase C task = move `handoverNav` to `config/handover-navigation.ts`
 (handover-owned), no behaviour change.
-Still need from lead: ownership of `hooks/use-theme.ts`; additive
-`routes.accountPassword`; confirm `lib/theme.ts` + `public/theme-init.js` are mine; test globs in `test:ui`; decision on
-default theme (System vs Light); OK for the sidebar "Open handovers" read.
+Lead rulings D10-D12 (recorded): default theme = System (provisional until Checkpoint B); sidebar "Open handovers"
+approved (one streamed listMyHandovers, no new query); theme logic (`hooks/use-theme.ts`, `lib/theme.ts`,
+`public/theme-init.js`) is mine, THEME_COLOR values stay brand's; `lib/routes.ts` mine for additive entries
+(`routes.accountPassword` approved); `test:ui` glob addition approved in my branch only.
+Waiting for Phase C to open after user approval.
 Blockers: none.

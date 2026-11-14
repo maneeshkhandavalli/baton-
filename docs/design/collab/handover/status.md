@@ -1,20 +1,25 @@
 # handover status
 
-Phase A (audit, research, plan). No code edits.
+**Phase A complete** (2026-11-15). No code was edited. Waiting for brand's response to my Checkpoint A review, then for Checkpoint B.
 
 | Item | State |
 |---|---|
-| Code read: wizard, processing, review, gaps, Gap Interview, settings, published, token routes, previews | Done |
-| Screenshots (previews, /demo, token error states; 1440/1024/390; light and dark) in `.claude/ui3/shots/handover/` | Done |
-| `audit.md` | Done (P0: privacy review dead end; P1s: no source context, dead readiness blockers, errors shown as empty, Publish hidden < lg, clamped conflict quotes, shortcut accessibility, …) |
-| `research.md` | Done |
-| `plan.md` | Done |
-| `requests.md` | Done (ownership of gap-interview and handoverNav, source-context server function approval, MaskedText and stamps to brand) |
-| Checkpoint A review of brand's draft (`review-design-system.md`) | **Waiting for brand's draft** |
+| `audit.md`: full workflow audit, finding IDs, the actions and queries each screen uses | Done |
+| `research.md`: document, editorial and review patterns mapped to Dossier | Done |
+| `plan.md`: P0s first, then report IA, evidence slip and source viewer, review and conflict UX, privacy review, wizard (5 steps), Gaps and Gap Interview, publish and ack, states, accessibility, tests, files, brand requests, risks | Done |
+| `requests.md`: ownership and approvals (1–3 ruled by lead), MaskedText and stamps (brand) | Done |
+| `review-design-system.md`: Checkpoint A, approve with changes (A1–A11, B1–B9) | Sent to brand (cc main) |
+| Screenshots `.claude/ui3/shots/handover/` (+ `spec/` for brand's specimen) | Done |
+
+## Phase C order (once the design system is approved)
+1. P0: privacy-review flow (resolve_privacy_review) plus working gates. P0: the pure ProcessingStatusView, so the preview never calls continueProcessing.
+2. Demo seams (view/connected split, action interfaces, `data-tour` anchors, `startRevision?` in ReviewActions).
+3. Rebase on shell's `handoverNav` move, then role- and state-aware tabs and `[id]/error.tsx`.
+4. Source viewer (approved read-only server function) and evidence slip.
+5. Review layout, decision bar, conflict ledger. Then wizard step 5. Then published dossier, ack signature block, print. Then Gaps and Gap Interview. Then Settings.
 
 ## Coordination log
-- 2026-11-15 `demo`: reuse contract agreed (view/connected split, action interfaces, pure ProcessingStatusView, action-free wizard steps, `draftStorageKey` / `storageNamespace` / `linkMode` / `showCover`, `data-tour` anchors). In plan §9.
-- 2026-11-15 `shell`: agreed H-1 to H-7 (role/state-aware tabs, `[id]/error.tsx`, no duplicate published title, `PageBand`, canonical `WIZARD_STEPS` in `components/wizard/steps.ts`, shared `SignInOptions`, collapsible sidebar rail on review). In plan §9.
-- 2026-11-15 to `main`: requests 1–3 in requests.md.
-- 2026-11-15 to `brand`: ready for Checkpoint A.
-- 2026-11-15 lead rulings (D8/D9): gap-interview is mine; `config/navigation.ts` stays with shell, and shell's first Phase C commit moves `handoverNav` to `config/handover-navigation.ts` (then mine; I rebase on shell's hash); `config/status.ts` goes to brand; the source-context server function is approved for Phase C. The two P0s (privacy review, preview polling a real action) are now at the top of plan.md.
+- `demo`: reuse contract agreed (plan §9), and `startRevision?` added to ReviewActions with a "Start a revision" affordance in the review.
+- `shell`: H-1 to H-7 agreed. `PageBand`, `WIZARD_STEPS` from `components/wizard/steps.ts`, `SignInOptions`, a collapsible sidebar rail on review and processing. Shell moves `handoverNav` in its first Phase C commit and sends me the hash.
+- `main`: rulings D8/D9 applied (gap-interview is mine; `config/handover-navigation.ts` becomes mine after shell's move; `config/status.ts` goes to brand; source-context function approved for Phase C).
+- `brand`: Checkpoint A review sent. Blocking items for my visuals: A1 (mono quotes), A2 (redaction loudness), A4 (ack signature block), A5 (decision bar), A7 (document layout width).

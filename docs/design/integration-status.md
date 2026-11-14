@@ -10,8 +10,8 @@ the lead consolidates here.
 | Agent | Phase A task | Status | Depends on | Next |
 |---|---|---|---|---|
 | brand | Research doc; landing in Dossier direction; design-system proposal (tokens light/dark, type, components, motion) | Draft circulated (Checkpoint A); landing in progress | — | Checkpoint A draft to the others, then Checkpoint B to the user |
-| shell | Route audit; dashboard/app-shell research; implementation plan | Done; reviewing draft | Design system (approval) | Review brand's proposal (Checkpoint A) |
-| handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; reviewing draft | Design system (approval) | Review brand's proposal (Checkpoint A) |
+| shell | Route audit; dashboard/app-shell research; implementation plan | Done; review sent (approve with changes: focus ring and faint-foreground contrast) | Design system (approval) | Review brand's proposal (Checkpoint A) |
+| handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done (scenario data on its branch, 14 tests); reviewing draft | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
 ## Checkpoints

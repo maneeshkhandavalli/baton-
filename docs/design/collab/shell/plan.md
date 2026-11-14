@@ -202,9 +202,9 @@ of one style [A3]:
 ## 5. Theme: light / dark / system, no flash, persistence
 
 ### 5.1 Behaviour
-- Preference values: `"light" | "dark" | "system"`. Storage key unchanged (`baton-theme`); what an absent or
-  unknown value means is the default, and that is a **decision for the lead/user**: today it is light.
-  Recommendation: absent = **System** for new visitors (dark-OS users currently get a cream page [T1]); anyone who already saved "dark" keeps
+- Preference values: `"light" | "dark" | "system"`. Storage key unchanged (`baton-theme`); an absent or
+  unknown value means **System** (lead ruling D10, provisional until the user confirms at Checkpoint B; today it is
+  light) for new visitors (dark-OS users currently get a cream page [T1]); anyone who already saved "dark" keeps
   it; a saved "light" keeps light.
 - Resolved theme still applied as the `dark` class on `<html>` (every token depends on it; no rename, D5). Also set
   `data-theme-preference` for debugging/tests.
