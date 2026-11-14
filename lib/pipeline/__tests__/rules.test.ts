@@ -127,4 +127,31 @@ describe("decideRunOutcome (§9.3, W0 I2.7)", () => {
     const d = decideRunOutcome([runJob("prepare_review", "failed", "internal"), runJob("extract", "succeeded")]);
     assert.ok(d.kind === "finish" && d.status === "failed" && /^[a-z0-9_:]{1,64}$/.test(d.errorMessage));
   });
+
+  it("surfaces the AI cause as the run reason when every failed extract shares it", () => {
+    for (const reason of ["ai_provider_error", "ai_invalid_output", "ai_request_invalid", "ai_timed_out", "ai_transient", "ai_budget_exceeded"]) {
+      const d = decideRunOutcome([
+        runJob("parse", "failed", "parser:corrupt_file", IDS.source),
+        runJob("extract", "cancelled", "upstream_failed", IDS.source),
+        runJob("extract", "failed", reason, IDS.source2),
+        runJob("extract", "failed", reason, IDS.source2),
+        runJob("verify_support", "succeeded"),
+      ]);
+      assert.deepEqual(d, { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: reason });
+    }
+  });
+
+  it("keeps no_source_succeeded for mixed or non-AI extract failures", () => {
+    for (const reasons of [["ai_provider_error", "ai_invalid_output"], ["source_changed"], ["ai_provider_error", "lease_expired"]]) {
+      const d = decideRunOutcome(reasons.map((r) => runJob("extract", "failed", r, IDS.source)));
+      assert.deepEqual(d, { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: "no_source_succeeded" }, reasons.join("+"));
+    }
+  });
+
+  it("a handover-level stage that failed on an AI call reports the AI reason; otherwise <stage>_failed", () => {
+    const ai = decideRunOutcome([runJob("extract", "succeeded", null, IDS.source), runJob("verify_support", "failed", "ai_provider_error")]);
+    assert.deepEqual(ai, { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: "ai_provider_error" });
+    const other = decideRunOutcome([runJob("extract", "succeeded", null, IDS.source), runJob("verify_support", "failed", "lease_expired")]);
+    assert.deepEqual(other, { kind: "finish", status: "failed", errorCode: "processing_failed", errorMessage: "verify_support_failed" });
+  });
 });

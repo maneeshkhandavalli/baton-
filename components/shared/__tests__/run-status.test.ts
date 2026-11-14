@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { RUN_SURFACED_AI_REASONS } from "@/lib/pipeline/finish";
+
 import { runReasonText, stageStatusMeta } from "../run-status";
 
 describe("stage status", () => {
@@ -17,6 +19,24 @@ describe("run reason copy", () => {
     assert.match(r.text, /database needs an update/);
     assert.equal(r.reference, "db_schema_outdated");
     assert.match(runReasonText("no_jobs").text, /nothing to process/);
+  });
+  it("maps every run reason the pipeline can write (structural and AI) to plain language", () => {
+    const tokens = [
+      "no_source_succeeded",
+      "verify_support_failed",
+      "analyze_failed",
+      "prepare_review_failed",
+      "provider_not_configured",
+      "ai_config_changed",
+      // every AI reason lib/pipeline/finish.ts can write as the run reason
+      ...RUN_SURFACED_AI_REASONS,
+    ];
+    for (const token of tokens) {
+      const r = runReasonText(token);
+      assert.notEqual(r.text, "Processing stopped before it finished.", token);
+      assert.equal(r.reference, token);
+    }
+    assert.match(runReasonText("ai_provider_error").text, /free-tier limit/);
   });
   it("never shows an unknown raw token as the sentence", () => {
     assert.deepEqual(runReasonText("parser:corrupt_file"), { text: "Processing stopped before it finished.", reference: "parser:corrupt_file" });

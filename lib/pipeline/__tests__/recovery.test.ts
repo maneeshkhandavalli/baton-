@@ -197,7 +197,7 @@ describe("E4: retry and failure recovery", () => {
     assert.deepEqual(w.completions.map((c) => c.p_outcome), ["retry", "retry", "retry"]);
     assert.equal(w.jobs.get(IDS.job)!.status, "failed", "the database turns the last retry into failed");
     assert.equal(w.finished[0].p_status, "failed");
-    assert.equal(w.finished[0].p_error_message, "no_source_succeeded");
+    assert.equal(w.finished[0].p_error_message, "ai_timed_out", "the shared AI cause is the run reason");
     assert.equal(w.stores.get(IDS.job)!.points.length, 0);
   });
 
@@ -237,7 +237,7 @@ describe("E4: multi-source runs", () => {
     assert.deepEqual(w.finished.map((f) => f.p_status), ["succeeded"], "partial success: the run succeeds; the failed source stays visible on its job");
   });
 
-  it("when every source fails, the run fails with no_source_succeeded", async () => {
+  it("when every source fails with the same AI reason, the run fails with that reason", async () => {
     const jobB = "9e6f7081-a2b3-4dc5-8e6f-708192a3b4c6";
     const w = world([
       { sourceId: SRC_A, jobId: IDS.job, messages: messages(1, 3) },
@@ -247,6 +247,6 @@ describe("E4: multi-source runs", () => {
     await drainer(w.client, ai)({ maxJobs: 5 });
     assert.equal(w.finished.length, 1);
     assert.equal(w.finished[0].p_status, "failed");
-    assert.equal(w.finished[0].p_error_message, "no_source_succeeded");
+    assert.equal(w.finished[0].p_error_message, "ai_invalid_output");
   });
 });

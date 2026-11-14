@@ -143,7 +143,7 @@ describe("extract end to end (real extractCandidates, fake adapter)", () => {
     const c = db.called("complete_processing_job")[0].args;
     assert.equal(c.p_error_message, "ai_invalid_output");
     assert.equal(db.called("pipeline_store_extract_chunk").length, 0);
-    assert.equal(db.called("finish_processing_run")[0].args.p_error_message, "no_source_succeeded");
+    assert.equal(db.called("finish_processing_run")[0].args.p_error_message, "ai_invalid_output", "the AI cause reaches the run (the only reason the processing page can read)");
   });
 });
 
