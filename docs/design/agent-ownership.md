@@ -34,6 +34,8 @@ Start a dev server for a worktree with `node C:/Users/manee/Documents/programing
 - `app/(workspace)/layout.tsx`, `app/(workspace)/dashboard/**`, `app/(workspace)/account/**`
 - `components/dashboard/**`, `components/account/**`, `components/auth/**`, `app/(auth)/**`
 - `components/shared/theme-toggle.tsx` and theme behaviour (provider wiring), `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx`
+- Theme logic: `hooks/use-theme.ts`, `lib/theme.ts`, `public/theme-init.js` (except brand's `THEME_COLOR` values)
+- `lib/routes.ts`: additive entries only (no renames or removals without lead approval); others request new routes from shell
 - `config/navigation.ts`. First Phase C task: move `handoverNav` into a new `config/handover-navigation.ts` owned by `handover`
   (coordinated with `handover`; no behaviour change)
 - `app/(preview)/preview/dashboard/**`
@@ -67,7 +69,8 @@ storage, Vercel configuration. UI agents call existing actions and queries exact
    touch `master`, never force anything.
 2. Need a change in a file you do not own? Write a request in your collab folder and message the owner (and `main`).
    The owner makes the change. If it is urgent and blocking, the lead decides.
-3. New dependencies need lead approval first (`package.json` is lead-owned). Prefer CSS scroll-driven animation,
+3. New dependencies need lead approval first (`package.json` is lead-owned). Exception granted: an agent may add ITS OWN
+   test folder to the matching `test:*` glob in its branch (single-line change); the lead reconciles these at integration. Prefer CSS scroll-driven animation,
    `framer-motion` and `lenis`, which are already installed.
 4. Keep semantic token NAMES stable (`--background`, `--foreground`, `--card`, `--primary`, `--status-*`, …). Add new
    tokens rather than renaming; every screen depends on them.

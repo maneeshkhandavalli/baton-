@@ -12,7 +12,9 @@ Phase A: audit, research and plan **done** (2026-11-15). No code edits.
 Messages: flags sent to `handover` (H-1…H-7, **agreed** in reply, folded into plan) and `brand` (B-1…B-5, ready for
 Checkpoint A).
 
-Waiting on: `brand` design-system draft (Checkpoint A) → I'll write `review-design-system.md`.
+Checkpoint A: **done**. `review-design-system.md` (approve with changes: focus ring 2.0–2.3:1 and faint-foreground
+<4.5:1 must change, plus missing app-side specs) sent to `brand`, cc `main`.
+Phase A complete; stopped. Next (Phase C, after Checkpoint B): handoverNav move commit first, then plan §12.
 Lead ruling D8: `config/navigation.ts` is mine; first Phase C task = move `handoverNav` to `config/handover-navigation.ts`
 (handover-owned), no behaviour change.
 Still need from lead: ownership of `hooks/use-theme.ts`; additive
