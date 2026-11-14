@@ -14,9 +14,19 @@ the lead consolidates here.
 | handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done: 8079f5a scenario + dec6439 sample alignment (npm test 2,115/2,116 pass, 1 Docker todo); review sent (D1-D4) | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
+## Recovery milestone (D15/D16), 2026-11-15
+| Agent | Delivered | Branch head | Next |
+|---|---|---|---|
+| brand | `/design/variant-a` (immersive system) and `/design/variant-b` (editorial transfer) on :3101; "Harbour" app palette in design-system.md §0; Dribbble notes in research | `ui3/agent1-brand` @ d7754bf | Waits for the user's pick |
+| shell | `/design/dashboard-preview` on :3102: new IA, pure `classify()` model + 10 tests, light + dark, 390/1024/1440 | `ui3/agent2-shell` @ 2943553 | On hold: real /dashboard and Light/Dark/System control wait for user approval |
+| handover | Variant review (`collab/handover/review-variants.md`); brand accepted the carry-over rules | no code | Phase C after approval |
+| demo | Cast swap 955d011; visual requirements in `collab/demo/visual-requirements.md` | `ui3/agent4-demo` @ 955d011 | Phase C after approval |
+
 ## Checkpoints
 - [x] Checkpoint A (done): `brand` circulates the draft design system; `shell`, `handover`, `demo` send feedback; `brand` responds.
-- [~] Checkpoint B (awaiting the user): user reviews the landing preview, screenshots, design system, tokens, motion spec, research.
+- [x] Checkpoint B: Dossier package rejected by the user (D15).
+- [~] Checkpoint B2 (awaiting the user): landing variant A or B, Harbour palette, dashboard preview.
+- ~~Checkpoint B (old)~~: user reviews the landing preview, screenshots, design system, tokens, motion spec, research.
 - [ ] Phase C start: parallel implementation on the approved system.
 - [ ] Checkpoint C: every UI agent reviews at least one other agent's completed work.
 - [ ] Phase D: integration one branch at a time on `ui3/integration`; whole-product review; user approval before any merge to `master`.
