@@ -24,18 +24,25 @@ Start a dev server for a worktree with `node C:/Users/manee/Documents/programing
 - `components/marketing/**` except `demo-tabs.tsx`; `app/(marketing)/layout.tsx`, `app/(marketing)/page.tsx`
 - Public header/footer: `components/layout/site-header.tsx`, `site-footer.tsx`, `header-account.tsx`, `account-menu.tsx`
 - `docs/design/design-system.md`, `docs/design/research/**`, `public/**` brand assets, `app/icon*`, `app/opengraph-image*`
+- `config/status.ts` (evidence-label tones, labels and descriptions: part of the design system)
 
 **Agent 2 `shell`**
 - `components/layout/**` except the four public header/footer files above (app shell, workspace nav, page container, …)
 - `app/(workspace)/layout.tsx`, `app/(workspace)/dashboard/**`, `app/(workspace)/account/**`
 - `components/dashboard/**`, `components/account/**`, `components/auth/**`, `app/(auth)/**`
 - `components/shared/theme-toggle.tsx` and theme behaviour (provider wiring), `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx`
+- `config/navigation.ts`. First Phase C task: move `handoverNav` into a new `config/handover-navigation.ts` owned by `handover`
+  (coordinated with `handover`; no behaviour change)
 - `app/(preview)/preview/dashboard/**`
 
 **Agent 3 `handover`**
 - `app/(workspace)/handover/**`, `app/(token)/**`
 - `components/wizard/**`, `components/review/**`, `components/handover/**`, `components/gaps/**`, `components/processing/**`,
-  `components/published/**`, `components/settings/**`, `components/sources/**` (if present)
+  `components/published/**`, `components/settings/**`, `components/sources/**` (if present), `components/gap-interview/**`
+- `config/handover-navigation.ts` (after `shell` creates it in Phase C)
+- Approved new file: `app/(workspace)/handover/[id]/review/source-context.ts`, a read-only `"use server"` wrapper that
+  only calls the existing `getQueries().getSourceMessageContext` (input validated with the existing contract schema,
+  verified session via the facade, no writes, tests added)
 - `app/(preview)/preview/**` except `dashboard/**`; `components/preview/**`
 
 **Agent 4 `demo`**
