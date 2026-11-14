@@ -9,7 +9,8 @@
 // Configuration comes ONLY from <repo>/.env.baton-dev (read literally, like restore-dev/start-baton-dev.mjs),
 // which must contain AI_API_KEY. This process forces AI_PROVIDER=gemini for itself; the file is not changed.
 //
-// What it does (synthetic data only: fixtures/demo/round2-club-chat.txt, 14 invented lines):
+// What it does (synthetic data only: fixtures/demo/round2-gemini-e2e.txt, 23 invented lines covering every
+// point category, an unanswered question, an owner-less undated task and two planted PII values):
 //   1. guards: target is baton-dev and never the original project; the local dev server is NOT running
 //      (its worker would claim this run with a different AI config); no queued/running job or open run
 //      anywhere in baton-dev (the claim is global); the actor profile exists.
@@ -20,10 +21,14 @@
 //   4. assertions: run/jobs succeeded; every pipeline_* RPC the worker sent carried p_claim_generation equal
 //      to the claimed row's generation (recorded from the wire, Supabase RPC paths only, no bodies kept);
 //      Gemini provenance and token counts; masking; evidence; nothing published; the API key appears in no
-//      row read back; a stale claim (finished job) is refused with BTLL0 by both overloads.
+//      row read back; a stale claim (finished job) is refused with BTLL0 by both overloads. Evidence quality
+//      (tests/live/evidence-check.ts, pure): every exact/normalized quote is a substring of its cited message
+//      body; owner/assignee labels and due dates in attributes appear in the source text; the owner-less
+//      task is given no owner or date.
 //   5. cleanup (always): soft-delete through delete_handover. Prints the handover id and the optional
 //      hard-purge SQL (purge_handover is granted to no app role, so it runs in the baton-dev SQL editor).
-// Output is ids, counts and statuses only: never message text, model output or secrets.
+// Output is ids, counts and statuses, plus (because the fixture is entirely synthetic) up to 12 findings as
+// `category | title | first verified quote` and any check violations. Never secrets.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -31,13 +36,18 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { inventedOwnerOrDate, quotesAreVerbatim, stripChatTimestamps, unsupportedAttributes } from "./evidence-check";
+
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const TARGET = "xnwppnzvrpthukxjfojj";
 const CONFIRM = `run-gemini-e2e-on-${TARGET}`;
 const FORBIDDEN = ["enalguyitewjojgrgzxv", "enalguyitewjojgrgzv"];
 const STATEMENT = "gemini-free-2026-11-14-v1";
-const FIXTURE = path.join(REPO, "fixtures/demo/round2-club-chat.txt");
-const PLANTED = ["99999 00001", "desk@example.org"]; // synthetic PII in the fixture; must be masked
+const FIXTURE = path.join(REPO, "fixtures/demo/round2-gemini-e2e.txt");
+const PLANTED = ["99999 00002", "treasurer@example.org"]; // synthetic PII in the fixture; must be masked
+/** The fixture's one task that names no owner and no date (the model must not invent them). */
+const OWNERLESS_TASK = "registration form still needs to be updated";
+const MAX_FINDINGS_PRINTED = 12;
 const RUN_TIMEOUT_MS = 12 * 60_000;
 
 const ENABLED = process.env.BATON_LIVE_E2E === "1" && process.env.BATON_LIVE_E2E_CONFIRM === CONFIRM;
@@ -164,8 +174,8 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
     handoverId = await m.mutations.createHandover(db, actor, {
       title: `ZZ TEST Gemini e2e ${stamp}`,
-      teamName: "Synthetic Robotics Club",
-      roleTitle: "Treasurer",
+      teamName: "Synthetic Debate Society",
+      roleTitle: "Secretary",
       creatorRole: "outgoing",
     });
     console.log(`[live-e2e] handover ${handoverId}`);
@@ -174,7 +184,7 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     const ticket = await m.storage.createSourceUpload(db, actor, m.serverStorage(), {
       handoverId,
       kind: "whatsapp",
-      fileName: "WhatsApp Chat with Synthetic Robotics Club Core.txt",
+      fileName: "WhatsApp Chat with Synthetic Debate Society Committee.txt",
       mimeType: "text/plain",
       sizeBytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -277,14 +287,14 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     assert.equal(source.raw_storage_path, null, "raw upload deleted after the parse");
     assert.equal(source.consent_ai_provider, "gemini");
     assert.equal(source.consent_statement_version, STATEMENT);
-    const msgs = (await admin.from("source_messages").select("body").eq("source_id", sourceId)).data as Array<{ body: string }>;
+    const msgs = (await admin.from("source_messages").select("id, body").eq("source_id", sourceId)).data as Array<{ id: string; body: string }>;
     assert.ok(msgs.length > 0);
     for (const p of PLANTED) assert.ok(!msgs.some((x) => x.body.includes(p)), "planted PII persisted unmasked");
 
-    const points = (await admin.from("handover_points").select("id, category, review_state, origin").eq("handover_id", handoverId)).data as Array<Record<string, string>>;
-    const revs = (await admin.from("point_revisions").select("title, statement, attributes, ai_provenance").eq("handover_id", handoverId)).data as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const quotes = (await admin.from("evidence_quotes").select("quote_check").eq("handover_id", handoverId)).data as Array<{ quote_check: string }>;
-    const links = (await admin.from("point_evidence").select("support_verdict, verifier_provenance").eq("handover_id", handoverId)).data as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const points = (await admin.from("handover_points").select("id, category, review_state, origin, current_revision_id").eq("handover_id", handoverId)).data as Array<Record<string, string>>;
+    const revs = (await admin.from("point_revisions").select("id, point_id, title, statement, attributes, ai_provenance").eq("handover_id", handoverId)).data as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const quotes = (await admin.from("evidence_quotes").select("id, source_message_id, quote_text, quote_check").eq("handover_id", handoverId)).data as Array<{ id: string; source_message_id: string | null; quote_text: string; quote_check: string }>;
+    const links = (await admin.from("point_evidence").select("point_id, evidence_id, support_verdict, verifier_provenance").eq("handover_id", handoverId)).data as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
     const tally = (xs: string[]) => xs.reduce<Record<string, number>>((a, x) => ((a[x] = (a[x] ?? 0) + 1), a), {});
     console.log(`[live-e2e] points=${points.length} ${JSON.stringify(tally(points.map((p) => p.category)))} quotes=${JSON.stringify(tally(quotes.map((q) => q.quote_check)))} verdicts=${JSON.stringify(tally(links.map((l) => l.support_verdict)))}`);
     assert.ok(points.length >= 3, "Gemini extracted points from the demo chat");
@@ -293,6 +303,45 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     for (const r of revs) for (const p of PLANTED) assert.ok(!JSON.stringify([r.title, r.statement, r.attributes]).includes(p), "unmasked value in a stored point");
     assert.ok(quotes.some((q) => q.quote_check === "exact" || q.quote_check === "normalized"), "at least one verified verbatim quote");
     assert.ok(links.some((l) => l.support_verdict !== "unchecked" && l.verifier_provenance?.provider === "gemini"), "Gemini verified support");
+
+    // ── Evidence quality (pure checks, tests/live/evidence-check.ts) ──
+    const revById = new Map(revs.map((r) => [r.id as string, r]));
+    const quoteById = new Map(quotes.map((q) => [q.id, q]));
+    type QuoteRow = (typeof quotes)[number];
+    const isVerified = (q: QuoteRow | undefined): q is QuoteRow => q !== undefined && (q.quote_check === "exact" || q.quote_check === "normalized");
+    const current = points.map((p) => {
+      const rev = revById.get(p.current_revision_id);
+      const cited = links.filter((l) => l.point_id === p.id).map((l) => quoteById.get(l.evidence_id)).filter(isVerified);
+      return { category: p.category, title: String(rev?.title ?? "?"), attributes: (rev?.attributes ?? {}) as Record<string, unknown>, cited };
+    });
+
+    const bodies = new Map(msgs.map((x) => [x.id, x.body]));
+    const quoteViolations = quotesAreVerbatim(quotes, bodies);
+    const sourceText = stripChatTimestamps(bytes.toString("utf8"));
+    const attributeViolations = unsupportedAttributes(current, sourceText, { dateOrder: "dmy" });
+    const ownerless = new Set(msgs.filter((x) => x.body.includes(OWNERLESS_TASK)).map((x) => x.id));
+    assert.equal(ownerless.size, 1, "the owner-less task message was persisted once");
+    const invented = inventedOwnerOrDate(
+      current.map((c) => ({ ...c, messageIds: c.cited.map((q) => q.source_message_id).filter((id): id is string => id !== null) })),
+      ownerless,
+    );
+    const ownerlessExtracted = current.some((c) => c.cited.some((q) => q.source_message_id !== null && ownerless.has(q.source_message_id)));
+    console.log(
+      `[live-e2e] evidence checks: quotes=${quotes.length} verified=${quotes.filter(isVerified).length} quoteViolations=${quoteViolations.length} ` +
+        `attributeViolations=${attributeViolations.length} ownerlessTaskExtracted=${ownerlessExtracted} inventedOwnerOrDate=${invented.length}`,
+    );
+    for (const v of quoteViolations) console.log(`[live-e2e]   quote violation: ${v.reason} quote=${v.quoteId} message=${v.sourceMessageId} check=${v.quoteCheck}`);
+    for (const v of attributeViolations) console.log(`[live-e2e]   attribute violation: ${v.reason} ${v.category}.${v.field}=${JSON.stringify(v.value)} (${current[v.index].title})`);
+    for (const v of invented) console.log(`[live-e2e]   invented for the owner-less task: ${v.category}.${v.field}=${JSON.stringify(v.value)}`);
+
+    // Synthetic data only, so a sample of findings is printed for the lead to show.
+    const sample = [...current].sort((a, b) => a.category.localeCompare(b.category)).slice(0, MAX_FINDINGS_PRINTED);
+    console.log(`[live-e2e] findings (${sample.length} of ${current.length}): category | title | first verified quote`);
+    for (const c of sample) console.log(`[live-e2e]   ${c.category} | ${c.title} | ${c.cited[0] ? JSON.stringify(c.cited[0].quote_text) : "(no verified quote)"}`);
+
+    assert.deepEqual(quoteViolations, [], "a quote marked exact/normalized is not a substring of its cited message");
+    assert.deepEqual(attributeViolations, [], "an owner/assignee label or due date is not in the source text");
+    assert.deepEqual(invented, [], "the owner-less, undated task was given an owner or a date");
 
     const h = (await admin.from("handovers").select("state").eq("id", handoverId).single()).data;
     assert.equal(h.state, "in_review");
@@ -303,6 +352,6 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
 
     // ── The API key is in no row read back ──
     const key = process.env.AI_API_KEY!.trim();
-    assert.ok(!JSON.stringify({ run, jobs, revs, links, source }).includes(key), "API key found in database rows");
+    assert.ok(!JSON.stringify({ run, jobs, revs, links, quotes, msgs, source }).includes(key), "API key found in database rows");
   });
 });
