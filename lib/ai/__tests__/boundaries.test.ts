@@ -45,6 +45,7 @@ describe("lib/ai boundaries", () => {
       "config.ts",
       "quote-check.ts",
       "providers/fake.ts",
+      "providers/gemini.ts",
       "prompts/versions.ts",
       "prompts/payload.ts",
       "prompts/extract.ts",
@@ -85,11 +86,23 @@ describe("lib/ai boundaries", () => {
     for (const f of files) assert.doesNotMatch(code(f.text), /\bconsole\s*\.|\bdebugger\b/, f.rel);
   });
 
+  // D11 (2026-11-14): the Gemini adapter is the ONE module allowed to import the provider SDK (which does
+  // the network I/O). Every other lib/ai module stays SDK- and network-free.
+  const SDK_ALLOWED: Readonly<Record<string, string>> = { "providers/gemini.ts": "@google/genai" };
+
+  it("only providers/gemini.ts imports the provider SDK", () => {
+    for (const f of files) {
+      const usesSdk = importSpecifiers(f.text).includes("@google/genai");
+      assert.equal(usesSdk, SDK_ALLOWED[f.rel] === "@google/genai", `${f.rel}: provider SDK import`);
+    }
+  });
+
   it("imports only contracts, privacy, zod, server-only and lib/ai itself (no SDK, no network)", () => {
     for (const f of files) {
       for (const spec of importSpecifiers(f.text)) {
         const relative = spec.startsWith("./") || spec.startsWith("../");
-        assert.ok(spec === "server-only" || spec === "zod" || relative, `${f.rel} imports ${spec}`);
+        const sdk = SDK_ALLOWED[f.rel] === spec;
+        assert.ok(spec === "server-only" || spec === "zod" || relative || sdk, `${f.rel} imports ${spec}`);
         if (relative) {
           const resolved = path.posix.normalize(path.posix.join("lib/ai", path.posix.dirname(f.rel), spec));
           assert.ok(

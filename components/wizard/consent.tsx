@@ -9,19 +9,20 @@ import { MASK_KINDS, type MaskKind } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 /** Version of the consent statement below. Bump it whenever the wording changes (§12.2). */
-export const CONSENT_STATEMENT_VERSION = "2026-11-v1";
+export const CONSENT_STATEMENT_VERSION = "gemini-paid-2026-11-14-v1";
 
 /**
- * The AI provider is still an open decision (D11), so the statement names it generically.
- * Main replaces this with the configured provider's name before launch.
+ * D11 (2026-11-14): the configured provider is the Google Gemini Developer API on the paid tier
+ * (lib/ai/providers/gemini.ts, GEMINI_DISPLAY_NAME). The server records the configured provider id with
+ * each consent, and processing refuses a source whose consent names a different provider.
  */
-export const AI_PROVIDER_LABEL = "Baton's configured AI provider";
+export const AI_PROVIDER_LABEL = "Google Gemini (Gemini Developer API, paid tier)";
 
 export const CONSENT_ITEMS = [
   { id: "informed", label: "I told the group (or document owners) that I'm using this content for a Baton handover." },
   {
     id: "provider",
-    label: `I understand masked content will be processed by ${AI_PROVIDER_LABEL}. Phone numbers, emails, payment details and secrets are masked first, and the raw file is deleted after processing.`,
+    label: `I understand masked content will be sent to ${AI_PROVIDER_LABEL} for processing. Phone numbers, emails, payment details and secrets are masked before anything is sent. On the paid tier, Google does not use this content to train its models, but may keep it for a limited time to detect abuse. The raw file is deleted after processing.`,
   },
   { id: "optout", label: "I told members they can ask to be left out, and I've excluded anyone who did." },
 ] as const;

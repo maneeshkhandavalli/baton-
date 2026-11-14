@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createDevDrainTick, DEV_DRAIN_BUDGET, devDrainAllowed } from "./dev-drain-guard";
+import { workerTargetAllowed } from "./target-guard";
 import { drainJobs } from "./worker";
 
 /**
@@ -20,6 +21,10 @@ type LoopState = { started: boolean };
 const g = globalThis as typeof globalThis & { __batonDevDrain?: LoopState };
 
 export function startDevDrainLoop(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.NODE_ENV === "development" && env.BATON_DEV_WORKER !== "0" && !workerTargetAllowed(env.NEXT_PUBLIC_SUPABASE_URL)) {
+    console.warn("[baton dev worker] REFUSED: the configured Supabase project is not allowed for processing (use node restore-dev/start-baton-dev.mjs)");
+    return false;
+  }
   if (!devDrainAllowed(env)) return false;
   const state = (g.__batonDevDrain ??= { started: false });
   if (state.started) return true; // one loop per server process, even across hot reloads

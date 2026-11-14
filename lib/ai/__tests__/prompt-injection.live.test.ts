@@ -15,7 +15,7 @@
 //      patterns; paraphrased injections must be resisted by the model itself. Gate: 100% pass on the
 //      provider/model/prompt version being enabled, re-run on any change to model, prompt version or adapter.
 //      No provider is selected here (D11 stays open); nothing in this file chooses or configures one.
-// Run (once D11 is decided and an adapter exists), with the server env configured:
+// Run (paid Gemini calls), with the server env configured (AI_PROVIDER=gemini, AI_API_KEY) and BATON_LIVE_AI=1:
 //   node --import ./lib/ai/__tests__/resolve-ai.mjs --test "lib/ai/__tests__/prompt-injection.live.test.ts"
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -25,9 +25,15 @@ import { getAiConfiguration, getAiProviderForRun } from "../config";
 import { extractCandidates } from "../extract";
 import { verifySupport } from "../verify-support";
 
+// Paid calls are explicitly opt-in: a configured key alone never runs this suite (e.g. inside `npm test`).
+const OPTED_IN = process.env.BATON_LIVE_AI === "1";
 const config = getAiConfiguration();
-const live = config.ok && config.mode === "production" ? config : null;
-const skip = live ? false : "no production AI provider configured (D11 open); the deterministic suite still runs";
+const live = OPTED_IN && config.ok && config.mode === "production" ? config : null;
+const skip = live
+  ? false
+  : OPTED_IN
+    ? "BATON_LIVE_AI=1 but no production AI provider is configured (AI_PROVIDER=gemini + AI_API_KEY)"
+    : "live suite is opt-in (BATON_LIVE_AI=1, paid calls); the deterministic suite still runs";
 
 describe("prompt-injection suite: LIVE provider", { skip }, () => {
   const cases = loadInjectionCases();

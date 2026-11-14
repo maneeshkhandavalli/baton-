@@ -10,6 +10,7 @@ import type { PipelineAi } from "./ai";
 import { createConsoleLogger } from "./log";
 import { getVerifiedPepper } from "./pepper";
 import { createDrainer, type DrainOptions, type DrainReport } from "./runner";
+import { WorkerTargetRefusedError, workerTargetAllowed } from "./target-guard";
 
 export type { DrainOptions, DrainReport } from "./runner";
 
@@ -22,6 +23,11 @@ const SCHEDULED_DRAIN: DrainOptions = { maxJobs: 5, deadlineMs: 50_000 };
  * jobs and runs.
  */
 export function drainJobs(opts?: DrainOptions): Promise<DrainReport> {
+  // Independent of the dev launcher: never claim or write jobs in the original Supabase project.
+  if (!workerTargetAllowed(process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+    createConsoleLogger().error("worker_target_refused");
+    return Promise.reject(new WorkerTargetRefusedError());
+  }
   return createDrainer({
     db: serverDb(),
     storage: serverStorage(),
