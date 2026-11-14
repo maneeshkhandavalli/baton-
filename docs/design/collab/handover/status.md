@@ -1,5 +1,7 @@
 # handover status
 
+**User direction (2026-11-15): Dossier is NOT approved.** brand is building landing variants A and B, and shell a redesigned dashboard preview. My current job: screenshot them, send brand and shell feedback on how my document surfaces fit each direction, and add a direction-agnostic "mapping to the new direction" section to plan.md. The user's cast: Priya Raman hands over to Neha Kulkarni. My Phase A P0s still stand.
+
 **Phase A complete** (2026-11-15). No code was edited. Waiting for brand's response to my Checkpoint A review, then for Checkpoint B.
 
 | Item | State |

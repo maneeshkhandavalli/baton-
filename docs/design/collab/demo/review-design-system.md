@@ -93,6 +93,9 @@ nobody wraps the whole sandbox in grain.
 
 ## Coherence with the landing (important)
 
+> **Update after this review (user direction):** the cast is now **Priya Raman → Neha Kulkarni**, with Kabir Shah as
+> president and reviewer (branch commit `955d011`). Everything else in the table below stands; read "Kabir" and "Priya" swapped.
+
 You said the landing uses `lib/mocks/fixtures/codecell.ts` content. The specimen shows it too: "github org owners are me
 and kabir… master password is [PASSWORD]", "Collect on [UPI_1]", Priya as the outgoing lead, Bitwarden, line 2975. **The
 public demo's story has changed** (lead-confirmed: Kabir → Neha, Priya reviews). Source of truth:

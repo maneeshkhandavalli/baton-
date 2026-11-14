@@ -47,12 +47,12 @@ lib/demo/scenario/generated/*.ts     masked transcripts of the three sources for
 ```
 
 **Where state lives.** All of it is in `DemoSandbox`'s reducer state: one `MockStore` value (only the CodeCell demo
-rows), the persona (`kabir | neha | ananya`), the step, and the annotation progress. Reducers copy the store
+rows), the persona (`priya | neha | ananya`), the step, and the annotation progress. Reducers copy the store
 (`structuredClone`) and mutate the copy, so the ported mock logic stays almost verbatim. Optional per-tab persistence:
 the state is serialised to `sessionStorage` (key `baton:demo:v1`, wrapped in try/catch), so a reload keeps progress. If
 storage is missing, the demo simply starts at step 1.
 
-**Reset.** "Start over" restores `buildDemoStore()`, step 1 and persona Kabir. It clears `baton:demo:*`, the demo's
+**Reset.** "Start over" restores `buildDemoStore()`, step 1 and persona Priya. It clears `baton:demo:*`, the demo's
 first-week ticks (`storageNamespace="baton:demo:first-week"`, agreed with `handover`), and turns off Gap Interview draft
 persistence (`draftStorageKey={null}`, agreed). "Jump to step N" = `replay(N)`. The step navigation warns when a jump
 would discard the visitor's own changes.
@@ -70,7 +70,7 @@ result is scripted (`ScriptedReverify` in `journey.ts`) and appears after a shor
 For any other edit a visitor makes, the engine keeps the previous verdicts, marks the point "Not re-checked in the demo"
 and explains why. Approving such a point is still allowed, as it is in the product.
 
-**Personas and permissions.** Selectors compute each view at the persona's clearance: Kabir is the creator at
+**Personas and permissions.** Selectors compute each view at the persona's clearance: Priya is the creator at
 reviewer_only; Neha is incoming at everyone, so leads-only points disappear and the demo says so; Ananya sees only the Gap
 Interview questions in her link's scope. Reducers apply the same permission and lifecycle checks as the mock actions. For
 example, Neha cannot approve and publishing needs readiness, so visitors meet the product's real rules.
@@ -85,14 +85,14 @@ in the URL as `?step=sources|draft|review|decisions|publish|receive` (read on th
 | Step | Persona, clock | Real components (from `handover` unless noted) | Visitor can | Demo-only pieces |
 |---|---|---|---|---|
 | Entry | n/a | none | Read a short intro (what Baton is, who's who, six steps, ~5 min), start, or "jump to any step" | Intro, cast list, step overview |
-| 1 Sources | Kabir, 11 Nov 10:12 | `SourcesStep` (3 ready rows), `ScopeStep` (the 2 exclusions), `MaskingTable`, `ConsentChecklist`, `MatchesSection` if relevant | Open each source: raw ↔ masked transcript; toggle the exclusions to see what drops out; tick consent; Continue | Transcript viewer (labelled illustration: "the product never shows raw text after upload"); upload, retry and remove disabled with a note ("the demo uses three sample files") |
-| 2 AI draft | Kabir, 11 Nov 10:20 | `ProcessingStatusView` (pure, agreed) | Watch a simulated run (≈8 s, skippable, instant under reduced motion), then "Open the draft" | Simulated stage timer; label "Simulated: no AI runs in the demo; this draft was written in advance" |
-| 3 Review | Kabir, 12 Nov 11:00 | `ReviewWorkspaceView` with `ReviewActions` (reviewPoint, createGapQuestion, publishHandover; no createManualPoint at first, see §9), `PointDetailPanel`, `ReviewDialogs`, `ReadinessPanel` | Every review action: approve, confirm inferred, resolve a conflict, edit, reject, exclude or restore evidence, change access, reopen, "Ask in Gap Interview"; J/K/A/E/R; filters | A suggested-path checklist of the 6 corrections, anchored to `data-tour` targets; "do it for me" for each; re-check label |
-| 4 Decisions and tasks | Kabir | `PublishedHandoverView` in reviewer preview mode **or** the review workspace filtered to decisions and open work (decision with `handover`/`brand` in Phase B) | Read the approved decisions and tasks, with quotes | One framing sentence: "every line here is backed by a quote you can open" |
-| 5 Publish | Kabir, 13 Nov 18:30 | The publish dialog in `ReviewWorkspaceView` (blocked until readiness allows) | Write or keep the summary, publish v1 | After publishing: "Neha would get an email now. In the demo nobody is notified." |
+| 1 Sources | Priya, 11 Nov 10:12 | `SourcesStep` (3 ready rows), `ScopeStep` (the 2 exclusions), `MaskingTable`, `ConsentChecklist`, `MatchesSection` if relevant | Open each source: raw ↔ masked transcript; toggle the exclusions to see what drops out; tick consent; Continue | Transcript viewer (labelled illustration: "the product never shows raw text after upload"); upload, retry and remove disabled with a note ("the demo uses three sample files") |
+| 2 AI draft | Priya, 11 Nov 10:20 | `ProcessingStatusView` (pure, agreed) | Watch a simulated run (≈8 s, skippable, instant under reduced motion), then "Open the draft" | Simulated stage timer; label "Simulated: no AI runs in the demo; this draft was written in advance" |
+| 3 Review | Priya, 12 Nov 11:00 | `ReviewWorkspaceView` with `ReviewActions` (reviewPoint, createGapQuestion, publishHandover; no createManualPoint at first, see §9), `PointDetailPanel`, `ReviewDialogs`, `ReadinessPanel` | Every review action: approve, confirm inferred, resolve a conflict, edit, reject, exclude or restore evidence, change access, reopen, "Ask in Gap Interview"; J/K/A/E/R; filters | A suggested-path checklist of the 6 corrections, anchored to `data-tour` targets; "do it for me" for each; re-check label |
+| 4 Decisions and tasks | Priya | `PublishedHandoverView` in reviewer preview mode **or** the review workspace filtered to decisions and open work (decision with `handover`/`brand` in Phase B) | Read the approved decisions and tasks, with quotes | One framing sentence: "every line here is backed by a quote you can open" |
+| 5 Publish | Priya, 13 Nov 18:30 | The publish dialog in `ReviewWorkspaceView` (blocked until readiness allows) | Write or keep the summary, publish v1 | After publishing: "Neha would get an email now. In the demo nobody is notified." |
 | 6a Neha reads | Neha, 14 Nov 09:10 | `PublishedHandoverView` (`PublishedActions.acknowledgePublication`, `storageNamespace`) | Read, open quotes, tick the first week, acknowledge | Persona switch banner; note that 3 leads-only points are hidden from Neha |
-| 6b Gap Interview | Ananya, 14 Nov 21:40 | `GapsManager` (`linkMode="demo"`) to create the link as Kabir; `GapInterview` (`GapInterviewActions`, `draftStorageKey={null}`) as Ananya | Create the link; answer the questions (prefilled suggestion available), skip one, submit | "Demo link, not shareable" |
-| 6c Close the loop | Kabir, then Neha, 15 Nov | `GapsManager` (`reviewGapAnswer`), review workspace (start revision via the demo adapter, edit, approve, publish v2), `PublishedHandoverView` v2 | Accept the answer, update the point, publish v2, see Neha's v2 and the acknowledgement prompt | End card: what they saw, "Start your own handover", "Start over" |
+| 6b Gap Interview | Ananya, 14 Nov 21:40 | `GapsManager` (`linkMode="demo"`) to create the link as Priya; `GapInterview` (`GapInterviewActions`, `draftStorageKey={null}`) as Ananya | Create the link; answer the questions (prefilled suggestion available), skip one, submit | "Demo link, not shareable" |
+| 6c Close the loop | Priya, then Neha, 15 Nov | `GapsManager` (`reviewGapAnswer`), review workspace (start revision via the demo adapter, edit, approve, publish v2), `PublishedHandoverView` v2 | Accept the answer, update the point, publish v2, see Neha's v2 and the acknowledgement prompt | End card: what they saw, "Start your own handover", "Start over" |
 
 Global controls: step navigation (6 steps, done/current/next, keyboard reachable), persona indicator, "Start over",
 "What's simulated here?" (a short list), and per-step annotations that can be dismissed or brought back. On mobile the
@@ -160,7 +160,7 @@ the scenario (same cast and facts), so the wizard's samples no longer contradict
 `lib/parsers/__tests__/prototype-sample-data.test.ts` and `tests/integration/prototype-sample-e2e.test.ts` (that one is Docker-gated, so
 it was skipped locally). `components/review/__tests__/sample-point.test.ts` is untouched and passes.
 
-**Not touched:** `lib/mocks/**` (the Priya → Neha fixture stays for `handover`'s dev-only previews and tests; previews are
+**Not touched:** `lib/mocks/**` (the Priya → Neha fixture, with Arjun as reviewer and Kabir as lead, stays for `handover`'s dev-only previews and tests; previews are
 not public, so the two stories never meet a user), and every backend path.
 
 ## 8. Requests
@@ -208,7 +208,7 @@ be confused with demo labels);
 
 **`main`:** (a) add the `lib/demo` tests to `test:ui`; (b) list `components/gap-interview/**` under `handover` (they asked
 too); (c) masker false positive, `lib/privacy` (off limits): "send the guest wifi codes last time" is masked as
-`codes [PASSWORD] time`, and real chats will hit this; (d) confirm the cast decision Kabir → Neha for the public demo and
+`codes [PASSWORD] time`, and real chats will hit this; (d) cast: RESOLVED by user direction, Priya → Neha with Kabir as reviewer, for the public demo and
 the prototype samples, with `lib/mocks` left as is; (e) approve the `lib/prototype` alignment and its test updates in
 Phase B.
 
@@ -232,7 +232,7 @@ Phase B.
 
 ## 10. Open decisions (lead / user)
 
-1. Cast for the public demo: **Kabir → Neha** (proposed; matches the brief) instead of today's Priya → Neha.
+1. Cast: **resolved by the user**: Priya Raman → Neha Kulkarni; Kabir Shah (president, reviewer) and teammates appear in the chats (commit `955d011`).
 2. Step 4 form: the published view in reviewer-preview mode vs. a filtered review workspace (with `handover`/`brand`).
 3. Whether to keep a lightweight "read-only tour" entry for visitors who only want to look (the current demo's value), or
    only the interactive sandbox.
