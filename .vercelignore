@@ -18,4 +18,3 @@ coverage
 tests
 docs
 supabase/hosted-apply
-fixtures/parser
