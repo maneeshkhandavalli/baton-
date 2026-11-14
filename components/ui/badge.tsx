@@ -1,51 +1,86 @@
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
+import type * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
+/**
+ * Badges (docs/design/design-system.md → Badges & status).
+ * - `shape="pill"` (default) for states: handover state, evidence status, review outcome.
+ * - `shape="tag"` for metadata: access level, category, "possibly outdated".
+ * Tones map 1:1 to tokens. Evidence tones are only for evidence status.
+ */
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border font-medium whitespace-nowrap transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        secondary:
-          "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-        destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
-        outline:
-          "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
-        ghost:
-          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
+      tone: {
+        neutral: "border-border bg-muted text-muted-foreground",
+        outline: "border-border-strong bg-transparent text-muted-foreground",
+        primary: "border-primary/20 bg-primary-soft text-primary-fg",
+        info: "border-info/20 bg-info-soft text-info-fg",
+        success: "border-success/20 bg-success-soft text-success-fg",
+        warning: "border-warning/25 bg-warning-soft text-warning-fg",
+        danger: "border-destructive/20 bg-destructive-soft text-destructive-fg",
+        inverse: "border-inverse bg-inverse text-inverse-foreground dark:border-inverse-muted/45",
+        sourced: "border-status-sourced/20 bg-status-sourced-soft text-status-sourced-fg",
+        inferred: "border-status-inferred/25 bg-status-inferred-soft text-status-inferred-fg",
+        conflicting: "border-status-conflicting/20 bg-status-conflicting-soft text-status-conflicting-fg",
+        missing: "border-status-missing/20 bg-status-missing-soft text-status-missing-fg",
+      },
+      size: {
+        sm: "h-5 px-1.5 text-2xs",
+        md: "h-6 px-2 text-xs",
+      },
+      shape: {
+        pill: "rounded-full",
+        tag: "rounded-sm",
       },
     },
+    compoundVariants: [
+      { shape: "pill", size: "sm", className: "px-2" },
+      { shape: "pill", size: "md", className: "px-2.5" },
+    ],
     defaultVariants: {
-      variant: "default",
+      tone: "neutral",
+      size: "md",
+      shape: "pill",
     },
   }
 )
 
-function Badge({
-  className,
-  variant = "default",
-  render,
-  ...props
-}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-  return useRender({
-    defaultTagName: "span",
-    props: mergeProps<"span">(
-      {
-        className: cn(badgeVariants({ variant }), className),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: "badge",
-      variant,
-    },
-  })
+/** Dot colours for pills that lead with a status dot. */
+const badgeDotClass: Record<NonNullable<VariantProps<typeof badgeVariants>["tone"]>, string> = {
+  neutral: "bg-status-missing",
+  outline: "bg-border-strong",
+  primary: "bg-primary",
+  info: "bg-info",
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-destructive",
+  inverse: "bg-inverse-foreground",
+  sourced: "bg-status-sourced",
+  inferred: "bg-status-inferred",
+  conflicting: "bg-status-conflicting",
+  missing: "bg-status-missing",
 }
 
-export { Badge, badgeVariants }
+type BadgeProps = React.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & {
+    /** Lead with a small status dot in the tone's colour. */
+    dot?: boolean
+    /** Animate the dot (live states such as "Processing"); static under reduced motion. */
+    pulse?: boolean
+  }
+
+/** Server-safe (no hooks): usable from server and client components alike. */
+function Badge({ className, tone = "neutral", size = "md", shape = "pill", dot = false, pulse = false, children, ...props }: BadgeProps) {
+  return (
+    <span data-slot="badge" className={cn(badgeVariants({ tone, size, shape }), className)} {...props}>
+      {dot && (
+        <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", badgeDotClass[tone ?? "neutral"], pulse && "animate-pulse")} />
+      )}
+      {children}
+    </span>
+  )
+}
+
+export { Badge, badgeVariants, badgeDotClass }

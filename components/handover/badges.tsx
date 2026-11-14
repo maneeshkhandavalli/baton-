@@ -1,57 +1,53 @@
-import { Eye, Lock, Shield, Users } from "lucide-react";
+import { Clock3, Lock, Shield, Users } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import type { AccessLevel, HandoverState } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 import { accessLevelMeta, handoverStateMeta } from "./labels";
 
-export function HandoverStateBadge({ state, className }: { state: HandoverState; className?: string }) {
+/** Lifecycle state of a handover (pill, system tone). */
+export function HandoverStateBadge({ state, size = "md", className }: { state: HandoverState; size?: "sm" | "md"; className?: string }) {
   const meta = handoverStateMeta[state];
   return (
-    <span
-      className={cn(
-        "inline-flex h-6 w-fit shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap",
-        meta.className,
-        className,
-      )}
-    >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", meta.dot, state === "processing" && "animate-pulse")} />
+    <Badge tone={meta.tone} size={size} dot pulse={state === "processing"} title={meta.description} className={className}>
       {meta.label}
-    </span>
+    </Badge>
   );
 }
 
 const ACCESS_ICONS = { everyone: Users, leads_only: Shield, reviewer_only: Lock } as const;
 
+/** Who may see a point or source (tag, metadata). Hidden for "Everyone" unless asked. */
 export function AccessBadge({ level, className, showEveryone = true }: { level: AccessLevel; className?: string; showEveryone?: boolean }) {
   if (level === "everyone" && !showEveryone) return null;
   const Icon = ACCESS_ICONS[level];
   return (
-    <span
+    <Badge
+      shape="tag"
+      size="sm"
+      tone={level === "everyone" ? "outline" : "neutral"}
       title={accessLevelMeta[level].description}
-      className={cn(
-        "inline-flex h-5 w-fit shrink-0 items-center gap-1 rounded-md border px-1.5 text-[0.6875rem] font-medium whitespace-nowrap",
-        level === "everyone" ? "border-border text-muted-foreground" : "border-foreground/15 bg-foreground/5 text-foreground",
-        className,
-      )}
+      className={cn(level !== "everyone" && "text-foreground", className)}
     >
-      <Icon aria-hidden="true" className="size-3" />
+      <Icon aria-hidden="true" />
       {accessLevelMeta[level].label}
-    </span>
+    </Badge>
   );
 }
 
+/** The latest supporting evidence is old relative to the record (metadata tag, warning tone). */
 export function OutdatedBadge({ className }: { className?: string }) {
   return (
-    <span
+    <Badge
+      shape="tag"
+      size="sm"
+      tone="warning"
       title="The latest supporting evidence is more than 30 days older than the end of the record."
-      className={cn(
-        "inline-flex h-5 w-fit shrink-0 items-center gap-1 rounded-md border border-status-inferred/30 px-1.5 text-[0.6875rem] font-medium whitespace-nowrap text-status-inferred-fg",
-        className,
-      )}
+      className={className}
     >
-      <Eye aria-hidden="true" className="size-3" />
+      <Clock3 aria-hidden="true" />
       Possibly outdated
-    </span>
+    </Badge>
   );
 }

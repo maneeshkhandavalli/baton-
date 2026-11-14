@@ -1,0 +1,32 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
+
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { useAction } from "@/hooks/use-action";
+import { deleteHandover } from "@/lib/actions/handovers";
+
+/** Discards a draft through the creator-only deleteHandover action (soft delete; D27 keeps purge disabled). */
+export function DiscardDraftButton({ handoverId, title, disabled = false }: { handoverId: string; title: string; disabled?: boolean }) {
+  const router = useRouter();
+  const { run, isPending } = useAction();
+  return (
+    <ConfirmDialog
+      trigger={
+        <Button size="icon" variant="destructive-ghost" aria-label={`Discard draft “${title}”`} title="Discard draft" disabled={isPending || disabled}>
+          <Trash2 aria-hidden="true" />
+        </Button>
+      }
+      title={`Discard “${title}”?`}
+      description="The draft and its uploaded files are removed from your workspace. This can't be undone here."
+      confirmLabel="Discard draft"
+      destructive
+      onConfirm={async () => {
+        const r = await run(() => deleteHandover({ handoverId }), { success: "Draft discarded" });
+        if (r.ok) router.refresh();
+      }}
+    />
+  );
+}

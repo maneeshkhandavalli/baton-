@@ -62,7 +62,7 @@ export function MagicLinkForm({
     return (
       <section className="rounded-xl border border-border bg-card p-8 shadow-soft" aria-live="polite">
         <MailCheck aria-hidden="true" className="size-8 text-status-sourced" />
-        <h1 className="mt-4 font-serif text-3xl leading-tight">Check your inbox</h1>
+        <h1 className="mt-4 type-section-title">Check your inbox</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           We sent a sign-in link to <span className="font-medium text-foreground">{email}</span>. It expires in an hour and works once.
         </p>
@@ -75,7 +75,7 @@ export function MagicLinkForm({
 
   return (
     <section className="rounded-xl border border-border bg-card p-8 shadow-soft">
-      <h1 className="font-serif text-3xl leading-tight">{title}</h1>
+      <h1 className="type-section-title">{title}</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
       <form
         className="mt-6 space-y-4"
@@ -99,7 +99,7 @@ export function MagicLinkForm({
             className="h-10"
           />
           {error && (
-            <p id="magic-error" role="alert" className="text-xs text-destructive">
+            <p id="magic-error" role="alert" className="text-xs text-destructive-fg">
               {error}
             </p>
           )}

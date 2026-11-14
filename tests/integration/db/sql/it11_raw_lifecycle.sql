@@ -70,8 +70,8 @@ select tests.throws(format('select public.start_processing(%L, %L, %L, %L, %L)',
 select public.remove_source(tests.actor(), tests.id('nocons'));
 select tests.throws(format('select public.start_processing(%L, %L, %L, %L, %L)', tests.actor(), tests.id('h'), 'it-1', '{"provider":"other"}', '[]'),
                     'BTPF0', 'provider mismatch still refused once every source has consent');
-select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', '[]'));
-select tests.as_service();
+select tests.put('run', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x')))));
+select tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
 select tests.throws(format('select public.persist_parsed_source(%L, %L, %L)', tests.id('sb'), it.parsed('phone', repeat('a1', 32)), 'p1'),
                     'BTCF0', 'messages of an excluded phone identity are refused');
 select tests.throws(format('select public.persist_parsed_source(%L, %L, %L)', tests.id('sb'), it.parsed('name', repeat('b2', 32)), 'p1'),
@@ -95,8 +95,8 @@ select tests.throws(format('select public.confirm_identity_match(%L, %L, %L, %L)
                            'different_person'), 'BTFB0', 'only the creator decides identity matches');
 select tests.as_user('ann');
 select public.confirm_identity_match(tests.actor(), tests.id('sb'), tests.id('ex_name'), 'different_person');
-select tests.put('run2', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', '[]'));
-select tests.as_service();
+select tests.put('run2', public.start_processing(tests.actor(), tests.id('h'), 'it-1', '{"provider":"fake"}', jsonb_build_array(jsonb_build_object('stage','analyze','sourceId',null,'inputHash',md5('x')))));
+select tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
 select public.persist_parsed_source(tests.id('sb'), it.parsed('name', repeat('b2', 32)), 'p1');
 select tests.as_owner();
 select tests.eq((select state from public.sources where id = tests.id('sb')), 'parsed', 'sb parsed after the decision');
@@ -109,11 +109,12 @@ select tests.throws(format('select public.source_preview_target(%L, %L)', tests.
 select tests.throws(format($q$select public.add_exclusion(p_actor_profile_id => %L, p_source_id => %L, p_kind => 'date_range',
                                p_range_start => now() - interval '1 day', p_range_end => now())$q$, tests.actor(), tests.id('sb')),
                     'BTIT0', 'exclusions after the parse are refused (use erasure)');
-select tests.as_service();
+select tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
 select tests.throws(format('select public.persist_parsed_source(%L, %L, %L)', tests.id('sb'), it.parsed('phone', repeat('e5', 32)), 'p1'),
                     'BTIT0', 'a source is parsed once');
 
 -- the raw delete after commit, then preview reports the upload is gone
+select tests.as_service();
 select public.mark_source_raw_deleted(tests.id('sb'));
 select tests.as_owner();
 select tests.ok((select raw_storage_path is null and raw_deleted_at is not null from public.sources where id = tests.id('sb')), 'raw deleted');
@@ -124,9 +125,12 @@ update public.sources set state = 'failed', raw_storage_path = null, raw_deleted
 select tests.as_user('ann');
 select tests.throws(format('select public.source_preview_target(%L, %L)', tests.actor(), tests.id('sc')), 'BTPF0', 'raw gone → re-upload');
 
--- QA-L1 (DB half, accepted by the lead and kept open on purpose): the TypeScript parse path
--- (deleteParsedRawSource) refuses unparsed sources, but the SQL function must still mark a failed or
--- abandoned upload's raw object deleted, because the 7-day retention sweep (§12.6) uses it for exactly those.
+-- QA-L1 (DB half, fixed by Agent 3 in 20261113200300_mark_raw_deleted_guard.sql): a raw delete is recorded
+-- only for a parsed or removed source, or one whose handover is deleted; an uploaded/failed source on a live
+-- draft keeps its raw upload for a (re)parse. The 7-day ceiling is a separate retention function.
 select tests.as_service();
-select it.todo(tests.try(format('select public.mark_source_raw_deleted(%L)', tests.id('sa'))) like 'ERR:%', 'QA-L1',
-               'mark_source_raw_deleted accepts a source that was never parsed');
+select tests.eq(tests.try(format('select public.mark_source_raw_deleted(%L)', tests.id('sa'))), 'ERR:BTIT0',
+                'QA-L1 (fixed): mark_source_raw_deleted refuses an unparsed source on a live draft');
+select tests.as_owner();
+select tests.ok((select raw_storage_path is not null and raw_deleted_at is null from public.sources where id = tests.id('sa')),
+                'QA-L1 (fixed): its raw upload is still recorded');

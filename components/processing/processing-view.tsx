@@ -2,23 +2,29 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, CircleDashed, FileText, Loader2, MessageCircle, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, Loader2, MessageCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AccessBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
+import { CONSENT_REQUIRED_REASON, runReasonText, sourcesNeedingConsent, stageStatusMeta } from "@/components/shared/run-status";
+import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyConsent } from "@/components/wizard/consent";
 import { useAction } from "@/hooks/use-action";
 import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
 import type { MaskKind } from "@/lib/contracts/enums";
-import { cancelProcessing, startProcessing } from "@/lib/actions/handovers";
+import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
+import { sourceErrorText } from "./source-error";
+
 const POLL_MS = 3_000; // D10
+/** Hosted (Vercel) has no background drain loop: while the run is active this page keeps it moving. */
+const NUDGE_MS = 20_000;
 
 interface ProcessingViewProps {
   handoverId: string;
@@ -31,14 +37,24 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
   const router = useRouter();
   const { run, isPending } = useAction();
   const [consent, setConsent] = useState(emptyConsent());
+  // Set when startProcessing refused with consent_required: consent exists but names another AI provider.
+  const [reconsentAll, setReconsentAll] = useState(false);
+  // Kept on the page (toasts disappear): why the last Start attempt didn't go through.
+  const [startError, setStartError] = useState<string | null>(null);
   const { run: r, handoverState, sources } = status;
   const active = r?.status === "queued" || r?.status === "running";
 
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => router.refresh(), POLL_MS);
-    return () => clearInterval(t);
-  }, [active, router]);
+    // Fire-and-forget: schedules one more fenced drain on the server; errors are ignored (the next tick retries).
+    const nudge = () => void continueProcessing({ handoverId }).catch(() => undefined);
+    const n = setInterval(nudge, NUDGE_MS);
+    return () => {
+      clearInterval(t);
+      clearInterval(n);
+    };
+  }, [active, router, handoverId]);
 
   const stages = r?.stages ?? [];
   const weights = stages.map((s) => (s.total ? s.done / s.total : 0));
@@ -49,9 +65,28 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
     return acc;
   }, {});
   const totalMasked = Object.values(masking).reduce((a, b) => a + (b ?? 0), 0);
-  const needsConsent = sources.filter((s) => !s.consentRecordedAt);
+  const needsConsent = sourcesNeedingConsent(sources, reconsentAll);
+  const failedSources = sources.filter((s) => s.state === "failed");
+  const reason = r?.status === "failed" ? runReasonText(r.error?.message) : null;
+  const currentStage = stages.find((s) => s.status === "running");
+  const title = active
+    ? "Processing your sources"
+    : r?.status === "succeeded"
+      ? "Processing complete"
+      : r?.status === "failed"
+        ? "Processing failed"
+        : r?.status === "cancelled"
+          ? "Processing cancelled"
+          : "Ready to process";
+  // One polite announcement per meaningful change (stage or outcome), never per percentage tick.
+  const announcement = active
+    ? `Processing. ${currentStage ? `Now: ${stageLabel[currentStage.stage].label}.` : "Starting."}`
+    : reason
+      ? `${title}. ${reason.text}`
+      : title;
 
   async function start() {
+    setStartError(null);
     for (const s of needsConsent) {
       const res = await run(() =>
         recordSourceConsent({
@@ -62,26 +97,53 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
         }),
       );
-      if (!res.ok) return;
+      if (!res.ok) {
+        setStartError(`Couldn't record consent for ${s.title}. ${res.error.message}`);
+        return;
+      }
     }
-    await run(() => startProcessing({ handoverId }), { success: "Processing started" });
+    const started = await run(() => startProcessing({ handoverId }), {
+      success: "Processing started",
+      onError: (e) => {
+        if (e.details?.reason !== CONSENT_REQUIRED_REASON) {
+          setStartError(e.message);
+          return;
+        }
+        setReconsentAll(true);
+        setConsent(emptyConsent());
+      },
+    });
+    if (started.ok) setReconsentAll(false);
   }
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <section aria-labelledby="run-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-6">
+      <section aria-labelledby="run-heading" className="space-y-6 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-7">
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 id="run-heading" className="font-serif text-2xl">
-              {active ? "Processing your sources" : r?.status === "succeeded" ? "Processing complete" : r?.status === "failed" ? "Processing failed" : r?.status === "cancelled" ? "Processing cancelled" : "Ready to process"}
+          <div className="min-w-0 space-y-1.5">
+            <p className="type-eyebrow text-muted-foreground">
+              {active ? (
+                <span className="inline-flex items-center gap-1.5 text-primary-fg">
+                  <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
+                  Live · updates every few seconds
+                </span>
+              ) : (
+                "Processing"
+              )}
+            </p>
+            <h2 id="run-heading" className="type-section-title">
+              {title}
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {active
-                ? "You can leave this page. Baton keeps working and the review opens when it's done."
+                ? `You can leave this page. Baton keeps working and the review opens when it's done.${r?.startedAt ? ` Started ${formatDateTime(r.startedAt)}.` : ""}`
                 : r?.status === "succeeded"
                   ? `Finished ${formatDateTime(r.finishedAt)}. Every point is ready for your review.`
                   : r?.status === "failed"
-                    ? r.error?.message ?? "Something went wrong. Your sources are safe; try again."
+                    ? "Your sources are safe. Nothing was published."
                     : handoverState === "draft"
                       ? "Add consent for every source, then start processing."
                       : "Start processing to extract source-backed points."}
@@ -95,13 +157,27 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
           )}
         </div>
 
+        {reason && (
+          <Alert tone="danger" live="none" title="This run stopped before it finished">
+            <p>{reason.text}</p>
+            <p className="mt-2 text-caption">
+              {failedSources.length > 0 &&
+                `${failedSources.length === 1 ? "1 source couldn't be read" : `${failedSources.length} sources couldn't be read`}: the reason is shown under Sources. `}
+              {canStart ? "When you're ready, choose Try again below." : "Ask the creator or outgoing member to try again."}
+            </p>
+            {reason.reference && (
+              <p className="mt-1.5 text-2xs opacity-80">
+                Reference for support: <code className="font-mono">{reason.reference}</code>
+              </p>
+            )}
+          </Alert>
+        )}
+
         {r && (
           <div className="space-y-2">
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-medium">Overall</span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground" aria-live="polite">
-                {percent}%
-              </span>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">{percent}%</span>
             </div>
             <div role="progressbar" aria-label="Overall progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div className={cn("h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none", r.status === "failed" ? "bg-destructive" : r.status === "succeeded" ? "bg-status-sourced" : "bg-primary")} style={{ width: `${percent}%` }} />
@@ -112,28 +188,51 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         {r && (
           <ol className="space-y-1" aria-label="Pipeline stages">
             {stages.map((s) => {
-              const Icon = s.status === "succeeded" ? Check : s.status === "running" ? Loader2 : s.status === "failed" ? AlertTriangle : CircleDashed;
+              const meta = stageStatusMeta(s.status);
+              const Icon =
+                s.status === "succeeded" ? Check : s.status === "running" ? Loader2 : s.status === "partial" ? CircleAlert : s.status === "failed" ? AlertTriangle : CircleDashed;
               return (
-                <li key={s.stage} aria-current={s.status === "running" ? "step" : undefined} className={cn("flex items-start gap-3 rounded-lg px-2 py-2.5", s.status === "running" && "bg-primary/[0.04]")}>
+                <li
+                  key={s.stage}
+                  aria-current={s.status === "running" ? "step" : undefined}
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg border border-transparent px-2 py-2.5",
+                    s.status === "running" && "bg-primary-soft/50",
+                    s.status === "partial" && "border-warning/30 bg-warning-soft/50",
+                    s.status === "failed" && "border-destructive/25 bg-destructive-soft/40",
+                  )}
+                >
                   <span
                     aria-hidden="true"
                     className={cn(
                       "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border",
-                      s.status === "succeeded" && "border-primary bg-primary text-primary-foreground",
-                      s.status === "running" && "border-primary text-primary",
-                      (s.status === "queued" || s.status === "cancelled") && "border-input text-muted-foreground",
-                      s.status === "failed" && "border-destructive text-destructive",
+                      meta.tone === "done" && "border-primary bg-primary text-primary-foreground",
+                      meta.tone === "active" && "border-primary text-primary",
+                      meta.tone === "idle" && "border-border-strong text-muted-foreground",
+                      meta.tone === "warning" && "border-warning bg-warning-soft text-warning-fg",
+                      meta.tone === "danger" && "border-destructive text-destructive-fg",
                     )}
                   >
                     <Icon className={cn("size-3.5", s.status === "running" && "animate-spin")} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={cn("text-sm", s.status === "queued" ? "text-muted-foreground" : "font-medium")}>{stageLabel[s.stage].label}</p>
-                    <p className="text-xs text-muted-foreground">{stageLabel[s.stage].description}</p>
+                    <p className={cn("text-sm", s.status === "queued" ? "text-muted-foreground" : "font-medium")}>
+                      {stageLabel[s.stage].label}
+                      <span className="sr-only">: {meta.label}</span>
+                    </p>
+                    <p className="text-caption text-muted-foreground">{stageLabel[s.stage].description}</p>
+                    {(s.status === "partial" || s.status === "failed") && (
+                      <p aria-hidden="true" className={cn("mt-1 text-caption font-medium", s.status === "partial" ? "text-warning-fg" : "text-destructive-fg")}>
+                        {meta.label}
+                      </p>
+                    )}
                   </div>
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {s.done}/{s.total}
-                  </span>
+                  {s.total > 0 && (
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                      {s.done}/{s.total}
+                      <span className="sr-only"> done</span>
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -143,17 +242,51 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         {!active && canStart && (handoverState === "draft" || handoverState === "in_review") && r?.status !== "succeeded" && (
           <div className="space-y-4 border-t border-border pt-5">
             {needsConsent.length > 0 && (
-              <>
-                <p className="text-sm">
-                  {needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.
-                </p>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <h3 className="type-subheading">Confirm consent first</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {reconsentAll
+                      ? "Consent was recorded for a different AI provider. Confirm the statement below to record it again for every source."
+                      : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
+                  </p>
+                </div>
                 <ConsentChecklist value={consent} onChange={setConsent} />
-              </>
+              </div>
             )}
-            <Button disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
-              {isPending ? "Starting…" : r ? "Try again" : "Start processing"}
-            </Button>
-            {sources.length === 0 && <p className="text-xs text-muted-foreground">This handover has no sources yet.</p>}
+            {startError && (
+              <Alert tone="danger" title="Processing didn't start">
+                {startError}
+              </Alert>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="lg" aria-busy={isPending} disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
+                {isPending ? (
+                  <>
+                    <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                    Starting…
+                  </>
+                ) : r ? (
+                  <>
+                    <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                    Try again
+                  </>
+                ) : (
+                  "Start processing"
+                )}
+              </Button>
+              {handoverState === "draft" && (
+                <Link href={`${routes.handover.new}?draft=${encodeURIComponent(handoverId)}`} className={buttonVariants({ variant: "outline", size: "lg" })}>
+                  Add or change sources
+                </Link>
+              )}
+            </div>
+            {sources.length === 0 ? (
+              <p className="text-caption text-muted-foreground">This handover has no sources yet. Add at least one to start.</p>
+            ) : (
+              needsConsent.length > 0 &&
+              !consentComplete(consent) && <p className="text-caption text-muted-foreground">Tick every statement above to continue.</p>
+            )}
           </div>
         )}
 
@@ -170,15 +303,15 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         )}
       </section>
 
-      <aside className="space-y-4">
-        <div className="grid grid-cols-3 gap-2 rounded-xl border border-border bg-card p-4 shadow-soft">
+      <aside className="divide-y divide-border self-start overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+        <dl className="grid grid-cols-3 gap-2 p-4">
           <Stat label="Sources" value={formatCount(sources.length)} />
           <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "—"} />
           <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "—"} />
-        </div>
+        </dl>
 
-        <section aria-labelledby="sources-heading" className="rounded-xl border border-border bg-card shadow-soft">
-          <h2 id="sources-heading" className="border-b border-border px-4 py-3 text-sm font-semibold">
+        <section aria-labelledby="sources-heading">
+          <h2 id="sources-heading" className="px-4 pt-4 pb-1 type-subheading">
             Sources
           </h2>
           <ul className="divide-y divide-border">
@@ -189,12 +322,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         </section>
 
         {totalMasked > 0 && (
-          <section className="rounded-xl border border-border bg-card p-4 shadow-soft">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck aria-hidden="true" className="size-4 text-status-sourced" />
+          <section className="p-4">
+            <p className="flex items-center gap-2 type-subheading">
+              <ShieldCheck aria-hidden="true" className="size-4 text-success" />
               Masked before storage
             </p>
-            <ul className="mt-2 space-y-1 text-xs">
+            <ul className="mt-2 space-y-1 text-caption">
               {(Object.entries(masking) as Array<[MaskKind, number]>)
                 .filter(([, n]) => n > 0)
                 .map(([k, n]) => (
@@ -213,9 +346,9 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center">
-      <p className="font-serif text-2xl tabular-nums">{value}</p>
-      <p className="text-[0.6875rem] tracking-wide text-muted-foreground uppercase">{label}</p>
+    <div className="flex flex-col-reverse text-center">
+      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dd className="font-display text-2xl leading-tight tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -229,16 +362,31 @@ function SourceRow({ s }: { s: SourceSummary }) {
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{s.title}</p>
         <AccessBadge level={s.accessLevel} showEveryone={false} />
       </div>
-      <p className="pl-6 text-xs text-muted-foreground">
+      <p className="pl-6 text-caption text-muted-foreground">
         {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} ·{" "}
-        <span className={cn(s.state === "failed" && "text-destructive", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
+        <span className={cn(s.state === "failed" && "text-destructive-fg", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
         {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${s.kind === "whatsapp_export" ? "messages" : "blocks"}`}
       </p>
-      {s.firstMessageAt && <p className="pl-6 text-xs text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}
-      <p className="pl-6 text-xs text-muted-foreground">
-        {s.consentRecordedAt ? "Consent recorded" : <span className="text-status-inferred-fg">Consent needed</span>}
+      {s.firstMessageAt && <p className="pl-6 text-caption text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}
+      <p className="pl-6 text-caption text-muted-foreground">
+        {s.consentRecordedAt ? "Consent recorded" : <span className="font-medium text-warning-fg">Consent needed</span>}
         {s.rawDeletedAt ? " · raw file deleted" : ""}
       </p>
+      {s.state === "failed" && <SourceFailure code={s.errorCode} />}
     </li>
+  );
+}
+
+function SourceFailure({ code }: { code: string | null }) {
+  const { text, reference } = sourceErrorText(code);
+  return (
+    <div className="ml-6 flex items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive-soft/60 px-2.5 py-2 text-caption text-destructive-fg">
+      <AlertTriangle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+      <p className="min-w-0 [overflow-wrap:anywhere]">
+        <span className="sr-only">Why it failed: </span>
+        {text}
+        {reference && <code className="ml-1 font-mono text-2xs opacity-75">({reference})</code>}
+      </p>
+    </div>
   );
 }

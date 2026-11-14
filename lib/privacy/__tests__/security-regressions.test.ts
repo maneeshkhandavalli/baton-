@@ -1,7 +1,8 @@
 /**
  * Regression and adversarial tests for the security audit findings fixed in the privacy layer:
  * H2 (secrets next to punctuation, hex tokens), M1 (E.164 phone identities),
- * M2 (excluded participants' names and mentions in other people's messages).
+ * M2 (excluded participants' names and mentions in other people's messages), QA-L5 (credentials
+ * written with whitespace or other separators).
  */
 
 import assert from "node:assert/strict";
@@ -275,5 +276,33 @@ describe("M2: end-to-end", () => {
     assert.ok(r.ok);
     assert.ok(r.data.messages[0].body.includes("Ravi Kumar"));
     assert.ok(!r.data.warnings.some((x) => x.code === "excluded_mentions_redacted"));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// QA-L5
+
+describe("QA-L5: credentials written without ':' / '=' are masked end to end", () => {
+  const text = [
+    "20/02/2024, 08:00 - Asha: password Hunter2",
+    "20/02/2024, 08:01 - Asha: pin 4821, otp 556677",
+    "20/02/2024, 08:02 - Meera: login: bob / s3cretpw and wifi password CafeNet2024",
+    "20/02/2024, 08:03 - Meera: user bob pass hunter2; api key abcd1234efgh",
+  ].join("\n");
+  it("no credential value survives parsing", async () => {
+    const r = await parseSource(input({ kind: "whatsapp_export", bytes: bytesOf(text), dateOrder: "dmy" }));
+    assert.ok(r.ok);
+    const bodies = r.data.messages.map((x) => x.body).join("\n");
+    for (const leak of ["Hunter2", "4821", "556677", "bob", "s3cretpw", "CafeNet2024", "hunter2", "abcd1234efgh"]) {
+      assert.ok(!bodies.includes(leak), `leaked ${leak}: ${bodies}`);
+    }
+    assert.ok(bodies.includes("[PASSWORD]"));
+    assert.ok(bodies.includes("[API_KEY]"));
+  });
+  it("the audit's original examples", () => {
+    assert.equal(maskText({ text: "password Hunter2" }).text, "password [PASSWORD]");
+    assert.equal(maskText({ text: "pin 4821" }).text, "pin [PASSWORD]");
+    assert.equal(maskText({ text: "otp 556677" }).text, "otp [PASSWORD]");
+    assert.equal(maskText({ text: "login: bob / secret" }).text, "login: [PASSWORD] / [PASSWORD]");
   });
 });

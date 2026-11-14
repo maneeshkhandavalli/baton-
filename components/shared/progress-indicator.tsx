@@ -2,6 +2,8 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { stepState as getState } from "./steps";
+
 export interface ProgressStep {
   id: string;
   label: string;
@@ -15,14 +17,6 @@ interface ProgressIndicatorProps {
   /** Accessible name for the step list. */
   label?: string;
   className?: string;
-}
-
-type StepState = "complete" | "current" | "upcoming";
-
-function getState(index: number, current: number): StepState {
-  if (index < current) return "complete";
-  if (index === current) return "current";
-  return "upcoming";
 }
 
 /** A vertical, multi-step progress indicator for long-running work such as processing. */
@@ -82,10 +76,10 @@ export function ProgressIndicator({
               <span
                 aria-hidden="true"
                 className={cn(
-                  "relative flex size-6 shrink-0 items-center justify-center rounded-full border text-[0.6875rem] font-medium",
+                  "relative flex size-6 shrink-0 items-center justify-center rounded-full border text-2xs font-medium",
                   state === "complete" && "border-primary bg-primary text-primary-foreground",
                   state === "current" && "border-primary bg-card text-primary ring-4 ring-primary/10",
-                  state === "upcoming" && "border-input bg-card text-muted-foreground",
+                  state === "upcoming" && "border-border-strong bg-card text-muted-foreground",
                 )}
               >
                 {state === "complete" ? <Check className="size-3.5" /> : index + 1}

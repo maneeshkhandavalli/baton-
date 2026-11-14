@@ -11,7 +11,7 @@
     "test:contracts": "node --import ./lib/contracts/__tests__/resolve-ts.mjs --test \"lib/contracts/__tests__/*.test.ts\"",
     "test:db": "node --import ./lib/contracts/__tests__/resolve-ts.mjs --test \"lib/db/__tests__/*.test.ts\"",
     "test:parsers": "node --import ./lib/contracts/__tests__/resolve-ts.mjs --test \"lib/parsers/__tests__/*.test.ts\" \"lib/privacy/__tests__/*.test.ts\"",
-    "test:ui": "node --import ./lib/mocks/__tests__/resolve-ui.mjs --test \"lib/mocks/__tests__/*.test.ts\" \"components/shared/__tests__/*.test.ts\"",
+    "test:ui": "node --import ./lib/mocks/__tests__/resolve-ui.mjs --test \"lib/mocks/__tests__/*.test.ts\" \"components/shared/__tests__/*.test.ts\" \"components/wizard/__tests__/*.test.ts\" \"components/review/__tests__/*.test.ts\"",
     "test:sql": "bash supabase/tests/run.sh",
     "test": "npm run test:contracts && npm run test:db && npm run test:parsers && npm run test:ui && npm run test:ai && npm run test:actions && npm run test:pipeline && npm run test:integration",
     "test:ai": "node --import ./lib/ai/__tests__/resolve-ai.mjs --test \"lib/ai/__tests__/*.test.ts\"",
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
+    "@google/genai": "2.32.0",
     "@hookform/resolvers": "^7.0.5",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.0",

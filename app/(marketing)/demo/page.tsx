@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight, Info, ListChecks, Quote, UserRoundCheck } from "lucide-react";
 import { Suspense } from "react";
 
 import { DemoTabs } from "@/components/marketing/demo-tabs";
 import { PublishedHandoverView } from "@/components/published/published-handover-view";
 import { loadReview } from "@/components/review/load-review";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
-import { LoadingState } from "@/components/shared/loading-state";
+import { WorkspaceSkeleton } from "@/components/shared/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import { CODECELL_ID } from "@/lib/mocks/fixtures/codecell";
 import { PROFILES } from "@/lib/mocks/fixtures/profiles";
@@ -20,28 +20,45 @@ export const metadata: Metadata = {
   description: "Explore a read-only Baton handover for a fictional college coding club.",
 };
 
+/** Short pointers for a first-time visitor (and judges) on where to look. */
+const LOOK_FOR = [
+  { icon: Quote, text: "Each point shows the exact quote and source it rests on." },
+  { icon: ListChecks, text: "Conflicting and missing points show what still needs a person." },
+  { icon: UserRoundCheck, text: "Switch to Incoming handover to see what Neha receives." },
+] as const;
+
 export default function DemoPage() {
   return (
-    <div className="mx-auto w-full max-w-[90rem] space-y-8 px-4 py-10 sm:px-6 lg:px-10">
-      <header className="flex flex-col gap-6 border-b border-border pb-8 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mx-auto w-full max-w-[90rem] space-y-8 px-4 py-10 sm:px-6 lg:px-10 lg:py-12 xl:px-12">
+      <header className="flex flex-col gap-6 border-b border-border pb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
         <div className="max-w-2xl space-y-3">
-          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Public demo · read only</p>
-          <h1 className="font-serif text-4xl leading-[1.08] tracking-tight sm:text-5xl">CodeCell: handing over the technical lead role</h1>
-          <p className="leading-relaxed text-muted-foreground">
+          <p className="type-eyebrow text-muted-foreground">Public demo · read only</p>
+          <h1 className="type-page-title">CodeCell: handing over the technical lead role</h1>
+          <p className="type-body text-muted-foreground">
             Priya is leaving CodeCell, a college coding club. Baton read two WhatsApp groups, a sponsorship MoU, the hackathon runbook and some infrastructure
             notes. Browse what it found, how each point is backed, and what Neha, the incoming lead, receives.
           </p>
         </div>
-        <Link href={routes.handover.new} className={cn(buttonVariants({ size: "lg" }), "h-10 shrink-0 px-4")}>
+        <Link href={routes.handover.new} className={cn(buttonVariants({ size: "lg" }), "shrink-0")}>
           Start your own handover
           <ArrowRight aria-hidden="true" data-icon="inline-end" />
         </Link>
       </header>
-      <p className="flex items-start gap-2 text-sm text-muted-foreground">
-        <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        Everyone and everything here is fictional. Press J and K to move between points.
-      </p>
-      <Suspense fallback={<LoadingState label="Loading the demo…" className="min-h-96" />}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-10">
+        <ul aria-label="What to look for" className="grid gap-2.5 sm:grid-cols-3 sm:gap-4">
+          {LOOK_FOR.map((item) => (
+            <li key={item.text} className="flex items-start gap-2.5 text-sm leading-snug">
+              <item.icon aria-hidden="true" className="mt-px size-4 shrink-0 text-primary" />
+              <span>{item.text}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="flex items-start gap-2 text-caption text-muted-foreground lg:max-w-xs">
+          <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          Everyone and everything here is fictional. Press J and K to move between points.
+        </p>
+      </div>
+      <Suspense fallback={<WorkspaceSkeleton label="Loading the demo…" />}>
         <DemoContent />
       </Suspense>
     </div>
@@ -66,7 +83,7 @@ async function DemoContent() {
       }
       incoming={
         published.ok ? (
-          <div className="rounded-2xl border border-border bg-background p-4 sm:p-8">
+          <div className="rounded-2xl border border-border bg-background p-4 sm:p-8 lg:p-10">
             <PublishedHandoverView handover={published.data} viewerLabel={PROFILES.neha.displayName} viewerRole="incoming" preview />
           </div>
         ) : (

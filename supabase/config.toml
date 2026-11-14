@@ -3,7 +3,7 @@ project_id = "baton-dev"
 
 [db]
 # §2: migrations rely on UNIQUE NULLS NOT DISTINCT and ON DELETE SET NULL (column_list).
-major_version = 15
+major_version = 17
 
 [auth]
 site_url = "http://localhost:3000"

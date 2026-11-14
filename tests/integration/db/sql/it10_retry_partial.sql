@@ -110,8 +110,10 @@ begin
 end $$;
 
 -- the failed parse keeps the raw upload for a retry (§9.3, §10.3 step 5)
-select public.mark_source_parse_failed(tests.id('sa'), 'parse_failed');
+-- 300600 revoked the unfenced writer from service_role (the worker uses pipeline_mark_source_parse_failed);
+-- the fixture runs its body as the owner.
 select tests.as_owner();
+select public.mark_source_parse_failed(tests.id('sa'), 'parse_failed');
 select tests.eq((select state from public.sources where id = tests.id('sa')), 'failed', 'source a failed');
 select tests.ok((select raw_storage_path is not null and raw_deleted_at is null from public.sources where id = tests.id('sa')),
                 'its raw upload is kept');
@@ -148,9 +150,10 @@ select tests.source('h2', 'sp');
 select tests.as_user('ann');
 select tests.put('ra', public.start_processing(tests.actor(), tests.id('h2'), 'it-1', '{"provider":"fake"}',
   jsonb_build_array(jsonb_build_object('stage', 'extract', 'sourceId', tests.id('sp'), 'inputHash', md5('same')))));
-select tests.as_service();
+select tests.as_owner(); -- DB-12-LEGACY: unfenced writer, owner-only since 20261113300500
 select tests.put('pa', public.insert_extracted_point(tests.id('h2'), tests.id('ra'), 'decision', 'Kept', 'Kept statement', '{}', null,
                                                      'everyone', '{"provider":"fake"}'));
+select tests.as_service();
 select tests.put('ja', (select id from public.claim_ready_processing_jobs(5, 300) limit 1));
 select public.complete_processing_job(tests.id('ja'), 1, 'succeeded');
 select public.finish_processing_run(tests.id('ra'), 'succeeded');

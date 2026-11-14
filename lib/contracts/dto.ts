@@ -46,6 +46,8 @@ export interface HandoverSummary {
   title: string;
   teamName: string;
   roleTitle: string | null;
+  /** R3: the draft's free-text description (masked), so the wizard can show and edit it. */
+  description: string | null;
   state: HandoverState;
   viewerRole: MemberRole;
   viewerIsCreator: boolean;
@@ -195,11 +197,22 @@ export interface EvidenceItem {
   quoteCheck: QuoteCheck;
   supportVerdict: SupportVerdict;
   verdictRationale: string | null;
+  /**
+   * PI-11 (additive): true when the deterministic injection guard replaced the verifier's promoting verdict
+   * with `irrelevant` (the evidence contains instructions addressed to an automated checker). Use this
+   * instead of matching the rationale text. Absent from older readers; treat absent as false.
+   */
+  guarded?: boolean;
+  /** PI-11 (additive): the verdict the model returned before the guard; non-null only when `guarded`. */
+  modelVerdict?: GuardedModelVerdict | null;
   isCurrentRevisionVerdict: boolean;
   excluded: boolean;
   exclusionReason: string | null;
   accessLevel: AccessLevel;
 }
+
+/** The promoting verdicts the PI-11 guard replaces (lib/ai/injection-guard.ts#PROMOTING_VERDICTS). */
+export type GuardedModelVerdict = Extract<SupportVerdict, "supports" | "partial">;
 
 export interface PointSummary {
   id: string;
@@ -293,7 +306,11 @@ export interface ProcessingStatus {
     status: RunStatus;
     startedAt: string | null;
     finishedAt: string | null;
-    stages: Array<{ stage: PipelineStage; status: RunStatus; done: number; total: number }>;
+    /**
+     * Per-stage status. `partial` (Round 3, E4): all of the stage's jobs are terminal and some succeeded while
+     * the rest failed or were skipped, or the run succeeded although this stage's jobs failed or were skipped.
+     */
+    stages: Array<{ stage: PipelineStage; status: RunStatus | "partial"; done: number; total: number }>;
     error: { code: string; message: string } | null;
   };
   sources: SourceSummary[];

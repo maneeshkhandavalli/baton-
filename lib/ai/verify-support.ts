@@ -10,6 +10,11 @@ import "server-only";
  *
  * This verdict alone can never make a point `sourced`: status also requires the deterministic quote
  * existence check (§4.2, §10.7).
+ *
+ * PI-11: a deterministic, provider-independent guard (injection-guard.ts) screens the claim, quote and
+ * context for instructions addressed to an automated checker. If any are found, a promoting verdict
+ * (`supports`, `partial`) is replaced by `irrelevant` with a fixed rationale, so injected evidence can
+ * never make a point sourced on the model's word. `modelVerdict` keeps what the model said.
  */
 
 import { z } from "zod";
@@ -18,6 +23,7 @@ import { POINT_CATEGORIES } from "../contracts/enums";
 import type { SupportVerdict } from "../contracts/enums";
 import { supportVerdictResponseSchema } from "../contracts/schemas";
 import { AI_ERROR_REASONS } from "./errors";
+import { applySupportGuard, GUARD_RATIONALE, screenVerifyRequest, type InjectionScreen } from "./injection-guard";
 import { verifyRequestWithinLimits } from "./limits";
 import type { AiAttemptRecord, AiProvenance, AiProvider, AiResult, AiStageOptions, VerifySupportRequest } from "./provider";
 import { attemptRecord, callProvider, checkStageOptions, invalidOutputFailure, requestFailure, wouldMask } from "./stage";
@@ -25,8 +31,13 @@ import { attemptRecord, callProvider, checkStageOptions, invalidOutputFailure, r
 export { VERIFY_REQUEST_LIMITS } from "./limits";
 
 export interface SupportOutcome {
+  /** The verdict to record: the model's, unless the PI-11 guard replaced a promoting verdict. */
   verdict: Exclude<SupportVerdict, "unchecked">;
-  /** One sentence from the model; null when it would have needed masking. */
+  /** What the model answered (for audit and the live suite). */
+  modelVerdict?: Exclude<SupportVerdict, "unchecked">;
+  /** The PI-11 screen; `guarded` is true when it replaced the model's verdict. */
+  injection?: InjectionScreen & { guarded: boolean };
+  /** One sentence from the model (or the fixed guard text); null when it would have needed masking. */
   rationale: string | null;
   provenance: AiProvenance;
   attempt: AiAttemptRecord;
@@ -70,11 +81,16 @@ export async function verifySupport(
   const parsed = supportVerdictResponseSchema.safeParse(called.raw);
   if (!parsed.success) return invalidOutputFailure(clock, called.provenance, called.extra);
 
+  const screen = screenVerifyRequest(forwarded);
+  const guard = applySupportGuard(parsed.data.verdict, screen);
+  const modelRationale = wouldMask(parsed.data.rationale) ? null : parsed.data.rationale;
   return {
     ok: true,
     data: {
-      verdict: parsed.data.verdict,
-      rationale: wouldMask(parsed.data.rationale) ? null : parsed.data.rationale,
+      verdict: guard.verdict,
+      modelVerdict: parsed.data.verdict,
+      injection: { ...screen, guarded: guard.guarded },
+      rationale: guard.guarded ? GUARD_RATIONALE : modelRationale,
       provenance: called.provenance,
       attempt: attemptRecord(clock, { ...called.extra, outcome: "succeeded" }),
     },

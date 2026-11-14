@@ -41,6 +41,13 @@ export interface ZipInput {
   declaredSize?: number;
   /** Corrupts the stored CRC. */
   badCrc?: boolean;
+  /**
+   * Streaming-writer layout (general-purpose flag bit 3, as Android exports use): the local header
+   * carries zero CRC and sizes, and a data descriptor follows the data. The central directory is exact.
+   */
+  dataDescriptor?: boolean;
+  /** Overrides the compression-method field (e.g. 99 = AES, 12 = bzip2) without changing the data. */
+  methodField?: number;
 }
 
 export function buildZip(entries: ZipInput[]): Uint8Array {
@@ -53,26 +60,38 @@ export function buildZip(entries: ZipInput[]): Uint8Array {
     const body = method === 0 ? raw : new Uint8Array(deflateRawSync(raw));
     const crc = e.badCrc ? (crc32(raw) ^ 0xffff) >>> 0 : crc32(raw);
     const name = bytesOf(e.name);
-    const flags = 0x0800 | (e.encryptedFlag ? 1 : 0);
+    const flags = 0x0800 | (e.encryptedFlag ? 1 : 0) | (e.dataDescriptor ? 0x0008 : 0);
     const size = e.declaredSize ?? raw.length;
+    const methodField = e.methodField ?? method;
 
     const lh = new DataView(new ArrayBuffer(30));
     lh.setUint32(0, 0x04034b50, true);
     lh.setUint16(4, 20, true);
     lh.setUint16(6, flags, true);
-    lh.setUint16(8, method, true);
-    lh.setUint32(14, crc, true);
-    lh.setUint32(18, body.length, true);
-    lh.setUint32(22, size, true);
+    lh.setUint16(8, methodField, true);
+    if (!e.dataDescriptor) {
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, body.length, true);
+      lh.setUint32(22, size, true);
+    }
     lh.setUint16(26, name.length, true);
-    const local = concat([new Uint8Array(lh.buffer), name, body]);
+    let descriptor = new Uint8Array(0);
+    if (e.dataDescriptor) {
+      const dd = new DataView(new ArrayBuffer(16));
+      dd.setUint32(0, 0x08074b50, true);
+      dd.setUint32(4, crc, true);
+      dd.setUint32(8, body.length, true);
+      dd.setUint32(12, size, true);
+      descriptor = new Uint8Array(dd.buffer);
+    }
+    const local = concat([new Uint8Array(lh.buffer), name, body, descriptor]);
 
     const ch = new DataView(new ArrayBuffer(46));
     ch.setUint32(0, 0x02014b50, true);
     ch.setUint16(4, 20, true);
     ch.setUint16(6, 20, true);
     ch.setUint16(8, flags, true);
-    ch.setUint16(10, method, true);
+    ch.setUint16(10, methodField, true);
     ch.setUint32(16, crc, true);
     ch.setUint32(20, body.length, true);
     ch.setUint32(24, size, true);

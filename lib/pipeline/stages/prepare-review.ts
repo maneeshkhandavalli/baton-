@@ -11,7 +11,7 @@ import type { EvidenceStatus } from "../../contracts/enums";
 import { DbError } from "../../db/errors";
 import { createSystemGapQuestion, listGapQuestionsForPipeline, listPointsForPipeline, setPointSortKeys, type PipelinePoint } from "../../db/pipeline";
 import { gapPriority } from "../checklist";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import type { StageOutcome } from "../types";
 
 const STATUS_ORDER: Record<EvidenceStatus, number> = { conflicting: 0, inferred: 1, missing: 2, sourced: 3 };
@@ -60,7 +60,7 @@ export function questionForPoint(title: string): string {
 }
 
 export async function runPrepareReview(ctx: StageContext): Promise<StageOutcome> {
-  const { handoverId, runId } = ctx.job.job;
+  const { handoverId } = ctx.job.job;
   const [points, questions] = await Promise.all([
     listPointsForPipeline(ctx.db, handoverId),
     listGapQuestionsForPipeline(ctx.db, handoverId),
@@ -70,8 +70,7 @@ export async function runPrepareReview(ctx: StageContext): Promise<StageOutcome>
   let skipped = 0;
   for (const p of pointsNeedingQuestions(points, questions)) {
     try {
-      await createSystemGapQuestion(ctx.db, {
-        handoverId,
+      await createSystemGapQuestion(ctx.db, claimOf(ctx), {
         pointId: p.pointId,
         category: null, // a point question takes the point's category (SQL)
         question: questionForPoint(p.title as string),
@@ -91,7 +90,7 @@ export async function runPrepareReview(ctx: StageContext): Promise<StageOutcome>
   }
 
   const keys = reviewOrder(points).map((p, i) => ({ pointId: p.pointId, sortKey: i + 1 }));
-  if (keys.length > 0) await setPointSortKeys(ctx.db, { handoverId, runId, keys });
+  if (keys.length > 0) await setPointSortKeys(ctx.db, claimOf(ctx), keys);
 
   ctx.logger.info("prepare_review_done", { jobId: ctx.claimed.id, points: points.length, gapQuestions: created, skipped });
   return { kind: "succeeded", progress: { done: 1, total: 1 } };

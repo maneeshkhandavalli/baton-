@@ -22,12 +22,13 @@ import type {
 } from "@/lib/contracts/enums";
 import type { ReadinessBlocker } from "@/lib/contracts/dto";
 
-export const handoverStateMeta: Record<HandoverState, { label: string; className: string; dot: string }> = {
-  draft: { label: "Draft", className: "bg-muted text-muted-foreground border-border", dot: "bg-status-missing" },
-  processing: { label: "Processing", className: "bg-primary/8 text-primary border-primary/20", dot: "bg-primary" },
-  in_review: { label: "In review", className: "bg-status-inferred-soft text-status-inferred-fg border-status-inferred/25", dot: "bg-status-inferred" },
-  approved: { label: "Approved", className: "bg-status-sourced-soft text-status-sourced-fg border-status-sourced/20", dot: "bg-status-sourced" },
-  acknowledged: { label: "Acknowledged", className: "bg-foreground text-background border-foreground", dot: "bg-background" },
+/** Handover lifecycle state → label + system tone (never an evidence tone). See <HandoverStateBadge>. */
+export const handoverStateMeta: Record<HandoverState, { label: string; tone: "neutral" | "primary" | "warning" | "success" | "inverse"; description: string }> = {
+  draft: { label: "Draft", tone: "neutral", description: "Being set up. Nothing has been processed yet." },
+  processing: { label: "Processing", tone: "primary", description: "Baton is reading the sources." },
+  in_review: { label: "In review", tone: "warning", description: "Points are waiting for review before publishing." },
+  approved: { label: "Approved", tone: "success", description: "Published to the incoming member." },
+  acknowledged: { label: "Acknowledged", tone: "inverse", description: "The incoming member has acknowledged the handover." },
 };
 
 export const reviewStateLabel: Record<ReviewState, string> = {

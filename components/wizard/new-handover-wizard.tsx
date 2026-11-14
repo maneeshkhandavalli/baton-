@@ -2,78 +2,95 @@
 
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, FileText, Loader2, MessageCircle, Sparkles, Trash2, Upload, UserCheck, UserX } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Link2, Lock, Trash2, UserCheck, UserX } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
-import { formatBytes, formatCount, formatDate } from "@/components/handover/format";
-import { accessLevelMeta, identityKindLabel, sourceKindLabel } from "@/components/handover/labels";
-import { MaskedText } from "@/components/shared/masked-text";
+import { identityKindLabel } from "@/components/handover/labels";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { SaveIndicator } from "@/components/shared/save-indicator";
+import type { SaveState } from "@/components/shared/save-state";
+import { Stepper } from "@/components/shared/stepper";
+import { phaseForError } from "@/components/shared/upload-status";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { Field, FieldGroup, fieldDescribedBy } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
-import { ACCESS_LEVELS, MASK_KINDS, type AccessLevel, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import { MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import type { HandoverSummary, SourceSummary } from "@/lib/contracts/dto";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
-import { createHandover, startProcessing } from "@/lib/actions/handovers";
+import { createHandover, deleteHandover, startProcessing } from "@/lib/actions/handovers";
 import { inviteMember } from "@/lib/actions/members";
 import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent, removeSource } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
-import { cn } from "@/lib/utils";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTarget, TOO_LARGE_MESSAGE, type DraftSource } from "./draft-state";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import type { DetailsValues } from "./details-save";
+import { ScopeStep } from "./scope-step";
+import { SourcesStep } from "./sources-step";
+import { useDetailsAutosave } from "./use-details-autosave";
 
-const STEPS = [
+// Consent comes before any upload: the database refuses a preview until consent is recorded for the
+// source (§10 steps 2–3; source_preview_target), so each upload records consent right after the server
+// has verified the bytes, and only then asks for the preview.
+export const STEPS = [
   { id: "details", label: "Details" },
+  { id: "privacy", label: "Privacy & consent" },
   { id: "sources", label: "Sources" },
   { id: "scope", label: "Scope & access" },
-  { id: "privacy", label: "Privacy & consent" },
 ] as const;
+const LAST_STEP = STEPS.length - 1;
 
 const MAX_SOURCES = 10; // D15
 
-interface Details {
+export interface Details {
   title: string;
   teamName: string;
   roleTitle: string;
+  /** `undefined` while the stored description isn't known (resumed draft on an older summary). */
+  description?: string;
   creatorRole: "outgoing" | "reviewer" | "";
   outgoingEmail: string;
   incomingEmail: string;
   incomingRole: "incoming" | "lead";
 }
 
-interface DraftSource {
-  localId: string;
-  name: string;
-  size: number;
-  kind: SourceKind;
-  status: "hashing" | "uploading" | "previewing" | "ready" | "error";
-  error?: string;
-  sourceId?: string;
-  preview?: SourcePreview;
-  accessLevel: AccessLevel;
-  excludedConversations: string[];
-  /** Participant local ids ticked off and not saved yet. Saved ones disappear from the preview (D33). */
-  excludedParticipants: string[];
-  /** How many people were left out of this source and saved (they're no longer in the preview). */
-  savedParticipantExclusions: number;
-  rangeFrom: string;
-  rangeTo: string;
-  documentDate: string;
+/** A draft reopened from the server (dashboard "Continue", a refresh, or a reload after a conflict). */
+export interface WizardInitial {
+  handoverId: string;
+  /** HandoverSummary.updatedAt — the version the details editor starts from. */
+  updatedAt: string;
+  details: Pick<Details, "title" | "teamName" | "roleTitle" | "description" | "creatorRole">;
+  sources: SourceSummary[];
+  step: number;
 }
-
-const CHAT_ACCEPT = ".txt,.zip";
-const DOC_ACCEPT = ".pdf,.docx,.md,.markdown";
 
 function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
-  if (group === "chat") return ext === "txt" || ext === "zip" ? "whatsapp_export" : null;
+  // A .txt is decided by its contents (looksLikeChatExport); this is only the starting guess.
+  if (ext === "txt") return group === "chat" ? "whatsapp_export" : "text";
+  if (group === "chat") return ext === "zip" ? "whatsapp_export" : null;
   if (ext === "pdf") return "pdf";
   if (ext === "docx") return "docx";
   if (ext === "md" || ext === "markdown") return "markdown";
   return null;
 }
+
+/** "This file isn't a valid …" */
+const KIND_NOUN: Record<SourceKind, string> = {
+  whatsapp_export: "WhatsApp chat export",
+  pdf: "PDF",
+  docx: "Word document",
+  markdown: "Markdown file",
+  text: "text file",
+};
 
 const MIME: Record<SourceKind, string> = {
   whatsapp_export: "text/plain",
@@ -83,17 +100,34 @@ const MIME: Record<SourceKind, string> = {
   text: "text/plain",
 };
 
+/** WhatsApp exports start lines with a date + time stamp ("12/03/24, 9:41 pm - …" or "[12/03/24, 09:41:07] …"). */
+const CHAT_LINE = /^\u200e?\[?\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4},?\s+\d{1,2}[:.]\d{2}/m;
+
+async function looksLikeChatExport(file: File): Promise<boolean> {
+  try {
+    return CHAT_LINE.test(await file.slice(0, 8192).text());
+  } catch {
+    return true; // can't tell: keep the chat default; the user can switch it on the row
+  }
+}
+
+const isTxt = (name: string) => name.toLowerCase().endsWith(".txt");
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function sha256Hex(data: ArrayBuffer) {
   const digest = await crypto.subtle.digest("SHA-256", data);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const SAMPLES: Array<{ name: string; size: number; kind: SourceKind }> = [
-  { name: "WhatsApp Chat with Core Team.txt", size: 842_000, kind: "whatsapp_export" },
-  { name: "WhatsApp Chat with Event Volunteers.txt", size: 512_000, kind: "whatsapp_export" },
-  { name: "Club handbook 2026.pdf", size: 310_000, kind: "pdf" },
-  { name: "event-checklist.md", size: 6_200, kind: "markdown" },
-];
+/** The browser's zone, used for consent and for every preview of this draft (D33: same parse context). */
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
 
 const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
 
@@ -114,7 +148,7 @@ function zonedInstant(date: string, time: string, timeZone: string): string {
 }
 
 /** An identity match waiting for the creator's answer (§6.8.1). */
-interface PendingMatch {
+export interface PendingMatch {
   sourceLocalId: string;
   sourceId: string;
   sourceName: string;
@@ -124,58 +158,215 @@ interface PendingMatch {
   kind: SourcePreview["participants"][number]["identityKind"];
 }
 
-export function NewHandoverWizard() {
+const valuesOf = (d: Pick<Details, "title" | "teamName" | "roleTitle" | "description">): DetailsValues => ({
+  title: d.title,
+  teamName: d.teamName,
+  roleTitle: d.roleTitle,
+  ...(d.description !== undefined ? { description: d.description } : {}),
+});
+
+export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { run, isPending } = useAction();
-  const [step, setStep] = useState(0);
+  const resumed = !!initial;
+  const initialConsented = !!initial?.sources.some((s) => s.consentRecordedAt);
+  const [step, setStepState] = useState(() => Math.min(Math.max(initial?.step ?? 0, 0), LAST_STEP));
+  /** Every step change moves focus to the new step's heading (see StepHeading). */
+  const setStep = useCallback((next: number) => {
+    focusNextStep.current = true;
+    setStepState(next);
+  }, []);
   const [details, setDetails] = useState<Details>({
-    title: "",
-    teamName: "",
-    roleTitle: "",
-    creatorRole: "",
+    title: initial?.details.title ?? "",
+    teamName: initial?.details.teamName ?? "",
+    roleTitle: initial?.details.roleTitle ?? "",
+    description: initial ? initial.details.description : "",
+    creatorRole: initial?.details.creatorRole ?? "",
     outgoingEmail: "",
     incomingEmail: "",
     incomingRole: "incoming",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [handoverId, setHandoverId] = useState<string | null>(null);
+  const [handoverId, setHandoverId] = useState<string | null>(initial?.handoverId ?? null);
   const [invites, setInvites] = useState<Array<{ label: string; url: string }>>([]);
-  const [sources, setSources] = useState<DraftSource[]>([]);
-  const [consent, setConsent] = useState(emptyConsent());
+  const [sources, setSources] = useState<DraftSource[]>(() => (initial?.sources ?? []).map((s) => fromSummary(s, initialConsented)));
+  // A consent already recorded for this draft's sources was given on this checklist; re-ask otherwise.
+  const [consent, setConsent] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
   const [submitting, setSubmitting] = useState(false);
+  /** Why the last "Start processing" didn't go through, kept on the page (the toast disappears). */
+  const [startError, setStartError] = useState<string | null>(null);
   const [savingScope, setSavingScope] = useState(false);
+  const [save, setSave] = useState<SaveState>(() => (initial ? { kind: "saved", at: initial.updatedAt } : { kind: "unsaved" }));
+  const [skipped, setSkipped] = useState(0);
   /** Identity decisions recorded with confirmIdentityMatch in this session (§6.8.1). */
   const [decisions, setDecisions] = useState<Array<PendingMatch & { decision: IdentityMatchDecision }>>([]);
+  const timeZone = useRef(browserTimeZone()).current;
 
-  const update = (id: string, patch: Partial<DraftSource>) => setSources((list) => list.map((s) => (s.localId === id ? { ...s, ...patch } : s)));
+  // Server version of the details: from the reopened draft, the create result, or a reload.
+  const [server, setServer] = useState<{ updatedAt: string; values: DetailsValues } | null>(() =>
+    initial ? { updatedAt: initial.updatedAt, values: valuesOf(initial.details) } : null,
+  );
+  const reloadPending = useRef(false);
+
+  const autosave = useDetailsAutosave({
+    handoverId,
+    serverUpdatedAt: server?.updatedAt ?? null,
+    savedValues: server?.values ?? null,
+    onState: setSave,
+    onFieldErrors: (e) => setErrors((prev) => ({ ...Object.fromEntries(Object.entries(prev).filter(([k]) => !["title", "teamName", "roleTitle", "description"].includes(k))), ...e })),
+    onSaved: (h: HandoverSummary, sent) => {
+      // The server masks free text: show what was stored if it differs and nothing newer was typed.
+      setDetails((d) =>
+        d.title === sent.title && d.teamName === sent.teamName && d.roleTitle === sent.roleTitle && d.description === sent.description
+          ? { ...d, title: h.title, teamName: h.teamName, roleTitle: h.roleTitle ?? "", description: sent.description === undefined ? d.description : (h.description ?? "") }
+          : d,
+      );
+    },
+    onStale: () => {
+      reloadPending.current = true;
+      router.refresh();
+    },
+    onNotDraft: () => {
+      if (handoverId) router.push(routes.handover.processing(handoverId));
+    },
+  });
+
+  // A reload (after a conflict, or on returning to Details) brings a newer server version.
+  useEffect(() => {
+    if (!initial || (server && initial.updatedAt <= server.updatedAt)) return;
+    const values = valuesOf(initial.details);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- adopting a newer server version of the draft
+    setServer({ updatedAt: initial.updatedAt, values });
+    if (reloadPending.current) {
+      reloadPending.current = false;
+      setDetails((d) => ({ ...d, ...values, description: initial.details.description }));
+    }
+  }, [initial, server]);
+
+  const update = useCallback((id: string, patch: Partial<DraftSource>) => setSources((list) => list.map((s) => (s.localId === id ? { ...s, ...patch } : s))), []);
+
+  /** Wraps a server write so the save indicator is truthful. */
+  const saving = useCallback(async <R extends { ok: boolean }>(work: () => Promise<R>): Promise<R> => {
+    setSave({ kind: "saving" });
+    const r = await work();
+    setSave(r.ok ? { kind: "saved", at: new Date() } : { kind: "error" });
+    return r;
+  }, []);
+
+  // The step and the draft live in the URL, so a refresh or the dashboard reopens exactly here. The draft
+  // itself (details, sources, consent, exclusions) is already in the database.
+  useEffect(() => {
+    if (!handoverId) return;
+    const url = `${routes.handover.new}?draft=${encodeURIComponent(handoverId)}&step=${step}`;
+    if (window.location.pathname + window.location.search !== url) window.history.replaceState(null, "", url);
+  }, [handoverId, step]);
+
+  // ── One place that turns a preview result into the source's state (upload, resume, date-order choice) ─
+  const applyPreview = useCallback(
+    (localId: string, preview: Awaited<ReturnType<typeof previewSource>>) => {
+      if (!preview.ok) {
+        const parserCode = typeof preview.error.details?.parserCode === "string" ? preview.error.details.parserCode : undefined;
+        if (parserCode === "date_format_ambiguous") {
+          return update(localId, { status: "error", needsDateOrder: true, errorPhase: "needs_input", error: "Baton can't tell whether these dates are day/month or month/day. Which is it?" });
+        }
+        return update(localId, { status: "error", errorPhase: phaseForError({ code: preview.error.code, parserCode }), error: preview.error.message });
+      }
+      update(localId, { status: "ready", needsDateOrder: false, errorPhase: undefined, preview: preview.data, rangeFrom: dateOnly(preview.data.firstMessageAt), rangeTo: dateOnly(preview.data.lastMessageAt) });
+    },
+    [update],
+  );
+
+  // ── Consent + preview for one confirmed source ─────────────
+  const consentAndPreview = useCallback(
+    async (localId: string, sourceId: string, accessLevel: AccessLevel, dateOrder?: DateOrder) => {
+      update(localId, { status: "consent", error: undefined, errorPhase: undefined, needsDateOrder: false });
+      const c = await saving(() =>
+        recordSourceConsent({ sourceId, consentStatementVersion: CONSENT_STATEMENT_VERSION, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
+      );
+      if (!c.ok) return update(localId, { status: "error", errorPhase: "failed", error: c.error.message });
+      update(localId, { status: "previewing", dateOrder });
+      applyPreview(localId, await previewSource({ sourceId }));
+    },
+    [applyPreview, saving, timeZone, update],
+  );
+
+  // Reopened draft: preview sources that are uploaded (recording consent first where it is missing).
+  // A draft created in this session never runs this, even when a reload later supplies `initial`.
+  const resumedOnce = useRef(!initial);
+  useEffect(() => {
+    if (resumedOnce.current || !initial) return;
+    resumedOnce.current = true;
+    // Every state update below happens after an await (the initial statuses come from fromSummary).
+    for (const s of initial.sources) {
+      if (s.state !== "uploaded" || (!s.consentRecordedAt && !initialConsented)) continue;
+      void (async () => {
+        if (!s.consentRecordedAt) {
+          await Promise.resolve();
+          return consentAndPreview(s.id, s.id, s.accessLevel);
+        }
+        applyPreview(s.id, await previewSource({ sourceId: s.id }));
+      })();
+    }
+  }, [initial, initialConsented, consentAndPreview, applyPreview]);
+
+  // Returning to Details on an existing draft: fetch the latest version so autosave starts from it.
+  // Any step change moves focus to the new step's heading (StepHeading), so keyboard and screen-reader
+  // users land at the top of the new step instead of on a button that no longer exists.
+  const prevStep = useRef(step);
+  useEffect(() => {
+    if (step === 0 && prevStep.current !== 0 && handoverId) router.refresh();
+    prevStep.current = step;
+  }, [step, handoverId, router]);
 
   // ── Step 1 ────────────────────────────────────────────────
+  function setDetail<K extends keyof Details>(k: K, v: Details[K]) {
+    const next = { ...details, [k]: v };
+    setDetails(next);
+    if (handoverId && (k === "title" || k === "teamName" || k === "roleTitle" || k === "description")) autosave.schedule(valuesOf(next));
+  }
+
   async function submitDetails() {
-    if (handoverId) return setStep(1);
+    if (handoverId) {
+      if (await autosave.flush(valuesOf(details))) setStep(1);
+      return;
+    }
     const next: Record<string, string> = {};
     const parsed = createHandoverInput.safeParse({
       title: details.title,
       teamName: details.teamName,
       roleTitle: details.roleTitle || undefined,
+      description: details.description || undefined,
       creatorRole: details.creatorRole || undefined,
     });
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const key = String(issue.path[0]);
         next[key] ??=
-          key === "title" ? "Give the handover a title (at least 3 characters)." : key === "teamName" ? "Add the team or club name." : key === "creatorRole" ? "Choose who is leaving the role." : issue.message;
+          key === "title"
+            ? "Give the handover a title (at least 3 characters)."
+            : key === "teamName"
+              ? "Add the team or club name."
+              : key === "creatorRole"
+                ? "Choose who is leaving the role."
+                : issue.message;
       }
     }
     if (details.creatorRole === "reviewer" && details.outgoingEmail && !z.email().safeParse(details.outgoingEmail).success) next.outgoingEmail = "Enter a valid email.";
     if (details.incomingEmail && !z.email().safeParse(details.incomingEmail).success) next.incomingEmail = "Enter a valid email.";
     setErrors(next);
-    if (Object.keys(next).length > 0 || !parsed.success) return;
+    if (Object.keys(next).length > 0 || !parsed.success) {
+      const first = Object.keys(next)[0];
+      const target: Record<string, string> = { title: "title", teamName: "team", creatorRole: "creator-outgoing", outgoingEmail: "outgoing", incomingEmail: "incoming" };
+      if (first && target[first]) document.getElementById(target[first])?.focus();
+      return;
+    }
 
-    const created = await run(() => createHandover(parsed.data));
+    const created = await saving(() => run(() => createHandover(parsed.data)));
     if (!created.ok) return;
     const id = created.data.id;
-    setHandoverId(id);
+    setHandoverId(id); // the URL now carries the draft, so a retry or refresh reopens it instead of creating another
+    setServer({ updatedAt: created.data.updatedAt, values: valuesOf(details) });
     const made: Array<{ label: string; url: string }> = [];
     if (details.incomingEmail) {
       const r = await run(() => inviteMember({ handoverId: id, email: details.incomingEmail, role: details.incomingRole }));
@@ -189,79 +380,172 @@ export function NewHandoverWizard() {
     setStep(1);
   }
 
-  // ── Step 2 ────────────────────────────────────────────────
-  async function addSource(entry: { name: string; size: number; kind: SourceKind; file?: File }) {
+  // ── Step 3: real signed upload → server verification → consent → preview ─
+  async function uploadSource(localId: string, entry: { name: string; size: number; kind: SourceKind; file: File }) {
     if (!handoverId) return;
-    const localId = crypto.randomUUID();
-    const draft: DraftSource = {
-      localId,
-      name: entry.name,
-      size: entry.size,
-      kind: entry.kind,
-      status: "hashing",
-      accessLevel: "everyone",
-      excludedConversations: [],
-      excludedParticipants: [],
-      savedParticipantExclusions: 0,
-      rangeFrom: "",
-      rangeTo: "",
-      documentDate: "",
-    };
-    setSources((list) => [...list, draft]);
-    if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", error: "Files can be up to 25 MB." });
-
-    const sha = entry.file
-      ? await sha256Hex(await entry.file.arrayBuffer())
-      : await sha256Hex(new TextEncoder().encode(`${entry.name}-${Date.now()}`).buffer as ArrayBuffer);
+    if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", errorPhase: "too_large", error: TOO_LARGE_MESSAGE });
+    if (entry.size === 0) return update(localId, { status: "error", errorPhase: "empty", error: "This file is empty." });
+    update(localId, { status: "hashing", error: undefined, errorPhase: undefined });
+    let sha: string;
+    try {
+      sha = await sha256Hex(await entry.file.arrayBuffer());
+    } catch {
+      return update(localId, { status: "error", errorPhase: "failed", error: "Couldn't read this file. Choose it again." });
+    }
     update(localId, { status: "uploading" });
-    const ticket = await createSourceUpload({ handoverId, kind: entry.kind, fileName: entry.name, mimeType: entry.file?.type || MIME[entry.kind], sizeBytes: entry.size, sha256: sha });
-    if (!ticket.ok) return update(localId, { status: "error", error: ticket.error.message });
-    // Mock: the browser would PUT the file to ticket.data.signedUploadUrl here (§10 step 1).
-    const confirmed = await confirmSourceUploaded({ sourceId: ticket.data.sourceId });
-    if (!confirmed.ok) return update(localId, { status: "error", error: confirmed.error.message, sourceId: ticket.data.sourceId });
-    update(localId, { status: "previewing", sourceId: ticket.data.sourceId });
-    const preview = await previewSource({ sourceId: ticket.data.sourceId });
-    if (!preview.ok) return update(localId, { status: "error", error: preview.error.message });
+    const ticket = await saving(() =>
+      createSourceUpload({ handoverId, kind: entry.kind, fileName: entry.name, mimeType: entry.file.type || MIME[entry.kind], sizeBytes: entry.size, sha256: sha }),
+    );
+    if (!ticket.ok) {
+      const reason = typeof ticket.error.details?.reason === "string" ? ticket.error.details.reason : undefined;
+      return update(localId, { status: "error", errorPhase: phaseForError({ code: ticket.error.code, reason }), error: ticket.error.message });
+    }
+    const { sourceId, signedUploadUrl, token } = ticket.data;
+    update(localId, { sourceId });
+
+    // The bytes go straight to the private bucket with the one-time signed URL; they never pass through a
+    // server action. Success is reported only after the server re-measures them (confirmSourceUploaded).
+    const target = signedTarget(signedUploadUrl);
+    let uploadError = !target;
+    if (target) {
+      try {
+        const { error } = await createSupabaseBrowserClient().storage.from(target.bucket).uploadToSignedUrl(target.path, token, entry.file, {
+          contentType: entry.file.type || MIME[entry.kind],
+          upsert: false,
+        });
+        uploadError = !!error;
+      } catch {
+        uploadError = true;
+      }
+    }
+    if (uploadError) return cleanUp(localId, sourceId, "The upload didn't go through. Check your connection and retry.");
+
+    // confirmSourceUploaded is idempotent: a lost response or a transient error is retried with a short
+    // backoff before the upload is given up, so a good upload is never deleted because of the network.
+    update(localId, { status: "verifying" });
+    let confirmed: Awaited<ReturnType<typeof confirmSourceUploaded>> | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await pause(500 * attempt);
+      try {
+        confirmed = await saving(() => confirmSourceUploaded({ sourceId }));
+      } catch {
+        confirmed = { ok: false, error: { code: "internal", message: "Couldn't reach Baton.", retryable: true } };
+      }
+      if (confirmed.ok || !(confirmed.error.retryable || confirmed.error.code === "internal")) break;
+    }
+    if (!confirmed?.ok) {
+      // validation_failed is told apart by details.reason: wrong kind (e.g. a PDF renamed .docx), a damaged
+      // upload (size or SHA-256 mismatch: Retry), or over the size limit (QA-R3-16).
+      const hint = isTxt(entry.name) ? " If it's a plain text document, switch it to Plain text." : "";
+      const failure = confirmFailure(confirmed ? confirmed.error : null, { kindNoun: KIND_NOUN[entry.kind], textHint: hint });
+      return cleanUp(localId, sourceId, failure.message, failure.phase);
+    }
+    await consentAndPreview(localId, sourceId, "everyone");
+  }
+
+  /** A failed upload removes its pending source; if that fails too, the row says so and keeps the id for Remove. */
+  async function cleanUp(localId: string, sourceId: string, message: string, phase: "failed" | "unsupported" | "too_large" = "failed") {
+    let removed = false;
+    try {
+      removed = (await removeSource({ sourceId })).ok;
+    } catch {
+      removed = false;
+    }
+    if (removed) return update(localId, { status: "error", errorPhase: phase, error: message, sourceId: undefined });
     update(localId, {
-      status: "ready",
-      preview: preview.data,
-      rangeFrom: dateOnly(preview.data.firstMessageAt),
-      rangeTo: dateOnly(preview.data.lastMessageAt),
+      status: "error",
+      errorPhase: phase,
+      error: `${message} Baton also couldn't clean up this upload: remove it before adding the file again.`,
+      sourceId,
     });
+  }
+
+  /** Read a .txt as a WhatsApp chat export or as a plain text document (re-uploads with the other kind). */
+  async function switchKind(s: DraftSource, kind: "whatsapp_export" | "text") {
+    if (!s.file || s.kind === kind) return;
+    if (s.sourceId) {
+      const r = await saving(() => run(() => removeSource({ sourceId: s.sourceId! })));
+      if (!r.ok) return;
+    }
+    update(s.localId, { kind, sourceId: undefined, preview: undefined, error: undefined, errorPhase: undefined, needsDateOrder: false, dateOrder: undefined });
+    void uploadSource(s.localId, { name: s.name, size: s.size, kind, file: s.file });
   }
 
   function onFiles(files: FileList | null, group: "chat" | "doc") {
     if (!files) return;
+    let count = sources.length;
+    let over = 0;
     for (const file of Array.from(files)) {
-      if (sources.length >= MAX_SOURCES) break;
+      if (count >= MAX_SOURCES) {
+        over += 1;
+        continue;
+      }
+      count += 1;
+      const localId = crypto.randomUUID();
       const kind = kindFor(file.name, group);
       if (!kind) {
         setSources((list) => [
           ...list,
-          { localId: crypto.randomUUID(), name: file.name, size: file.size, kind: "text", status: "error", error: group === "chat" ? "Use a WhatsApp export (.txt or .zip)." : "Use a PDF, DOCX or Markdown file.", accessLevel: "everyone", excludedConversations: [], excludedParticipants: [], savedParticipantExclusions: 0, rangeFrom: "", rangeTo: "", documentDate: "" },
+          blankSource({
+            localId,
+            name: file.name,
+            size: file.size,
+            kind: "text",
+            status: "error",
+            errorPhase: "unsupported",
+            error: group === "chat" ? "Use a WhatsApp export (.txt or .zip)." : "Use a PDF, DOCX or Markdown file.",
+          }),
         ]);
         continue;
       }
-      void addSource({ name: file.name, size: file.size, kind, file });
+      setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
+      if (isTxt(file.name)) {
+        void (async () => {
+          const detected: SourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
+          if (detected !== kind) update(localId, { kind: detected });
+          await uploadSource(localId, { name: file.name, size: file.size, kind: detected, file });
+        })();
+        continue;
+      }
+      void uploadSource(localId, { name: file.name, size: file.size, kind, file });
     }
+    setSkipped(over);
+  }
+
+  function chooseDateOrder(s: DraftSource, order: DateOrder) {
+    if (!s.sourceId) return;
+    void consentAndPreview(s.localId, s.sourceId, s.accessLevel, order);
+  }
+
+  function retry(s: DraftSource) {
+    if (!s.file || phaseOf(s) !== "failed" || (s.kind === "text" && !isTxt(s.name))) return;
+    void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
   }
 
   async function remove(s: DraftSource) {
     if (s.sourceId) {
-      const r = await run(() => removeSource({ sourceId: s.sourceId! }));
+      const r = await saving(() => run(() => removeSource({ sourceId: s.sourceId! }), { success: `Removed ${s.name}` }));
       if (!r.ok) return;
     }
     setSources((list) => list.filter((x) => x.localId !== s.localId));
+    setSkipped(0);
+  }
+
+  async function discard() {
+    if (!handoverId) return;
+    const r = await run(() => deleteHandover({ handoverId }), { success: "Draft discarded" });
+    if (r.ok) router.push(routes.dashboard);
   }
 
   const ready = sources.filter((s) => s.status === "ready");
-  const busy = sources.some((s) => s.status === "hashing" || s.status === "uploading" || s.status === "previewing");
+  const busy = sources.some((s) => s.status !== "ready" && s.status !== "error");
 
-  // ── Step 3 → 4: save people left out, then refresh every preview (D33) ─
-  // Participant exclusions are saved here, not at the end, because a handover-wide opt-out changes
-  // what the other chats' previews show and may need a "same person?" answer (§6.8.1).
-  async function saveScope() {
+  // ── Scope: save people left out, then refresh every preview (D33) ─
+  // Participant exclusions are saved first, because a handover-wide opt-out changes what the other chats'
+  // previews show and may need a "same person?" answer (§6.8.1) before processing can start.
+  async function saveParticipantExclusions(): Promise<boolean> {
     const pending = ready.filter((s) => s.excludedParticipants.length > 0);
+    if (pending.length === 0) return true;
     setSavingScope(true);
     try {
       for (const s of pending) {
@@ -278,21 +562,20 @@ export function NewHandoverWizard() {
           };
           // Phone numbers are strong identities: one handover-wide rule applies to every chat (§6.8).
           // A saved name is weak: a handover-wide name rule is only DETECTED elsewhere and never applies
-          // to any source without that source's own same_person decision (§6.8.1). So the person is left
-          // out of THIS chat by a source-scoped rule, and the handover-wide rule asks about other chats.
+          // to any source without that source's own same_person decision (§6.8.1).
           const inputs: AddExclusionInput[] =
             person.identityKind === "phone" ? [{ ...identity, scope: "handover" }] : [{ ...identity, scope: "source" }, { ...identity, scope: "handover" }];
           for (const input of inputs) {
             // conflict = this handover-wide identity is already recorded; nothing to add.
-            const r = await run(() => addExclusion(input), { onError: (e) => e.code === "conflict" });
-            if (!r.ok && r.error.code !== "conflict") return;
+            const r = await saving(() => run(() => addExclusion(input), { onError: (e) => e.code === "conflict" }));
+            if (!r.ok && r.error.code !== "conflict") return false;
           }
           saved += 1;
         }
         update(s.localId, { excludedParticipants: [], savedParticipantExclusions: s.savedParticipantExclusions + saved });
       }
       await refreshPreviews();
-      setStep(3);
+      return false; // previews changed: let the creator review them (and any matches) before starting
     } finally {
       setSavingScope(false);
     }
@@ -304,27 +587,30 @@ export function NewHandoverWizard() {
       current.map(async (s) => {
         const r = await previewSource({ sourceId: s.sourceId! });
         if (r.ok) update(s.localId, { preview: r.data });
-        else update(s.localId, { status: "error", error: r.error.message });
+        else update(s.localId, { status: "error", errorPhase: "failed", error: r.error.message });
       }),
     );
   }
 
   async function answerMatch(m: PendingMatch, decision: IdentityMatchDecision) {
-    const r = await run(() => confirmIdentityMatch({ sourceId: m.sourceId, exclusionId: m.exclusionId, decision }), {
-      success: decision === "same_person" ? `${m.label} will be left out of ${m.sourceName}` : `${m.label} stays in ${m.sourceName}`,
-    });
+    const r = await saving(() =>
+      run(() => confirmIdentityMatch({ sourceId: m.sourceId, exclusionId: m.exclusionId, decision }), {
+        success: decision === "same_person" ? `${m.label} will be left out of ${m.sourceName}` : `${m.label} stays in ${m.sourceName}`,
+      }),
+    );
     if (!r.ok) return;
-    // The decision is stored on the server; this list only mirrors what was recorded, so it can be shown and changed.
     setDecisions((list) => [...list.filter((d) => !(d.sourceId === m.sourceId && d.exclusionId === m.exclusionId)), { ...m, decision }]);
     const p = await previewSource({ sourceId: m.sourceId });
     if (p.ok) update(m.sourceLocalId, { preview: p.data });
   }
 
-  // ── Step 4: record the remaining exclusions + consent, start processing ─
+  // ── Finish: remaining exclusions, final access levels on the consent record, start processing ─
   async function finish() {
     if (!handoverId) return;
     setSubmitting(true);
+    setStartError(null);
     try {
+      if (!(await saveParticipantExclusions())) return;
       for (const s of ready) {
         const preview = s.preview!;
         // Positional ids are bound to the preview they were chosen on (D32).
@@ -339,22 +625,37 @@ export function NewHandoverWizard() {
           inputs.push({ kind: "date_range", sourceId: s.sourceId!, scope: "source", rangeStart: zonedInstant(s.rangeTo, "23:59:59", tz), rangeEnd: preview.lastMessageAt! });
         }
         for (const input of inputs) {
-          const r = await run(() => addExclusion(input));
-          if (!r.ok) return;
+          const r = await saving(() => run(() => addExclusion(input)));
+          if (!r.ok) {
+            setStartError(`Couldn't save what to leave out of ${s.name}. ${r.error.message}`);
+            return;
+          }
         }
-        const c = await run(() =>
-          recordSourceConsent({
-            sourceId: s.sourceId!,
-            consentStatementVersion: CONSENT_STATEMENT_VERSION,
-            consentConfirmed: true,
-            accessLevel: s.accessLevel,
-            timezone: preview.parseContext.timezone, // the context the preview, and any exclusion, was chosen in
-            documentDate: s.kind !== "whatsapp_export" && s.documentDate ? s.documentDate : undefined,
-          }),
+        // Same statement and zone as at upload; this records the chosen access level and document date.
+        const c = await saving(() =>
+          run(() =>
+            recordSourceConsent({
+              sourceId: s.sourceId!,
+              consentStatementVersion: CONSENT_STATEMENT_VERSION,
+              consentConfirmed: true,
+              accessLevel: s.accessLevel,
+              timezone: tz,
+              dateOrder: s.dateOrder, // keep the creator's choice: the final parse must match the preview (D32)
+              documentDate: s.kind !== "whatsapp_export" && s.documentDate ? s.documentDate : undefined,
+            }),
+          ),
         );
-        if (!c.ok) return;
+        if (!c.ok) {
+          setStartError(`Couldn't save the settings for ${s.name}. ${c.error.message}`);
+          return;
+        }
       }
-      const started = await run(() => startProcessing({ handoverId }), { success: "Processing started" });
+      const started = await run(() => startProcessing({ handoverId }), {
+        success: "Processing started",
+        onError: (e) => {
+          setStartError(e.message);
+        },
+      });
       if (started.ok) router.push(routes.handover.processing(handoverId));
     } finally {
       setSubmitting(false);
@@ -369,408 +670,367 @@ export function NewHandoverWizard() {
         : [];
     }),
   );
-  const canNext = step === 0 ? true : step === 1 ? ready.length > 0 && !busy : step === 2 ? !savingScope : consentComplete(consent) && matches.length === 0;
+  const consentGiven = consentComplete(consent);
+  const canNext = step === 0 ? true : step === 1 ? consentGiven : step === 2 ? ready.length > 0 && !busy : matches.length === 0 && !busy && !savingScope;
   const detectedMasking = ready.reduce<Partial<Record<MaskKind, number>>>((acc, s) => {
     for (const k of MASK_KINDS) acc[k] = (acc[k] ?? 0) + (s.preview?.masking.counts[k] ?? 0);
     return acc;
   }, {});
-  const hasChat = ready.some((s) => s.kind === "whatsapp_export");
+  const pendingPeople = ready.some((s) => s.excludedParticipants.length > 0);
+  // Never let the step indicator run ahead of what the draft really holds.
+  const maxStep = maxStepFor({ hasDraft: !!handoverId, consentGiven, readySources: ready.length }, LAST_STEP);
+  const shownStep = Math.min(step, maxStep);
+
+  const blockedReason =
+    shownStep === 1 && !consentGiven
+      ? "Tick every statement to continue. Without consent, nothing can be uploaded."
+      : shownStep === 2 && busy
+        ? "Wait for uploads to finish."
+        : shownStep === 2 && ready.length === 0
+          ? "Add at least one file that's ready."
+          : shownStep === 3 && matches.length > 0
+            ? "Answer each “same person?” question first."
+            : null;
 
   return (
     <div className="space-y-8">
-      <ol aria-label="Steps" className="grid grid-cols-4 gap-2">
-        {STEPS.map((s, i) => (
-          <li key={s.id} aria-current={i === step ? "step" : undefined} className="space-y-2">
-            <div className={cn("h-1 rounded-full transition-colors", i <= step ? "bg-primary" : "bg-muted")} />
-            <p className={cn("text-xs font-medium", i === step ? "text-foreground" : "text-muted-foreground")}>
-              <span className="font-mono">{i + 1}</span>
-              <span className="hidden sm:inline"> · {s.label}</span>
-            </p>
-          </li>
-        ))}
-      </ol>
-      <p className="text-sm font-medium sm:hidden">{STEPS[step].label}</p>
+      <div className="space-y-5 border-b border-border pb-6">
+        <Stepper steps={STEPS} current={shownStep} onStepClick={submitting ? undefined : (i) => setStep(i)} label="New handover steps" />
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <SaveIndicator
+            state={save}
+            onRetry={handoverId && shownStep === 0 ? () => void autosave.flush(valuesOf(details)) : undefined}
+            className="min-w-0 flex-1"
+          />
+          {handoverId && (
+            <ConfirmDialog
+              trigger={
+                <Button size="sm" variant="destructive-ghost">
+                  <Trash2 aria-hidden="true" data-icon="inline-start" />
+                  Discard draft
+                </Button>
+              }
+              title="Discard this draft?"
+              description="The draft and its uploaded files are removed from your workspace. This can't be undone here."
+              confirmLabel="Discard draft"
+              destructive
+              onConfirm={discard}
+            />
+          )}
+        </div>
+        {handoverId && (
+          <p className="text-caption text-muted-foreground">Everything is saved as you go. Leave any time and continue from the dashboard.</p>
+        )}
+      </div>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={step}
+          key={shownStep}
           initial={reduceMotion ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="space-y-6"
+          className="space-y-8"
         >
-          {step === 0 && <DetailsStep details={details} setDetails={setDetails} errors={errors} locked={!!handoverId} invites={invites} />}
-          {step === 1 && (
-            <SourcesStep
-              sources={sources}
-              onFiles={onFiles}
-              onSample={() => SAMPLES.filter((x) => !sources.some((s) => s.name === x.name)).forEach((x) => void addSource(x))}
-              onRemove={remove}
-              full={sources.length >= MAX_SOURCES}
-            />
+          {shownStep === 0 && (
+            <DetailsStep details={details} setDetail={setDetail} errors={errors} created={!!handoverId} invites={invites} resumed={resumed} />
           )}
-          {step === 2 && <ScopeStep sources={ready} update={update} />}
-          {step === 3 && (
-            <div className="space-y-6">
-              <section className="space-y-2">
-                <h2 className="font-serif text-2xl">Privacy and consent</h2>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Baton masks personal and financial details in memory before anything is saved. The raw upload is deleted once processing succeeds.
-                  Only masked, permitted evidence is kept.
-                </p>
-              </section>
-              {(matches.length > 0 || decisions.length > 0) && (
-                <MatchesSection
-                  matches={matches}
-                  decisions={decisions.filter((d) => ready.some((s) => s.sourceId === d.sourceId))}
-                  onAnswer={answerMatch}
-                  disabled={isPending}
-                />
-              )}
-              <MaskingTable counts={detectedMasking} />
-              {hasChat && <GroupNotice teamName={details.teamName} />}
+          {shownStep === 1 && (
+            <div className="space-y-8">
+              <StepHeading
+                index={1}
+                title="Privacy and consent"
+                description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
+              />
+              <GroupNotice teamName={details.teamName} />
               <ConsentChecklist value={consent} onChange={setConsent} />
+            </div>
+          )}
+          {shownStep === 2 && (
+            <div className="space-y-8">
+              <StepHeading
+                index={2}
+                title="Add the team’s record"
+                description="Export WhatsApp chats without media (Chat → More → Export chat → Without media) and add any handbooks or notes. Up to 10 files, 25 MB each."
+              />
+              {skipped > 0 && (
+                <Alert tone="warning" title={`${skipped === 1 ? "1 file wasn’t" : `${skipped} files weren’t`} added`}>
+                  A handover holds up to {MAX_SOURCES} files. Remove one to add another.
+                </Alert>
+              )}
+              <SourcesStep
+                sources={sources}
+                onFiles={onFiles}
+                onRemove={remove}
+                onRetry={retry}
+                onDateOrder={chooseDateOrder}
+                onSwitchKind={(s, k) => void switchKind(s, k)}
+                full={sources.length >= MAX_SOURCES}
+              />
+            </div>
+          )}
+          {shownStep === 3 && (
+            <div className="space-y-8">
+              <StepHeading
+                index={3}
+                title="Choose what Baton reads"
+                description="Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and decide who may see evidence from each source."
+              />
+              {(matches.length > 0 || decisions.length > 0) && (
+                <MatchesSection matches={matches} decisions={decisions.filter((d) => ready.some((s) => s.sourceId === d.sourceId))} onAnswer={answerMatch} disabled={isPending} />
+              )}
+              <ScopeStep sources={ready} update={update} />
+              <MaskingTable counts={detectedMasking} />
             </div>
           )}
         </motion.div>
       </AnimatePresence>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-        <Button variant="ghost" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0 || submitting}>
-          <ArrowLeft aria-hidden="true" data-icon="inline-start" />
-          Back
-        </Button>
-        {step < 3 ? (
-          <Button
-            size="lg"
-            disabled={!canNext || isPending}
-            aria-busy={savingScope}
-            onClick={() => (step === 0 ? submitDetails() : step === 2 ? saveScope() : setStep(step + 1))}
-          >
-            {isPending && step === 0 ? "Creating…" : savingScope ? "Saving…" : step === 0 && !handoverId ? "Create and continue" : "Continue"}
-            <ArrowRight aria-hidden="true" data-icon="inline-end" />
+      {shownStep === LAST_STEP && startError && (
+        <Alert tone="danger" title="Processing didn't start">
+          {startError} Your draft and files are saved, so you can try again.
+        </Alert>
+      )}
+
+      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
+            <ArrowLeft aria-hidden="true" data-icon="inline-start" />
+            Back
           </Button>
-        ) : (
-          <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting}>
-            {submitting ? "Starting…" : "Start processing"}
-            <ArrowRight aria-hidden="true" data-icon="inline-end" />
-          </Button>
-        )}
+          <div className="flex min-w-0 items-center gap-3">
+            {blockedReason && <p className="hidden text-right text-caption text-muted-foreground md:block">{blockedReason}</p>}
+            {shownStep < LAST_STEP ? (
+              <Button size="lg" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
+                {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft" : "Continue"}
+                <ArrowRight aria-hidden="true" data-icon="inline-end" />
+              </Button>
+            ) : (
+              <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
+                {submitting || savingScope ? "Saving…" : pendingPeople ? "Save and review" : "Start processing"}
+                <ArrowRight aria-hidden="true" data-icon="inline-end" />
+              </Button>
+            )}
+          </div>
+        </div>
+        {blockedReason && <p className="mt-2 text-caption text-muted-foreground md:hidden">{blockedReason}</p>}
       </div>
     </div>
+  );
+}
+
+/** Set when the step changes; the next StepHeading to mount takes focus (then clears it). */
+const focusNextStep = { current: false };
+
+export function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
+  return (
+    <header className="space-y-2">
+      <p className="type-eyebrow text-muted-foreground">
+        Step {index + 1} of {STEPS.length}
+      </p>
+      <h2
+        tabIndex={-1}
+        className="type-section-title outline-none"
+        ref={(el) => {
+          if (el && focusNextStep.current) {
+            focusNextStep.current = false;
+            el.focus();
+          }
+        }}
+      >
+        {title}
+      </h2>
+      <p className="max-w-2xl type-body text-muted-foreground">{description}</p>
+    </header>
   );
 }
 
 // ── Steps ────────────────────────────────────────────────────────────────────
 
-function Field({ label, htmlFor, hint, error, children }: { label: string; htmlFor: string; hint?: string; error?: string; children: React.ReactNode }) {
+export function DetailsStep({
+  details,
+  setDetail,
+  errors,
+  created,
+  invites,
+  resumed,
+}: {
+  details: Details;
+  setDetail: <K extends keyof Details>(k: K, v: Details[K]) => void;
+  errors: Record<string, string>;
+  created: boolean;
+  invites: Array<{ label: string; url: string }>;
+  resumed: boolean;
+}) {
+  const hint = {
+    title: "For example, “CodeCell technical lead”.",
+    role: "The role being handed over, e.g. Treasurer.",
+    description: "A sentence or two of context for reviewers. Shown only inside Baton.",
+  };
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
+    <div className="space-y-8">
+      <StepHeading
+        index={0}
+        title={created ? "Handover details" : "What is being handed over?"}
+        description={
+          created
+            ? "Edit the title, team and role any time while this is a draft. Changes save automatically."
+            : "Name the role and the people involved. You can invite more people later in Settings."
+        }
+      />
 
-function DetailsStep({ details, setDetails, errors, locked, invites }: { details: Details; setDetails: (d: Details) => void; errors: Record<string, string>; locked: boolean; invites: Array<{ label: string; url: string }> }) {
-  const set = <K extends keyof Details>(k: K, v: Details[K]) => setDetails({ ...details, [k]: v });
-  return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-serif text-2xl">What is being handed over?</h2>
-        <p className="text-sm text-muted-foreground">Name the role and the people involved. You can invite more people later in Settings.</p>
-      </section>
-      {locked && (
-        <div className="space-y-2 rounded-xl border border-status-sourced/25 bg-status-sourced-soft px-4 py-3 text-sm text-status-sourced-fg">
-          <p className="flex items-center gap-2 font-medium">
-            <Check aria-hidden="true" className="size-4" /> Draft handover created. Its details can be changed later in Settings.
-          </p>
-          {invites.length > 0 && (
-            <ul className="space-y-1 text-xs">
-              {invites.map((i) => (
-                <li key={i.url}>
-                  Invite link for {i.label}: <code className="font-mono break-all">{i.url}</code>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      <fieldset disabled={locked} className="grid gap-5 disabled:opacity-70 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <Field label="Handover title" htmlFor="title" error={errors.title} hint="For example, “CodeCell technical lead”.">
-            <Input id="title" value={details.title} maxLength={120} onChange={(e) => set("title", e.target.value)} aria-invalid={!!errors.title} />
-          </Field>
-        </div>
-        <Field label="Team or club" htmlFor="team" error={errors.teamName}>
-          <Input id="team" value={details.teamName} maxLength={120} onChange={(e) => set("teamName", e.target.value)} aria-invalid={!!errors.teamName} />
-        </Field>
-        <Field label="Role (optional)" htmlFor="role">
-          <Input id="role" value={details.roleTitle} maxLength={120} onChange={(e) => set("roleTitle", e.target.value)} placeholder="Treasurer" />
-        </Field>
-
-        <fieldset className="space-y-2 sm:col-span-2">
-          <legend className="text-sm font-medium">Are you the person leaving this role?</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(
-              [
-                ["outgoing", "Yes, I'm leaving", "You'll review the handover as the outgoing member."],
-                ["reviewer", "No, I'm setting it up for someone", "You'll review it; invite the outgoing member below."],
-              ] as const
-            ).map(([value, title, desc]) => (
-              <label key={value} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3 text-sm has-checked:border-primary/50 has-checked:ring-3 has-checked:ring-primary/10">
-                <input type="radio" name="creatorRole" value={value} checked={details.creatorRole === value} onChange={() => set("creatorRole", value)} className="mt-0.5 accent-primary" />
-                <span>
-                  <span className="block font-medium">{title}</span>
-                  <span className="text-xs text-muted-foreground">{desc}</span>
-                </span>
-              </label>
+      {invites.length > 0 && (
+        <Alert tone="success" title="Invitations created" icon={<Link2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}>
+          <ul className="mt-1 space-y-1.5">
+            {invites.map((i) => (
+              <li key={i.url} className="min-w-0">
+                <span className="font-medium">{i.label}</span>
+                <code className="mt-0.5 block font-mono text-2xs break-all opacity-90">{i.url}</code>
+              </li>
             ))}
-          </div>
-          {errors.creatorRole && <p className="text-xs text-destructive">{errors.creatorRole}</p>}
-        </fieldset>
+          </ul>
+        </Alert>
+      )}
 
-        {details.creatorRole === "reviewer" && (
-          <div className="sm:col-span-2">
-            <Field label="Outgoing member's email (optional)" htmlFor="outgoing" error={errors.outgoingEmail} hint="They get their own sign-in link and can review alongside you.">
-              <Input id="outgoing" type="email" value={details.outgoingEmail} onChange={(e) => set("outgoingEmail", e.target.value)} aria-invalid={!!errors.outgoingEmail} />
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Field id="title" label="Handover title" hint={hint.title} error={errors.title} className="sm:col-span-2">
+          <Input
+            id="title"
+            value={details.title}
+            maxLength={120}
+            autoComplete="off"
+            onChange={(e) => setDetail("title", e.target.value)}
+            aria-invalid={!!errors.title}
+            aria-describedby={fieldDescribedBy("title", { hint: hint.title, error: errors.title })}
+          />
+        </Field>
+        <Field id="team" label="Team or club" error={errors.teamName}>
+          <Input
+            id="team"
+            value={details.teamName}
+            maxLength={120}
+            autoComplete="organization"
+            onChange={(e) => setDetail("teamName", e.target.value)}
+            aria-invalid={!!errors.teamName}
+            aria-describedby={fieldDescribedBy("team", { error: errors.teamName })}
+          />
+        </Field>
+        <Field id="role" label="Role" optional hint={hint.role} error={errors.roleTitle}>
+          <Input
+            id="role"
+            value={details.roleTitle}
+            maxLength={120}
+            onChange={(e) => setDetail("roleTitle", e.target.value)}
+            aria-invalid={!!errors.roleTitle}
+            aria-describedby={fieldDescribedBy("role", { hint: hint.role, error: errors.roleTitle })}
+          />
+        </Field>
+        {details.description !== undefined && (
+          <Field id="description" label="Description" optional hint={hint.description} error={errors.description} className="sm:col-span-2">
+            <Textarea
+              id="description"
+              value={details.description}
+              maxLength={2000}
+              rows={3}
+              onChange={(e) => setDetail("description", e.target.value)}
+              aria-invalid={!!errors.description}
+              aria-describedby={fieldDescribedBy("description", { hint: hint.description, error: errors.description })}
+            />
+          </Field>
+        )}
+      </div>
+
+      <FieldGroup
+        legend="Are you the person leaving this role?"
+        description={created ? "Set when the draft was created; it decides your role in the review." : undefined}
+        error={errors.creatorRole}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              ["outgoing", "Yes, I'm leaving", "You'll review the handover as the outgoing member."],
+              ["reviewer", "No, I'm setting it up for someone", "You'll review it; invite the outgoing member below."],
+            ] as const
+          ).map(([value, title, desc]) => (
+            <ChoiceCard
+              key={value}
+              id={`creator-${value}`}
+              name="creatorRole"
+              value={value}
+              checked={details.creatorRole === value}
+              onChange={() => setDetail("creatorRole", value)}
+              disabled={created}
+              title={title}
+              description={desc}
+              icon={created && details.creatorRole === value ? <Lock /> : undefined}
+            />
+          ))}
+        </div>
+      </FieldGroup>
+
+      {created ? (
+        <p className="text-caption text-muted-foreground">
+          {resumed || invites.length > 0
+            ? "Invitations are listed in Settings once processing starts. Invite more people there."
+            : "Invite the incoming member from Settings once processing starts."}
+        </p>
+      ) : (
+        <FieldGroup legend="Who receives the handover?" description="You can add this later, but you need it before publishing.">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {details.creatorRole === "reviewer" && (
+              <Field
+                id="outgoing"
+                label="Outgoing member’s email"
+                optional
+                hint="They get their own sign-in link and can review alongside you."
+                error={errors.outgoingEmail}
+                className="sm:col-span-2"
+              >
+                <Input
+                  id="outgoing"
+                  type="email"
+                  autoComplete="off"
+                  value={details.outgoingEmail}
+                  onChange={(e) => setDetail("outgoingEmail", e.target.value)}
+                  aria-invalid={!!errors.outgoingEmail}
+                  aria-describedby={fieldDescribedBy("outgoing", { hint: true, error: errors.outgoingEmail })}
+                />
+              </Field>
+            )}
+            <Field id="incoming" label="Incoming member’s email" optional error={errors.incomingEmail}>
+              <Input
+                id="incoming"
+                type="email"
+                autoComplete="off"
+                value={details.incomingEmail}
+                onChange={(e) => setDetail("incomingEmail", e.target.value)}
+                aria-invalid={!!errors.incomingEmail}
+                aria-describedby={fieldDescribedBy("incoming", { error: errors.incomingEmail })}
+              />
+            </Field>
+            <Field
+              id="incoming-role"
+              label="Their role"
+              hint={details.incomingRole === "lead" ? "Leads see lead-level information." : "Sees everything marked Everyone."}
+            >
+              <NativeSelect
+                id="incoming-role"
+                value={details.incomingRole}
+                onChange={(e) => setDetail("incomingRole", e.target.value as Details["incomingRole"])}
+                aria-describedby="incoming-role-hint"
+              >
+                <option value="incoming">Incoming member</option>
+                <option value="lead">Incoming lead</option>
+              </NativeSelect>
             </Field>
           </div>
-        )}
-
-        <Field label="Incoming member's email" htmlFor="incoming" error={errors.incomingEmail} hint="You can add this later, but you need it before publishing.">
-          <Input id="incoming" type="email" value={details.incomingEmail} onChange={(e) => set("incomingEmail", e.target.value)} aria-invalid={!!errors.incomingEmail} />
-        </Field>
-        <Field label="Their role" htmlFor="incoming-role" hint={details.incomingRole === "lead" ? "Leads see lead-level information." : "Sees everything marked Everyone."}>
-          <select
-            id="incoming-role"
-            value={details.incomingRole}
-            onChange={(e) => set("incomingRole", e.target.value as Details["incomingRole"])}
-            className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <option value="incoming">Incoming member</option>
-            <option value="lead">Incoming lead</option>
-          </select>
-        </Field>
-      </fieldset>
-    </div>
-  );
-}
-
-function DropZone({ id, title, description, accept, icon, onFiles, disabled }: { id: string; title: string; description: string; accept: string; icon: React.ReactNode; onFiles: (f: FileList | null) => void; disabled: boolean }) {
-  const [over, setOver] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-  return (
-    <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        if (!disabled) onFiles(e.dataTransfer.files);
-      }}
-      className={cn(
-        "flex flex-col items-center rounded-xl border border-dashed bg-card/60 px-4 py-8 text-center transition-colors",
-        over ? "border-primary bg-primary/[0.04]" : "border-input",
-        disabled && "opacity-50",
-      )}
-    >
-      <div aria-hidden="true" className="mb-3 flex size-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-soft [&_svg]:size-5">
-        {icon}
-      </div>
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      <input ref={input} id={id} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} disabled={disabled} />
-      <Button size="sm" variant="outline" className="mt-4" onClick={() => input.current?.click()} disabled={disabled}>
-        <Upload aria-hidden="true" data-icon="inline-start" />
-        Choose files
-      </Button>
-    </div>
-  );
-}
-
-function SourcesStep({ sources, onFiles, onSample, onRemove, full }: { sources: DraftSource[]; onFiles: (f: FileList | null, g: "chat" | "doc") => void; onSample: () => void; onRemove: (s: DraftSource) => void; full: boolean }) {
-  const uid = useId();
-  return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-serif text-2xl">Add the team&rsquo;s record</h2>
-        <p className="text-sm text-muted-foreground">
-          Export WhatsApp chats without media (Chat → More → Export chat → Without media) and add any handbooks or notes. Up to 10 files, 25 MB each.
-        </p>
-      </section>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <DropZone id={`${uid}-chat`} title="WhatsApp chat exports" description=".txt or .zip (text only)" accept={CHAT_ACCEPT} icon={<MessageCircle />} onFiles={(f) => onFiles(f, "chat")} disabled={full} />
-        <DropZone id={`${uid}-doc`} title="Documents" description="PDF, DOCX or Markdown" accept={DOC_ACCEPT} icon={<FileText />} onFiles={(f) => onFiles(f, "doc")} disabled={full} />
-      </div>
-      <button type="button" onClick={onSample} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
-        <Sparkles aria-hidden="true" className="size-4" />
-        No files handy? Add sample sources
-      </button>
-
-      {sources.length > 0 && (
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" aria-label="Added sources">
-          {sources.map((s) => (
-            <li key={s.localId} className="flex items-center gap-3 px-4 py-3">
-              {s.kind === "whatsapp_export" ? <MessageCircle aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /> : <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{s.name}</p>
-                <p className={cn("text-xs", s.status === "error" ? "text-destructive" : "text-muted-foreground")}>
-                  {s.status === "error"
-                    ? s.error
-                    : s.status === "ready"
-                      ? `${sourceKindLabel[s.kind]} · ${formatBytes(s.size)} · ${s.kind === "whatsapp_export" ? `${formatCount(s.preview?.stats.messagesKept)} messages, ${s.preview?.participants.length ?? 0} people` : `${formatCount(s.preview?.stats.messagesKept)} text blocks`}`
-                      : s.status === "hashing"
-                        ? "Checking file…"
-                        : s.status === "uploading"
-                          ? "Uploading securely…"
-                          : "Reading a preview (nothing is saved yet)…"}
-                </p>
-              </div>
-              {s.status === "ready" ? (
-                <Check aria-label="Ready" className="size-4 text-status-sourced" />
-              ) : s.status !== "error" ? (
-                <Loader2 aria-label="Working" className="size-4 animate-spin text-primary" />
-              ) : null}
-              <Button size="icon-sm" variant="ghost" aria-label={`Remove ${s.name}`} onClick={() => onRemove(s)} disabled={s.status !== "ready" && s.status !== "error"}>
-                <Trash2 />
-              </Button>
-            </li>
-          ))}
-        </ul>
+        </FieldGroup>
       )}
     </div>
   );
 }
 
-function ScopeStep({ sources, update }: { sources: DraftSource[]; update: (id: string, patch: Partial<DraftSource>) => void }) {
-  const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
-  return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-serif text-2xl">Choose what Baton reads</h2>
-        <p className="text-sm text-muted-foreground">
-          Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and decide who may see evidence from each source.
-        </p>
-      </section>
-      {sources.some((s) => s.excludedParticipants.length > 0) && (
-        <p className="rounded-lg border border-status-inferred/25 bg-status-inferred-soft px-3 py-2 text-xs text-status-inferred-fg" role="status">
-          People you leave out are saved when you continue, for every chat in this handover. That can&rsquo;t be undone here.
-        </p>
-      )}
-      {sources.map((s) => {
-        const p = s.preview;
-        const keptConversations = p?.conversations.filter((c) => !s.excludedConversations.includes(c.localId)) ?? [];
-        return (
-          <section key={s.localId} className="space-y-5 rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5" aria-label={s.name}>
-            <div className="flex items-center gap-2">
-              {s.kind === "whatsapp_export" ? <MessageCircle aria-hidden="true" className="size-4 text-muted-foreground" /> : <FileText aria-hidden="true" className="size-4 text-muted-foreground" />}
-              <h3 className="min-w-0 truncate text-sm font-semibold">{s.name}</h3>
-            </div>
-
-            {s.kind === "whatsapp_export" && p ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`${s.localId}-from`}>From</Label>
-                    <Input id={`${s.localId}-from`} type="date" value={s.rangeFrom} min={dateOnly(p.firstMessageAt)} max={s.rangeTo || dateOnly(p.lastMessageAt)} onChange={(e) => update(s.localId, { rangeFrom: e.target.value })} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`${s.localId}-to`}>To</Label>
-                    <Input id={`${s.localId}-to`} type="date" value={s.rangeTo} min={s.rangeFrom || dateOnly(p.firstMessageAt)} max={dateOnly(p.lastMessageAt)} onChange={(e) => update(s.localId, { rangeTo: e.target.value })} />
-                  </div>
-                  <p className="text-xs text-muted-foreground sm:col-span-2">
-                    The export covers {formatDate(p.firstMessageAt)} to {formatDate(p.lastMessageAt)}.
-                  </p>
-                </div>
-
-                <fieldset className="space-y-2">
-                  <legend className="mb-1 text-sm font-medium">
-                    Conversations <span className="font-normal text-muted-foreground">· {keptConversations.length} of {p.conversations.length} included</span>
-                  </legend>
-                  {p.conversations.map((c) => {
-                    const included = !s.excludedConversations.includes(c.localId);
-                    return (
-                      <label key={c.localId} className={cn("flex items-start gap-3 rounded-lg border border-border p-3 text-sm", !included && "bg-muted/50 text-muted-foreground")}>
-                        <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={included} onChange={() => update(s.localId, { excludedConversations: toggle(s.excludedConversations, c.localId) })} />
-                        <span className="min-w-0">
-                          <MaskedText text={c.preview} className={cn("block font-mono text-xs", !included && "line-through")} />
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(c.startedAt)} – {formatDate(c.endedAt)} · {formatCount(c.messageCount)} messages
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </fieldset>
-
-                <fieldset className="space-y-2">
-                  <legend className="mb-1 text-sm font-medium">People</legend>
-                  <p className="text-xs text-muted-foreground">
-                    Untick anyone who asked to be left out. Their messages are dropped before anything is saved, in every chat of this handover, including later uploads.
-                    People saved under a name, not a number, are matched in other chats only after you confirm it&rsquo;s the same person.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {p.participants.map((person) => {
-                      const included = !s.excludedParticipants.includes(person.localId);
-                      return (
-                        <label
-                          key={person.localId}
-                          title={identityKindLabel[person.identityKind].label}
-                          className={cn("inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs", !included && "bg-muted text-muted-foreground line-through")}
-                        >
-                          <input type="checkbox" className="size-3.5 accent-primary" checked={included} onChange={() => update(s.localId, { excludedParticipants: toggle(s.excludedParticipants, person.localId) })} />
-                          {person.displayLabel}
-                          <span className="text-muted-foreground no-underline">{formatCount(person.messageCount)}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {(s.savedParticipantExclusions > 0 || p.stats.messagesExcluded > 0) && (
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <UserX aria-hidden="true" className="size-3.5" />
-                      {s.savedParticipantExclusions > 0 ? `${s.savedParticipantExclusions === 1 ? "1 person" : `${s.savedParticipantExclusions} people`} left out and saved. ` : ""}
-                      {formatCount(p.stats.messagesExcluded)} messages won&rsquo;t be read.
-                      {p.warnings.some((w) => w.code === "excluded_mentions_redacted") && " Mentions of them in other messages are removed."}
-                    </p>
-                  )}
-                </fieldset>
-              </>
-            ) : (
-              <div className="max-w-xs space-y-1.5">
-                <Label htmlFor={`${s.localId}-date`}>Document date (optional)</Label>
-                <Input id={`${s.localId}-date`} type="date" value={s.documentDate} onChange={(e) => update(s.localId, { documentDate: e.target.value })} />
-                <p className="text-xs text-muted-foreground">Used to flag points that may be outdated.</p>
-              </div>
-            )}
-
-            <fieldset className="space-y-2">
-              <legend className="mb-1 text-sm font-medium">Who can see evidence from this source?</legend>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {ACCESS_LEVELS.map((level) => (
-                  <label key={level} className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-3 text-sm has-checked:border-primary/50 has-checked:ring-3 has-checked:ring-primary/10">
-                    <input type="radio" name={`${s.localId}-access`} className="mt-0.5 accent-primary" checked={s.accessLevel === level} onChange={() => update(s.localId, { accessLevel: level })} />
-                    <span>
-                      <span className="block font-medium">{accessLevelMeta[level].label}</span>
-                      <span className="text-xs text-muted-foreground">{accessLevelMeta[level].description}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-function MatchesSection({
+export function MatchesSection({
   matches,
   decisions,
   onAnswer,
@@ -782,12 +1042,12 @@ function MatchesSection({
   disabled: boolean;
 }) {
   return (
-    <section aria-labelledby="matches-heading" className="space-y-3 rounded-xl border border-status-inferred/30 bg-status-inferred-soft/60 p-4 sm:p-5">
+    <section aria-labelledby="matches-heading" className="space-y-4 rounded-xl border border-warning/30 bg-warning-soft/60 p-4 sm:p-5">
       <div className="space-y-1">
-        <h3 id="matches-heading" className="text-sm font-semibold">
+        <h3 id="matches-heading" className="type-heading text-warning-fg">
           Is this the same person?
         </h3>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm leading-relaxed text-foreground/80">
           Someone who asked to be left out was saved under the same name in another chat. Names can be shared, so Baton never assumes: nobody is left out of a
           chat by name until you say so for that chat. Answer each one before processing.
         </p>
@@ -795,10 +1055,10 @@ function MatchesSection({
       {matches.length > 0 && (
         <ul className="space-y-2" aria-label="Waiting for your answer">
           {matches.map((m) => (
-            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center">
+            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-xs sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{m.label}</span> <span className="text-muted-foreground">in {m.sourceName}</span>
-                <span className="block text-xs text-muted-foreground">{identityKindLabel[m.kind].label} match · no decision yet</span>
+                <span className="block text-caption text-muted-foreground">{identityKindLabel[m.kind].label} match · no decision yet</span>
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" disabled={disabled} onClick={() => onAnswer(m, "different_person")}>
@@ -815,12 +1075,12 @@ function MatchesSection({
         </ul>
       )}
       {decisions.length > 0 && (
-        <ul className="space-y-2" aria-label="Your decisions">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card/80" aria-label="Your decisions">
           {decisions.map((d) => (
-            <li key={`${d.sourceId}-${d.exclusionId}`} className="flex flex-col gap-2 rounded-lg border border-border bg-card/70 p-3 sm:flex-row sm:items-center">
+            <li key={`${d.sourceId}-${d.exclusionId}`} className="flex flex-col gap-2 p-3.5 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{d.label}</span> <span className="text-muted-foreground">in {d.sourceName}</span>
-                <span className="block text-xs text-muted-foreground">
+                <span className="block text-caption text-muted-foreground">
                   {d.decision === "same_person" ? "You said: same person. Left out of this chat." : "You said: different person. Kept in this chat."}
                 </span>
               </p>

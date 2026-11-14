@@ -8,14 +8,14 @@ const SEGMENTS = [
 ] as const;
 
 const SIZES = {
-  sm: { bar: "h-1 w-5 gap-px", word: "text-[0.6875rem] tracking-[0.22em]", gap: "gap-2" },
+  sm: { bar: "h-1 w-5 gap-px", word: "text-2xs tracking-[0.22em]", gap: "gap-2" },
   md: { bar: "h-1.5 w-7 gap-[2px]", word: "text-xs tracking-[0.24em]", gap: "gap-2.5" },
   lg: { bar: "h-2 w-10 gap-[3px]", word: "text-sm tracking-[0.26em]", gap: "gap-3" },
 } as const;
 
 interface BatonLogoProps {
   size?: keyof typeof SIZES;
-  /** `inverse` renders the wordmark for dark surfaces such as the sidebar. */
+  /** `inverse` renders the wordmark on `bg-inverse` surfaces (dark bands). */
   tone?: "default" | "inverse";
   /** Hide the wordmark to render the bar mark alone. */
   showWordmark?: boolean;
@@ -60,7 +60,7 @@ export function BatonLogo({
           className={cn(
             "font-sans leading-none font-semibold uppercase",
             SIZES[size].word,
-            tone === "inverse" ? "text-sidebar-foreground" : "text-foreground",
+            tone === "inverse" ? "text-inverse-foreground" : "text-foreground",
           )}
         >
           Baton

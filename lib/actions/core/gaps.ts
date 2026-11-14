@@ -23,18 +23,53 @@ import { createInputMasker } from "./mask";
 import { absoluteUrl, action, failWith, ok, parseInput, siteOriginOrFail, withActor, withoutActor } from "./run";
 import type { ActionDeps } from "./types";
 
-/** Review roles only (SQL). The server raises accessLevel to the point's level. */
+/**
+ * Review roles only (SQL). The server raises accessLevel to the point's level.
+ *
+ * R3: the question is COMMITTED once create_gap_question returns, so the action never reports a failure
+ * after that (a failed result would invite a retry and a duplicate question). The summary comes from the
+ * RLS re-read; if that read fails or does not (yet) include the question, the action still succeeds with the
+ * summary of what was just stored: a new question is `open` and unanswered; a point question takes the
+ * point's category and is privacy-held while that point's privacy review is required (both read under RLS;
+ * null / false if that read fails too).
+ */
 export async function createGapQuestion(deps: ActionDeps, input: CreateGapQuestionInput): Promise<Result<GapQuestionSummary>> {
   return action(deps, createGapQuestionInput, input, async (actor, v) => {
     const m = createInputMasker();
     const masked = parseInput(createGapQuestionInput, { ...v, question: m.text(v.question), context: m.optional(v.context) });
     if (!masked.ok) return masked;
     const questionId = await mutations.createGapQuestion(deps.adminDb(), actor, masked.data);
-    const questions = await deps.queries.listGapQuestions(v.handoverId);
-    if (!questions.ok) return questions;
-    const created = questions.data.find((q) => q.id.toLowerCase() === questionId.toLowerCase());
-    return created ? ok(created) : failWith("not_found");
+    const questions = await deps.queries.listGapQuestions(v.handoverId).catch(() => null);
+    const created = questions?.ok ? questions.data.find((q) => q.id.toLowerCase() === questionId.toLowerCase()) : undefined;
+    if (created) return ok(created);
+    return ok(await committedQuestionSummary(deps, questionId, masked.data));
   });
+}
+
+async function committedQuestionSummary(
+  deps: ActionDeps,
+  id: string,
+  v: { pointId?: string; category?: GapQuestionSummary["category"]; question: string; context?: string; priority: GapQuestionSummary["priority"] },
+): Promise<GapQuestionSummary> {
+  let category = v.category ?? null;
+  let privacyHeld = false;
+  if (v.pointId !== undefined) {
+    const point = await deps.queries.getPoint(v.pointId).catch(() => null);
+    category = point?.ok ? point.data.category : null;
+    privacyHeld = point?.ok ? point.data.privacyReview === "required" : false; // gap_question_privacy_held
+  }
+  const context = v.context?.trim() ? v.context.trim() : null;
+  return {
+    id,
+    pointId: v.pointId ?? null,
+    category,
+    question: v.question.trim(),
+    context,
+    priority: v.priority,
+    status: "open",
+    privacyHeld,
+    answers: [],
+  };
 }
 
 /** Review roles. The raw token is returned once, inside an absolute url built from BATON_SITE_URL (§12.4). */

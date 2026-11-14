@@ -75,6 +75,7 @@ export function toHandoverSummary(store: MockStore, h: MockHandover, profileId: 
     title: h.title,
     teamName: h.teamName,
     roleTitle: h.roleTitle,
+    description: h.description,
     state: h.state,
     viewerRole: member.role,
     viewerIsCreator: h.createdBy === profileId,

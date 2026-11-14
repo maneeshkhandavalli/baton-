@@ -8,17 +8,18 @@ import { PageContainer } from "@/components/layout/page-container";
 import { loadReview } from "@/components/review/load-review";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { WorkspaceSkeleton } from "@/components/shared/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Review" };
 
 export default function ReviewPage({ params }: PageProps<"/handover/[id]/review">) {
   return (
     <PageContainer width="wide" className="lg:py-8">
-      <Suspense fallback={<LoadingState label="Loading the review…" className="min-h-96" />}>
+      <Suspense fallback={<WorkspaceSkeleton />}>
         <ReviewContent params={params} />
       </Suspense>
     </PageContainer>
@@ -27,6 +28,7 @@ export default function ReviewPage({ params }: PageProps<"/handover/[id]/review"
 
 async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const load = await loadReview(getQueries(), id);
   if (load.kind === "not_found") notFound();
 

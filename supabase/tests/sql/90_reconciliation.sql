@@ -163,7 +163,7 @@ do $$
 declare
   v_run uuid := tests.start_run('sy');
 begin
-  perform tests.as_service();
+  perform tests.as_owner(); -- DB-12-LEGACY: persist_parsed_source is no longer granted to service_role
   perform tests.throws(format('select public.persist_parsed_source(%L, %L, %L)', tests.id('sy'), tests.parsed('name', 'ravi'), 'p1'),
                        'BTPF0', 'S6: an undecided name match blocks the parse (identity_confirmation_required)');
   perform tests.eq((select count(*)::int from public.source_participants where source_id = tests.id('sy')), 0, 'nothing persisted');
@@ -237,7 +237,7 @@ do $$
 declare
   v_run uuid := tests.start_run('sy');
 begin
-  perform tests.as_service();
+  perform tests.as_owner(); -- DB-12-LEGACY: persist_parsed_source is no longer granted to service_role
   perform tests.throws(format('select public.persist_parsed_source(%L, %L, %L)', tests.id('sy'), tests.parsed('name', 'ravi', 2), 'p1'),
                        'BTCF0', 'same_person: a parse that still contains the excluded participant is refused');
   perform tests.fail_run(v_run);
@@ -245,7 +245,7 @@ begin
   perform public.confirm_identity_match(tests.actor(), tests.id('sy'), tests.id('ex_name'), 'different_person');
   perform tests.as_owner();
   v_run := tests.start_run('sy');
-  perform tests.as_service();
+  perform tests.as_owner(); -- DB-12-LEGACY: persist_parsed_source is no longer granted to service_role
   perform public.persist_parsed_source(tests.id('sy'), tests.parsed('name', 'ravi', 2), 'p1');
   perform tests.eq((select identity_kind from public.source_participants where source_id = tests.id('sy')), 'name',
                    'S2: the participant is stored with its identity kind');

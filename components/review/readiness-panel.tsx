@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, CircleHelp, Send, Swords } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, CircleHelp, Scale, Send } from "lucide-react";
 
 import { HANDOVER_SECTIONS, blockerLabel, type HandoverSectionId } from "@/components/handover/labels";
 import { ReadinessRing } from "@/components/shared/readiness-ring";
@@ -33,7 +33,7 @@ function NavButton({ active, onClick, children, count, dots }: { active: boolean
       aria-pressed={active}
       className={cn(
         "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-        active ? "bg-foreground/[0.06] font-medium text-foreground" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+        active ? "bg-card font-medium text-foreground shadow-xs ring-1 ring-border" : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <span className="min-w-0 flex-1 truncate">{children}</span>
@@ -61,7 +61,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
         <div className="flex items-center gap-3">
           <ReadinessRing value={readiness?.score ?? 0} />
           <div className="min-w-0">
-            <h2 id="readiness-heading" className="text-sm font-semibold">
+            <h2 id="readiness-heading" className="type-subheading">
               Readiness
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -72,7 +72,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
         {readiness && (
           <>
             {readiness.blockers.length === 0 ? (
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-status-sourced-fg">
+              <p className="mt-3 flex items-center gap-1.5 text-caption font-medium text-success-fg">
                 <CheckCircle2 aria-hidden="true" className="size-3.5" />
                 Ready to publish
               </p>
@@ -83,9 +83,9 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
                     <button
                       type="button"
                       onClick={() => onBlocker(b.kind)}
-                      className="flex w-full items-start gap-1.5 rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-caption text-foreground/85 transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      <span aria-hidden="true" className="mt-1.5 size-1 shrink-0 rounded-full bg-status-inferred" />
+                      <span aria-hidden="true" className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warning" />
                       {blockerLabel[b.kind](b.count)}
                     </button>
                   </li>
@@ -93,7 +93,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
               </ul>
             )}
             {onPublish && (
-              <Button className="mt-3 w-full" size="sm" disabled={!canPublish} onClick={onPublish}>
+              <Button className="mt-4 w-full" disabled={!canPublish} onClick={onPublish}>
                 <Send aria-hidden="true" data-icon="inline-start" />
                 Publish handover
               </Button>
@@ -119,7 +119,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
       <div className="space-y-0.5 border-t border-border pt-4">
         <NavButton active={section === "conflicts"} onClick={() => onSection("conflicts")} count={conflicts.length}>
           <span className="inline-flex items-center gap-2">
-            <Swords aria-hidden="true" className="size-3.5 text-status-conflicting" />
+            <Scale aria-hidden="true" className="size-3.5 text-status-conflicting" />
             Conflicts
           </span>
         </NavButton>
@@ -130,7 +130,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
           </span>
         </NavButton>
         {gapsHref && (
-          <Link href={gapsHref} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-primary hover:underline">
+          <Link href={gapsHref} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-caption font-medium text-primary-fg hover:underline">
             Manage the Gap Interview
             <ArrowUpRight aria-hidden="true" className="size-3" />
           </Link>

@@ -20,6 +20,8 @@ export const AI_ERROR_REASONS = {
   aborted: "ai_aborted",
   requestTooLarge: "ai_request_too_large",
   requestInvalid: "ai_request_invalid",
+  /** The provider's DAILY free-tier quota is used up: retrying before it resets only re-sends into a 429. */
+  quotaExhausted: "ai_quota_exhausted",
 } as const;
 export type AiErrorReason = (typeof AI_ERROR_REASONS)[keyof typeof AI_ERROR_REASONS];
 
@@ -77,6 +79,7 @@ const DEFAULT_MESSAGES: Record<AiErrorReason, string> = {
   ai_aborted: "The AI request was cancelled.",
   ai_request_too_large: "The AI request was larger than allowed.",
   ai_request_invalid: "The AI request was not valid.",
+  ai_quota_exhausted: "The AI provider's daily free-tier limit has been reached.",
 };
 
 /** `precondition_failed`, `details.reason = "provider_not_configured"`, never retryable (D11). */

@@ -6,8 +6,9 @@ import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { PublishedHandoverView } from "@/components/published/published-handover-view";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LoadingState } from "@/components/shared/loading-state";
+import { DocumentSkeleton } from "@/components/shared/skeletons";
 import { getQueries } from "@/lib/data";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Published handover" };
 
@@ -18,7 +19,7 @@ export const metadata: Metadata = { title: "Published handover" };
 export default function PublishedPage({ params }: PageProps<"/handover/[id]/published">) {
   return (
     <PageContainer width="default">
-      <Suspense fallback={<LoadingState label="Opening the handover…" className="min-h-96" />}>
+      <Suspense fallback={<DocumentSkeleton />}>
         <PublishedContent params={params} />
       </Suspense>
     </PageContainer>
@@ -27,6 +28,7 @@ export default function PublishedPage({ params }: PageProps<"/handover/[id]/publ
 
 async function PublishedContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const queries = getQueries();
   const [handover, members] = await Promise.all([queries.getHandover(id), queries.listMembers(id)]);
   if (!handover.ok) notFound();

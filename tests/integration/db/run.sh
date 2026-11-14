@@ -17,7 +17,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 NAME="${BATON_IT_CONTAINER:-baton-pg-it}"
-IMAGE="${BATON_PG_IMAGE:-postgres:15-alpine}"
+IMAGE="${BATON_PG_IMAGE:-postgres:17-alpine}" # hosted dev runs 17.x; override for older versions
 FILTER="${1:-}"
 SHIM="$ROOT/supabase/tests/shim"
 

@@ -14,7 +14,7 @@ import { checkQuote, meetsQuoteMinimum } from "../../ai/quote-check";
 import type { QuoteCheck } from "../../contracts/enums";
 import { DbError } from "../../db/errors";
 import { listQuotesForCheck, recordQuoteCheck, type PendingQuote } from "../../db/pipeline";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import { failed, type StageOutcome } from "../types";
 
 const HEARTBEAT_EVERY = 200;
@@ -41,12 +41,12 @@ export async function runVerifyQuotes(ctx: StageContext): Promise<StageOutcome> 
       continue;
     }
     try {
-      await recordQuoteCheck(ctx.db, q.evidenceId, check);
+      await recordQuoteCheck(ctx.db, claimOf(ctx), q.evidenceId, check);
       counts[check] += 1;
     } catch (e) {
       if (!(e instanceof DbError && e.code === "validation_failed" && check !== "not_found")) throw e;
       counts.refused += 1;
-      await recordQuoteCheck(ctx.db, q.evidenceId, "not_found"); // fail closed
+      await recordQuoteCheck(ctx.db, claimOf(ctx), q.evidenceId, "not_found"); // fail closed
       counts.not_found += 1;
     }
     if ((i + 1) % HEARTBEAT_EVERY === 0) await ctx.heartbeat({ done: i + 1, total: quotes.length });

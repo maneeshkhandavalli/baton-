@@ -55,7 +55,7 @@ async function scenario(opts: {
         original_filename: "chat.txt",
       }),
       heartbeat_processing_job: "running",
-      persist_parsed_source: () => {
+      pipeline_persist_parsed_source: () => {
         if (opts.persist) return opts.persist;
         persisted = true;
         return null;
@@ -86,15 +86,15 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_outcome, "succeeded");
     assert.equal(report.succeeded, 1);
 
-    const persist = db.called("persist_parsed_source")[0].args;
+    const persist = db.called("pipeline_persist_parsed_source")[0].args;
     assert.equal(persist.p_pepper_version, "p1");
     const parsed = persist.p_parsed as ParsedSource;
     assert.equal(parsed.messages.length, 3);
     assert.ok(parsed.messages.every((m) => !m.body.includes("99999")), "phone numbers are masked before persisting");
 
     assert.equal(removed.length, 1);
-    assert.ok(log.indexOf("rpc:persist_parsed_source") < log.indexOf("storage:remove"), "raw deleted only after persist");
-    assert.ok(log.indexOf("rpc:heartbeat_processing_job") < log.indexOf("rpc:persist_parsed_source"), "lease checked before persisting");
+    assert.ok(log.indexOf("rpc:pipeline_persist_parsed_source") < log.indexOf("storage:remove"), "raw deleted only after persist");
+    assert.ok(log.indexOf("rpc:heartbeat_processing_job") < log.indexOf("rpc:pipeline_persist_parsed_source"), "lease checked before persisting");
     assert.equal(db.called("mark_source_raw_deleted").length, 1);
 
     const logged = JSON.stringify(logger.records);
@@ -108,8 +108,8 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_error_message, "identity_pepper_unverified");
     assert.equal(completion?.p_next_attempt_at, new Date(Date.UTC(2026, 10, 12) + 30_000).toISOString());
     assert.ok(!log.includes("storage:download"));
-    assert.equal(db.called("persist_parsed_source").length, 0);
-    assert.equal(db.called("mark_source_parse_failed").length, 0, "the source is not failed for a configuration problem");
+    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_mark_source_parse_failed").length, 0, "the source is not failed for a configuration problem");
   });
 
   it("stops on an identity match before anything is persisted", async () => {
@@ -122,12 +122,12 @@ describe("parse stage (§10.3, D14)", () => {
       mode: "detect",
     };
     const { db, removed, completion } = await scenario({ rules: [rule] });
-    assert.equal(db.called("persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
     assert.equal(removed.length, 0, "raw upload kept");
     assert.equal(completion?.p_outcome, "failed");
     assert.equal(completion?.p_error_code, "precondition_failed");
     assert.equal(completion?.p_error_message, "identity_confirmation_required");
-    assert.equal(db.called("mark_source_parse_failed")[0].args.p_error_code, "identity_confirmation_required");
+    assert.equal(db.called("pipeline_mark_source_parse_failed")[0].args.p_error_code, "identity_confirmation_required");
   });
 
   it("an applied exclusion drops the participant's messages before persisting", async () => {
@@ -141,7 +141,7 @@ describe("parse stage (§10.3, D14)", () => {
     };
     const { db, completion } = await scenario({ rules: [rule] });
     assert.equal(completion?.p_outcome, "succeeded");
-    const parsed = db.called("persist_parsed_source")[0].args.p_parsed as ParsedSource;
+    const parsed = db.called("pipeline_persist_parsed_source")[0].args.p_parsed as ParsedSource;
     assert.equal(parsed.messages.length, 2);
     assert.ok(!JSON.stringify(parsed).includes("Ravi"));
   });
@@ -151,7 +151,7 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(removed.length, 0);
     assert.equal(completion?.p_outcome, "failed");
     assert.equal(completion?.p_error_message, "excluded_participant_content");
-    assert.equal(db.called("mark_source_parse_failed")[0].args.p_error_code, "excluded_participant_content");
+    assert.equal(db.called("pipeline_mark_source_parse_failed")[0].args.p_error_code, "excluded_participant_content");
   });
 
   it("retries a transient persistence error and keeps the raw upload", async () => {
@@ -166,31 +166,37 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_outcome, "failed");
     assert.match(String(completion?.p_error_message), /^parser:[a-z_]+$/);
     assert.ok(["parse_failed", "unsupported_file_type"].includes(String(completion?.p_error_code)));
-    assert.equal(db.called("persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
     assert.equal(removed.length, 0);
-    assert.equal(db.called("mark_source_parse_failed").length, 1);
+    assert.equal(db.called("pipeline_mark_source_parse_failed").length, 1);
   });
 
   it("never parses bytes that fail the integrity check", async () => {
     const { db, completion } = await scenario({ declaredSha: "00".repeat(32) });
     assert.equal(completion?.p_outcome, "failed");
     assert.equal(completion?.p_error_message, "integrity_mismatch");
-    assert.equal(db.called("persist_parsed_source").length, 0);
-    assert.equal(db.called("mark_source_parse_failed")[0].args.p_error_code, "integrity_mismatch");
+    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    // DB-12: the mismatch is written through the fenced writer under this job's claim, never the unfenced one.
+    const marked = db.called("pipeline_mark_source_parse_failed");
+    assert.equal(marked.length, 1);
+    assert.equal(marked[0].args.p_error_code, "integrity_mismatch");
+    assert.equal(marked[0].args.p_job_id, IDS.job);
+    assert.equal(marked[0].args.p_attempt, 1);
+    assert.equal(db.called("mark_source_parse_failed").length, 0);
   });
 
   it("retries when the raw object cannot be downloaded, without failing the source", async () => {
     const { db, completion } = await scenario({ noObject: true });
     assert.equal(completion?.p_outcome, "retry");
     assert.equal(completion?.p_error_message, "raw_unavailable");
-    assert.equal(db.called("mark_source_parse_failed").length, 0);
-    assert.equal(db.called("persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_mark_source_parse_failed").length, 0);
+    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
   });
 
   it("is idempotent for an already parsed source: deletes a leftover raw upload, persists nothing", async () => {
     const { db, removed, completion } = await scenario({ sourceState: "parsed", rawState: () => "parsed" });
     assert.equal(completion?.p_outcome, "succeeded");
-    assert.equal(db.called("persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
     assert.equal(removed.length, 1);
   });
 
@@ -215,7 +221,7 @@ describe("parse stage (§10.3, D14)", () => {
           original_filename: "chat.txt",
         }),
         heartbeat_processing_job: "running",
-        persist_parsed_source: () => {
+        pipeline_persist_parsed_source: () => {
           persisted = true;
           return null;
         },

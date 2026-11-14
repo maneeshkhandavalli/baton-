@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedText } from "@/components/shared/masked-text";
 import type { PointDetail } from "@/lib/contracts/dto";
@@ -49,7 +50,7 @@ export function ReviewDialogs({ state, onClose, onSubmit, pending, fieldErrors }
 
 function FieldError({ messages }: { messages?: string[] }) {
   if (!messages?.length) return null;
-  return <p className="text-xs text-destructive">{messages[0]}</p>;
+  return <p className="text-caption font-medium text-destructive-fg">{messages[0]}</p>;
 }
 
 function DialogBody({ state, onClose, onSubmit, pending, fieldErrors }: ReviewDialogsProps & { state: NonNullable<ReviewDialogState> }) {
@@ -67,7 +68,7 @@ function DialogBody({ state, onClose, onSubmit, pending, fieldErrors }: ReviewDi
     if (ok) onClose();
   }
 
-  const footer = (label: string, input: ReviewPointInput | null, variant: "default" | "destructive" = "default") => (
+  const footer = (label: string, input: ReviewPointInput | null, variant: "default" | "success" | "destructive" = "default") => (
     <DialogFooter>
       <Button variant="outline" onClick={onClose} disabled={pending}>
         Cancel
@@ -135,11 +136,11 @@ function DialogBody({ state, onClose, onSubmit, pending, fieldErrors }: ReviewDi
           <DialogTitle>{heading}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <p className="rounded-lg border border-border bg-background/60 px-3 py-2 text-sm">
+        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
           <MaskedText className="font-medium" text={`${point.title}.`} /> <MaskedText className="text-muted-foreground" text={point.statement} />
         </p>
         {body}
-        {footer(status === "missing" ? "Approve as known gap" : "Approve", input)}
+        {footer(status === "missing" ? "Approve as known gap" : "Approve", input, "success")}
       </>
     );
   }
@@ -244,19 +245,14 @@ function DialogBody({ state, onClose, onSubmit, pending, fieldErrors }: ReviewDi
                 return (
                   <div key={key} className="space-y-1.5">
                     <Label htmlFor={id}>{label}</Label>
-                    <select
-                      id={id}
-                      value={(value as string | null) ?? ""}
-                      onChange={(e) => setAttributes((a) => ({ ...a, [key]: e.target.value || null }))}
-                      className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
+                    <NativeSelect id={id} value={(value as string | null) ?? ""} onChange={(e) => setAttributes((a) => ({ ...a, [key]: e.target.value || null }))}>
                       <option value="">Not set</option>
                       {Object.entries(options).map(([v, l]) => (
                         <option key={v} value={v}>
                           {l}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </div>
                 );
               }
@@ -302,13 +298,13 @@ function ConflictSides({ supports, contradicts }: { supports: PointDetail["evide
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-2">
-        <p className="text-xs font-medium text-status-sourced-fg">Supports ({supports.length})</p>
+        <p className="type-eyebrow text-status-sourced-fg">Supports ({supports.length})</p>
         {supports.map((e) => (
           <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp />
         ))}
       </div>
       <div className="space-y-2">
-        <p className="text-xs font-medium text-status-conflicting-fg">Contradicts ({contradicts.length})</p>
+        <p className="type-eyebrow text-status-conflicting-fg">Contradicts ({contradicts.length})</p>
         {contradicts.map((e) => (
           <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp />
         ))}

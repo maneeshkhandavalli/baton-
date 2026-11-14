@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { Keyboard, ListFilter, SearchX } from "lucide-react";
+import { Keyboard, ListFilter, Lock, Plus, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS } from "@/components/handover/labels";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
@@ -22,6 +25,7 @@ import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
 import { cn } from "@/lib/utils";
 
+import { AddPointDialog } from "./add-point-dialog";
 import { PointCard, type PointAction } from "./point-card";
 import { PointDetailPanel } from "./point-detail-panel";
 import { ReadinessPanel, type SectionFilter } from "./readiness-panel";
@@ -38,13 +42,18 @@ interface ReviewWorkspaceProps {
   readOnlyReason?: string;
   gapsHref: string | null;
   publishedHref: string | null;
+  /**
+   * Dev-only design preview (/preview/review): every action button is rendered as in a live review,
+   * but nothing calls a server action; a toast says so instead.
+   */
+  preview?: boolean;
 }
 
 type ReviewFilter = "all" | ReviewState;
 
 const REQUIRED_GAP_CATEGORIES: PointCategory[] = ["owner", "account_access", "open_task", "blocker"];
 
-export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sources, readOnly, readOnlyReason, gapsHref, publishedHref }: ReviewWorkspaceProps) {
+export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sources, readOnly, readOnlyReason, gapsHref, publishedHref, preview = false }: ReviewWorkspaceProps) {
   const [section, setSection] = useState<SectionFilter>("all");
   const [status, setStatus] = useState<EvidenceStatus | "all">("all");
   const [review, setReview] = useState<ReviewFilter>("all");
@@ -53,6 +62,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   const [sheetOpen, setSheetOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [summary, setSummary] = useState("");
   const { run, isPending, error, clearError } = useAction();
   const cardRefs = useRef(new Map<string, HTMLElement>());
@@ -74,22 +84,37 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   }, [points, section, status, review]);
 
   const selected = visible.find((p) => p.id === selectedId) ?? visible[0] ?? null;
+  const toReview = points.filter((p) => p.reviewState === "pending").length;
 
+  // Scroll only when the user moved the selection (J/K, click, after approve/reject) — never on
+  // mount or filter changes, so the page opens at its header (DEMO-SCROLL).
+  const userMoved = useRef(false);
   useEffect(() => {
-    if (selected) cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!userMoved.current || !selected) return;
+    userMoved.current = false;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    cardRefs.current.get(selected.id)?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
   }, [selected]);
+  const select = (id: string) => {
+    userMoved.current = true;
+    setSelectedId(id);
+  };
 
   function move(delta: number) {
     if (visible.length === 0) return;
     const i = selected ? visible.findIndex((p) => p.id === selected.id) : -1;
     const next = visible[Math.max(0, Math.min(visible.length - 1, i + delta))];
-    setSelectedId(next.id);
+    select(next.id);
   }
 
   function advanceFrom(id: string) {
     const i = visible.findIndex((p) => p.id === id);
     const next = visible.slice(i + 1).find((p) => p.reviewState === "pending") ?? visible.find((p) => p.reviewState === "pending" && p.id !== id);
-    if (next) setSelectedId(next.id);
+    if (next) {
+      select(next.id);
+      // Keyboard and screen-reader users continue on the next point instead of a stale control.
+      requestAnimationFrame(() => cardRefs.current.get(next.id)?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true }));
+    }
   }
 
   async function submit(input: ReviewPointInput): Promise<boolean> {
@@ -115,7 +140,11 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
 
   function act(point: PointDetail, action: PointAction) {
     if (readOnly && action !== "details") return;
-    setSelectedId(point.id);
+    select(point.id);
+    if (preview && action !== "details") {
+      toast.info("Preview only: actions are turned off and nothing is saved.");
+      return;
+    }
     switch (action) {
       case "approve": {
         const needsInput =
@@ -153,7 +182,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
     }
   }
 
-  const anyModal = dialog !== null || sheetOpen || publishOpen || helpOpen;
+  const anyModal = dialog !== null || sheetOpen || publishOpen || helpOpen || addOpen;
   useHotkeys(
     {
       j: () => move(1),
@@ -181,6 +210,15 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
   }
 
   const canPublishNow = handover.viewerIsCreator && handover.state === "in_review" && !readOnly;
+  // P1-1: review roles add knowledge the AI missed (create_manual_point: in_review only).
+  const canAddPoint = !readOnly && handover.state === "in_review";
+  function openAddPoint() {
+    if (preview) {
+      toast.info("Preview only: actions are turned off and nothing is saved.");
+      return;
+    }
+    setAddOpen(true);
+  }
 
   const detail = selected && (
     <PointDetailPanel
@@ -203,7 +241,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       onBlocker={onBlocker}
       gapsHref={gapsHref}
       canPublish={!!readiness?.canPublish}
-      onPublish={canPublishNow ? () => setPublishOpen(true) : null}
+      onPublish={canPublishNow ? () => (preview ? toast.info("Preview only: publishing is turned off.") : setPublishOpen(true)) : null}
     />
   );
 
@@ -228,14 +266,20 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       {/* Centre: evidence cards */}
       <section aria-label="Points" className="min-w-0 space-y-4">
         {(readOnly && readOnlyReason) || publishedHref ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card/70 px-4 py-2.5 text-sm">
-            {readOnly && readOnlyReason && <span className="text-muted-foreground">{readOnlyReason}</span>}
-            {publishedHref && (
-              <Link href={publishedHref} className="font-medium text-primary hover:underline">
-                Open the incoming view
-              </Link>
-            )}
-          </div>
+          <Alert
+            tone={readOnly ? "neutral" : "info"}
+            live="none"
+            icon={readOnly ? <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : undefined}
+            action={
+              publishedHref && (
+                <Link href={publishedHref} className={buttonVariants({ size: "sm", variant: "outline" })}>
+                  Open the incoming view
+                </Link>
+              )
+            }
+          >
+            {readOnly && readOnlyReason ? readOnlyReason : "This handover has a published version."}
+          </Alert>
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -257,14 +301,21 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
               </FilterChip>
             ))}
           </div>
-          <Button size="sm" variant="ghost" className="ml-auto hidden sm:inline-flex" onClick={() => setHelpOpen(true)}>
+          {canAddPoint && (
+            <Button size="sm" variant="outline" className="ml-auto" onClick={openAddPoint}>
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              Add a point
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className={cn("hidden sm:inline-flex", !canAddPoint && "ml-auto")} onClick={() => setHelpOpen(true)}>
             <Keyboard aria-hidden="true" data-icon="inline-start" />
             Shortcuts
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="text-caption text-muted-foreground" aria-live="polite">
           Showing {visible.length} of {points.length} points
+          {toReview > 0 ? ` · ${toReview} still to review` : " · all reviewed"}
         </p>
 
         {visible.length === 0 ? (
@@ -299,7 +350,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
                   readOnly={readOnly}
                   gapQuestion={gapByPoint.get(p.id)}
                   pending={isPending}
-                  onSelect={() => setSelectedId(p.id)}
+                  onSelect={() => select(p.id)}
                   onAction={(a) => act(p, a)}
                 />
               </li>
@@ -323,6 +374,19 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       </Dialog>
 
       <ReviewDialogs state={dialog} onClose={() => setDialog(null)} onSubmit={submit} pending={isPending} fieldErrors={error?.fieldErrors} />
+      {canAddPoint && !preview && (
+        <AddPointDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          handoverId={handover.id}
+          onCreated={(point) => {
+            setSection("all");
+            setStatus("all");
+            setReview("all");
+            select(point.id);
+          }}
+        />
+      )}
 
       <Dialog open={publishOpen} onOpenChange={(o) => !isPending && setPublishOpen(o)}>
         <DialogContent>
@@ -377,7 +441,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
             ].map(([k, v]) => (
               <div key={k} className="contents">
                 <dt>
-                  <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">{k}</kbd>
+                  <Kbd>{k}</Kbd>
                 </dt>
                 <dd className="text-muted-foreground">{v}</dd>
               </div>
@@ -396,8 +460,8 @@ function FilterChip({ active, className, ...props }: React.ComponentProps<"butto
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-        active ? "border-foreground/20 bg-foreground/[0.06] text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground",
+        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium max-sm:h-10 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+        active ? "border-foreground/25 bg-card text-foreground shadow-xs ring-1 ring-foreground/10" : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}
       {...props}

@@ -8,11 +8,14 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
+/** Primary workspace destinations (top of the sidebar). */
 export const workspaceNav: readonly NavItem[] = [
   { title: "Dashboard", href: routes.dashboard, icon: LayoutDashboard },
   { title: "New handover", href: routes.handover.new, icon: FilePlus2 },
-  { title: "Account", href: routes.account, icon: CircleUserRound },
 ];
+
+/** Personal destinations (bottom of the sidebar, above sign-out). */
+export const accountNav: readonly NavItem[] = [{ title: "Account", href: routes.account, icon: CircleUserRound }];
 
 export interface HandoverNavItem {
   title: string;

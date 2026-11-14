@@ -1,0 +1,14 @@
+05/01/2026, 18:00 - Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them. Tap to learn more.
+05/01/2026, 18:01 - Asha Rao created group "Synthetic Robotics Club Core"
+05/01/2026, 18:02 - Asha Rao added Ravi Kumar
+05/01/2026, 18:05 - Asha Rao: Welcome everyone! This chat holds the treasurer handover notes.
+05/01/2026, 18:07 - Asha Rao: We decided the annual robotics workshop will be held in the Main Seminar Hall on 14 February.
+05/01/2026, 18:09 - Ravi Kumar: Asha is responsible for the club bank account and all reimbursements.
+05/01/2026, 18:11 - Asha Rao: We need to renew the sponsorship agreement with the local electronics store before March.
+05/01/2026, 18:13 - Ravi Kumar: The workshop budget approval is blocked until the faculty advisor signs the form.
+05/01/2026, 18:15 - Asha Rao: There is a risk that the venue booking expires if we do not pay the deposit this week.
+05/01/2026, 18:17 - Ravi Kumar: The projector failed again during the last meetup, it keeps happening.
+05/01/2026, 18:19 - Asha Rao: Next step is to email the advisor the signed budget by Friday.
+06/01/2026, 09:30 - Ravi Kumar: For receipts, contact the store desk at 99999 00001 or desk@example.org
+06/01/2026, 09:32 - Asha Rao: Ravi handles the component inventory spreadsheet from now on.
+06/01/2026, 09:35 - Ravi Kumar: We agreed that reimbursements above 2000 rupees need two signatures.

@@ -4,15 +4,16 @@ import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { HandoverSettings } from "@/components/settings/handover-settings";
-import { LoadingState } from "@/components/shared/loading-state";
+import { FormSkeleton } from "@/components/shared/skeletons";
 import { getQueries } from "@/lib/data";
+import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Handover settings" };
 
 export default function HandoverSettingsPage({ params }: PageProps<"/handover/[id]/settings">) {
   return (
     <PageContainer width="narrow" className="lg:py-8">
-      <Suspense fallback={<LoadingState label="Loading settings…" />}>
+      <Suspense fallback={<FormSkeleton label="Loading settings…" fields={5} />}>
         <SettingsContent params={params} />
       </Suspense>
     </PageContainer>
@@ -21,6 +22,7 @@ export default function HandoverSettingsPage({ params }: PageProps<"/handover/[i
 
 async function SettingsContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const queries = getQueries();
   const handover = await queries.getHandover(id);
   if (!handover.ok) notFound();

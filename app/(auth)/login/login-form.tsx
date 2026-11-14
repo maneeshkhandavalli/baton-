@@ -7,6 +7,7 @@
 
 import { useActionState } from "react";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,9 +23,9 @@ export function LoginForm({ next, error }: { next: string | null; error: string 
 
   if (state.status === "sent") {
     return (
-      <p role="status" className="mt-6 text-sm leading-relaxed text-muted-foreground">
-        Check your inbox. If the address can sign in, we&apos;ve sent a link that signs you in on this device.
-      </p>
+      <Alert tone="success" title="Check your inbox" className="mt-6">
+        If the address can sign in, we&apos;ve sent a link that signs you in on this device. It can take a minute to arrive.
+      </Alert>
     );
   }
 
@@ -46,11 +47,11 @@ export function LoginForm({ next, error }: { next: string | null; error: string 
         />
       </div>
       {message ? (
-        <p id="login-message" role="alert" className="text-sm text-destructive">
+        <Alert id="login-message" tone="danger">
           {message}
-        </p>
+        </Alert>
       ) : null}
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" size="lg" className="w-full" disabled={pending} aria-busy={pending}>
         {pending ? "Sending…" : "Email me a sign-in link"}
       </Button>
     </form>

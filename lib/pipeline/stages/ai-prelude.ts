@@ -6,7 +6,7 @@
 import type { AiProvider, AiRunConfig } from "../../ai/provider";
 import { setJobProvenance } from "../../db/pipeline";
 import { mapAiFailure, parseRunConfig, provenanceBeforeCall } from "../ai";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import { failure, type PipelineFailure } from "../types";
 
 export type AiPrelude = { ok: true; provider: AiProvider; runConfig: AiRunConfig } | { ok: false; failure: PipelineFailure };
@@ -19,7 +19,7 @@ export async function startAiStage(ctx: StageContext, stage: "extract" | "verify
   const provider = ctx.ai.providerForRun(runConfig);
   if (!provider.ok) return { ok: false, failure: mapAiFailure(provider.error) };
   if (provider.data.id !== runConfig.provider) return { ok: false, failure: failure("precondition_failed", "ai_config_changed") };
-  await setJobProvenance(ctx.db, ctx.claimed.id, { ...provenanceBeforeCall(runConfig, stage) });
+  await setJobProvenance(ctx.db, claimOf(ctx), { ...provenanceBeforeCall(runConfig, stage) });
   return { ok: true, provider: provider.data, runConfig };
 }
 

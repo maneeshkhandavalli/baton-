@@ -68,6 +68,13 @@ function validateInput(input: unknown): { input: ParseSourceInput; exclusions: C
   return { input: input as ParseSourceInput, exclusions };
 }
 
+/** True if the bytes begin (after an optional UTF-8 BOM) with the `%PDF-` header. */
+function startsWithPdfHeader(bytes: Uint8Array): boolean {
+  const start = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+  const magic = [0x25, 0x50, 0x44, 0x46, 0x2d]; // %PDF-
+  return magic.every((b, i) => bytes[start + i] === b);
+}
+
 function parseInternal(input: ParseSourceInput, exclusions: CompiledExclusions): ParsedSource {
   const { bytes, kind } = input;
   if (bytes.length > LIMITS.maxFileBytes) {
@@ -107,6 +114,8 @@ function parseInternal(input: ParseSourceInput, exclusions: CompiledExclusions):
     case "markdown":
     case "text": {
       if (isZip(bytes)) throw new ParserAbort("unsupported_format", "The file is an archive, not a text document.");
+      // R3 D2: a PDF without binary bytes would otherwise decode as text and become garbage blocks.
+      if (startsWithPdfHeader(bytes)) throw new ParserAbort("unsupported_format", "The file is a PDF, not a text document.");
       const lines = splitLines(decodeText(bytes));
       const blocks = parseMarkdownLines(lines, kind === "markdown");
       const totalLines = lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;

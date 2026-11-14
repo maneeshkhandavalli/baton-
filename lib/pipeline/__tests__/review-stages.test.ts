@@ -67,10 +67,10 @@ describe("D21 checklist", () => {
   });
 
   it("analyze creates category-level system questions at 'everyone' with no point", async () => {
-    const db = fakeDb({ list_points_for_pipeline: [], list_gap_questions_for_pipeline: [], create_system_gap_question: IDS.point2 });
+    const db = fakeDb({ list_points_for_pipeline: [], list_gap_questions_for_pipeline: [], pipeline_create_system_gap_question: IDS.point2 });
     const out = await runAnalyze(stageCtx("analyze", db));
     assert.equal(out.kind, "succeeded");
-    const created = db.called("create_system_gap_question").map((c) => c.args);
+    const created = db.called("pipeline_create_system_gap_question").map((c) => c.args);
     assert.equal(created.length, EXPECTED_KNOWLEDGE_CHECKLIST.length);
     for (const c of created) {
       assert.equal(c.p_point_id, null);
@@ -119,18 +119,21 @@ describe("prepare_review (§10.10)", () => {
     const db = fakeDb({
       list_points_for_pipeline: pts,
       list_gap_questions_for_pipeline: [],
-      create_system_gap_question: (args: Record<string, unknown>) => (args.p_point_id === IDS.point2 ? rpcError("BTPF0") : "q"),
-      set_point_sort_keys: 3,
+      pipeline_create_system_gap_question: (args: Record<string, unknown>) => (args.p_point_id === IDS.point2 ? rpcError("BTPF0") : "q"),
+      pipeline_set_point_sort_keys: 3,
     });
     const out = await runPrepareReview(stageCtx("prepare_review", db));
     assert.equal(out.kind, "succeeded");
-    const q = db.called("create_system_gap_question").map((c) => c.args);
+    const q = db.called("pipeline_create_system_gap_question").map((c) => c.args);
     assert.equal(q.length, 2);
     assert.equal(q[0].p_access_level, "leads_only");
     assert.equal(q[0].p_priority, "required");
     assert.equal(q[0].p_category, null);
-    const keys = db.called("set_point_sort_keys")[0].args;
-    assert.equal(keys.p_run_id, IDS.run);
+    assert.equal(q[0].p_job_id, IDS.job, "DB-12: questions are written under the claim");
+    assert.ok(!("p_handover_id" in q[0]), "the handover comes from the claim, never from the caller");
+    const keys = db.called("pipeline_set_point_sort_keys")[0].args;
+    assert.equal(keys.p_job_id, IDS.job, "DB-12: sort keys are written under the claim");
+    assert.equal(keys.p_attempt, 1);
     assert.deepEqual((keys.p_keys as Array<{ pointId: string }>).map((k) => k.pointId), [IDS.point3, IDS.point1, IDS.point2]);
     assert.equal(db.called("approve_point").length, 0, "nothing is approved");
   });

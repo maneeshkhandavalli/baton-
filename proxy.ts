@@ -43,7 +43,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except static assets and image optimisation.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)",
+    // Everything except static assets and image optimisation. `js` covers public/theme-init.js, which blocks
+    // first paint and so must never wait on a session refresh (no app route ends in .js).
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|js)$).*)",
   ],
 };

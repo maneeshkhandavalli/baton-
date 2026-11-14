@@ -8,16 +8,18 @@ import { formatDate, formatDateTime } from "@/components/handover/format";
 import { accessLevelMeta, categoryLabel, gapPriorityLabel } from "@/components/handover/labels";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedText } from "@/components/shared/masked-text";
 import { maskedTextToPlain } from "@/components/shared/mask-tokens";
 import { useAction } from "@/hooks/use-action";
 import type { CreatedLink, GapQuestionSummary, PointSummary } from "@/lib/contracts/dto";
-import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel, type GapPriority, type PointCategory } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel, type GapAnswerStatus, type GapPriority, type PointCategory } from "@/lib/contracts/enums";
 import { createGapInterviewLink, createGapQuestion, reviewGapAnswer } from "@/lib/actions/gaps";
 
 import { linkLevelAtLeast, questionLevelAtLeast } from "./gap-access";
@@ -65,7 +67,20 @@ export function GapsManager({ handoverId, questions, points, canManage }: GapsMa
       </div>
 
       {questions.length === 0 ? (
-        <EmptyState icon={<CircleHelp />} title="No knowledge gaps" description="Every point has evidence. Missing knowledge found during processing, and questions you add, will appear here." />
+        points.length === 0 ? (
+          <EmptyState
+            icon={<CircleHelp />}
+            title="No questions yet"
+            description="Knowledge gaps appear here once processing has found what the sources don't cover. You can also add your own questions."
+          />
+        ) : (
+          <EmptyState
+            icon={<CircleHelp />}
+            tone="success"
+            title="No knowledge gaps"
+            description="Every point has evidence. Missing knowledge found during processing, and questions you add, will appear here."
+          />
+        )
       ) : (
         <>
           <Group title="Answers to review" description="Accepting an answer adds it as testimony evidence to the linked point." questions={needsReview} pointById={pointById} handoverId={handoverId} canManage={canManage} pending={isPending} run={run} />
@@ -83,9 +98,9 @@ export function GapsManager({ handoverId, questions, points, canManage }: GapsMa
 function Stat({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
     <div>
-      <dt className="text-xs tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className="font-serif text-4xl tabular-nums">{value}</dd>
-      <dd className="text-xs text-muted-foreground">{hint}</dd>
+      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dd className="mt-1 font-display text-4xl leading-none tabular-nums">{value}</dd>
+      <dd className="mt-1 text-caption text-muted-foreground">{hint}</dd>
     </div>
   );
 }
@@ -113,10 +128,10 @@ function Group({
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold">
-          {title} <span className="font-normal text-muted-foreground">· {questions.length}</span>
+        <h2 className="type-heading">
+          {title} <span className="font-normal text-muted-foreground tabular-nums">· {questions.length}</span>
         </h2>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        {description && <p className="mt-0.5 text-caption text-muted-foreground">{description}</p>}
       </div>
       <ul className="space-y-3">
         {questions.map((q) => {
@@ -124,13 +139,15 @@ function Group({
           return (
             <li key={q.id} className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={cn("inline-flex h-5 items-center rounded-md px-1.5 text-[0.6875rem] font-medium", q.priority === "required" ? "bg-status-conflicting-soft text-status-conflicting-fg" : "bg-muted text-muted-foreground")}>
+                <Badge shape="tag" size="sm" tone={q.priority === "required" ? "warning" : "neutral"}>
                   {gapPriorityLabel[q.priority]}
-                </span>
+                </Badge>
                 {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
-                <span className="ml-auto text-xs text-muted-foreground capitalize">{q.status}</span>
+                <Badge size="sm" className="ml-auto capitalize" tone={q.status === "open" ? "primary" : q.status === "answered" ? "warning" : "neutral"} dot>
+                  {q.status}
+                </Badge>
               </div>
-              <h3 className="mt-2 text-[0.9375rem] leading-snug font-semibold"><MaskedText text={q.question} /></h3>
+              <h3 className="mt-2.5 type-heading"><MaskedText text={q.question} /></h3>
               {q.context && <p className="mt-1 text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}
               {point && (
                 <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -144,12 +161,18 @@ function Group({
               {q.answers.length > 0 && (
                 <ul className="mt-4 space-y-2">
                   {q.answers.map((a) => (
-                    <li key={a.id} className={cn("rounded-lg border-l-2 bg-background/70 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-primary/50")}>
+                    <li key={a.id} className={cn("rounded-lg border-l-2 bg-muted/40 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-primary/50")}>
                       <p className="text-sm leading-relaxed"><MaskedText text={a.text} /></p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground/80">{a.answererLabel}</span>
-                        <span>{formatDateTime(a.createdAt)}</span>
-                        <span className="capitalize">· {a.status}</span>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
+                        <span className="font-medium text-foreground/85">{a.answererLabel}</span>
+                        <span aria-hidden="true">·</span>
+                        <time dateTime={a.createdAt} className="tabular-nums">
+                          {formatDateTime(a.createdAt)}
+                        </time>
+                        <span aria-hidden="true">·</span>
+                        <span className={cn(a.status === "accepted" && "font-medium text-status-sourced-fg", a.status === "submitted" && "font-medium text-primary-fg")}>
+                          {ANSWER_STATUS[a.status]}
+                        </span>
                         {a.status === "submitted" && canManage && (
                           <span className="ml-auto flex gap-1.5">
                             <Button size="xs" variant="ghost" disabled={pending} onClick={() => run(() => reviewGapAnswer({ answerId: a.id, decision: "reject" }), { success: "Answer rejected; the question is open again" })}>
@@ -176,6 +199,12 @@ function Group({
 }
 
 const rank = (l: AccessLevel) => ACCESS_LEVELS.indexOf(l);
+
+const ANSWER_STATUS: Record<GapAnswerStatus, string> = {
+  submitted: "Waiting for review",
+  accepted: "Accepted",
+  rejected: "Rejected",
+};
 
 function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId: string; questions: GapQuestionSummary[]; pointById: Map<string, PointSummary>; onClose: () => void }) {
   const { run, isPending, error } = useAction();
@@ -263,7 +292,7 @@ function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId:
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="link-level">Most restricted question it may show</Label>
-                <select
+                <NativeSelect
                   id="link-level"
                   value={maxAccessLevel}
                   onChange={(e) => setChosenLevel(e.target.value as AccessLevel)}
@@ -275,7 +304,7 @@ function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId:
                       {accessLevelMeta[l].label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
                 <p id="link-level-hint" className="text-xs text-muted-foreground">
                   {error?.fieldErrors?.maxAccessLevel?.[0] ??
                     (underivable > 0
@@ -336,25 +365,25 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="prio">Priority</Label>
-              <select id="prio" value={priority} onChange={(e) => setPriority(e.target.value as GapPriority)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="prio" value={priority} onChange={(e) => setPriority(e.target.value as GapPriority)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
                 <option value="optional">Optional</option>
                 <option value="required">Required before publishing</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pt">Link to a missing point</Label>
-              <select id="pt" value={pointId} onChange={(e) => { setPointId(e.target.value); if (e.target.value) setCategory(""); }} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="pt" value={pointId} onChange={(e) => { setPointId(e.target.value); if (e.target.value) setCategory(""); }} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
                 <option value="">None</option>
                 {points.map((p) => (
                   <option key={p.id} value={p.id}>
                     {maskedTextToPlain(p.title)}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cat">Topic</Label>
-              <select
+              <NativeSelect
                 id="cat"
                 value={category}
                 disabled={!!pointId}
@@ -368,17 +397,17 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
                     {categoryLabel[c]}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ask-level">Who may see it</Label>
-              <select id="ask-level" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="ask-level" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
                 {ACCESS_LEVELS.map((l) => (
                   <option key={l} value={l}>
                     {accessLevelMeta[l].label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
           {pointId && <p className="text-xs text-muted-foreground">If the point is more restricted, the question is raised to its level.</p>}

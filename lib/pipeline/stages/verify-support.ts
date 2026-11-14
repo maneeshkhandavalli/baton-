@@ -8,6 +8,8 @@
  *   `VERIFY_REQUEST_LIMITS`; a pair that still does not fit is left unchecked (the point stays inferred).
  * - `recordSupportVerdict` is given the exact quote text the verifier saw; a conflict means the evidence
  *   changed meanwhile (privacy redaction) and the verdict is discarded (§5.5 T6).
+ * - PI-11: lib/ai already replaced a promoting verdict on instruction-bearing evidence (injection-guard.ts);
+ *   the stage records the guarded verdict and logs only the count.
  * - Per-run budget: ≤ 2000 calls. `progress_done` counts calls, so the budget survives yields and retries.
  * - The provider is only resolved when there is something to verify.
  */
@@ -18,7 +20,7 @@ import type { PointAttributes } from "../../contracts/schemas";
 import { DbError } from "../../db/errors";
 import { listLinksNeedingSupport, recordSupportVerdict, type LinkNeedingSupport } from "../../db/pipeline";
 import { mapAiFailure } from "../ai";
-import type { StageContext } from "../stage-context";
+import { claimOf, type StageContext } from "../stage-context";
 import { failure, type AttemptRecord, type StageOutcome } from "../types";
 import { callSignal, startAiStage } from "./ai-prelude";
 
@@ -51,7 +53,7 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
   let calls = Math.max(0, ctx.job.job.progressDone ?? 0);
   const callsAtStart = calls;
   const skip = new Set<string>();
-  const counts = { verdicts: 0, tooLarge: 0, discarded: 0 };
+  const counts = { verdicts: 0, tooLarge: 0, discarded: 0, injectionGuarded: 0 };
   let ai: { provider: AiProvider; runConfig: AiRunConfig } | null = null;
   let lastAttempt: AttemptRecord | undefined;
   const withAttempt = () => (lastAttempt ? { attemptRecord: lastAttempt } : {});
@@ -95,15 +97,16 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
       lastAttempt = result.data.attempt;
 
       try {
-        await recordSupportVerdict(ctx.db, {
+        await recordSupportVerdict(ctx.db, claimOf(ctx), {
           pointEvidenceId: link.pointEvidenceId,
           revisionId: link.revisionId,
           verdict: result.data.verdict,
           rationale: result.data.rationale,
-          provenance: { ...result.data.provenance },
+          provenance: verdictProvenance(result.data),
           verifiedQuoteText: link.quote.text,
         });
         counts.verdicts += 1;
+        if (result.data.injection?.guarded) counts.injectionGuarded += 1; // PI-11: count only, never the text
       } catch (e) {
         if (!(e instanceof DbError && e.code === "conflict" && !e.retryable)) throw e;
         skip.add(link.pointEvidenceId); // evidence text changed since the call: discard the verdict
@@ -115,6 +118,24 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
 
   log(ctx, calls, counts);
   return { kind: "succeeded", progress: { done: calls, total: calls }, ...withAttempt() };
+}
+
+/**
+ * The stored `verifier_provenance`. PI-11: when the guard replaced the model's verdict, it also carries
+ * `injectionGuard` (the model's verdict and the pattern/field ids, never text); `api_get_point`
+ * (migration 20261113300900) exposes it as `EvidenceItem.guarded` / `modelVerdict`.
+ */
+export function verdictProvenance(data: {
+  provenance: object;
+  modelVerdict?: string;
+  injection?: { guarded: boolean; patterns: readonly string[]; fields: readonly string[] };
+}): Record<string, unknown> {
+  const base: Record<string, unknown> = { ...data.provenance };
+  if (!data.injection?.guarded) return base;
+  return {
+    ...base,
+    injectionGuard: { guarded: true, modelVerdict: data.modelVerdict ?? null, patterns: [...data.injection.patterns], fields: [...data.injection.fields] },
+  };
 }
 
 function log(ctx: StageContext, calls: number, c: { verdicts: number; tooLarge: number; discarded: number }) {

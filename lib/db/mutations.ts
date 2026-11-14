@@ -68,6 +68,29 @@ export async function createHandover(
   }));
 }
 
+/**
+ * R3 C1: edit a DRAFT's details (creator or outgoing member; checked in SQL). Free text is ALREADY MASKED.
+ * `expectedUpdatedAt` is the HandoverSummary.updatedAt the editor last saw (compared at millisecond
+ * precision); a stale value is `conflict` unless the values are already stored (an idempotent retry).
+ * Optional fields: `undefined` keeps the stored value, an empty string clears it. Returns the new updatedAt.
+ */
+export async function updateHandoverDetails(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { handoverId: string; title: string; teamName: string; roleTitle?: string; description?: string; expectedUpdatedAt: string },
+): Promise<string> {
+  const updatedAt = await call(db, actor, "update_handover_details", {
+    p_handover_id: input.handoverId,
+    p_expected_updated_at: input.expectedUpdatedAt,
+    p_title: input.title,
+    p_team_name: input.teamName,
+    p_role_title: input.roleTitle ?? null,
+    p_description: input.description ?? null,
+  });
+  if (typeof updatedAt !== "string") throw new DbError("internal");
+  return updatedAt;
+}
+
 /** `aiConfig` is the server's AiRunConfig snapshot (§11.8); its `provider` must match every source's consent. */
 export async function startProcessing(
   db: DbClient,

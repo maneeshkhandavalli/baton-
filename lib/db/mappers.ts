@@ -110,6 +110,8 @@ const handoverRow = z.object({
   title: text,
   team_name: text,
   role_title: nullableText,
+  // R3 (migration 20261113100400): absent from older rows/fixtures → null
+  description: nullableText.optional(),
   state: z.enum(HANDOVER_STATES),
   viewer_role: z.enum(MEMBER_ROLES),
   viewer_is_creator: z.boolean(),
@@ -128,6 +130,7 @@ export function mapHandoverSummary(raw: unknown): HandoverSummary {
     title: r.title,
     teamName: r.team_name,
     roleTitle: r.role_title,
+    description: r.description ?? null,
     state: r.state,
     viewerRole: r.viewer_role,
     viewerIsCreator: r.viewer_is_creator,
@@ -368,7 +371,7 @@ const processingRow = z.object({
       finished_at: nullableTimestamp,
       error: z.object({ code: text, message: text }).nullable(),
       stages: z.array(
-        z.object({ stage: z.enum(PIPELINE_STAGES), status: z.enum(RUN_STATUSES), done: count, total: count }),
+        z.object({ stage: z.enum(PIPELINE_STAGES), status: z.enum([...RUN_STATUSES, "partial"]), done: count, total: count }),
       ),
     })
     .nullable(),
@@ -469,6 +472,9 @@ const pointDetailRow = z.object({
       quote_check: z.enum(QUOTE_CHECKS),
       support_verdict: z.enum(SUPPORT_VERDICTS),
       verdict_rationale: nullableText,
+      // PI-11 (migration 20261113300900): optional so a database without that migration still parses.
+      guarded: z.boolean().optional(),
+      model_verdict: z.enum(["supports", "partial"]).nullable().optional(),
       is_current_revision_verdict: z.boolean(),
       excluded: z.boolean(),
       exclusion_reason: nullableText,
@@ -528,6 +534,10 @@ export function mapPointDetail(raw: unknown): PointDetail {
       quoteCheck: e.quote_check,
       supportVerdict: e.support_verdict,
       verdictRationale: e.verdict_rationale,
+      // Absent on a database without migration 300900: leave undefined so the UI can fall back to the
+      // fixed guard rationale (components/shared/support-guard.ts#isGuardedVerdict).
+      guarded: typeof e.guarded === "boolean" ? e.guarded : undefined,
+      modelVerdict: e.guarded === true ? (e.model_verdict ?? null) : e.guarded === false ? null : undefined,
       isCurrentRevisionVerdict: e.is_current_revision_verdict,
       excluded: e.excluded,
       exclusionReason: e.exclusion_reason,

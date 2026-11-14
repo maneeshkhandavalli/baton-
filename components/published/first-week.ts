@@ -1,7 +1,7 @@
 import type { PublishedHandover } from "@/lib/contracts/dto";
 import type { PointAttributesFor } from "@/lib/contracts/schemas";
 
-import { formatDate } from "@/components/handover/format";
+import { formatDayOrRaw } from "@/components/shared/key-facts";
 
 export interface ChecklistItem {
   id: string;
@@ -13,6 +13,23 @@ export interface ChecklistItem {
 export interface ChecklistDay {
   label: string;
   items: ChecklistItem[];
+}
+
+/** Browser-storage key for one viewer's ticks on one publication. */
+export const firstWeekStorageKey = (publicationId: string) => `baton:first-week:${publicationId}`;
+
+/**
+ * Ticked item ids from browser storage. Anything missing, malformed or not a list of strings reads as
+ * "nothing ticked", which is also what the server renders, so hydration always matches.
+ */
+export function parseTicks(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -44,7 +61,10 @@ export function buildFirstWeek(handover: PublishedHandover): ChecklistDay[] {
         break;
       case "open_task": {
         const a = c.attributes as PointAttributesFor<"open_task">;
-        (a.dueDate ? days23 : days47).push({ id: `${p.id}:task`, pointId: p.id, title: c.title, detail: a.dueDate ? `Due ${formatDate(a.dueDate)}` : a.progressNote });
+        // Published attributes aren't re-validated on read: an impossible day ("2026-02-30") or free
+        // text ("March 5") is shown as written, never rolled over or guessed (QA-R3-12-R1).
+        const due = formatDayOrRaw(a.dueDate);
+        (due ? days23 : days47).push({ id: `${p.id}:task`, pointId: p.id, title: c.title, detail: due ? `Due ${due}` : a.progressNote });
         break;
       }
       case "next_action":

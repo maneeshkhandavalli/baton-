@@ -18,6 +18,9 @@ import { resetPlatform, signInAs } from "./support/platform";
 import { RecordingDb } from "./support/recording-db";
 import { RecordingStorage } from "./support/recording-storage";
 
+/** DB-12: the parse job writes an integrity mismatch under its claim (fenced writer). */
+const CLAIM = { jobId: randomUUID(), attempt: 1 };
+
 const BYTES = new TextEncoder().encode("10/02/2024, 18:00 - Asha Rao: synthetic raw chat line\n");
 const SHA = createHash("sha256").update(BYTES).digest("hex");
 const code = (c: string) => (e: unknown) => isDbError(e) && e.code === c;
@@ -27,17 +30,18 @@ function setup(row: Record<string, unknown> | null) {
   const db = new RecordingDb(events);
   const storage = new RecordingStorage(events);
   const sourceId = randomUUID();
-  const path = `raw/${randomUUID()}/${sourceId}`;
+  const handoverId = randomUUID(); // the raw path and the row share one handover (QA-R3-06)
+  const path = `raw/${handoverId}/${sourceId}`;
   storage.put(SOURCE_BUCKET, path, BYTES);
   const fullRow =
     row === null
       ? null
       : { raw_storage_path: path, size_bytes: BYTES.byteLength, sha256: SHA, kind: "whatsapp_export", timezone: "Asia/Kolkata",
-          date_order: "dmy", original_filename: "chat.txt", handover_id: randomUUID(), ...row };
+          date_order: "dmy", original_filename: "chat.txt", handover_id: handoverId, ...row };
   db.returns("raw_source_for_processing", fullRow)
     .returns("source_preview_target", fullRow)
     .returns("mark_source_raw_deleted", null)
-    .returns("mark_source_parse_failed", null);
+    .returns("pipeline_mark_source_parse_failed", null);
   return { events, db, storage, sourceId, path };
 }
 
@@ -86,7 +90,7 @@ describe("IT-11 / QA-L1: deleteParsedRawSource", () => {
 describe("IT-11 / M5: the parse job re-verifies the raw bytes", () => {
   it("matching bytes come back with their metadata, and nothing is written", async () => {
     const { db, storage, sourceId, path } = setup({ state: "uploaded" });
-    const got = await downloadVerifiedRawSourceWithMeta(db, storage, sourceId);
+    const got = await downloadVerifiedRawSourceWithMeta(db, storage, sourceId, CLAIM);
     assert.deepEqual([...got.bytes], [...BYTES]);
     assert.equal(got.rawStoragePath, path);
     assert.equal(got.dateOrder, "dmy");
@@ -96,8 +100,8 @@ describe("IT-11 / M5: the parse job re-verifies the raw bytes", () => {
 
   it("tampered bytes fail the source (integrity_mismatch), are never returned, and the raw upload is kept", async () => {
     const { db, storage, sourceId, path } = setup({ state: "uploaded", sha256: "00".repeat(32) });
-    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storage, sourceId), code("validation_failed"));
-    assert.deepEqual(db.last("mark_source_parse_failed")?.args, { p_source_id: sourceId, p_error_code: "integrity_mismatch" });
+    await assert.rejects(downloadVerifiedRawSourceWithMeta(db, storage, sourceId, CLAIM), code("validation_failed"));
+    assert.deepEqual(db.last("pipeline_mark_source_parse_failed")?.args, { p_job_id: CLAIM.jobId, p_attempt: CLAIM.attempt, p_error_code: "integrity_mismatch" });
     assert.deepEqual(storage.removed(), []);
     assert.ok(storage.has(SOURCE_BUCKET, path));
   });

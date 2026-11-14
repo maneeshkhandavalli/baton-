@@ -428,3 +428,14 @@ describe("AI output caps (§12.10 rule 3)", () => {
     assert.equal(extractionResponseSchema.safeParse({ candidates: Array(101).fill({}) }).success, false);
   });
 });
+
+describe("updateHandoverDetailsInput (R3 draft metadata)", () => {
+  const ok = { handoverId: "4f1c2a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b", title: "Treasurer handover", teamName: "Robotics Club", expectedUpdatedAt: "2026-11-12T10:00:00.000Z" };
+  it("accepts a valid edit and requires the concurrency token", async () => {
+    const { updateHandoverDetailsInput } = await import("../schemas");
+    assert.equal(updateHandoverDetailsInput.safeParse(ok).success, true);
+    assert.equal(updateHandoverDetailsInput.safeParse({ ...ok, expectedUpdatedAt: undefined }).success, false);
+    assert.equal(updateHandoverDetailsInput.safeParse({ ...ok, title: "ab" }).success, false);
+    assert.equal(updateHandoverDetailsInput.safeParse({ ...ok, creatorRole: "outgoing" }).data && "creatorRole" in updateHandoverDetailsInput.parse({ ...ok, creatorRole: "outgoing" }), false);
+  });
+});
