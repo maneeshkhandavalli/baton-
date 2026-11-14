@@ -255,7 +255,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
             })}
           </ul>
           <p className="text-xs text-muted-foreground">
-            Surrounding messages are not shown here yet; the read contract has no source-context query.
+            Only the quoted passage is shown here, not the messages around it.
           </p>
         </Section>
       )}

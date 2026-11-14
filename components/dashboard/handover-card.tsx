@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Crown, FileText } from "lucide-react";
+import { ArrowRight, Crown, FileText, Loader2 } from "lucide-react";
 
 import { HandoverStateBadge } from "@/components/handover/badges";
 import { formatDate } from "@/components/handover/format";
@@ -56,7 +56,17 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
       </p>
 
       <div className="mt-6 flex-1">
-        {readiness !== null ? (
+        {h.state === "processing" || (h.state === "draft" && readiness !== null) ? (
+          // Readiness means nothing before there are points: say where the handover is instead.
+          <p className="flex items-center gap-2 text-caption text-muted-foreground">
+            {h.state === "processing" ? (
+              <Loader2 aria-hidden="true" className="size-3.5 animate-spin text-primary motion-reduce:animate-none" />
+            ) : (
+              <FileText aria-hidden="true" className="size-3.5" />
+            )}
+            {h.state === "processing" ? "Baton is reading the sources." : "Still being set up. Readiness appears once points are extracted."}
+          </p>
+        ) : readiness !== null ? (
           <div>
             <div className="flex items-baseline justify-between text-caption">
               <span className="text-muted-foreground">Readiness to publish</span>

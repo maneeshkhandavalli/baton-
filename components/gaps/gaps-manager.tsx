@@ -19,7 +19,7 @@ import { MaskedText } from "@/components/shared/masked-text";
 import { maskedTextToPlain } from "@/components/shared/mask-tokens";
 import { useAction } from "@/hooks/use-action";
 import type { CreatedLink, GapQuestionSummary, PointSummary } from "@/lib/contracts/dto";
-import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel, type GapPriority, type PointCategory } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel, type GapAnswerStatus, type GapPriority, type PointCategory } from "@/lib/contracts/enums";
 import { createGapInterviewLink, createGapQuestion, reviewGapAnswer } from "@/lib/actions/gaps";
 
 import { linkLevelAtLeast, questionLevelAtLeast } from "./gap-access";
@@ -67,7 +67,20 @@ export function GapsManager({ handoverId, questions, points, canManage }: GapsMa
       </div>
 
       {questions.length === 0 ? (
-        <EmptyState icon={<CircleHelp />} title="No knowledge gaps" description="Every point has evidence. Missing knowledge found during processing, and questions you add, will appear here." />
+        points.length === 0 ? (
+          <EmptyState
+            icon={<CircleHelp />}
+            title="No questions yet"
+            description="Knowledge gaps appear here once processing has found what the sources don't cover. You can also add your own questions."
+          />
+        ) : (
+          <EmptyState
+            icon={<CircleHelp />}
+            tone="success"
+            title="No knowledge gaps"
+            description="Every point has evidence. Missing knowledge found during processing, and questions you add, will appear here."
+          />
+        )
       ) : (
         <>
           <Group title="Answers to review" description="Accepting an answer adds it as testimony evidence to the linked point." questions={needsReview} pointById={pointById} handoverId={handoverId} canManage={canManage} pending={isPending} run={run} />
@@ -85,9 +98,9 @@ export function GapsManager({ handoverId, questions, points, canManage }: GapsMa
 function Stat({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
     <div>
-      <dt className="text-xs tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className="font-serif text-4xl tabular-nums">{value}</dd>
-      <dd className="text-xs text-muted-foreground">{hint}</dd>
+      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dd className="mt-1 font-display text-4xl leading-none tabular-nums">{value}</dd>
+      <dd className="mt-1 text-caption text-muted-foreground">{hint}</dd>
     </div>
   );
 }
@@ -115,10 +128,10 @@ function Group({
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold">
-          {title} <span className="font-normal text-muted-foreground">· {questions.length}</span>
+        <h2 className="type-heading">
+          {title} <span className="font-normal text-muted-foreground tabular-nums">· {questions.length}</span>
         </h2>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        {description && <p className="mt-0.5 text-caption text-muted-foreground">{description}</p>}
       </div>
       <ul className="space-y-3">
         {questions.map((q) => {
@@ -150,10 +163,16 @@ function Group({
                   {q.answers.map((a) => (
                     <li key={a.id} className={cn("rounded-lg border-l-2 bg-muted/40 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-primary/50")}>
                       <p className="text-sm leading-relaxed"><MaskedText text={a.text} /></p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground/80">{a.answererLabel}</span>
-                        <span>{formatDateTime(a.createdAt)}</span>
-                        <span className="capitalize">· {a.status}</span>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
+                        <span className="font-medium text-foreground/85">{a.answererLabel}</span>
+                        <span aria-hidden="true">·</span>
+                        <time dateTime={a.createdAt} className="tabular-nums">
+                          {formatDateTime(a.createdAt)}
+                        </time>
+                        <span aria-hidden="true">·</span>
+                        <span className={cn(a.status === "accepted" && "font-medium text-status-sourced-fg", a.status === "submitted" && "font-medium text-primary-fg")}>
+                          {ANSWER_STATUS[a.status]}
+                        </span>
                         {a.status === "submitted" && canManage && (
                           <span className="ml-auto flex gap-1.5">
                             <Button size="xs" variant="ghost" disabled={pending} onClick={() => run(() => reviewGapAnswer({ answerId: a.id, decision: "reject" }), { success: "Answer rejected; the question is open again" })}>
@@ -180,6 +199,12 @@ function Group({
 }
 
 const rank = (l: AccessLevel) => ACCESS_LEVELS.indexOf(l);
+
+const ANSWER_STATUS: Record<GapAnswerStatus, string> = {
+  submitted: "Waiting for review",
+  accepted: "Accepted",
+  rejected: "Rejected",
+};
 
 function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId: string; questions: GapQuestionSummary[]; pointById: Map<string, PointSummary>; onClose: () => void }) {
   const { run, isPending, error } = useAction();

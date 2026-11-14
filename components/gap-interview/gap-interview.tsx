@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { categoryLabel } from "@/components/handover/labels";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,7 +209,9 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                   const a = (draft.answers[x.id] ?? "").trim();
                   return (
                     <li key={x.id} className="rounded-lg border border-border p-3">
-                      <p className="text-sm font-medium">{x.question}</p>
+                      <p className="text-sm font-medium">
+                        <MaskedText text={x.question} />
+                      </p>
                       <p className={cn("mt-1 text-sm whitespace-pre-line", a ? "text-foreground/85" : "text-muted-foreground italic")}>{a || "Skipped"}</p>
                       <button type="button" className="mt-1 inline-flex min-h-8 items-center rounded-sm text-caption font-medium text-primary-fg hover:underline max-sm:min-h-10" onClick={() => goTo(i)}>
                         {a ? "Edit" : "Answer"}
@@ -217,6 +220,21 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
                   );
                 })}
               </ol>
+              {error && (
+                <Alert
+                  tone="danger"
+                  title="Your answers weren't sent"
+                  action={
+                    error.fieldErrors?.answererLabel && (
+                      <Button size="sm" variant="outline" onClick={() => goTo(-1)}>
+                        Edit your name
+                      </Button>
+                    )
+                  }
+                >
+                  {error.fieldErrors?.answererLabel?.[0] ?? error.message} Your answers are still saved on this device, so you can try again.
+                </Alert>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Button variant="ghost" onClick={() => goTo(qs.length - 1)}>
                   <ArrowLeft aria-hidden="true" data-icon="inline-start" />

@@ -279,7 +279,9 @@ function PublishedPoint({ point }: { point: Point }) {
             className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-primary-fg max-sm:h-10 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/40"
           >
             <ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
-            {open ? "Hide" : "Show"} {evidence.length === 1 ? "the source" : `${evidence.length} sources`}
+            {evidence.length === 0
+              ? `${open ? "Hide" : "Show"} evidence notes`
+              : `${open ? "Hide" : "Show"} ${evidence.length === 1 ? "the quote" : `${evidence.length} quotes`} behind this`}
           </button>
           {open && (
             <div id={panelId} className="mt-2 space-y-2">

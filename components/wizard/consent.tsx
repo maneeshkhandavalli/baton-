@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, ShieldCheck } from "lucide-react";
+import { Check, Copy, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { maskKindLabel } from "@/components/handover/labels";
@@ -44,7 +44,15 @@ export function ConsentChecklist({ value, onChange, className }: { value: Record
             checked={value[item.id]}
             onChange={(e) => onChange({ ...value, [item.id]: e.target.checked })}
           />
-          {item.label}
+          <span className="min-w-0">
+            {item.id === "provider" && (
+              <span aria-hidden="true" className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold tracking-wide text-warning-fg uppercase">
+                <Sparkles className="size-3" />
+                AI provider · free tier
+              </span>
+            )}
+            <span className="block text-pretty">{item.label}</span>
+          </span>
         </label>
       ))}
       <p className="text-caption text-muted-foreground">

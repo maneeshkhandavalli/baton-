@@ -194,6 +194,8 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   // A consent already recorded for this draft's sources was given on this checklist; re-ask otherwise.
   const [consent, setConsent] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
   const [submitting, setSubmitting] = useState(false);
+  /** Why the last "Start processing" didn't go through, kept on the page (the toast disappears). */
+  const [startError, setStartError] = useState<string | null>(null);
   const [savingScope, setSavingScope] = useState(false);
   const [save, setSave] = useState<SaveState>(() => (initial ? { kind: "saved", at: initial.updatedAt } : { kind: "unsaved" }));
   const [skipped, setSkipped] = useState(0);
@@ -606,6 +608,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   async function finish() {
     if (!handoverId) return;
     setSubmitting(true);
+    setStartError(null);
     try {
       if (!(await saveParticipantExclusions())) return;
       for (const s of ready) {
@@ -623,7 +626,10 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
         }
         for (const input of inputs) {
           const r = await saving(() => run(() => addExclusion(input)));
-          if (!r.ok) return;
+          if (!r.ok) {
+            setStartError(`Couldn't save what to leave out of ${s.name}. ${r.error.message}`);
+            return;
+          }
         }
         // Same statement and zone as at upload; this records the chosen access level and document date.
         const c = await saving(() =>
@@ -639,9 +645,17 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
             }),
           ),
         );
-        if (!c.ok) return;
+        if (!c.ok) {
+          setStartError(`Couldn't save the settings for ${s.name}. ${c.error.message}`);
+          return;
+        }
       }
-      const started = await run(() => startProcessing({ handoverId }), { success: "Processing started" });
+      const started = await run(() => startProcessing({ handoverId }), {
+        success: "Processing started",
+        onError: (e) => {
+          setStartError(e.message);
+        },
+      });
       if (started.ok) router.push(routes.handover.processing(handoverId));
     } finally {
       setSubmitting(false);
@@ -771,6 +785,12 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
           )}
         </motion.div>
       </AnimatePresence>
+
+      {shownStep === LAST_STEP && startError && (
+        <Alert tone="danger" title="Processing didn't start">
+          {startError} Your draft and files are saved, so you can try again.
+        </Alert>
+      )}
 
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">

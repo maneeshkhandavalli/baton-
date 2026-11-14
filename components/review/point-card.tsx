@@ -116,14 +116,14 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
                   <p className="type-eyebrow text-status-sourced-fg">Supports</p>
                   {supports.length === 0 && <p className="text-caption text-muted-foreground">No supporting quote.</p>}
                   {supports.slice(0, 2).map((e) => (
-                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp />
+                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp showVerification />
                   ))}
                 </div>
                 <div className="space-y-1.5">
                   <p className="type-eyebrow text-status-conflicting-fg">Contradicts</p>
                   {contradicts.length === 0 && <p className="text-caption text-muted-foreground">No contradicting quote.</p>}
                   {contradicts.slice(0, 2).map((e) => (
-                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp />
+                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp showVerification />
                   ))}
                 </div>
               </div>
@@ -152,7 +152,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
               )}
             </div>
           ) : (
-            lead && <EvidenceQuote {...lead} tone={lead.supportVerdict === "supports" ? "supports" : "default"} clamp />
+            lead && <EvidenceQuote {...lead} tone={lead.supportVerdict === "supports" ? "supports" : "default"} clamp showVerification />
           )}
 
           {status === "inferred" && point.inferenceRationale && !lead && (

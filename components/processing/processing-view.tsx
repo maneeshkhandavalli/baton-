@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, Loader2, MessageCircle, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, Loader2, MessageCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AccessBadge } from "@/components/handover/badges";
@@ -19,6 +19,8 @@ import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/act
 import { recordSourceConsent } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+
+import { sourceErrorText } from "./source-error";
 
 const POLL_MS = 3_000; // D10
 /** Hosted (Vercel) has no background drain loop: while the run is active this page keeps it moving. */
@@ -37,6 +39,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
   const [consent, setConsent] = useState(emptyConsent());
   // Set when startProcessing refused with consent_required: consent exists but names another AI provider.
   const [reconsentAll, setReconsentAll] = useState(false);
+  // Kept on the page (toasts disappear): why the last Start attempt didn't go through.
+  const [startError, setStartError] = useState<string | null>(null);
   const { run: r, handoverState, sources } = status;
   const active = r?.status === "queued" || r?.status === "running";
 
@@ -62,8 +66,27 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
   }, {});
   const totalMasked = Object.values(masking).reduce((a, b) => a + (b ?? 0), 0);
   const needsConsent = sourcesNeedingConsent(sources, reconsentAll);
+  const failedSources = sources.filter((s) => s.state === "failed");
+  const reason = r?.status === "failed" ? runReasonText(r.error?.message) : null;
+  const currentStage = stages.find((s) => s.status === "running");
+  const title = active
+    ? "Processing your sources"
+    : r?.status === "succeeded"
+      ? "Processing complete"
+      : r?.status === "failed"
+        ? "Processing failed"
+        : r?.status === "cancelled"
+          ? "Processing cancelled"
+          : "Ready to process";
+  // One polite announcement per meaningful change (stage or outcome), never per percentage tick.
+  const announcement = active
+    ? `Processing. ${currentStage ? `Now: ${stageLabel[currentStage.stage].label}.` : "Starting."}`
+    : reason
+      ? `${title}. ${reason.text}`
+      : title;
 
   async function start() {
+    setStartError(null);
     for (const s of needsConsent) {
       const res = await run(() =>
         recordSourceConsent({
@@ -74,12 +97,18 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
         }),
       );
-      if (!res.ok) return;
+      if (!res.ok) {
+        setStartError(`Couldn't record consent for ${s.title}. ${res.error.message}`);
+        return;
+      }
     }
     const started = await run(() => startProcessing({ handoverId }), {
       success: "Processing started",
       onError: (e) => {
-        if (e.details?.reason !== CONSENT_REQUIRED_REASON) return;
+        if (e.details?.reason !== CONSENT_REQUIRED_REASON) {
+          setStartError(e.message);
+          return;
+        }
         setReconsentAll(true);
         setConsent(emptyConsent());
       },
@@ -90,9 +119,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <section aria-labelledby="run-heading" className="space-y-6 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-7">
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
-            <p className="type-eyebrow text-muted-foreground" aria-live="polite">
+            <p className="type-eyebrow text-muted-foreground">
               {active ? (
                 <span className="inline-flex items-center gap-1.5 text-primary-fg">
                   <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
@@ -103,11 +135,11 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
               )}
             </p>
             <h2 id="run-heading" className="type-section-title">
-              {active ? "Processing your sources" : r?.status === "succeeded" ? "Processing complete" : r?.status === "failed" ? "Processing failed" : r?.status === "cancelled" ? "Processing cancelled" : "Ready to process"}
+              {title}
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {active
-                ? "You can leave this page. Baton keeps working and the review opens when it's done."
+                ? `You can leave this page. Baton keeps working and the review opens when it's done.${r?.startedAt ? ` Started ${formatDateTime(r.startedAt)}.` : ""}`
                 : r?.status === "succeeded"
                   ? `Finished ${formatDateTime(r.finishedAt)}. Every point is ready for your review.`
                   : r?.status === "failed"
@@ -125,13 +157,19 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
           )}
         </div>
 
-        {r?.status === "failed" && (
-          <Alert tone="danger" title="This run stopped before it finished">
-            {runReasonText(r.error?.message).text}
-            {runReasonText(r.error?.message).reference && (
-              <span className="ml-1 font-mono text-2xs opacity-80">(ref: {runReasonText(r.error?.message).reference})</span>
+        {reason && (
+          <Alert tone="danger" live="none" title="This run stopped before it finished">
+            <p>{reason.text}</p>
+            <p className="mt-2 text-caption">
+              {failedSources.length > 0 &&
+                `${failedSources.length === 1 ? "1 source couldn't be read" : `${failedSources.length} sources couldn't be read`}: the reason is shown under Sources. `}
+              {canStart ? "When you're ready, choose Try again below." : "Ask the creator or outgoing member to try again."}
+            </p>
+            {reason.reference && (
+              <p className="mt-1.5 text-2xs opacity-80">
+                Reference for support: <code className="font-mono">{reason.reference}</code>
+              </p>
             )}
-            {canStart ? " Try again below." : " Ask the creator or outgoing member to try again."}
           </Alert>
         )}
 
@@ -139,9 +177,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
           <div className="space-y-2">
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-medium">Overall</span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground" aria-live="polite">
-                {percent}%
-              </span>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">{percent}%</span>
             </div>
             <div role="progressbar" aria-label="Overall progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div className={cn("h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none", r.status === "failed" ? "bg-destructive" : r.status === "succeeded" ? "bg-status-sourced" : "bg-primary")} style={{ width: `${percent}%` }} />
@@ -191,9 +227,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
                       </p>
                     )}
                   </div>
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {s.done}/{s.total}
-                  </span>
+                  {s.total > 0 && (
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                      {s.done}/{s.total}
+                      <span className="sr-only"> done</span>
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -203,23 +242,50 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
         {!active && canStart && (handoverState === "draft" || handoverState === "in_review") && r?.status !== "succeeded" && (
           <div className="space-y-4 border-t border-border pt-5">
             {needsConsent.length > 0 && (
-              <>
-                <p className="text-sm">
-                  {reconsentAll
-                    ? "Consent was recorded for a different AI provider. Confirm the statement below to record it again for every source."
-                    : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
-                </p>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <h3 className="type-subheading">Confirm consent first</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {reconsentAll
+                      ? "Consent was recorded for a different AI provider. Confirm the statement below to record it again for every source."
+                      : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
+                  </p>
+                </div>
                 <ConsentChecklist value={consent} onChange={setConsent} />
-              </>
+              </div>
             )}
-            <Button size="lg" aria-busy={isPending} disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
-              {isPending ? "Starting…" : r ? "Try again" : "Start processing"}
-            </Button>
-            {sources.length === 0 && <p className="text-xs text-muted-foreground">This handover has no sources yet.</p>}
-            {handoverState === "draft" && (
-              <Link href={`${routes.handover.new}?draft=${encodeURIComponent(handoverId)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-                Add or change sources
-              </Link>
+            {startError && (
+              <Alert tone="danger" title="Processing didn't start">
+                {startError}
+              </Alert>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="lg" aria-busy={isPending} disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
+                {isPending ? (
+                  <>
+                    <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                    Starting…
+                  </>
+                ) : r ? (
+                  <>
+                    <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                    Try again
+                  </>
+                ) : (
+                  "Start processing"
+                )}
+              </Button>
+              {handoverState === "draft" && (
+                <Link href={`${routes.handover.new}?draft=${encodeURIComponent(handoverId)}`} className={buttonVariants({ variant: "outline", size: "lg" })}>
+                  Add or change sources
+                </Link>
+              )}
+            </div>
+            {sources.length === 0 ? (
+              <p className="text-caption text-muted-foreground">This handover has no sources yet. Add at least one to start.</p>
+            ) : (
+              needsConsent.length > 0 &&
+              !consentComplete(consent) && <p className="text-caption text-muted-foreground">Tick every statement above to continue.</p>
             )}
           </div>
         )}
@@ -306,6 +372,21 @@ function SourceRow({ s }: { s: SourceSummary }) {
         {s.consentRecordedAt ? "Consent recorded" : <span className="font-medium text-warning-fg">Consent needed</span>}
         {s.rawDeletedAt ? " · raw file deleted" : ""}
       </p>
+      {s.state === "failed" && <SourceFailure code={s.errorCode} />}
     </li>
+  );
+}
+
+function SourceFailure({ code }: { code: string | null }) {
+  const { text, reference } = sourceErrorText(code);
+  return (
+    <div className="ml-6 flex items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive-soft/60 px-2.5 py-2 text-caption text-destructive-fg">
+      <AlertTriangle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+      <p className="min-w-0 [overflow-wrap:anywhere]">
+        <span className="sr-only">Why it failed: </span>
+        {text}
+        {reference && <code className="ml-1 font-mono text-2xs opacity-75">({reference})</code>}
+      </p>
+    </div>
   );
 }

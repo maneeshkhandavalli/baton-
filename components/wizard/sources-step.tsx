@@ -56,6 +56,11 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
           disabled={full}
         />
       </div>
+      {full && (
+        <p className="-mt-2 text-caption text-muted-foreground">
+          You&rsquo;ve added the maximum of 10 files. Remove one to add another.
+        </p>
+      )}
 
       {sources.length > 0 && (
         <section aria-labelledby={`${uid}-files`} className="space-y-3">
