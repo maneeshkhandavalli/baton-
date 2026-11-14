@@ -1,0 +1,114 @@
+/*
+ * Dashboard preview tokens, scoped to `.dp` (this route only). Values = brand's "Harbour" candidate palette
+ * (ui3-agent1-brand docs/design/design-system.md §0), until globals.css switches after the user's pick. Names mirror
+ * the global semantic tokens so the move to globals is a deletion of this block.
+ */
+.dp {
+  --dp-bg: #f7f6f3;
+  --dp-card: #ffffff;
+  --dp-popover: #ffffff;
+  --dp-muted: #efede8;
+  --dp-sunken: #f1efea;
+  --dp-track: #e3e0d9;
+  --dp-border: #e3e0d9;
+  --dp-border-strong: #cdc8be;
+  --dp-input: #8c867b;
+  --dp-fg: #15191a;
+  --dp-muted-fg: #5b5f60;
+  --dp-primary: #1f5e66;
+  --dp-primary-hover: #174a51;
+  --dp-primary-fg: #1a535a;
+  --dp-primary-soft: #e1eeef;
+  --dp-on-primary: #ffffff;
+  --dp-success: #2e7d32;
+  --dp-success-fg: #23622a;
+  --dp-success-soft: #e5f2e6;
+  --dp-warning: #a35f00;
+  --dp-warning-fg: #7f4a00;
+  --dp-warning-soft: #fbefd9;
+  --dp-danger: #b42e2e;
+  --dp-danger-fg: #952525;
+  --dp-danger-soft: #fbe5e4;
+  --dp-conflict: #a5326f;
+  --dp-conflict-fg: #852658;
+  --dp-conflict-soft: #f6e2ec;
+  --dp-shadow: 0 1px 2px rgb(21 25 26 / 0.04), 0 1px 1px rgb(21 25 26 / 0.03);
+  --dp-ring: #1f5e66;
+
+  background: var(--dp-bg);
+  color: var(--dp-fg);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+  min-height: 100dvh;
+}
+
+.dark .dp {
+  --dp-bg: #0f1416;
+  --dp-card: #172024;
+  --dp-popover: #1e2a2f;
+  --dp-muted: #1f2b30;
+  --dp-sunken: #0b1012;
+  --dp-track: #2e3d43;
+  --dp-border: #2b3a40;
+  --dp-border-strong: #3f5259;
+  --dp-input: #6c8088;
+  --dp-fg: #e8eeee;
+  --dp-muted-fg: #9fb0b3;
+  --dp-primary: #5fb7bf;
+  --dp-primary-hover: #7fc7cd;
+  --dp-primary-fg: #8fd3d9;
+  --dp-primary-soft: #133238;
+  --dp-on-primary: #0f1416;
+  --dp-success: #5dbb63;
+  --dp-success-fg: #8ed392;
+  --dp-success-soft: #14281a;
+  --dp-warning: #e0a23a;
+  --dp-warning-fg: #edc075;
+  --dp-warning-soft: #2e2311;
+  --dp-danger: #f07466;
+  --dp-danger-fg: #f6a197;
+  --dp-danger-soft: #331816;
+  --dp-conflict: #e584b6;
+  --dp-conflict-fg: #f0aed0;
+  --dp-conflict-soft: #321a28;
+  /* Shadows vanish on dark paper: a faint top highlight defines raised surfaces instead. */
+  --dp-shadow: inset 0 1px 0 rgb(232 238 238 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
+  --dp-ring: #5fb7bf;
+}
+
+.dp .dp-title {
+  font-family: var(--font-dp-title), var(--font-inter), sans-serif;
+  letter-spacing: -0.02em;
+}
+.dp .dp-mono {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum" 1;
+}
+.dp .dp-focus:focus-visible,
+.dp a:focus-visible,
+.dp button:focus-visible,
+.dp input:focus-visible,
+.dp select:focus-visible {
+  outline: 2px solid var(--dp-ring);
+  outline-offset: 2px;
+}
+.dp .dp-card {
+  background: var(--dp-card);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  box-shadow: var(--dp-shadow);
+}
+.dp .dp-scroll-x {
+  scrollbar-width: none;
+}
+.dp .dp-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
