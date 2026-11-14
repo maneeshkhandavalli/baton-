@@ -66,8 +66,8 @@ export interface DemoPointSeed {
   /** Inferred points: why Baton inferred it. */
   rationale?: string;
   /**
-   * Review state when the visitor reaches the review step. Priya (reviewer) approved the
-   * straightforward points on the evening of 11 Nov; the visitor, as Kabir, handles the rest.
+   * Review state when the visitor reaches the review step. Kabir (reviewer) approved the
+   * straightforward points on the evening of 11 Nov; the visitor, as Priya, handles the rest.
    */
   atReviewStart: "pending" | "approved";
 }
@@ -82,8 +82,8 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     statement: "DevForge 2027 runs on Saturday 30 and Sunday 31 January 2027, 9 am to 9 pm both days, with no overnight session in the labs. The core team voted 11–2 for it.",
     attributes: { decidedAt: "2026-08-21", decidedByLabel: "Core team vote (11–2)", rationale: "The 24-hour format was hard on the volunteers.", alternativesConsidered: ["24-hour overnight hackathon"] },
     evidence: [
-      { source: "core", quote: "vote closed 11–2. DevForge '27 is Sat 30 – Sun 31 Jan, 9am to 9pm both days. no overnight in the labs this time", by: "kabir", verdict: "supports", why: "States the vote, the dates and the daytime-only format." },
-      { source: "core", quote: "good call, last year's 24h format was rough on the volunteers", by: "priya", verdict: "supports", why: "Gives the reason for dropping the 24-hour format." },
+      { source: "core", quote: "vote closed 11–2. DevForge '27 is Sat 30 – Sun 31 Jan, 9am to 9pm both days. no overnight in the labs this time", by: "priya", verdict: "supports", why: "States the vote, the dates and the daytime-only format." },
+      { source: "core", quote: "good call, last year's 24h format was rough on the volunteers", by: "kabir", verdict: "supports", why: "Gives the reason for dropping the 24-hour format." },
       { source: "core", quote: "registrations page now says 30–31 jan, daytime only", by: "arjun", verdict: "supports", why: "Shows the decision is still current in November." },
     ],
     atReviewStart: "approved",
@@ -94,10 +94,10 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     category: "decision",
     title: "Workshop fee for non-members",
     statement: "Non-members pay ₹100 per workshop; members attend free.",
-    attributes: { decidedAt: "2026-08-04", decidedByLabel: "Kabir Shah", rationale: null, alternativesConsidered: [] },
+    attributes: { decidedAt: "2026-08-04", decidedByLabel: "Priya Raman", rationale: null, alternativesConsidered: [] },
     evidence: [
-      { source: "core", quote: "workshop fee for this sem: non-members pay ₹100 per workshop, members free. collect it at the door and note names in the sheet", by: "kabir", verdict: "supports", why: "States the fee and who pays it." },
-      { source: "core", quote: "from this sem workshops are free for everyone, we agreed in the leads call. no more ₹100 at the door", by: "priya", verdict: "contradicts", why: "Says workshops became free for everyone, which contradicts the ₹100 fee." },
+      { source: "core", quote: "workshop fee for this sem: non-members pay ₹100 per workshop, members free. collect it at the door and note names in the sheet", by: "priya", verdict: "supports", why: "States the fee and who pays it." },
+      { source: "core", quote: "from this sem workshops are free for everyone, we agreed in the leads call. no more ₹100 at the door", by: "kabir", verdict: "contradicts", why: "Says workshops became free for everyone, which contradicts the ₹100 fee." },
     ],
     atReviewStart: "pending",
   },
@@ -107,9 +107,9 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     category: "decision",
     title: "Club code lives in the codecell-org GitHub organisation",
     statement: "All club repositories, including the judging portal and the website, moved from personal accounts to the codecell-org GitHub organisation in October 2026.",
-    attributes: { decidedAt: "2026-10-12", decidedByLabel: "Kabir Shah", rationale: null, alternativesConsidered: [] },
+    attributes: { decidedAt: "2026-10-12", decidedByLabel: "Priya Raman", rationale: null, alternativesConsidered: [] },
     evidence: [
-      { source: "core", quote: "moved judging-portal and codecell-site to the codecell-org github org today. please stop pushing to my personal account", by: "kabir", verdict: "supports", why: "Describes the move to the organisation." },
+      { source: "core", quote: "moved judging-portal and codecell-site to the codecell-org github org today. please stop pushing to my personal account", by: "priya", verdict: "supports", why: "Describes the move to the organisation." },
       { source: "infra", quote: "All club repositories live in the codecell-org GitHub organisation. Personal forks are archived.", block: { lineStart: 7, lineEnd: 7, heading: "Code" }, by: null, verdict: "supports", why: "The infrastructure notes say the same." },
     ],
     atReviewStart: "approved",
@@ -123,7 +123,7 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     attributes: { decidedAt: null, decidedByLabel: null, rationale: null, alternativesConsidered: [] },
     evidence: [
       { source: "core", quote: "can we do thursday this week instead? lab 3 is free after 6", by: "ananya", verdict: "partial", why: "Asks for Thursday for one week only." },
-      { source: "core", quote: "thursday again? same lab 3 at 6", by: "priya", verdict: "partial", why: "Suggests Thursday again, without calling it a rule." },
+      { source: "core", quote: "thursday again? same lab 3 at 6", by: "kabir", verdict: "partial", why: "Suggests Thursday again, without calling it a rule." },
       { source: "core", quote: "see you all thursday, 6pm, lab 3", by: "ananya", verdict: "partial", why: "A meeting reminder, not a decision." },
     ],
     rationale: "Every meeting message since late September names Thursday, 6 pm and Lab 3, but nobody states it as a rule.",
@@ -149,8 +149,8 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     attributes: { responsibility: "Sponsor relations", ownerLabel: "Arjun Mehta", since: "September 2026" },
     evidence: [
       { source: "leads", quote: "orbitstack signed as DevForge title sponsor 🎉 i'm the point of contact for them, nobody else emails them please", by: "arjun", verdict: "supports", why: "Arjun names himself as the sponsor's contact." },
-      { source: "leads", quote: "amazing. arjun owns all sponsor comms from now", by: "priya", verdict: "supports", why: "The president assigns sponsor communication to Arjun." },
-      { source: "leads", quote: "for the handover: neha won't be in this group, the sponsor side stays with arjun", by: "kabir", verdict: "supports", why: "Confirms the ownership does not move to the incoming lead." },
+      { source: "leads", quote: "amazing. arjun owns all sponsor comms from now", by: "kabir", verdict: "supports", why: "The president assigns sponsor communication to Arjun." },
+      { source: "leads", quote: "for the handover: neha won't be in this group, the sponsor side stays with arjun", by: "priya", verdict: "supports", why: "Confirms the ownership does not move to the incoming lead." },
     ],
     atReviewStart: "approved",
   },
@@ -195,10 +195,10 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     key: "domain_renewal",
     category: "open_task",
     title: "Renew the club domain",
-    statement: "The codecell.example.org domain renews on 12 December. It is still billed to Kabir's personal card and has to move to the club card.",
-    attributes: { assigneeLabel: "Kabir Shah", dueDate: "2026-12-12", progressNote: "Still on Kabir's personal card." },
+    statement: "The codecell.example.org domain renews on 12 December. It is still billed to Priya's personal card and has to move to the club card.",
+    attributes: { assigneeLabel: "Priya Raman", dueDate: "2026-12-12", progressNote: "Still on Priya's personal card." },
     evidence: [
-      { source: "core", quote: "domain renews on 12 dec and it's still on my personal card. need to move it to the club card before i leave", by: "kabir", verdict: "supports", why: "States the renewal date and the billing problem." },
+      { source: "core", quote: "domain renews on 12 dec and it's still on my personal card. need to move it to the club card before i leave", by: "priya", verdict: "supports", why: "States the renewal date and the billing problem." },
       { source: "infra", quote: "The domain renews on 12 December every year.", block: { lineStart: 11, lineEnd: 12, heading: "Website" }, by: null, verdict: "supports", why: "The notes give the same renewal date." },
     ],
     atReviewStart: "pending",
@@ -241,12 +241,12 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     n: 14,
     key: "deploy_risk",
     category: "risk",
-    title: "Only Kabir knows how to deploy the judging portal",
-    statement: "The judging portal's deploy steps are not written down, and only Kabir has done a deploy.",
-    attributes: { likelihood: "high", impact: "high", mitigation: "Write the deploy steps into the infrastructure notes before Kabir leaves on 30 November." },
+    title: "Only Priya knows how to deploy the judging portal",
+    statement: "The judging portal's deploy steps are not written down, and only Priya has done a deploy.",
+    attributes: { likelihood: "high", impact: "high", mitigation: "Write the deploy steps into the infrastructure notes before Priya leaves on 30 November." },
     evidence: [
-      { source: "core", quote: "judging portal deploy is: ssh in, pull, restart pm2. config lives on the server, not in the repo. i'll write it down someday 😅", by: "kabir", verdict: "supports", why: "Shows the steps exist only in Kabir's head." },
-      { source: "infra", quote: "Deploy: ask Kabir.", block: { lineStart: 16, lineEnd: 17, heading: "Judging portal" }, by: null, verdict: "supports", why: "The notes point to Kabir instead of listing steps." },
+      { source: "core", quote: "judging portal deploy is: ssh in, pull, restart pm2. config lives on the server, not in the repo. i'll write it down someday 😅", by: "priya", verdict: "supports", why: "Shows the steps exist only in Priya's head." },
+      { source: "infra", quote: "Deploy: ask Priya.", block: { lineStart: 16, lineEnd: 17, heading: "Judging portal" }, by: null, verdict: "supports", why: "The notes point to Priya instead of listing steps." },
     ],
     atReviewStart: "approved",
   },
@@ -270,7 +270,7 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     evidence: [
       { source: "core", quote: "projector in lab 3 died 1.5 hrs into the git workshop. front desk has a spare one, used that", by: "ananya", verdict: "supports", why: "Describes the failure and the workaround." },
       { source: "core", quote: "same thing happened in march", by: "rohan", verdict: "supports", why: "Shows it has happened before." },
-      { source: "core", quote: "projector died again at 1.5 hrs. got the spare from the front desk", by: "kabir", verdict: "supports", why: "Shows it still happens in September." },
+      { source: "core", quote: "projector died again at 1.5 hrs. got the spare from the front desk", by: "priya", verdict: "supports", why: "Shows it still happens in September." },
     ],
     atReviewStart: "approved",
   },
@@ -303,7 +303,7 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     statement: "Dr. Menon (CSE department) is CodeCell's faculty coordinator. She signs the sponsor MoU and any spending above ₹2,000.",
     attributes: { nameLabel: "Dr. Menon", organisation: "CSE department", roleDescription: "Faculty coordinator; signs the sponsor MoU and spending above ₹2,000", preferredChannel: null, directContact: null },
     evidence: [
-      { source: "core", quote: "dr. menon (CSE) stays our faculty coordinator this year. she signs the sponsor MoU and anything above ₹2,000", by: "kabir", verdict: "supports", why: "Names her role and what she signs." },
+      { source: "core", quote: "dr. menon (CSE) stays our faculty coordinator this year. she signs the sponsor MoU and anything above ₹2,000", by: "priya", verdict: "supports", why: "Names her role and what she signs." },
       { source: "core", quote: "reimbursements: anything under ₹2,000 i can approve, above that needs dr. menon's signature", by: "rohan", verdict: "supports", why: "Confirms in October that she signs spending above ₹2,000." },
     ],
     atReviewStart: "approved",
@@ -314,11 +314,11 @@ export const DEMO_POINTS: readonly DemoPointSeed[] = [
     key: "github_owners",
     category: "account_access",
     title: "GitHub organisation owners",
-    statement: "Kabir Shah and Priya Raman own the codecell-org GitHub organisation. Recovery codes are in the club password manager. Kabir adds Neha as an owner before he leaves.",
-    attributes: { system: "GitHub (codecell-org)", holderLabel: "Kabir Shah, Priya Raman", accessLocation: "Club password manager (recovery codes)", recoveryNote: "Kabir adds Neha as an owner before he leaves." },
+    statement: "Priya Raman and Kabir Shah own the codecell-org GitHub organisation. Recovery codes are in the club password manager. Priya adds Neha as an owner before she leaves.",
+    attributes: { system: "GitHub (codecell-org)", holderLabel: "Priya Raman, Kabir Shah", accessLocation: "Club password manager (recovery codes)", recoveryNote: "Priya adds Neha as an owner before she leaves." },
     evidence: [
-      { source: "core", quote: "github org owners are me and priya. recovery codes are in the club password manager, not in chat. i'll add neha as owner before i go", by: "kabir", verdict: "supports", why: "Names both owners, where recovery codes are and the plan for Neha." },
-      { source: "infra", quote: "Owners of codecell-org: Kabir Shah, Priya Raman.", block: { lineStart: 21, lineEnd: 22, heading: "Access" }, by: null, verdict: "supports", why: "The notes list the same owners." },
+      { source: "core", quote: "github org owners are me and kabir. recovery codes are in the club password manager, not in chat. i'll add neha as owner before i go", by: "priya", verdict: "supports", why: "Names both owners, where recovery codes are and the plan for Neha." },
+      { source: "infra", quote: "Owners of codecell-org: Priya Raman, Kabir Shah.", block: { lineStart: 21, lineEnd: 22, heading: "Access" }, by: null, verdict: "supports", why: "The notes list the same owners." },
     ],
     atReviewStart: "approved",
   },
@@ -356,5 +356,5 @@ export const DEMO_GAP_QUESTIONS = [
 export const DEMO_GAP_ANSWER = {
   question: 1,
   answererLabel: "Ananya Iyer",
-  text: "I set the server up in 2025 and I'm its only admin. Kabir has moderator rights. I'll make Neha an admin on 1 December.",
+  text: "I set the server up in 2025 and I'm its only admin. Priya has moderator rights. I'll make Neha an admin on 1 December.",
 } as const;

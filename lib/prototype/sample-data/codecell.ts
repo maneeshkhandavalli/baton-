@@ -2,7 +2,7 @@
  * PROTOTYPE SAMPLE DATA — the single home of Baton's CodeCell demo content (see lib/prototype/flags.ts).
  *
  * Entirely invented: a student coding club ("CodeCell") handing over its technical-lead role from
- * Kabir Shah to Neha Kulkarni. The source files ARE the public demo's scenario sources
+ * Priya Raman to Neha Kulkarni. The source files ARE the public demo's scenario sources
  * (lib/demo/scenario/sources.ts) and the sample points fit the same story. Phone numbers use the synthetic
  * `99999 0000N` pattern and email addresses use example.org, so masking can be seen working. There are no
  * passwords, keys, tokens or other credential-like strings anywhere in this file, on purpose.
@@ -56,7 +56,7 @@ export const CODECELL_SAMPLE_SOURCES: readonly SampleSourceFile[] = [
     fileName: SAMPLE_SOURCE_FILE_NAMES[1],
     kind: "markdown",
     mimeType: "text/markdown",
-    description: "Kabir's infrastructure notes, last edited on 3 November 2026 (invented)",
+    description: "Priya's infrastructure notes, last edited on 3 November 2026 (invented)",
     content: INFRA_NOTES,
   },
 ];
@@ -79,17 +79,17 @@ export const CODECELL_SAMPLE_POINTS: Readonly<Record<PointCategory, SamplePoint>
   decision: {
     title: "Sample: Mixed judging panel for DevForge",
     statement: "DevForge 2027 is judged by a panel of three faculty members and two alumni, not by students or the sponsor.",
-    fields: { decidedAt: "October 2026", decidedByLabel: "Kabir Shah and Arjun Mehta", rationale: "Mixed panels gave fairer scores last year", alternativesConsidered: "Student judges only, Sponsor judges only" },
+    fields: { decidedAt: "October 2026", decidedByLabel: "Priya Raman and Arjun Mehta", rationale: "Mixed panels gave fairer scores last year", alternativesConsidered: "Student judges only, Sponsor judges only" },
   },
   owner: {
     title: "Sample: Ananya runs the Discord server",
-    statement: "Ananya Iyer is the only admin of the CodeCell Discord server; Kabir Shah is a moderator.",
+    statement: "Ananya Iyer is the only admin of the CodeCell Discord server; Priya Raman is a moderator.",
     fields: { responsibility: "Discord server administration", ownerLabel: "Ananya Iyer", since: "2025" },
   },
   open_task: {
     title: "Sample: Write down the judging portal deploy",
-    statement: "Kabir Shah writes the judging portal's deploy steps into the infrastructure notes before he leaves.",
-    fields: { assigneeLabel: "Kabir Shah", dueDate: "2026-11-28", progressNote: "Steps known; not yet in the infrastructure notes" },
+    statement: "Priya Raman writes the judging portal's deploy steps into the infrastructure notes before she leaves.",
+    fields: { assigneeLabel: "Priya Raman", dueDate: "2026-11-28", progressNote: "Steps known; not yet in the infrastructure notes" },
   },
   blocker: {
     title: "Sample: Prize money waits for a signature",
@@ -118,7 +118,7 @@ export const CODECELL_SAMPLE_POINTS: Readonly<Record<PointCategory, SamplePoint>
   },
   next_action: {
     title: "Sample: Pair on the next portal deploy",
-    statement: "Neha Kulkarni does the next judging portal deploy together with Kabir Shah before he leaves on 30 November.",
+    statement: "Neha Kulkarni does the next judging portal deploy together with Priya Raman before she leaves on 30 November.",
     fields: { actorLabel: "Neha Kulkarni", byWhen: "Before 30 November 2026" },
   },
   account_access: {

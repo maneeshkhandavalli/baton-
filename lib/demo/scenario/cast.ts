@@ -1,5 +1,5 @@
 /**
- * DEMO SCENARIO: the cast of the CodeCell technical-lead handover (Kabir Shah → Neha Kulkarni).
+ * DEMO SCENARIO: the cast of the CodeCell technical-lead handover (Priya Raman → Neha Kulkarni).
  *
  * Everyone here is invented. Email addresses use example.org and phone numbers use the synthetic
  * `99999 0000N` pattern, so Baton's masking can be seen working on them. See
@@ -22,14 +22,14 @@ export interface DemoPerson {
   member: { role: MemberRole; clearance: AccessLevel } | null;
 }
 
-export type DemoPersonKey = "kabir" | "neha" | "priya" | "arjun" | "ananya" | "rohan" | "ishaan";
+export type DemoPersonKey = "priya" | "neha" | "kabir" | "arjun" | "ananya" | "rohan" | "ishaan";
 
 export const DEMO_CAST: Readonly<Record<DemoPersonKey, DemoPerson>> = {
-  kabir: {
-    key: "kabir",
-    displayName: "Kabir Shah",
+  priya: {
+    key: "priya",
+    displayName: "Priya Raman",
     clubRole: "Technical lead 2025–26, final year. Leaves on 30 November 2026 for an internship.",
-    email: "kabir.shah@example.org",
+    email: "priya.raman@example.org",
     phone: "99999 00001",
     member: { role: "outgoing", clearance: "reviewer_only" },
   },
@@ -41,11 +41,11 @@ export const DEMO_CAST: Readonly<Record<DemoPersonKey, DemoPerson>> = {
     phone: "99999 00002",
     member: { role: "incoming", clearance: "everyone" },
   },
-  priya: {
-    key: "priya",
-    displayName: "Priya Raman",
+  kabir: {
+    key: "kabir",
+    displayName: "Kabir Shah",
     clubRole: "Club president. Reviews the handover.",
-    email: "priya.raman@example.org",
+    email: "kabir.shah@example.org",
     phone: "99999 00003",
     member: { role: "reviewer", clearance: "reviewer_only" },
   },

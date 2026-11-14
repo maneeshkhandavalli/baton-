@@ -122,10 +122,10 @@ describe("demo scenario: sources through the real parser and masker", () => {
       .sort()
       .at(-1);
     assert.equal(last, DEMO_TIMELINE.evidenceAsOf);
-    const order = Object.entries(DEMO_TIMELINE).filter(([k]) => k !== "kabirLeavesOn" && k !== "evidenceAsOf");
+    const order = Object.entries(DEMO_TIMELINE).filter(([k]) => k !== "priyaLeavesOn" && k !== "evidenceAsOf");
     for (let i = 1; i < order.length; i++) assert.ok(order[i - 1][1] < order[i][1], `${order[i - 1][0]} before ${order[i][0]}`);
     assert.ok(DEMO_TIMELINE.evidenceAsOf < DEMO_TIMELINE.exportedAt);
-    assert.ok(DEMO_TIMELINE.publishedV2At.slice(0, 10) < DEMO_TIMELINE.kabirLeavesOn);
+    assert.ok(DEMO_TIMELINE.publishedV2At.slice(0, 10) < DEMO_TIMELINE.priyaLeavesOn);
   });
 });
 

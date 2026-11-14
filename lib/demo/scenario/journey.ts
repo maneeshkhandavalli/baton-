@@ -15,11 +15,11 @@ import type { DemoPersonKey } from "./cast";
 import type { DemoPointKey } from "./points";
 
 export const DEMO_STEPS = [
-  { id: "sources", n: 1, label: "Sources", actor: "kabir" },
-  { id: "draft", n: 2, label: "AI draft", actor: "kabir" },
-  { id: "review", n: 3, label: "Review", actor: "kabir" },
-  { id: "decisions", n: 4, label: "Decisions and tasks", actor: "kabir" },
-  { id: "publish", n: 5, label: "Publish", actor: "kabir" },
+  { id: "sources", n: 1, label: "Sources", actor: "priya" },
+  { id: "draft", n: 2, label: "AI draft", actor: "priya" },
+  { id: "review", n: 3, label: "Review", actor: "priya" },
+  { id: "decisions", n: 4, label: "Decisions and tasks", actor: "priya" },
+  { id: "publish", n: 5, label: "Publish", actor: "priya" },
   { id: "receive", n: 6, label: "Neha's view and Gap Interview", actor: "neha" },
 ] as const satisfies ReadonlyArray<{ id: string; n: number; label: string; actor: DemoPersonKey }>;
 
@@ -27,9 +27,9 @@ export type DemoStepId = (typeof DEMO_STEPS)[number]["id"];
 
 /** Scenario timeline (UTC ISO; India is UTC+05:30). Times in comments are IST. */
 export const DEMO_TIMELINE = {
-  /** Last message in any source: Neha's "thanks kabir!" (8 Nov, 10:12). Baton's "evidence as of". */
+  /** Last message in any source: Neha's "thanks priya!" (8 Nov, 10:12). Baton's "evidence as of". */
   evidenceAsOf: "2026-11-08T04:42:00.000Z",
-  exportedAt: "2026-11-10T16:00:00.000Z", // 10 Nov 21:30, Kabir exports both chats
+  exportedAt: "2026-11-10T16:00:00.000Z", // 10 Nov 21:30, Priya exports both chats
   handoverCreatedAt: "2026-11-11T04:35:00.000Z", // 11 Nov 10:05
   sourcesUploadedAt: "2026-11-11T04:42:00.000Z", // 10:12
   consentRecordedAt: "2026-11-11T04:44:00.000Z", // 10:14
@@ -37,27 +37,27 @@ export const DEMO_TIMELINE = {
   runStartedAt: "2026-11-11T04:50:00.000Z", // 10:20
   runFinishedAt: "2026-11-11T04:59:00.000Z", // 10:29
   rawDeletedAt: "2026-11-11T04:59:30.000Z", // raw uploads deleted after the parse
-  priyaReviewedAt: "2026-11-11T14:30:00.000Z", // 11 Nov 20:00, Priya approves the straightforward points
-  kabirReviewStartsAt: "2026-11-12T05:30:00.000Z", // 12 Nov 11:00, the visitor's corrections
+  kabirReviewedAt: "2026-11-11T14:30:00.000Z", // 11 Nov 20:00, Kabir approves the straightforward points
+  priyaReviewStartsAt: "2026-11-12T05:30:00.000Z", // 12 Nov 11:00, the visitor's corrections
   publishedV1At: "2026-11-13T13:00:00.000Z", // 13 Nov 18:30
   nehaOpenedAt: "2026-11-14T03:40:00.000Z", // 14 Nov 09:10
   nehaAcknowledgedV1At: "2026-11-14T03:55:00.000Z", // 09:25
-  gapLinkCreatedAt: "2026-11-14T04:30:00.000Z", // 10:00, Kabir sends Ananya a Gap Interview link
+  gapLinkCreatedAt: "2026-11-14T04:30:00.000Z", // 10:00, Priya sends Ananya a Gap Interview link
   gapAnsweredAt: "2026-11-14T16:10:00.000Z", // 21:40, Ananya answers
-  gapAcceptedAt: "2026-11-15T03:45:00.000Z", // 15 Nov 09:15, Kabir accepts the answer
+  gapAcceptedAt: "2026-11-15T03:45:00.000Z", // 15 Nov 09:15, Priya accepts the answer
   revisionStartedAt: "2026-11-15T03:47:00.000Z",
   publishedV2At: "2026-11-15T04:00:00.000Z", // 09:30
   nehaAcknowledgedV2At: "2026-11-15T05:10:00.000Z", // 10:40
-  /** Kabir's last day; Neha takes over on 1 December. */
-  kabirLeavesOn: "2026-11-30",
+  /** Priya's last day; Neha takes over on 1 December. */
+  priyaLeavesOn: "2026-11-30",
 } as const;
 
 /** The step clock: the time a visitor action in each step is stamped with (plus one minute per action). */
 export const DEMO_STEP_CLOCK: Readonly<Record<DemoStepId, string>> = {
   sources: DEMO_TIMELINE.sourcesUploadedAt,
   draft: DEMO_TIMELINE.runStartedAt,
-  review: DEMO_TIMELINE.kabirReviewStartsAt,
-  decisions: DEMO_TIMELINE.kabirReviewStartsAt,
+  review: DEMO_TIMELINE.priyaReviewStartsAt,
+  decisions: DEMO_TIMELINE.priyaReviewStartsAt,
   publish: DEMO_TIMELINE.publishedV1At,
   receive: DEMO_TIMELINE.nehaOpenedAt,
 };
@@ -90,7 +90,7 @@ export type DemoAction =
 
 /** The suggested path, in order. "Jump to step N" replays every action of the steps before N. */
 export const DEMO_CANONICAL_ACTIONS: readonly DemoAction[] = [
-  // Step 3: Kabir's corrections (Priya already approved the straightforward points).
+  // Step 3: Priya's corrections (Kabir already approved the straightforward points).
   {
     step: "review",
     action: "edit",
@@ -115,9 +115,9 @@ export const DEMO_CANONICAL_ACTIONS: readonly DemoAction[] = [
     action: "edit",
     point: "domain_renewal",
     title: "Renew the club domain",
-    statement: "Renew codecell.example.org before 12 December. Kabir moves the billing from his personal card to the club card before he leaves on 30 November.",
-    attributes: { assigneeLabel: "Neha Kulkarni", dueDate: "2026-12-12", progressNote: "Kabir moves billing to the club card before 30 November." },
-    editReason: "Kabir leaves on 30 November, so the renewal falls to Neha.",
+    statement: "Renew codecell.example.org before 12 December. Priya moves the billing from her personal card to the club card before she leaves on 30 November.",
+    attributes: { assigneeLabel: "Neha Kulkarni", dueDate: "2026-12-12", progressNote: "Priya moves billing to the club card before 30 November." },
+    editReason: "Priya leaves on 30 November, so the renewal falls to Neha.",
     reverify: {
       verdicts: { 0: "supports", 1: "supports" },
       why: { 0: "States the renewal date and that billing must move to the club card.", 1: "The notes give the same renewal date." },
@@ -137,7 +137,7 @@ export const DEMO_CANONICAL_ACTIONS: readonly DemoAction[] = [
   // Step 6: Neha reads and acknowledges; the Gap Interview closes one of the gaps; v2.
   { step: "receive", action: "acknowledge", as: "neha" },
   { step: "receive", action: "create_gap_link", questions: [1, 2], sentTo: "ananya" },
-  { step: "receive", action: "submit_gap_answer", question: 1, answererLabel: "Ananya Iyer", text: "I set the server up in 2025 and I'm its only admin. Kabir has moderator rights. I'll make Neha an admin on 1 December." },
+  { step: "receive", action: "submit_gap_answer", question: 1, answererLabel: "Ananya Iyer", text: "I set the server up in 2025 and I'm its only admin. Priya has moderator rights. I'll make Neha an admin on 1 December." },
   { step: "receive", action: "accept_gap_answer", question: 1 },
   { step: "receive", action: "start_revision" },
   {
@@ -145,7 +145,7 @@ export const DEMO_CANONICAL_ACTIONS: readonly DemoAction[] = [
     action: "edit",
     point: "discord_admin",
     title: "Ananya runs the Discord server",
-    statement: "Ananya Iyer is the only admin of the CodeCell Discord server, and Kabir is a moderator. Ananya makes Neha an admin on 1 December.",
+    statement: "Ananya Iyer is the only admin of the CodeCell Discord server, and Priya is a moderator. Ananya makes Neha an admin on 1 December.",
     attributes: { responsibility: "Discord server administration", ownerLabel: "Ananya Iyer", since: "2025" },
     editReason: "Filled in from Ananya's Gap Interview answer.",
     // Index 0 is the testimony evidence that accepting the answer added.
