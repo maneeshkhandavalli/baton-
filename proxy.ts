@@ -4,6 +4,11 @@
  * Server Functions and the database (RLS + checked SQL functions) all verify access themselves (§8.3).
  *
  * Token routes (/g/[token], /h/[token]) never require a session (D8, §12.3) and get no-referrer.
+ *
+ * /auth/callback is deliberately NOT refreshed here. It exchanges a sign-in code using the PKCE verifier stored
+ * in this browser, and replaces any old session itself. Refreshing first is harmful: with a stale session
+ * cookie the refresh fails, and auth-js's session teardown then deletes every pending PKCE verifier before the
+ * callback runs, so every Google sign-in from that browser failed ("pkce_code_verifier_not_found").
  */
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -13,6 +18,7 @@ import { loginPath } from "@/lib/supabase/redirects";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/handover", "/account"];
 const TOKEN_PREFIXES = ["/g/", "/h/"];
+const AUTH_CALLBACK = "/auth/callback";
 
 function startsWithAny(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p.endsWith("/") ? p : `${p}/`));
@@ -20,6 +26,7 @@ function startsWithAny(pathname: string, prefixes: string[]) {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  if (pathname === AUTH_CALLBACK) return NextResponse.next();
   const { response, userId } = await updateSession(request);
 
   if (startsWithAny(pathname, TOKEN_PREFIXES)) {

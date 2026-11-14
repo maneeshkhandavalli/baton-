@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Check, CopyX, FileText, Loader2, MessageCircle, RotateCcw, Trash2, TriangleAlert, Upload } from "lucide-react";
+import { AlertCircle, Check, CopyX, FileText, FlaskConical, Loader2, MessageCircle, RotateCcw, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { formatBytes, formatCount } from "@/components/handover/format";
@@ -8,6 +8,7 @@ import { sourceKindLabel } from "@/components/handover/labels";
 import { uploadPhaseMeta, uploadProgress, type UploadPhase } from "@/components/shared/upload-status";
 import { Button } from "@/components/ui/button";
 import type { DateOrder } from "@/lib/contracts/enums";
+import { missingByName, SAMPLE_SOURCE_FILE_NAMES } from "@/lib/prototype/sample-data/identity";
 import { cn } from "@/lib/utils";
 
 import { phaseOf, type DraftSource } from "./draft-state";
@@ -24,9 +25,13 @@ interface SourcesStepProps {
   /** Read a .txt as a chat export or as plain text. */
   onSwitchKind: (s: DraftSource, kind: "whatsapp_export" | "text") => void;
   full: boolean;
+  /** PROTOTYPE (lib/prototype/flags.ts): add the CodeCell sample files. Omitted when sample data is off. */
+  onUseSample?: () => void;
+  /** True while sample files are being added. */
+  addingSample?: boolean;
 }
 
-export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, onSwitchKind, full }: SourcesStepProps) {
+export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, onSwitchKind, full, onUseSample, addingSample = false }: SourcesStepProps) {
   const uid = useId();
   const readyCount = sources.filter((s) => s.status === "ready").length;
   const announcement = useUploadAnnouncements(sources);
@@ -36,6 +41,7 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
+      {onUseSample && <SampleDataCard sources={sources} onUseSample={onUseSample} adding={addingSample} full={full} />}
       <div className="grid gap-4 sm:grid-cols-2">
         <DropZone
           id={`${uid}-chat`}
@@ -149,6 +155,11 @@ function FileRow({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            {s.sample && (
+              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px text-2xs font-semibold tracking-wide text-primary-fg uppercase" title="Invented demo data (prototype)">
+                Sample
+              </span>
+            )}
             <p className="min-w-0 truncate text-sm font-medium" title={s.name}>
               {s.name}
             </p>
@@ -187,7 +198,7 @@ function FileRow({
             </Button>
           </span>
         )}
-        {s.file && s.name.toLowerCase().endsWith(".txt") && !meta.busy && (
+        {s.file && !s.sample && s.name.toLowerCase().endsWith(".txt") && !meta.busy && (
           <span className="inline-flex rounded-md border border-border bg-muted p-0.5" role="group" aria-label={`Read ${s.name} as`}>
             {(
               [
@@ -285,6 +296,44 @@ function DropZone({
         Choose files
       </Button>
       <p className="mt-2 hidden text-2xs text-muted-foreground sm:block">or drop them here</p>
+    </div>
+  );
+}
+
+/**
+ * PROTOTYPE: one-click CodeCell sample data. The files are real uploads that go through the same masking,
+ * checks and AI processing as the user's own files; this card only starts them.
+ */
+function SampleDataCard({ sources, onUseSample, adding, full }: { sources: DraftSource[]; onUseSample: () => void; adding: boolean; full: boolean }) {
+  const missing = missingByName(
+    SAMPLE_SOURCE_FILE_NAMES.map((fileName) => ({ fileName })),
+    sources.map((s) => s.name),
+  ).length;
+  const allAdded = missing === 0;
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 gap-3">
+        <FlaskConical aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary-fg" />
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-semibold">Try Baton with sample data</p>
+          <p className="text-caption text-muted-foreground">
+            Adds an invented CodeCell team chat and infrastructure notes. They are processed exactly like your own files, and you can remove
+            them at any time. Prototype demo only.
+          </p>
+        </div>
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="shrink-0"
+        onClick={onUseSample}
+        disabled={adding || allAdded || full}
+        aria-busy={adding}
+      >
+        {adding ? <Loader2 aria-hidden="true" className="animate-spin" data-icon="inline-start" /> : allAdded ? <Check aria-hidden="true" data-icon="inline-start" /> : <FlaskConical aria-hidden="true" data-icon="inline-start" />}
+        {adding ? "Adding sample data…" : allAdded ? "Sample data added" : "Use sample data"}
+      </Button>
     </div>
   );
 }

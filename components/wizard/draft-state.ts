@@ -8,6 +8,7 @@ import type { SourceSummary } from "@/lib/contracts/dto";
 import type { AccessLevel, DateOrder, SourceKind } from "@/lib/contracts/enums";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import type { UploadPhase } from "@/components/shared/upload-status";
+import { isSampleFileName } from "@/lib/prototype/sample-data/identity";
 
 export type SourceStatus = "hashing" | "uploading" | "verifying" | "consent" | "previewing" | "ready" | "error";
 
@@ -37,6 +38,8 @@ export interface DraftSource {
   needsDateOrder?: boolean;
   /** The creator's choice; recorded on the consent so the preview and the final parse use the same context (D32/D33). */
   dateOrder?: DateOrder;
+  /** Prototype demo data (lib/prototype/sample-data): shown with a "Sample" badge; processed like any upload. */
+  sample?: boolean;
 }
 
 export const blankSource = (over: Partial<DraftSource> & Pick<DraftSource, "localId" | "name" | "size" | "kind" | "status">): DraftSource => ({
@@ -52,7 +55,7 @@ export const blankSource = (over: Partial<DraftSource> & Pick<DraftSource, "loca
 
 /** A source reopened from the server: uploaded + consented ones are previewed again; unfinished ones say so. */
 export function fromSummary(s: SourceSummary, consentGiven: boolean): DraftSource {
-  const base = { localId: s.id, sourceId: s.id, name: s.title, size: s.sizeBytes, kind: s.kind, accessLevel: s.accessLevel };
+  const base = { localId: s.id, sourceId: s.id, name: s.title, size: s.sizeBytes, kind: s.kind, accessLevel: s.accessLevel, ...(isSampleFileName(s.title) ? { sample: true } : {}) };
   if (s.state === "uploaded" && s.consentRecordedAt) return blankSource({ ...base, status: "previewing" });
   if (s.state === "uploaded" && consentGiven) return blankSource({ ...base, status: "consent" });
   if (s.state === "uploaded") return blankSource({ ...base, status: "error", error: "Give consent in step 2, then remove and add this file again." });

@@ -14,6 +14,7 @@ import {
   UserCheck,
 } from "lucide-react";
 
+import { ForTheNerds } from "@/components/marketing/for-the-nerds";
 import { ProductPreview } from "@/components/marketing/product-preview";
 import { FadeIn } from "@/components/shared/fade-in";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -132,7 +133,7 @@ export default function HomePage() {
       {/* ── How it works ─────────────────────────────────── */}
       <section id="how-it-works" aria-labelledby="how-title" className="border-y border-border/70 bg-card/50">
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-12">
+          <div className="reveal grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-12">
             <div className="space-y-3">
               <p className="type-eyebrow text-muted-foreground">How it works</p>
               <h2 id="how-title" className="type-section-title sm:text-4xl">
@@ -151,9 +152,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-14 xl:grid-cols-4">
+          <ol className="reveal-group mt-12 grid gap-4 sm:grid-cols-2 lg:mt-14 xl:grid-cols-4">
             {STEPS.map((step, i) => (
-              <li key={step.title} className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-xs sm:p-6">
+              <li key={step.title} className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-xs transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-raised sm:p-6">
                 <div className="flex items-center gap-3">
                   <span className="flex size-9 items-center justify-center rounded-lg bg-primary-soft text-primary-fg">
                     <step.icon aria-hidden="true" className="size-4.5" />
@@ -178,7 +179,7 @@ export default function HomePage() {
 
       {/* ── Evidence ─────────────────────────────────────── */}
       <section id="evidence" aria-labelledby="evidence-title" className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="max-w-2xl space-y-3">
+        <div className="reveal max-w-2xl space-y-3">
           <p className="type-eyebrow text-muted-foreground">Evidence</p>
           <h2 id="evidence-title" className="type-section-title sm:text-4xl">
             Every point shows how sure you can be.
@@ -187,7 +188,7 @@ export default function HomePage() {
             Baton never presents a guess as a fact. Each point carries one of four labels, worked out from the evidence rather than set by hand.
           </p>
         </div>
-        <dl className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="reveal-group mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {EVIDENCE_STATUSES.map((s) => (
             <div key={s} className={cn("space-y-3 rounded-2xl border border-t-2 border-border bg-card p-5", STATUS_ACCENT[s])}>
               <dt>
@@ -200,7 +201,7 @@ export default function HomePage() {
             </div>
           ))}
         </dl>
-        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-5 sm:flex-row sm:items-start sm:gap-4 sm:p-6">
+        <div className="reveal mt-6 flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-5 sm:flex-row sm:items-start sm:gap-4 sm:p-6">
           <UserCheck aria-hidden="true" className="size-5 shrink-0 text-primary" />
           <div className="space-y-1.5">
             <h3 className="type-heading">A person signs off before anything is published</h3>
@@ -214,7 +215,7 @@ export default function HomePage() {
       {/* ── Privacy ──────────────────────────────────────── */}
       <section id="privacy" aria-labelledby="privacy-title" className="bg-inverse text-inverse-foreground">
         <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="space-y-3">
+          <div className="reveal space-y-3">
             <p className="type-eyebrow text-inverse-muted">Privacy</p>
             <h2 id="privacy-title" className="type-section-title sm:text-4xl">
               Built for group chats full of phone numbers.
@@ -224,7 +225,7 @@ export default function HomePage() {
               details. You confirm the group was told, and anyone can ask to be left out.
             </p>
           </div>
-          <ul className="grid gap-8 sm:grid-cols-3 sm:gap-6 lg:grid-cols-1 xl:grid-cols-3">
+          <ul className="reveal-group grid gap-8 sm:grid-cols-3 sm:gap-6 lg:grid-cols-1 xl:grid-cols-3">
             {PRIVACY.map((p) => (
               <li key={p.title} className="space-y-2 border-t border-inverse-muted/30 pt-5">
                 <p.icon aria-hidden="true" className="size-5 text-inverse-muted" />
@@ -236,8 +237,11 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── For the nerds ─────────────────────────────────── */}
+      <ForTheNerds />
+
       {/* ── Closing call to action ───────────────────────── */}
-      <section aria-labelledby="cta-title" className="mx-auto w-full max-w-6xl px-4 py-20 text-center sm:px-6 sm:py-28">
+      <section aria-labelledby="cta-title" className="reveal mx-auto w-full max-w-6xl px-4 py-20 text-center sm:px-6 sm:py-28">
         <h2 id="cta-title" className="mx-auto max-w-2xl type-page-title">
           The next person shouldn&rsquo;t have to start from scratch.
         </h2>

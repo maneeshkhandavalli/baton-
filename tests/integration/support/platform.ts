@@ -33,10 +33,25 @@ export interface StubUser {
   email_confirmed_at: string | null;
 }
 
+type StubAuthError = { message: string; status?: number; code?: string };
+export interface PasswordStub {
+  signIn?: StubAuthError;
+  signUp?: StubAuthError;
+  signUpSession?: boolean;
+  reset?: StubAuthError;
+  update?: StubAuthError;
+}
+
 interface PlatformState {
   user?: StubUser | null;
   authError?: boolean;
   otpError?: { message: string; status?: number; code?: string } | null;
+  /** signInWithOAuth stub result: a custom authorize URL, or a provider error. */
+  oauth?: { url?: string; error?: { message: string; status?: number; code?: string } } | null;
+  /** password-auth stub results: an error per call, and whether signUp returns a session. */
+  password?: PasswordStub | null;
+  /** exchangeCodeForSession stub error (null: success). */
+  exchangeError?: StubAuthError | null;
   headers?: Record<string, string>;
   cookies?: Map<string, string>;
   after?: Array<() => unknown>;
@@ -153,4 +168,19 @@ export async function flushAfter(): Promise<number> {
 
 export function pendingAfter(): number {
   return (state().after ?? []).length;
+}
+
+/** Makes the stubbed signInWithOAuth return this URL or error (null restores the default authorize URL). */
+export function setOAuthResult(result: PlatformState["oauth"]): void {
+  state().oauth = result ?? null;
+}
+
+/** Shapes the stubbed password calls (signInWithPassword / signUp / resetPasswordForEmail / updateUser). */
+export function setPasswordStub(result: PasswordStub | null): void {
+  state().password = result;
+}
+
+/** Makes the stubbed exchangeCodeForSession fail with this error (null restores success). */
+export function setExchangeError(error: StubAuthError | null): void {
+  state().exchangeError = error;
 }

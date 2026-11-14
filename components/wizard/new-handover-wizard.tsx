@@ -27,6 +27,7 @@ import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@
 import { createHandover, deleteHandover, startProcessing } from "@/lib/actions/handovers";
 import { inviteMember } from "@/lib/actions/members";
 import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent, removeSource } from "@/lib/actions/sources";
+import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 import { routes } from "@/lib/routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -191,6 +192,13 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   const [handoverId, setHandoverId] = useState<string | null>(initial?.handoverId ?? null);
   const [invites, setInvites] = useState<Array<{ label: string; url: string }>>([]);
   const [sources, setSources] = useState<DraftSource[]>(() => (initial?.sources ?? []).map((s) => fromSummary(s, initialConsented)));
+  // Latest list for async handlers (the sample-data action reads it after an await).
+  const sourcesRef = useRef(sources);
+  useEffect(() => {
+    sourcesRef.current = sources;
+  }, [sources]);
+  const sampleBusy = useRef(false);
+  const [addingSample, setAddingSample] = useState(false);
   // A consent already recorded for this draft's sources was given on this checklist; re-ask otherwise.
   const [consent, setConsent] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
   const [submitting, setSubmitting] = useState(false);
@@ -517,6 +525,35 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     void consentAndPreview(s.localId, s.sourceId, s.accessLevel, order);
   }
 
+  /**
+   * PROTOTYPE (lib/prototype/flags.ts): adds the CodeCell sample files as real Files through the normal
+   * uploadSource path (signed upload → server verification → consent → preview → processing). Files already
+   * in the list are skipped, a ref guard ignores double clicks, and the database's duplicate check still
+   * applies. The fixture module is only loaded here, on demand.
+   */
+  async function addSampleSources() {
+    if (!SAMPLE_DATA_ENABLED || sampleBusy.current || !handoverId) return;
+    sampleBusy.current = true;
+    setAddingSample(true);
+    try {
+      const { missingSampleSources } = await import("@/lib/prototype/sample-data/codecell");
+      const current = sourcesRef.current;
+      const room = Math.max(0, MAX_SOURCES - current.length);
+      const rows = missingSampleSources(current.map((s) => s.name))
+        .slice(0, room)
+        .map((sample) => ({ sample, localId: crypto.randomUUID(), file: new File([sample.content], sample.fileName, { type: sample.mimeType }) }));
+      if (rows.length === 0) return;
+      const added = rows.map(({ sample, localId, file }) => blankSource({ localId, name: file.name, size: file.size, kind: sample.kind, status: "hashing", file, sample: true }));
+      sourcesRef.current = [...current, ...added];
+      setSources((list) => [...list, ...added]);
+      setSkipped(0);
+      for (const { sample, localId, file } of rows) void uploadSource(localId, { name: file.name, size: file.size, kind: sample.kind, file });
+    } finally {
+      sampleBusy.current = false;
+      setAddingSample(false);
+    }
+  }
+
   function retry(s: DraftSource) {
     if (!s.file || phaseOf(s) !== "failed" || (s.kind === "text" && !isTxt(s.name))) return;
     void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
@@ -766,6 +803,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
                 onDateOrder={chooseDateOrder}
                 onSwitchKind={(s, k) => void switchKind(s, k)}
                 full={sources.length >= MAX_SOURCES}
+                {...(SAMPLE_DATA_ENABLED && handoverId ? { onUseSample: () => void addSampleSources(), addingSample } : {})}
               />
             </div>
           )}

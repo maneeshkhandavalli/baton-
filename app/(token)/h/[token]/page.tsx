@@ -3,14 +3,17 @@ import Link from "next/link";
 import { LinkIcon, MailCheck, UserCheck } from "lucide-react";
 import { Suspense } from "react";
 
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { PageContainer } from "@/components/layout/page-container";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { routes } from "@/lib/routes";
 import { getSessionUser } from "@/lib/supabase/auth";
+import { EMAIL_LOGIN_ENABLED } from "@/lib/supabase/login-options";
+import { siteOriginOrNull } from "@/lib/supabase/site-url";
 import { cn } from "@/lib/utils";
 
-import { acceptInvitation, requestInviteLink } from "./actions";
+import { acceptInvitation, requestInviteLink, startGoogleInviteSignIn } from "./actions";
 import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Handover invitation" };
@@ -36,7 +39,7 @@ const ERRORS: Record<ErrorKind, { title: string; description: string }> = {
   token_invalid: {
     title: "This link isn't valid",
     description:
-      "It may have expired, been revoked or been used already. Ask the person who invited you for a new one. If you signed in with a different email address, sign out and use the invited address.",
+      "It may have expired, been revoked or been used already. Ask the person who invited you for a new one. If you signed in with a different Google account or email address, sign out and use the one this invitation was sent to.",
   },
   conflict: { title: "You're already a member", description: "Open your dashboard to find this handover." },
   rate_limited: { title: "Too many attempts", description: "Please wait a few minutes and try again." },
@@ -157,14 +160,22 @@ async function InvitationContent({
       <InvitationPanel
         icon={<MailCheck />}
         title="You've been invited to a handover"
-        description="Someone is passing on what their team knows, with quotes from the original chats and documents you can check. We'll email a sign-in link to the address this invitation was sent to."
-        steps={["We email a sign-in link to the invited address. No password needed.", "Open the link on this device.", "Accept, and the handover opens."]}
+        description="Someone is passing on what their team knows, with quotes from the original chats and documents you can check. Sign in with the Google account for the email address this invitation was sent to."
+        steps={["Continue with the Google account for the invited email address.", "You come straight back to this invitation.", "Accept, and the handover opens."]}
       >
-        <form action={requestInviteLink.bind(null, token)}>
-          <Button type="submit" size="lg">
-            Email me a sign-in link
-          </Button>
-        </form>
+        <div className="w-full max-w-sm space-y-4">
+          <GoogleSignInButton start={startGoogleInviteSignIn.bind(null, token)} autoStart={query.continue === "google"} siteOrigin={siteOriginOrNull()} />
+          <Link href={`${routes.login}?next=${encodeURIComponent(routes.token.handover(token))}`} className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "w-full")}>
+            Sign in with email and password
+          </Link>
+          {EMAIL_LOGIN_ENABLED ? (
+            <form action={requestInviteLink.bind(null, token)}>
+              <Button type="submit" size="lg" variant="ghost" className="w-full">
+                Email me a sign-in link instead
+              </Button>
+            </form>
+          ) : null}
+        </div>
       </InvitationPanel>
     );
   }

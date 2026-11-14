@@ -39,6 +39,11 @@ export function getSiteUrl(): string {
   return origin;
 }
 
+/** The configured site origin, or null when it is missing or unsafe (for UI that can do without it). */
+export function siteOriginOrNull(): string | null {
+  return parseSiteUrl(process.env.BATON_SITE_URL);
+}
+
 /** `${site}/auth/callback?next=<safe relative path>` built from the trusted origin only. */
 export function authCallbackUrl(next: string | null): string {
   const callback = new URL("/auth/callback", getSiteUrl());
