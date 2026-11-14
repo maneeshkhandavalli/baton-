@@ -19,7 +19,7 @@ each verified verbatim against the repository's migration file), so it would onl
 pinned bundle (`../03_phase_D_migrations_14-18.sql`) and the verify scripts (`../04_*`, `../05_*`) were already
 in the repository.
 
-## restore-dev/ — original project → baton-dev restore (2026-11-13, see `docs/round3/DEV_PROJECT_RESTORE_PLAN.md`)
+## restore/ — original project → baton-dev restore (was `restore-dev/`; renamed because `.git/info/exclude` ignores `restore-dev/` at any depth) (2026-11-13, see `docs/round3/DEV_PROJECT_RESTORE_PLAN.md`)
 | File | Purpose |
 |---|---|
 | `gen.sh` | Generated the restore SQL from the dumps (code only). |
