@@ -3,7 +3,7 @@ import "server-only";
 /**
  * AI configuration (§11.8, §12.5, D11). The ONLY reader of AI environment variables.
  *
- * D11 (2026-11-14): the production provider is the Google Gemini Developer API (paid tier).
+ * D11 (2026-11-14): the production provider is the Google Gemini Developer API (free tier).
  * - `AI_PROVIDER=gemini` → production mode, only when `AI_API_KEY` is set. `AI_MODEL_EXTRACT` /
  *   `AI_MODEL_VERIFY` default to `gemini-3.8-flash`; a value that is not a plain model id refuses.
  * - "fake" is accepted only when `NODE_ENV` is exactly "development" or "test" AND

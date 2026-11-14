@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Google Gemini Developer API adapter (§11.8, D11: provider = Gemini Developer API, paid tier).
+ * Google Gemini Developer API adapter (§11.8, D11: provider = Gemini Developer API, FREE tier only; billing is never enabled).
  *
  * - Prompts come only from lib/ai/prompts (fixed system text, escaped untrusted user turn, constant schema).
  * - Constrained output: `responseMimeType: application/json` + `responseJsonSchema`. Gemini supports a
@@ -29,8 +29,8 @@ import type { AiCallResult, AiProvenance, AiProvider, AiRunConfig, ExtractReques
 
 export const GEMINI_PROVIDER_ID = "gemini";
 export const GEMINI_ADAPTER_VERSION = "gemini@1";
-export const GEMINI_DISPLAY_NAME = "Google Gemini (Gemini Developer API, paid tier)";
-/** The agreed model for both stages (overridable with AI_MODEL_EXTRACT / AI_MODEL_VERIFY). */
+export const GEMINI_DISPLAY_NAME = "Google Gemini (Gemini Developer API, free tier)";
+/** The agreed model for both stages (Stable, free tier per ai.google.dev pricing, checked 2026-11-14) (overridable with AI_MODEL_EXTRACT / AI_MODEL_VERIFY). */
 export const GEMINI_DEFAULT_MODEL = "gemini-3.8-flash";
 
 export interface GeminiModels {

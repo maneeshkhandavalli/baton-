@@ -1,4 +1,4 @@
-// ONE synthetic end-to-end LIVE test: real Gemini (paid) + the real worker against baton-dev, which also
+// ONE synthetic end-to-end LIVE test: real Gemini (free tier) + the real worker against baton-dev, which also
 // verifies the Phase D claim-generation path. NOT part of `npm test`. It writes to baton-dev, so it only
 // runs with BOTH opt-ins:
 //
@@ -14,7 +14,7 @@
 //      (its worker would claim this run with a different AI config); no queued/running job or open run
 //      anywhere in baton-dev (the claim is global); the actor profile exists.
 //   2. setup through the same lib/db mutations the Server Functions call (create handover, source,
-//      signed upload, confirm, consent naming provider "gemini" + statement gemini-paid-2026-11-14-v1,
+//      signed upload, confirm, consent naming provider "gemini" + statement gemini-free-2026-11-14-v1,
 //      plan, start_processing). Only the session layer is skipped: the actor is given explicitly.
 //   3. the REAL worker: lib/pipeline/worker.ts drainJobs (claim → fenced writes → Gemini), until the run ends.
 //   4. assertions: run/jobs succeeded; every pipeline_* RPC the worker sent carried p_claim_generation equal
@@ -35,13 +35,13 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const TARGET = "xnwppnzvrpthukxjfojj";
 const CONFIRM = `run-gemini-e2e-on-${TARGET}`;
 const FORBIDDEN = ["enalguyitewjojgrgzxv", "enalguyitewjojgrgzv"];
-const STATEMENT = "gemini-paid-2026-11-14-v1";
+const STATEMENT = "gemini-free-2026-11-14-v1";
 const FIXTURE = path.join(REPO, "fixtures/demo/round2-club-chat.txt");
 const PLANTED = ["99999 00001", "desk@example.org"]; // synthetic PII in the fixture; must be masked
 const RUN_TIMEOUT_MS = 12 * 60_000;
 
 const ENABLED = process.env.BATON_LIVE_E2E === "1" && process.env.BATON_LIVE_E2E_CONFIRM === CONFIRM;
-const skip = ENABLED ? false : `opt-in only (BATON_LIVE_E2E=1 and BATON_LIVE_E2E_CONFIRM=${CONFIRM}); writes to baton-dev and makes paid Gemini calls`;
+const skip = ENABLED ? false : `opt-in only (BATON_LIVE_E2E=1 and BATON_LIVE_E2E_CONFIRM=${CONFIRM}); writes to baton-dev and makes real Gemini calls`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
