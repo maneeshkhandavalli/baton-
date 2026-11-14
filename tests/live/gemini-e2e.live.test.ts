@@ -68,7 +68,7 @@ function loadBatonDevEnv(): void {
   for (const k of Object.keys(process.env)) if (k.includes("SUPABASE") && !(k in vars)) delete process.env[k];
   Object.assign(process.env, vars);
   process.env.AI_PROVIDER = "gemini";
-  delete process.env.AI_MODEL_EXTRACT; // the agreed default, gemini-3.8-flash, for both stages
+  delete process.env.AI_MODEL_EXTRACT; // the default, gemini-3.6-flash, for both stages
   delete process.env.AI_MODEL_VERIFY;
   if (!process.env.AI_API_KEY?.trim()) throw new Error("REFUSED: AI_API_KEY is not set in .env.baton-dev");
 }
@@ -131,8 +131,8 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     };
     const cfg = m.config.getAiConfiguration();
     assert.ok(cfg.ok && cfg.mode === "production" && cfg.provider.id === "gemini", "Gemini must be configured");
-    assert.equal(cfg.runConfig.extract.model, "gemini-3.8-flash");
-    assert.equal(cfg.runConfig.verify.model, "gemini-3.8-flash");
+    assert.equal(cfg.runConfig.extract.model, "gemini-3.6-flash");
+    assert.equal(cfg.runConfig.verify.model, "gemini-3.6-flash");
 
     admin = m.createSupabaseAdminClient();
     const prof = await admin.from("profiles").select("id, deleted_at").eq("id", profileId).maybeSingle();
@@ -233,8 +233,8 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     for (const j of jobs) console.log(`[live-e2e] job ${j.stage}: ${j.status} attempt=${j.attempt} generation=${j.claim_generation} error=${j.error_message ?? "-"}`);
     assert.equal(run.status, "succeeded", `run ended ${run.status} (${run.error_message})`);
     assert.equal(run.ai_provider, "gemini");
-    assert.equal(run.ai_config.extract.model, "gemini-3.8-flash");
-    assert.equal(run.ai_config.verify.model, "gemini-3.8-flash");
+    assert.equal(run.ai_config.extract.model, "gemini-3.6-flash");
+    assert.equal(run.ai_config.verify.model, "gemini-3.6-flash");
 
     // ── Phase D claim generation ──
     assert.equal(jobs.length, 6);
@@ -274,7 +274,7 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
       if (j.ai_provenance === null) continue; // verify_support with nothing to verify resolves no provider
       assert.equal(j.ai_provenance.provider, "gemini");
       assert.equal(j.ai_provenance.adapterVersion, "gemini@1");
-      assert.equal(j.ai_provenance.requestedModel, "gemini-3.8-flash");
+      assert.equal(j.ai_provenance.requestedModel, "gemini-3.6-flash");
     }
     const exLog = (extract.attempt_log as Array<Record<string, unknown>>).at(-1)!;
     console.log(`[live-e2e] extract tokens in=${exLog.inputTokens} out=${exLog.outputTokens} latencyMs=${exLog.latencyMs} model=${exLog.reportedModel}`);

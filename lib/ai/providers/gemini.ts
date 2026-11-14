@@ -6,7 +6,8 @@ import "server-only";
  * - Prompts come only from lib/ai/prompts (fixed system text, escaped untrusted user turn, constant schema).
  * - Constrained output: `responseMimeType: application/json` + `responseJsonSchema`. Gemini supports a
  *   subset of JSON Schema, so `toGeminiJsonSchema` translates the constant schema (const → one-value enum,
- *   oneOf → anyOf) and drops keywords Gemini does not support (length limits, pattern, default, $schema).
+ *   oneOf → anyOf) and drops keywords Gemini does not support or rejects (length limits, pattern, default,
+ *   $schema, array-size bounds).
  *   This only shapes the request: lib/ai still parses every response with the unchanged Zod schemas, so no
  *   validation is weakened.
  * - No tools are declared. A function call in the response is rejected (§12.10 rule 2).
@@ -33,8 +34,13 @@ import type { AiCallResult, AiProvenance, AiProvider, AiRunConfig, ExtractReques
 export const GEMINI_PROVIDER_ID = "gemini";
 export const GEMINI_ADAPTER_VERSION = "gemini@1";
 export const GEMINI_DISPLAY_NAME = "Google Gemini (Gemini Developer API, free tier)";
-/** The agreed model for both stages (Stable, free tier per ai.google.dev pricing, checked 2026-11-14) (overridable with AI_MODEL_EXTRACT / AI_MODEL_VERIFY). */
-export const GEMINI_DEFAULT_MODEL = "gemini-3.8-flash";
+/**
+ * Default model for both stages (overridable with AI_MODEL_EXTRACT / AI_MODEL_VERIFY): `gemini-3.6-flash`,
+ * documented Stable and "Free of charge" on the free tier (ai.google.dev pricing/models, 2026-11-14).
+ * `gemini-3.8-flash` (also Stable/free) was listed for the key but answered 503 "high demand" or hung past
+ * 180 s on every call that day, so it is not the default.
+ */
+export const GEMINI_DEFAULT_MODEL = "gemini-3.6-flash";
 
 export interface GeminiModels {
   extract: string;
@@ -109,9 +115,12 @@ function sdkClient(apiKey: string): GeminiClient {
 
 // ── Schema translation (request shaping only; Zod stays the authority) ───────────────────────────────
 
+// `minItems` / `maxItems` are NOT sent although the SDK lists them: verified live on 2026-11-14, the API
+// answers 400 INVALID_ARGUMENT for the extraction schema's `candidates.maxItems: 100` (gemini-3.5-flash-lite
+// and gemini-3.6-flash). Array bounds stay enforced by Zod (≤100 candidates, ≤20 citations) and the prompt.
 const SUPPORTED_KEYWORDS: ReadonlySet<string> = new Set([
   "$id", "$defs", "$ref", "$anchor", "type", "format", "title", "description", "enum", "items", "prefixItems",
-  "minItems", "maxItems", "minimum", "maximum", "anyOf", "properties", "additionalProperties", "required", "propertyOrdering",
+  "minimum", "maximum", "anyOf", "properties", "additionalProperties", "required", "propertyOrdering",
 ]);
 const KEPT_FORMATS: ReadonlySet<string> = new Set(["date", "date-time", "time"]);
 

@@ -5,7 +5,7 @@ import "server-only";
  *
  * D11 (2026-11-14): the production provider is the Google Gemini Developer API (free tier).
  * - `AI_PROVIDER=gemini` → production mode, only when `AI_API_KEY` is set. `AI_MODEL_EXTRACT` /
- *   `AI_MODEL_VERIFY` default to `gemini-3.8-flash`; a value that is not a plain model id refuses.
+ *   `AI_MODEL_VERIFY` default to `gemini-3.6-flash`; a value that is not a plain model id refuses.
  * - "fake" is accepted only when `NODE_ENV` is exactly "development" or "test" AND
  *   `BATON_ALLOW_FAKE_AI === "1"` (QA-L3). An unset, empty, "production" or any other `NODE_ENV`
  *   (e.g. a custom server or script started without it) refuses the fake: fail closed.
@@ -34,7 +34,7 @@ function fakeAllowed(env: AiEnv): boolean {
   return env.NODE_ENV !== undefined && FAKE_NODE_ENVS.has(env.NODE_ENV) && env.BATON_ALLOW_FAKE_AI === "1";
 }
 
-/** A plain model id ("gemini-3.8-flash"); unset or empty means the default. */
+/** A plain model id ("gemini-3.6-flash"); unset or empty means the default. */
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 
 function geminiModel(value: string | undefined): string | null {

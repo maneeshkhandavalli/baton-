@@ -93,7 +93,7 @@ describe("Gemini adapter: request", () => {
 });
 
 describe("Gemini adapter: schema translation (request shaping only)", () => {
-  const SUPPORTED = new Set(["$id", "$defs", "$ref", "$anchor", "type", "format", "title", "description", "enum", "items", "prefixItems", "minItems", "maxItems", "minimum", "maximum", "anyOf", "properties", "additionalProperties", "required", "propertyOrdering"]);
+  const SUPPORTED = new Set(["$id", "$defs", "$ref", "$anchor", "type", "format", "title", "description", "enum", "items", "prefixItems", "minimum", "maximum", "anyOf", "properties", "additionalProperties", "required", "propertyOrdering"]);
   function keywords(v: unknown, out = new Set<string>()): Set<string> {
     if (Array.isArray(v)) v.forEach((x) => keywords(x, out));
     else if (v && typeof v === "object") {
@@ -118,6 +118,12 @@ describe("Gemini adapter: schema translation (request shaping only)", () => {
     assert.equal(cats.length, 10);
     for (const e of cats) assert.equal(e.length, 1);
     assert.ok(cats.some((e) => e[0] === "decision"));
+  });
+
+  it("never sends array-size bounds (the API rejects candidates.maxItems: 100; Zod enforces them)", () => {
+    const sent = JSON.stringify(toGeminiJsonSchema(EXTRACT_RESPONSE_SCHEMA));
+    assert.ok(!sent.includes('"maxItems"') && !sent.includes('"minItems"'));
+    assert.ok(JSON.stringify(EXTRACT_RESPONSE_SCHEMA).includes('"maxItems"'), "the contract schema keeps its bounds");
   });
 
   it("does not change the source schemas (Zod remains the authority)", () => {
@@ -266,13 +272,13 @@ describe("Gemini adapter: errors are sanitised", () => {
 describe("Gemini configuration (lib/ai/config.ts)", () => {
   const base = { AI_PROVIDER: "gemini", AI_API_KEY: KEY, NODE_ENV: "production" };
 
-  it("AI_PROVIDER=gemini + key → production mode, default model gemini-3.8-flash for both stages", () => {
+  it("AI_PROVIDER=gemini + key → production mode, default model gemini-3.6-flash for both stages", () => {
     const c = getAiConfiguration(base);
     assert.ok(c.ok);
     assert.equal(c.mode, "production");
     assert.deepEqual(c.runConfig, RC);
-    assert.equal(c.runConfig.extract.model, "gemini-3.8-flash");
-    assert.equal(c.runConfig.verify.model, "gemini-3.8-flash");
+    assert.equal(c.runConfig.extract.model, "gemini-3.6-flash");
+    assert.equal(c.runConfig.verify.model, "gemini-3.6-flash");
   });
 
   it("the API key never appears in the configuration, run config or provider object", () => {
