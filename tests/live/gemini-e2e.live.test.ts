@@ -183,7 +183,7 @@ describe("LIVE: Gemini end-to-end on baton-dev through the real worker (claim ge
     const bytes = readFileSync(FIXTURE);
     const ticket = await m.storage.createSourceUpload(db, actor, m.serverStorage(), {
       handoverId,
-      kind: "whatsapp",
+      kind: "whatsapp_export",
       fileName: "WhatsApp Chat with Synthetic Debate Society Committee.txt",
       mimeType: "text/plain",
       sizeBytes: bytes.length,
