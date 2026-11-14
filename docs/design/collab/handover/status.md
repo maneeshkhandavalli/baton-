@@ -22,4 +22,5 @@
 - `demo`: reuse contract agreed (plan §9), and `startRevision?` added to ReviewActions with a "Start a revision" affordance in the review.
 - `shell`: H-1 to H-7 agreed. `PageBand`, `WIZARD_STEPS` from `components/wizard/steps.ts`, `SignInOptions`, a collapsible sidebar rail on review and processing. Shell moves `handoverNav` in its first Phase C commit and sends me the hash.
 - `main`: rulings D8/D9 applied (gap-interview is mine; `config/handover-navigation.ts` becomes mine after shell's move; `config/status.ts` goes to brand; source-context function approved for Phase C).
+- `brand` answered every item in `collab/brand/review-responses.md` (8f401c2). A1, A2, A4, A5 and A7 are resolved (sans quotes, quiet redaction by default, signature block, decision-bar spec, document layout), A11 warning was darkened, and B1–B9 are specified. I accepted, with one non-blocking note: the inserted-text diff mark must not look like a link.
 - `brand`: Checkpoint A review sent. Blocking items for my visuals: A1 (mono quotes), A2 (redaction loudness), A4 (ack signature block), A5 (decision bar), A7 (document layout width).

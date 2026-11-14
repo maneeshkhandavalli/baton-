@@ -1,14 +1,13 @@
 # brand status
 
-Phase A, in progress (2026-11-15).
+**Checkpoint B package ready** (2026-11-15): `checkpoint-b.md`. Stopped, waiting for user review.
 
-- [x] Research pass 1 (34 live sites in headless Chrome; shots in .claude/ui3/shots/brand/research). Write-up in progress.
-- [x] Design-system draft: tokens light+dark, fonts, evidence primitives, spec, specimen (/design/system on :3101).
-- [x] Checkpoint A: reviews from shell, handover, demo answered in `review-responses.md`; must-fixes done (commit 8f401c2).
-- [ ] Landing page (Dossier, developed): building now. Content mirrors the demo scenario (Kabir → Neha).
-- [ ] Research doc `docs/design/research/ui3-research.md`.
-- [ ] Verify (lint, tsc, tests, screenshots 390/1024/1440 light+dark, reduced motion).
-- [ ] Checkpoint B package.
+- [x] Research (34 live sites, headless Chrome) -> `docs/design/research/ui3-research.md` (brand worktree).
+- [x] Design system: tokens light + designed dark, fonts, evidence primitives, spec, specimen (/design/system on :3101).
+- [x] Checkpoint A: shell, handover, demo reviews answered and accepted (`review-responses.md`).
+- [x] Landing (Dossier, developed): hero dossier, five-scene sticky story, evidence specimen + publish gate, privacy exhibit, appendix, receipt.
+- [x] Verify: lint + tsc clean; npm test 2,102 pass / 0 fail / 1 todo (baseline + 1 new test); 390/1024/1440 light+dark + reduced motion, no overflow, no console errors.
+- [ ] Phase C (after approval): Menu, RadioGroup, Toggletip, compact PageHeader, EmptyState variants, SkeletonRow, print stylesheet.
 
-Dev server: http://localhost:3101 (worktree `ui3-agent1-brand`).
+Branch `ui3/agent1-brand` @ 6fdd253 (local). Dev server: http://localhost:3101.
 Blockers: none.

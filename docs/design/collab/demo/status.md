@@ -15,6 +15,6 @@ Phase A **done**, 2026-11-15. Stopped, waiting for the lead.
       aligned with the scenario + lib/demo tests in `test:ui` (lead-approved). Full `npm test`: 2116 tests, 2115 pass,
       0 fail, 1 todo (Docker-gated suites skip). `tsc --noEmit` and `npm run lint` are clean. No UI yet.
 
-Lead rulings on plan §10 recorded (step 4 = published view in reviewer preview; one sandbox, no separate tour, "skip to the finished handover", /demo stays). Open for Phase C: `brand`'s response to D1–D4;
+`brand` adopted D1–D4 and S1–S6 (collab/brand/review-responses.md, commit 8f401c2): outline demo label with FlaskConical, numbered marker + step-brief band, `--header-height`/`--sticky-offset` tokens (raise on the demo wrapper), ink strikethrough, `MaskedText variant="strong"`; landing copy now mirrors lib/demo/scenario (verified: no [PASSWORD]/[UPI_1]). Lead rulings on plan §10 recorded (step 4 = published view in reviewer preview; one sandbox, no separate tour, "skip to the finished handover", /demo stays). Open for Phase C:
 `handover`'s view split (their Phase C) before steps 3–6.
 Blockers: none.
