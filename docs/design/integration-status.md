@@ -9,10 +9,10 @@ the lead consolidates here.
 
 | Agent | Phase A task | Status | Depends on | Next |
 |---|---|---|---|---|
-| brand | Research doc; landing in Dossier direction; design-system proposal (tokens light/dark, type, components, motion) | Draft circulated (Checkpoint A); landing in progress | — | Checkpoint A draft to the others, then Checkpoint B to the user |
+| brand | Research doc; landing in Dossier direction; design-system proposal (tokens light/dark, type, components, motion) | All 3 reviews received; answering + landing in progress | — | Checkpoint A draft to the others, then Checkpoint B to the user |
 | shell | Route audit; dashboard/app-shell research; implementation plan | Done; review sent (approve with changes: focus ring and faint-foreground contrast) | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
-| demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done (scenario data on its branch, 14 tests); reviewing draft | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
+| demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done: 8079f5a scenario + dec6439 sample alignment (npm test 2,115/2,116 pass, 1 Docker todo); review sent (D1-D4) | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
 ## Checkpoints
 - [~] Checkpoint A (in progress): `brand` circulates the draft design system; `shell`, `handover`, `demo` send feedback; `brand` responds.

@@ -147,7 +147,7 @@ annotations are plain text in the reading order (not tooltips only); timers resp
 | `generated.test.ts`: step 1's generated masked transcripts are up to date with the parser | Phase B |
 | `isolation.test.ts` (§4.1–4.2) | Phase B |
 | CDP walkthrough at 1440/1024/390: no console errors, no POSTs, focus moves on step change, reduced motion | Phase B |
-| **Request to `main`**: add `"lib/demo/__tests__/*.test.ts"` to `test:ui` in package.json (lead-owned) | open |
+| `lib/demo` tests in `test:ui` (lead-approved exception on my branch, commit `dec6439`) | **Done** |
 
 ## 7. Files
 
@@ -155,11 +155,10 @@ annotations are plain text in the reading order (not tooltips only); timers resp
 `components/demo/**`, `app/(marketing)/demo/page.tsx` and `loading.tsx` (rewritten). `components/marketing/demo-tabs.tsx`
 is deleted once the sandbox replaces it.
 
-**`lib/prototype/**` (mine), Phase B:** align the "Use sample data" sources and the "Fill with sample data" points with
-the scenario (same cast and facts), so the wizard's samples no longer contradict the demo (audit §2). Their tests live
-outside my paths (`lib/parsers/__tests__/prototype-sample-data.test.ts`, `components/review/__tests__/sample-point.test.ts`,
-`tests/integration/prototype-sample-e2e.test.ts`). They assert planted values such as `99999 00003` and `sponsors@example.org`,
-so I will coordinate the update with `main` before changing anything.
+**`lib/prototype/**` (mine): DONE in `dec6439` (lead-approved).** Aligned the "Use sample data" sources and the "Fill with sample data" points with
+the scenario (same cast and facts), so the wizard's samples no longer contradict the demo (audit §2). File names, exports and behaviour are unchanged. Only the content-dependent expectations changed: the planted numbers in
+`lib/parsers/__tests__/prototype-sample-data.test.ts` and `tests/integration/prototype-sample-e2e.test.ts` (that one is Docker-gated, so
+it was skipped locally). `components/review/__tests__/sample-point.test.ts` is untouched and passes.
 
 **Not touched:** `lib/mocks/**` (the Priya → Neha fixture stays for `handover`'s dev-only previews and tests; previews are
 not public, so the two stories never meet a user), and every backend path.
