@@ -1,0 +1,21 @@
+# Files that must never be uploaded by `vercel deploy` (Round 2 preview, CLI deployment from this folder).
+# Secrets and local environment files: configuration comes ONLY from Vercel Project Settings → Environment
+# Variables (Preview). .env.local points at the ORIGINAL Supabase project and must never reach a deployment.
+.env*
+!.env.example
+
+# Local-only tooling, agent worktrees, generated artefacts
+.claude
+restore-dev
+backup
+graphify-out
+.next
+node_modules
+coverage
+*.tsbuildinfo
+
+# Not needed at runtime
+tests
+docs
+supabase/hosted-apply
+fixtures/parser
