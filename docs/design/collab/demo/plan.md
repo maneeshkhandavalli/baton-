@@ -174,9 +174,7 @@ not public, so the two stories never meet a user), and every backend path.
 and `StepHeading` moved to `components/wizard/steps.ts` and `details-step.tsx`; `GapInterview draftStorageKey?: string |
 null`; `PublishedHandoverView storageNamespace?: string`; `GapsManager linkMode?: "live" | "demo"`; `data-tour` anchors
 `readiness`, `publish`, `point-actions`, `evidence-quote`, `point-detail`, `ack-form`, `gap-question`, `gap-answer-review`.
-Delivery: their Phase C. One addition I still need to raise: **`startRevision`** for step 6c. It lives in
-`handover-settings.tsx`, which the demo won't mount. I'll drive it from the demo's own button through my adapter unless
-`handover` prefers a `ReviewActions.startRevision?` slot.
+Delivery: their Phase C. Also agreed: **`ReviewActions.startRevision?(input: { handoverId }): Promise<Result<HandoverSummary>>`**. When the handover is approved or acknowledged and the viewer is the creator, the review view shows "Start a revision" in its read-only notice and then calls an optional `onRevisionStarted`. The demo uses it for step 6c.
 
 Interface sketch (names locked with `handover`; types are the existing contracts):
 ```ts
@@ -186,6 +184,7 @@ export interface ReviewActions {
   createGapQuestion(input: CreateGapQuestionInput): Promise<Result<GapQuestionSummary>>;
   publishHandover(input: PublishHandoverInput): Promise<Result<PublicationSummary>>;
   createManualPoint?(input: CreateManualPointInput): Promise<Result<PointDetail>>;
+  startRevision?(input: { handoverId: string }): Promise<Result<HandoverSummary>>;
 }
 // components/published/published-actions.ts
 export interface PublishedActions { acknowledgePublication(input: AcknowledgePublicationInput): Promise<Result<null>> }
