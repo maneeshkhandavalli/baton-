@@ -28,6 +28,14 @@ in the repository.
 | `storage-restore.mjs` | Uploaded the single restored Storage object through the Storage API. |
 | `verify.sql` | Post-restore read-only verification. |
 
+## backup/ — backup of the original project taken before the restore (2026-11-13)
+| File | Purpose |
+|---|---|
+| `BACKUP_README.md` | The backup folder's own README (procedure and file list; placeholders only). |
+| `run-backup.sh` | Took the pg_dump backup; read `SUPABASE_DB_URL` at run time from a local `backup/secrets/db.env` (never in Git, no longer present). |
+| `restore-rehearsal.sh` | Proved the dumps restorable on a throwaway local Postgres. |
+| `storage-backup.mjs` | Downloaded the Storage objects through the Storage API. |
+
 Deliberately NOT preserved here (they contain auth rows or user data and must never be committed):
-`10_baseline_schema.sql`, `20_auth_users*.sql`, `30_public_data*.sql`, and the dumps under `backup/`.
+`10_baseline_schema.sql`, `20_auth_users*.sql`, `30_public_data*.sql`, the dumps (`public.dump`, `auth_storage_data.dump`, `public_schema.sql`), `objects.json` and the downloaded Storage object.
 They are to be archived in encrypted storage outside the repository.
