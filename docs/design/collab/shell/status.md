@@ -21,5 +21,9 @@ Lead rulings D10-D12 (recorded): default theme = System (provisional until Check
 approved (one streamed listMyHandovers, no new query); theme logic (`hooks/use-theme.ts`, `lib/theme.ts`,
 `public/theme-init.js`) is mine, THEME_COLOR values stay brand's; `lib/routes.ts` mine for additive entries
 (`routes.accountPassword` approved); `test:ui` glob addition approved in my branch only.
-Waiting for Phase C to open after user approval.
+Phase C (opened by lead): dev-only dashboard redesign preview at http://localhost:3102/design/dashboard-preview
+(commits 4e7fee6, 2943553), pure model `components/dashboard/model.ts` + tests; handoverNav move 8d97c44 (sent to
+handover).
+ON HOLD (lead): preview is with the user alongside brand's landing variants. Real /dashboard and the
+Light/Dark/System control wait for the user's decision on palette and IA.
 Blockers: none.

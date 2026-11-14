@@ -20,6 +20,14 @@
 4. Source viewer (approved read-only server function) and evidence slip.
 5. Review layout, decision bar, conflict ledger. Then wizard step 5. Then published dossier, ack signature block, print. Then Gaps and Gap Interview. Then Settings.
 
+## Direction review (2026-11-15)
+- Captured variant A, variant B and shell's dashboard preview (1440 and 390, with the dark class) in `.claude/ui3/shots/handover/variants/`.
+- `review-variants.md`: per-surface fit for both directions. Sent to brand and shell (cc main).
+- `plan.md` §0: "Mapping to the new direction", a direction-agnostic slot table plus non-negotiables. The P0s are unchanged.
+- brand accepted `review-variants.md`. The ledger order is Supports | Contradicts everywhere. Whichever variant wins, the app system carries: a soft or outline dense evidence tag; the ink decision pill; sentence-case slips with a mono reference line; the `↳ source · line` reference; a flat transcript; circle gate rows and a quiet signature line; no card on card; dense-list titles at 700 weight or lighter; the landing accent kept out of the review; no grid backdrops; no horizontal-scroll review. The dark app-surface and list + pane + slip specimens come after the user picks.
+- shell agreed to the deep links (plain routes until I confirm the names), `WIZARD_STEPS` and `blockerShort`.
+- shell committed the `handoverNav` move: `8d97c44` on `ui3/agent2-shell` (`config/handover-navigation.ts`, now mine). I rebase on it in Phase C.
+
 ## Coordination log
 - `demo`: reuse contract agreed (plan §9), and `startRevision?` added to ReviewActions with a "Start a revision" affordance in the review.
 - `shell`: H-1 to H-7 agreed. `PageBand`, `WIZARD_STEPS` from `components/wizard/steps.ts`, `SignInOptions`, a collapsible sidebar rail on review and processing. Shell moves `handoverNav` in its first Phase C commit and sends me the hash.

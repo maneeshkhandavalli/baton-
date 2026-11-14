@@ -3,9 +3,9 @@
 **Update (user direction, 2026-11-15):** cast is **Priya Raman → Neha Kulkarni**; Kabir Shah (president, reviewer) and
 teammates appear in the chats. Commit `955d011` on `ui3/agent4-demo` swaps the scenario and the aligned lib/prototype
 sample points; scenario.md and plan.md updated. Full npm test: 2116 tests, 2115 pass, 0 fail, 1 todo; tsc and lint clean.
-Next: when brand's /design/variant-a and /design/variant-b (:3101) and shell's /design/dashboard-preview (:3102) are up,
-review them and send demo-specific visual requirements (step rail, preview labels, mobile). Not up yet (404/500 at
-last check). No visual implementation; no own design system.
+Visual requirements for the new direction sent to `brand` and `shell`: `visual-requirements.md` (step rail, persona, preview
+labels, annotations, transcript, mobile, motion, content coherence). `brand` applied the cast swap to the landing (bb9d406).
+No visual implementation; no own design system. Stopped until Phase C.
 
 Phase A **done**, 2026-11-15. Stopped, waiting for the lead.
 

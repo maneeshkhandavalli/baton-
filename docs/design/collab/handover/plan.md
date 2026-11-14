@@ -14,6 +14,49 @@ queries as they are; the one new server entry point is a thin read wrapper (§2.
    `ProcessingStatusView` (§5); the preview renders only the pure view, plus a static test that preview modules
    never import `@/lib/actions`.
 
+## 0. Mapping to the new direction (direction-agnostic until the user picks)
+
+User direction (2026-11-15): **Dossier is not approved.** brand offers landing variants A ("Immersive system") and B
+("Editorial transfer"), and shell a redesigned dashboard. My feedback is in `review-variants.md`. Everything in this
+plan except the visual vocabulary is **direction-independent**: the report IA (§1), the source-viewer data path
+(§2.2), the review layout and behaviour (§3), the privacy review (§3.4), the wizard flow (§4), states and
+accessibility (§8), the demo and shell seams (§9) and the P0s. "Dossier" wording in this file (stamps, redaction,
+signature block) names a **job**, not a look.
+
+My components will consume **roles**, not a direction. Whichever direction wins has to fill these slots:
+
+| Slot (role) | Used by | Variant A would fill it with | Variant B would fill it with |
+|---|---|---|---|
+| Reading face (report titles, statements) | published report, point headline in pane | grotesk at a calmer weight than the landing | sans/grotesk; condensed display only on the cover |
+| Operating face (rows, controls) | review list, wizard, settings | Inter-like sans | Archivo-like sans |
+| Record face (metadata line, tokens, line numbers) | slip header, transcript times, masks | mono, sentence case | mono, **sentence case** in slips (uppercase only for short labels) |
+| Quote text | slips, ledger, transcript | sans | sans |
+| Dense evidence tag | list rows, slip, gates | outlined tag plus shape mark (as A shows) | **needs a soft or outline variant** (B's solid tags are headline-only) |
+| Headline evidence mark | pane header, report legend, cover | tag at a larger size | solid-filled tag ("stamp") |
+| Reviewer decision | rows, pane, report notes | needs definition (not shown) | ink pill "Approved by Kabir" (preferred pattern) |
+| Collapsed evidence reference | report rows, list rows | `↳ Core Team 26-27 · line 15` | mono reference line |
+| Transcript (source viewer) | §2.2 | flat rows (not bubbles) | flat rows in one surface (not cards) |
+| Conflict ledger | §3.3 | two panels | stacked panels; order **Supports | Contradicts** everywhere |
+| Signature block | §7 | hairline plus "Read and acknowledged · Neha Kulkarni" | "Sign-off" line at the end of the document (not a tile) |
+| Accent | primary action only | teal; the orange accent stays out of the app's evidence and decision areas | the terracotta accent stays out of review and report |
+| Dark mode | every screen | **must be designed** (the variant page doesn't switch) | **must be designed** (same) |
+
+Non-negotiables for my screens in either direction (from `review-variants.md`): a designed dark mode; a quiet dense
+evidence tag; evidence, decision and system kept visibly distinct (D5); quotes in a readable face; no
+horizontal-scroll review, no card on card, no texture behind dense screens; landing-only devices (3D ring, poster
+tiles, outline type) stay on the landing.
+
+Cast for previews and demo copy: **Priya Raman → Neha Kulkarni** (the user's cast). `demo`'s scenario and
+`lib/mocks` fixtures stay as they are; my new preview routes will use the user's cast where they write their own
+copy.
+
+Shell's dashboard links into my screens with optional deep-link parameters: `?filter=conflicts&point=<id>`,
+`?point=<id>`, `#acknowledge` and `#danger`. These are added to §3.5's deep-link support. Shell agreed: it keeps
+plain routes until I confirm the query names in Phase C. I will also export `blockerShort` (short readiness-gate
+labels) from `components/handover/labels.ts`, so the dashboard and the review use one vocabulary.
+
+---
+
 Lead rulings recorded in agent-ownership.md and design-decisions.md (D8/D9):
 `components/gap-interview/**` is mine. `config/navigation.ts` stays with shell; at the start of Phase C shell moves
 `handoverNav` into `config/handover-navigation.ts`, which becomes mine (I coordinate the move with shell).
