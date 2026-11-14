@@ -1,0 +1,14 @@
+# UI3 design decisions
+
+Every decision that other agents must follow. Proposing a change to an approved decision: discuss it with the affected
+agents and the lead first (collab notes + messages), then the lead records the outcome here.
+
+| # | Date | Decision | Rationale | Status |
+|---|---|---|---|---|
+| D1 | 2026-11-15 | Direction **B, Dossier** is the foundation: warm cream/parchment neutrals, deep ink, editorial serif headings, restrained cobalt accent, monospace metadata, layered document cards. | User selection after reviewing A/B/C/D (`app/(design-lab)/design/*`). | Approved by user |
+| D2 | 2026-11-15 | The concept is a starting point, not a spec. It must become modern, premium and distinctive, archival without looking old-fashioned; rich through composition, type, texture, depth and interaction; never generic SaaS, gradients, glassmorphism or decorative motion. | User brief. | Approved by user |
+| D3 | 2026-11-15 | Agent 1 proposes the design system (tokens light+dark, type, spacing, surfaces, components, motion, responsive). Agents 2-4 review it at Checkpoint A. It is not final until the user approves it at Checkpoint B. No other agent picks colours, fonts or component treatments before then. | User brief, phases A-C. | Approved by user |
+| D4 | 2026-11-15 | Dark mode is designed, not inverted. | User brief. | Approved by user |
+| D5 | 2026-11-15 | Semantic token names stay stable; new tokens are added. Evidence-status colours stay distinct from system colours (conflicting ≠ destructive). | Every screen depends on the names; earlier audit found the overlap confusing. | Lead |
+| D6 | 2026-11-15 | Motion explains the product (state changes, evidence, transformation) and always has a reduced-motion equivalent. Prefer CSS scroll-driven animation; `framer-motion` and `lenis` are available; new animation libraries need lead approval. | User brief; performance. | Lead |
+| D7 | 2026-11-15 | Future features (Discord/Telegram bots, Ask the Handover, Living Handover) appear only later, only as clearly labelled previews. | User brief. | Approved by user |
