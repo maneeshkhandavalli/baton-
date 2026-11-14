@@ -37,6 +37,7 @@ export type FailureReason =
   | "handover_unavailable"
   | "run_inactive"
   | "ai_request_invalid"
+  | "ai_quota_exhausted"
   | "db_transient"
   | "db_rejected"
   /** The database lacks the fenced pipeline functions (migrations 2026111330* not applied). */

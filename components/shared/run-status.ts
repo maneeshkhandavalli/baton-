@@ -51,6 +51,8 @@ const REASONS: Record<string, string> = {
   ai_invalid_output: "The AI returned an answer Baton couldn't use, even after retrying. Try again; if it keeps happening, ask the workspace admin.",
   ai_tool_call: "The AI returned an answer Baton couldn't use, even after retrying. Try again; if it keeps happening, ask the workspace admin.",
   ai_request_invalid: "The AI provider rejected Baton's request as invalid. Ask the workspace admin to check the AI model settings.",
+  ai_quota_exhausted:
+    "The AI provider's free daily limit for this model has been used up. It resets at midnight Pacific time; start processing again after that. Baton does not switch to a paid tier.",
   ai_request_too_large: "Part of a source was too large to send to the AI in one request. Try a shorter export or a narrower date range.",
   ai_budget_exceeded: "These sources are larger than Baton can process in one run. Try a shorter export or a narrower date range.",
 };

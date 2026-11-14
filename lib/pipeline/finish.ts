@@ -41,6 +41,7 @@ export const RUN_SURFACED_AI_REASONS: ReadonlySet<string> = new Set<FailureReaso
   "ai_aborted",
   "ai_request_too_large",
   "ai_request_invalid",
+  "ai_quota_exhausted",
   "ai_budget_exceeded",
 ]);
 

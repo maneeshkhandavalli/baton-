@@ -258,6 +258,43 @@ describe("Gemini adapter: errors are sanitised", () => {
     });
   }
 
+  it("429 on a DAILY free-tier quota is final (ai_quota_exhausted), with no provider text kept", async () => {
+    const body = JSON.stringify({
+      error: {
+        code: 429,
+        message: `Quota exceeded ${KEY} prompt: Asha said pay [UPI_1]`,
+        status: "RESOURCE_EXHAUSTED",
+        details: [
+          { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests", quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier", quotaValue: "20" }] },
+          { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "1034s" },
+        ],
+      },
+    });
+    const { p } = provider(() => {
+      throw new ApiError({ message: body, status: 429 });
+    });
+    const r = await extractCandidates(p, extractRequest(), opts());
+    assert.ok(!r.ok);
+    assert.equal(r.error.details?.reason, "ai_quota_exhausted");
+    assert.equal(r.error.retryable, false);
+    assert.equal(r.attempt?.providerErrorType, "quota_per_day");
+    assert.equal(r.attempt?.httpStatus, 429);
+    const all = JSON.stringify(r);
+    assert.ok(!all.includes(KEY) && !all.includes("UPI_1") && !all.includes("Quota exceeded"));
+  });
+
+  it("429 on a per-MINUTE quota stays retryable", async () => {
+    const body = JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier" }] }] } });
+    const { p } = provider(() => {
+      throw new ApiError({ message: body, status: 429 });
+    });
+    const r = await extractCandidates(p, extractRequest(), opts());
+    assert.ok(!r.ok);
+    assert.equal(r.error.details?.reason, "ai_provider_error");
+    assert.equal(r.error.retryable, true);
+    assert.equal(r.attempt?.providerErrorType, "resource_exhausted");
+  });
+
   it("an aborted signal is a timeout (retryable)", async () => {
     const ac = new AbortController();
     ac.abort(new DOMException("t", "TimeoutError"));

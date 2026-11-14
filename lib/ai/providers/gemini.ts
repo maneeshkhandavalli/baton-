@@ -158,7 +158,29 @@ function providerError(retryable: boolean, providerErrorType: string, httpStatus
   return aiError({ code: "processing_failed", reason: AI_ERROR_REASONS.providerError, retryable, providerErrorType, httpStatus, providerRequestId });
 }
 
-/** Maps a thrown SDK/network error to an AppError. Never reads the error's message or body. */
+const QUOTA_ID = /^[A-Za-z0-9_-]{1,120}$/;
+
+/**
+ * True when a 429's structured error details name a per-DAY quota (google.rpc.QuotaFailure, e.g.
+ * `GenerateRequestsPerDayPerProjectPerModel-FreeTier`). Only the quota ids are inspected: the body's
+ * free-text message is never read, kept or returned.
+ */
+export function dailyQuotaExceeded(e: unknown): boolean {
+  const message = typeof e === "object" && e !== null ? (e as { message?: unknown }).message : undefined;
+  if (typeof message !== "string") return false;
+  const start = message.indexOf("{");
+  if (start < 0) return false;
+  try {
+    const body = JSON.parse(message.slice(start)) as { error?: { details?: Array<{ violations?: Array<{ quotaId?: unknown }> }> } };
+    return (body.error?.details ?? []).some((d) =>
+      (d.violations ?? []).some((v) => typeof v.quotaId === "string" && QUOTA_ID.test(v.quotaId) && /PerDay/.test(v.quotaId)),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Maps a thrown SDK/network error to an AppError. Never returns the error's message or body. */
 export function mapGeminiThrow(e: unknown, signal: AbortSignal | undefined): AppError {
   if (signal?.aborted) return abortedError(signal);
   const name = typeof e === "object" && e !== null ? (e as { name?: unknown }).name : undefined;
@@ -173,7 +195,14 @@ export function mapGeminiThrow(e: unknown, signal: AbortSignal | undefined): App
   if (status === 401 || status === 403) return providerError(false, "permission_denied", status);
   if (status === 404) return providerError(false, "model_not_found", status);
   if (status === 408) return providerError(true, "deadline_exceeded", status);
-  if (status === 429) return providerError(true, "resource_exhausted", status);
+  if (status === 429) {
+    // A DAILY free-tier quota cannot recover within Baton's retry window (30 s, 2 min): fail once, clearly.
+    // Per-minute limits stay retryable with backoff.
+    if (dailyQuotaExceeded(e)) {
+      return aiError({ code: "processing_failed", reason: AI_ERROR_REASONS.quotaExhausted, retryable: false, providerErrorType: "quota_per_day", httpStatus: status });
+    }
+    return providerError(true, "resource_exhausted", status);
+  }
   if (status >= 500) return providerError(true, "unavailable", status);
   return providerError(false, "http_error", status);
 }

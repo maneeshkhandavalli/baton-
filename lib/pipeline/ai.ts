@@ -30,6 +30,7 @@ const AI_REASONS: ReadonlySet<string> = new Set<FailureReason>([
   "ai_aborted",
   "ai_request_too_large",
   "ai_request_invalid",
+  "ai_quota_exhausted",
 ]);
 
 /** A lib/ai failure as a pipeline failure: the reason token is kept when known, the code always. */
