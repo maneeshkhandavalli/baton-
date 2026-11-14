@@ -39,7 +39,9 @@ const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 
 function geminiModel(value: string | undefined): string | null {
   if (value === undefined || value.trim() === "") return GEMINI_DEFAULT_MODEL;
-  return MODEL_ID.test(value) ? value : null;
+  // ".." is refused because @google/genai throws a plain Error for it on every call (tModel), which would
+  // surface as a retryable network failure instead of a configuration error.
+  return MODEL_ID.test(value) && !value.includes("..") ? value : null;
 }
 
 function geminiApiKey(env: AiEnv): string | null {

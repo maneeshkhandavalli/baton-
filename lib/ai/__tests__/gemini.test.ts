@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ApiError } from "@google/genai";
+import { ApiError, GoogleGenAI } from "@google/genai";
 
 import { getAiConfiguration, getAiProvider, getAiProviderForRun } from "../config";
 import { extractCandidates } from "../extract";
@@ -12,6 +12,8 @@ import { SUPPORT_RESPONSE_SCHEMA } from "../prompts/support";
 import {
   createGeminiProvider,
   GEMINI_ADAPTER_VERSION,
+  GEMINI_API_BASE_URL,
+  geminiClientOptions,
   GEMINI_DEFAULT_MODEL,
   GEMINI_PROVIDER_ID,
   geminiRunConfig,
@@ -288,6 +290,7 @@ describe("Gemini configuration (lib/ai/config.ts)", () => {
       { ...base, AI_API_KEY: "   " },
       { ...base, AI_MODEL_EXTRACT: "gemini/../x" },
       { ...base, AI_MODEL_VERIFY: "bad model" },
+      { ...base, AI_MODEL_EXTRACT: "gemini..x" }, // the SDK throws a plain Error for ".." on every call
     ]) {
       assert.deepEqual(getAiConfiguration(env), { ok: false, reason: "provider_not_configured" });
     }
@@ -309,5 +312,184 @@ describe("Gemini configuration (lib/ai/config.ts)", () => {
     assert.equal(getAiProviderForRun(fakeRc.runConfig, base).ok, false);
     assert.equal(getAiProviderForRun(RC, fakeEnv).ok, false);
     assert.equal(getAiProviderForRun(RC, base).ok, true);
+  });
+});
+
+// ── The adapter against the REAL @google/genai runtime, with an injected fetch (no network) ─────────────
+// These pin what the SDK actually puts on the wire and throws, not only what the adapter hands it.
+
+type WireCall = { url: string; headers: Headers; body: Record<string, unknown>; signal: AbortSignal | undefined };
+
+function sdkProvider(respond: (call: WireCall, i: number) => Response | Promise<Response>) {
+  const calls: WireCall[] = [];
+  const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
+    const call: WireCall = {
+      url: String(url),
+      headers: new Headers(init?.headers),
+      body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      signal: init?.signal ?? undefined,
+    };
+    calls.push(call);
+    return respond(call, calls.length - 1);
+  };
+  const base = geminiClientOptions(KEY);
+  const client = new GoogleGenAI({ ...base, httpOptions: { ...base.httpOptions, fetch: fetchImpl as typeof fetch } }) as unknown as GeminiClient;
+  return { p: createGeminiProvider({ apiKey: KEY, models: MODELS, client }), calls };
+}
+
+const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const EXPECTED_URL = `${GEMINI_API_BASE_URL}v1beta/models/${GEMINI_DEFAULT_MODEL}:generateContent`;
+
+async function withEnv<T>(vars: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+describe("Gemini adapter: real SDK runtime (injected fetch, no network)", () => {
+  it("wire request: models/ prefix, key in a header only, systemInstruction content, generationConfig.responseJsonSchema", async () => {
+    const { p, calls } = sdkProvider(() => jsonResponse(ok({ candidates: [candidate()] })));
+    const r = await extractCandidates(p, extractRequest(), opts());
+    assert.ok(r.ok, JSON.stringify(r));
+    assert.equal(calls.length, 1);
+    const c = calls[0];
+    assert.equal(c.url, EXPECTED_URL);
+    assert.equal(c.headers.get("x-goog-api-key"), KEY);
+    assert.ok(!c.url.includes(KEY), "key must not be in the URL");
+    const sys = c.body.systemInstruction as { parts: Array<{ text: string }> };
+    assert.match(sys.parts[0].text, /extraction component of Baton/);
+    const contents = c.body.contents as Array<{ role: string; parts: Array<{ text: string }> }>;
+    assert.equal(contents.length, 1);
+    assert.equal(contents[0].role, "user");
+    assert.match(contents[0].parts[0].text, /<<<PAYLOAD_JSON/);
+    const gc = c.body.generationConfig as Record<string, unknown>;
+    assert.equal(gc.responseMimeType, "application/json");
+    assert.equal(gc.candidateCount, 1);
+    assert.deepEqual(gc.responseJsonSchema, toGeminiJsonSchema(EXTRACT_RESPONSE_SCHEMA));
+    assert.ok(!("responseSchema" in gc));
+    assert.deepEqual(Object.keys(c.body).sort(), ["contents", "generationConfig", "systemInstruction"]);
+    // The SDK's response class is read correctly (thought parts skipped, ids and counts kept).
+    assert.equal(r.data.candidates.length, 1);
+    assert.equal(r.data.provenance.model, GEMINI_DEFAULT_MODEL);
+    assert.equal(r.data.attempt.providerRequestId, "resp_123");
+    assert.equal(r.data.attempt.inputTokens, 1200);
+    assert.equal(r.data.attempt.outputTokens, 350);
+  });
+
+  it("the environment cannot switch the backend, host or key (GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_GEMINI_BASE_URL, GOOGLE_API_KEY)", async () => {
+    const env = {
+      GOOGLE_GENAI_USE_VERTEXAI: "true",
+      GOOGLE_GENAI_USE_ENTERPRISE: "true",
+      GOOGLE_GEMINI_BASE_URL: "https://redirect.invalid/",
+      GOOGLE_VERTEX_BASE_URL: "https://redirect.invalid/",
+      GOOGLE_API_KEY: "env-key-must-not-be-used",
+    };
+    await withEnv(env, async () => {
+      // Unpinned, the SDK follows the environment (the behaviour the pinned options prevent).
+      let unpinnedUrl = "";
+      const unpinned = new GoogleGenAI({
+        apiKey: KEY,
+        httpOptions: {
+          retryOptions: { attempts: 1 },
+          fetch: (async (url: string | URL | Request) => {
+            unpinnedUrl = String(url);
+            return jsonResponse(ok({ candidates: [] }));
+          }) as typeof fetch,
+        },
+      });
+      await unpinned.models.generateContent({ model: GEMINI_DEFAULT_MODEL, contents: "x" });
+      assert.ok(!unpinnedUrl.startsWith(GEMINI_API_BASE_URL), `expected the unpinned SDK to be redirected, got ${unpinnedUrl}`);
+
+      const { p, calls } = sdkProvider(() => jsonResponse(ok({ candidates: [] })));
+      const r = await extractCandidates(p, extractRequest(), opts());
+      assert.ok(r.ok);
+      assert.equal(calls[0].url, EXPECTED_URL);
+      assert.equal(calls[0].headers.get("x-goog-api-key"), KEY);
+    });
+  });
+
+  it("the production client options pin the backend, host and key, and turn SDK retries off", () => {
+    const o = geminiClientOptions(KEY);
+    assert.equal(o.apiKey, KEY);
+    assert.equal(o.vertexai, false);
+    assert.equal(o.httpOptions?.baseUrl, GEMINI_API_BASE_URL);
+    assert.deepEqual(o.httpOptions?.retryOptions, { attempts: 1 });
+  });
+
+  const SECRET_BODY = { error: { code: 0, message: `API key ${KEY} rejected; prompt: Asha said pay [UPI_1]`, status: "X" } };
+  const statusCases: Array<[number, { retryable: boolean; type: string; code: string }]> = [
+    [429, { retryable: true, type: "resource_exhausted", code: "processing_failed" }],
+    [503, { retryable: true, type: "unavailable", code: "processing_failed" }],
+    [500, { retryable: true, type: "unavailable", code: "processing_failed" }],
+    [400, { retryable: false, type: "invalid_argument", code: "validation_failed" }],
+    [403, { retryable: false, type: "permission_denied", code: "processing_failed" }],
+  ];
+  for (const [status, want] of statusCases) {
+    it(`HTTP ${status}: the SDK throws ApiError(status) after exactly one request; sanitised`, async () => {
+      const { p, calls } = sdkProvider(() => jsonResponse(SECRET_BODY, status));
+      const r = await extractCandidates(p, extractRequest(), opts());
+      assert.ok(!r.ok);
+      assert.equal(calls.length, 1, "SDK retried");
+      assert.equal(r.error.code, want.code);
+      assert.equal(r.error.retryable, want.retryable);
+      assert.equal(r.attempt?.httpStatus, status);
+      assert.equal(r.attempt?.providerErrorType, want.type);
+      const all = JSON.stringify(r);
+      assert.ok(!all.includes(KEY) && !all.includes("UPI_1") && !all.includes("rejected"), "provider text leaked");
+    });
+  }
+
+  it("network failure: one request, retryable network error, no provider text", async () => {
+    const { p, calls } = sdkProvider(() => {
+      throw new TypeError(`fetch failed ${KEY}`);
+    });
+    const r = await extractCandidates(p, extractRequest(), opts());
+    assert.ok(!r.ok);
+    assert.equal(calls.length, 1);
+    assert.equal(r.error.retryable, true);
+    assert.equal(r.attempt?.providerErrorType, "network");
+    assert.ok(!JSON.stringify(r).includes(KEY));
+  });
+
+  it("the caller's signal reaches fetch; a timeout mid-request is ai_timed_out", async () => {
+    const ac = new AbortController();
+    const { p, calls } = sdkProvider(
+      (call) =>
+        new Promise<Response>((_, reject) => {
+          const signal = call.signal;
+          assert.ok(signal, "SDK did not pass a signal to fetch");
+          signal.addEventListener("abort", () => reject(signal.reason ?? new DOMException("aborted", "AbortError")));
+          queueMicrotask(() => ac.abort(new DOMException("deadline", "TimeoutError")));
+        }),
+    );
+    const r = await extractCandidates(p, extractRequest(), { ...opts(), signal: ac.signal });
+    assert.ok(!r.ok);
+    assert.equal(calls.length, 1);
+    assert.equal(r.error.details?.reason, "ai_timed_out");
+    assert.equal(r.error.retryable, true);
+  });
+
+  it("SDK automatic continuation (finishReason CONTINUATION) is merged into one JSON answer", async () => {
+    const text = JSON.stringify({ candidates: [candidate()] });
+    const cut = Math.floor(text.length / 2);
+    const { p, calls } = sdkProvider((_, i) =>
+      jsonResponse(
+        i === 0
+          ? { candidates: [{ content: { role: "model", parts: [{ text: text.slice(0, cut) }] }, finishReason: "CONTINUATION", continuationToken: "dG9r" }], modelVersion: GEMINI_DEFAULT_MODEL, responseId: "r1", usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }
+          : { candidates: [{ content: { role: "model", parts: [{ text: text.slice(cut) }] }, finishReason: "STOP" }], modelVersion: GEMINI_DEFAULT_MODEL, responseId: "r2", usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 7 } },
+      ),
+    );
+    const r = await extractCandidates(p, extractRequest(), opts());
+    assert.ok(r.ok, JSON.stringify(r));
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].body.continuationToken, "dG9r");
+    assert.equal(r.data.candidates.length, 1);
   });
 });

@@ -11,13 +11,16 @@ import "server-only";
  *   validation is weakened.
  * - No tools are declared. A function call in the response is rejected (§12.10 rule 2).
  * - The SDK's own HTTP retries are disabled (attempts: 1): Baton's job-level retry policy is the only one.
+ * - The backend and host are pinned (`vertexai: false`, explicit `baseUrl`): @google/genai otherwise switches
+ *   to Vertex AI when GOOGLE_GENAI_USE_VERTEXAI / GOOGLE_GENAI_USE_ENTERPRISE is set, and sends the request
+ *   (key included) to GOOGLE_GEMINI_BASE_URL or a `setDefaultBaseUrls` host when one is set.
  * - Never throws, never logs. Errors carry codes, reason tokens, HTTP status and short opaque ids only:
  *   never the provider's message or body, the prompt, the output, or the API key.
  * - The API key lives only inside the SDK client created here. It is never part of AiRunConfig,
  *   provenance, metadata or errors.
  */
 
-import { ApiError, GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI, type GoogleGenAIOptions } from "@google/genai";
 
 import type { AppError, Result } from "../../contracts/api";
 import { abortedError, aiError, AI_ERROR_REASONS, toolCallRejectedError } from "../errors";
@@ -87,9 +90,21 @@ export interface GeminiProviderOptions {
   client?: GeminiClient;
 }
 
+/** The Gemini Developer API host (the SDK's own default), pinned so the environment cannot redirect it. */
+export const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/";
+
+/**
+ * SDK client options. Every field the SDK would otherwise take from the environment or a process-wide
+ * default is explicit: the key (never GOOGLE_API_KEY / GEMINI_API_KEY), the backend (`vertexai: false`,
+ * never GOOGLE_GENAI_USE_VERTEXAI / GOOGLE_GENAI_USE_ENTERPRISE) and the host (never GOOGLE_GEMINI_BASE_URL
+ * or `setDefaultBaseUrls`). SDK retries are off.
+ */
+export function geminiClientOptions(apiKey: string): GoogleGenAIOptions {
+  return { apiKey, vertexai: false, httpOptions: { baseUrl: GEMINI_API_BASE_URL, retryOptions: { attempts: 1 } } };
+}
+
 function sdkClient(apiKey: string): GeminiClient {
-  const ai = new GoogleGenAI({ apiKey, httpOptions: { retryOptions: { attempts: 1 } } });
-  return ai as unknown as GeminiClient;
+  return new GoogleGenAI(geminiClientOptions(apiKey)) as unknown as GeminiClient;
 }
 
 // ── Schema translation (request shaping only; Zod stays the authority) ───────────────────────────────
