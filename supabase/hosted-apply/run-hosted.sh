@@ -7,6 +7,9 @@
 #   bash supabase/hosted-apply/run-hosted.sh r3verifyA      READ-ONLY: Phase A verify (14 rows) + Phase D prerequisites
 #   bash supabase/hosted-apply/run-hosted.sh r3phaseD       WRITES: migrations #14-#18 in one locked transaction
 #   bash supabase/hosted-apply/run-hosted.sh r3verifyAll    READ-ONLY: all 18 Verify blocks (19 rows) + post-Phase-D state
+#   bash supabase/hosted-apply/run-hosted.sh r4state        READ-ONLY: prerequisites for 20261114100100_account_deletion
+#   bash supabase/hosted-apply/run-hosted.sh r4apply        WRITES: 20261114100100 in one transaction (guarded bundle)
+#   bash supabase/hosted-apply/run-hosted.sh r4verify       READ-ONLY: state after 20261114100100
 #
 # Every command first runs phase-d.mjs verify (pinned SHA-256 of every SQL file and of the five migrations,
 # migration order, bundle rebuilt byte-for-byte from the migration files) and refuses on any mismatch.
@@ -18,6 +21,8 @@
 #
 # r3phaseD additionally requires BATON_PHASE_D_CONFIRM=apply-phase-d-to-xnwppnzvrpthukxjfojj, re-runs every
 # read-only gate, then applies r3_phase_d_txn.sql (locks + in-transaction guard + the pinned bundle).
+# r4apply requires BATON_R4_CONFIRM=apply-account-deletion-to-xnwppnzvrpthukxjfojj, re-runs r4_pre.sql, then applies
+# the pinned r4_account_deletion_txn.sql (its own in-transaction guard refuses any other migration state).
 # Stop the local dev server (its background worker drains jobs) before running r3phaseD.
 set -euo pipefail
 # Git Bash must not rewrite container paths (/ha/...) for docker, but must still translate host paths for the
@@ -30,11 +35,12 @@ REPO="$(cd "$HERE/../.." && pwd)"
 TARGET_REF=xnwppnzvrpthukxjfojj
 FORBIDDEN_REFS="enalguyitewjojgrgzxv enalguyitewjojgrgzv" # the original project (real 20-char ref + a known misspelling)
 CONFIRM_PHRASE="apply-phase-d-to-${TARGET_REF}"
+R4_CONFIRM_PHRASE="apply-account-deletion-to-${TARGET_REF}"
 IMG="${BATON_PG_IMAGE:-postgres:17-alpine}"
 
 case "$CMD" in
-  verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll) ;;
-  *) echo "usage: run-hosted.sh verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll" >&2; exit 2 ;;
+  verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll|r4state|r4apply|r4verify) ;;
+  *) echo "usage: run-hosted.sh verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll|r4state|r4apply|r4verify" >&2; exit 2 ;;
 esac
 
 # ── 1. offline file verification (always) ────────────────────────────────────────────────────────────
@@ -44,6 +50,10 @@ node "$HERE/phase-d.mjs" verify || exit 2
 # ── 2. explicit approval for the only writing command, before any connection ─────────────────────────
 if [[ "$CMD" == r3phaseD && "${BATON_PHASE_D_CONFIRM:-}" != "$CONFIRM_PHRASE" ]]; then
   echo "REFUSED: r3phaseD writes to baton-dev. Set BATON_PHASE_D_CONFIRM=$CONFIRM_PHRASE to approve this run." >&2
+  exit 3
+fi
+if [[ "$CMD" == r4apply && "${BATON_R4_CONFIRM:-}" != "$R4_CONFIRM_PHRASE" ]]; then
+  echo "REFUSED: r4apply writes to baton-dev. Set BATON_R4_CONFIRM=$R4_CONFIRM_PHRASE to approve this run." >&2
   exit 3
 fi
 
@@ -125,5 +135,21 @@ case "$CMD" in
     fi
     echo "[r3phaseD] FAILED: the transaction was rolled back, nothing applied. Current state:" >&2
     check r3_prereq.sql 8 "prerequisites (unchanged)" || true
+    exit 6 ;;
+  r4state)
+    echo "[r4state] prerequisites for 20261114100100 (read-only)"; check r4_pre.sql 8 "r4 prerequisites" ;;
+  r4verify)
+    echo "[r4verify] state after 20261114100100 (read-only)"; check r4_post.sql 9 "r4 post state" ;;
+  r4apply)
+    echo "[r4apply] prerequisites (read-only)"
+    check r4_pre.sql 8 "r4 prerequisites" || { echo "REFUSED: a read-only gate failed; nothing was applied" >&2; exit 5; }
+    echo "[r4apply] applying 20261114100100_account_deletion in one guarded transaction"
+    if dk run --rm -i --env-file "$ENVFILE" -v "$HA:/ha:ro" "$IMG" psql -X -v ON_ERROR_STOP=1 -f /ha/r4_account_deletion_txn.sql; then
+      echo "[r4apply] committed. Post-apply verification:"
+      check r4_post.sql 9 "r4 post state"
+      exit $?
+    fi
+    echo "[r4apply] FAILED: the transaction was rolled back, nothing applied. Current state:" >&2
+    check r4_pre.sql 8 "r4 prerequisites (unchanged)" || true
     exit 6 ;;
 esac

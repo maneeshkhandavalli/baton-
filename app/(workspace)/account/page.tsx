@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { KeyRound } from "lucide-react";
 import { Suspense } from "react";
 
 import { AccountDeletion, type OutgoingOffer } from "@/components/account/account-deletion";
+import { AccountDetails } from "@/components/account/account-details";
 import { CreatorOffers } from "@/components/account/creator-offers";
 import { PageContainer } from "@/components/layout/page-container";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { getAccountDeletionBlockers } from "@/lib/actions/account";
 import { getQueries } from "@/lib/data";
+import { getAccountOverview } from "@/lib/supabase/account-auth";
 import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Account" };
@@ -18,24 +17,8 @@ export const metadata: Metadata = { title: "Account" };
 export default function AccountPage() {
   return (
     <PageContainer width="narrow" className="space-y-8">
-      <PageHeader eyebrow="Workspace" title="Account" description="Sign-in methods, creatorship offers and account deletion." />
-      <section aria-labelledby="signin-methods" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <KeyRound aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-          <div className="space-y-1">
-            <h2 id="signin-methods" className="type-heading">
-              Sign-in methods
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              You can sign in with Google and, once you set one, with your email and password. Both open the same account.
-            </p>
-          </div>
-        </div>
-        <Link href="/account/password" className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Set or change password
-        </Link>
-      </section>
-      <Suspense fallback={<ListSkeleton label="Loading your account…" rows={2} />}>
+      <PageHeader eyebrow="Workspace" title="Account" description="Your sign-in details, creatorship offers and account deletion." />
+      <Suspense fallback={<ListSkeleton label="Loading your account…" rows={3} />}>
         <AccountContent />
       </Suspense>
     </PageContainer>
@@ -45,8 +28,11 @@ export default function AccountPage() {
 async function AccountContent() {
   await connection(); // session reads check token expiry against the current time (auth-js); request-time only
   const queries = getQueries(); // per-request: everything here depends on the signed-in user
-  const [offers, handovers] = await Promise.all([queries.listMyCreatorTransferOffers(), queries.listMyHandovers()]);
+  const [offers, handovers, overview] = await Promise.all([queries.listMyCreatorTransferOffers(), queries.listMyHandovers(), getAccountOverview()]);
   const blockers = await getAccountDeletionBlockers();
+  const counts = handovers.ok
+    ? { created: handovers.data.filter((h) => h.viewerIsCreator).length, memberOf: handovers.data.filter((h) => !h.viewerIsCreator).length }
+    : null;
 
   // Offers the viewer has made on handovers they created, so the deletion list can say "waiting for X".
   const outgoing: Record<string, OutgoingOffer> = {};
@@ -64,6 +50,11 @@ async function AccountContent() {
 
   return (
     <div className="space-y-6">
+      {overview ? (
+        <AccountDetails overview={overview} handovers={counts} />
+      ) : (
+        <p className="text-sm text-muted-foreground">Your account details couldn&rsquo;t be loaded. Try signing in again.</p>
+      )}
       {offers.ok ? (
         <CreatorOffers offers={offers.data} />
       ) : (

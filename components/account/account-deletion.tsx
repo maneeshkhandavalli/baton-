@@ -32,9 +32,10 @@ interface AccountDeletionProps {
 }
 
 /**
- * Account deletion (§12.9, D25). Blocked until every created handover, including soft-deleted ones
- * still in their grace period, is transferred (offer accepted) or explicitly marked for permanent
- * deletion. The user must type DELETE; the typed word itself is sent and checked on the server.
+ * Account deletion (§12.9, D25; live since migration 20261114100100). Blocked until every created handover,
+ * including soft-deleted ones still in their grace period, is transferred (offer accepted) or explicitly marked
+ * for permanent deletion. The user must type DELETE; the typed word itself is sent and checked on the server,
+ * which deletes the data in one transaction, removes the files and the sign-in, and ends the session.
  */
 export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
   const router = useRouter();
@@ -62,7 +63,10 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
     if (!request) return;
     void run(() => deleteAccount(request), {
       success: "Your account was deleted",
-      onSuccess: () => router.push(routes.home),
+      onSuccess: () => {
+        router.replace(routes.home);
+        router.refresh();
+      },
       onError: () => true, // shown inside the dialog
     });
   }
@@ -73,9 +77,27 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
         <h2 id="delete-account-heading" className="text-base font-semibold">
           Delete your account
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Your name is replaced with &ldquo;Former member&rdquo; wherever it appears. Answers and approvals you made stay, so handovers remain traceable.
-        </p>
+        <p className="text-sm text-muted-foreground">Deleting your account is permanent. Here is exactly what happens.</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3">
+          <p className="text-sm font-medium text-destructive-fg">Permanently deleted</p>
+          <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
+            <li>Your sign-in: email address, Google link and password</li>
+            <li>Handovers you mark below for permanent deletion, for every member: their uploaded files, processing, points and published versions</li>
+            <li>Your membership of every other handover</li>
+            <li>Invitation and gap-interview links you created (revoked)</li>
+          </ul>
+        </div>
+        <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+          <p className="text-sm font-medium">Kept, as &ldquo;Former member&rdquo;</p>
+          <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
+            <li>Answers, approvals and reviews you made in other people&rsquo;s handovers, so they stay traceable</li>
+            <li>Handovers you transferred to a new creator</li>
+            <li>An audit record that an account was deleted, with counts only: no name or email address</li>
+          </ul>
+        </div>
       </div>
 
       {created.length > 0 ? (
@@ -149,7 +171,10 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete your account?</DialogTitle>
-            <DialogDescription>This can&rsquo;t be undone. You&rsquo;ll be signed out and lose access to every handover.</DialogDescription>
+            <DialogDescription>
+              This can&rsquo;t be undone. You&rsquo;ll be signed out and lose access to every handover. You can sign up again later with the same
+              address, as a new, empty account.
+            </DialogDescription>
           </DialogHeader>
           {purging.length > 0 && (
             <div className="space-y-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">

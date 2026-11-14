@@ -74,12 +74,15 @@ describe("lib/actions Server Function modules", () => {
     }
   });
 
-  it("D27: erasure and account deletion never reach erase_participant, purge_handover or delete_account_data", () => {
+  it("D27: erasure stays closed; account deletion reaches the purge only through delete_own_account", () => {
     const privacy = read("lib/actions/core/privacy.ts");
     const account = read("lib/actions/core/account.ts");
-    for (const text of [privacy, account]) {
-      assert.doesNotMatch(text, /eraseParticipant\(deps\.|getErasureTarget|purgeHandover|deleteAccountData|checkAccountDeletion/);
-    }
+    assert.doesNotMatch(privacy, /eraseParticipant\(deps\.|getErasureTarget|purgeHandover|deleteAccountData|checkAccountDeletion/);
+    // Decision 2026-11-14 (migration 20261114100100): one transaction, for the verified actor's own account.
+    assert.doesNotMatch(account, /purgeHandover|deleteAccountData|eraseParticipant/);
+    assert.match(account, /mutations\.deleteOwnAccount\(db, actor, request\)/);
+    assert.match(account, /mutations\.checkAccountDeletion\(db, actor, request\)/);
+    assert.match(account, /softDeleteUser\(actor\.profileId\)/, "only the verified actor's own auth user is deleted");
   });
 });
 

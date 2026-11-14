@@ -7,6 +7,8 @@ import { controlClassName } from "@/components/ui/input"
 /**
  * A styled native <select>. Native keeps keyboard, screen-reader and mobile pickers right for
  * short option lists (roles, priorities, access levels); use it instead of hand-styled selects.
+ * `className` styles the WRAPPER (width, margins, grid placement). The control's border, height, padding and
+ * focus ring come from `controlClassName`; never restyle them here, or the wrapper draws a second outline.
  */
 function NativeSelect({ className, children, ...props }: React.ComponentProps<"select">) {
   return (

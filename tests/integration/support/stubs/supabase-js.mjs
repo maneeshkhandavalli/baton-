@@ -20,7 +20,20 @@ export function createClient(url, key, options) {
       throw new Error("@supabase/supabase-js stub: direct table access is not part of Baton (every write is a SQL function)");
     },
     auth: {
-      admin: new Proxy({}, { get: (_, name) => () => { throw new Error(`@supabase/supabase-js stub: auth.admin.${String(name)} is not emulated`); } }),
+      // Only deleteUser is emulated (account deletion): recorded, never sent. `globalThis.__batonIt.authAdmin`
+      // ({ deleteUserError }) makes it fail. Every other admin call still throws.
+      admin: new Proxy({}, {
+        get: (_, name) => {
+          if (name === "deleteUser") {
+            return async (id, shouldSoftDelete) => {
+              const s = (globalThis.__batonIt ??= {});
+              (s.authCalls ??= []).push({ client: "admin", name: "admin.deleteUser", args: { id, shouldSoftDelete } });
+              return { data: {}, error: s.authAdmin?.deleteUserError ?? null };
+            };
+          }
+          return () => { throw new Error(`@supabase/supabase-js stub: auth.admin.${String(name)} is not emulated`); };
+        },
+      }),
     },
   };
 }

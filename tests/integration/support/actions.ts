@@ -42,6 +42,6 @@ export const WRITE_RPCS = [
   "create_source", "confirm_source_uploaded", "record_source_consent", "add_exclusion", "confirm_identity_match",
   "remove_source", "create_gap_interview_link", "revoke_access_token", "invite_member", "update_member_clearance",
   "remove_member", "resolve_privacy_review", "erase_participant", "erasure_target", "purge_handover",
-  "check_account_deletion", "delete_account_data", "submit_gap_answers_with_token", "redeem_member_invite",
+  "check_account_deletion", "delete_account_data", "delete_own_account", "submit_gap_answers_with_token", "redeem_member_invite",
   "transition_handover", "finish_processing_run",
 ] as const;

@@ -47,7 +47,7 @@ export interface Call {
 }
 
 export interface StorageCall {
-  op: "createSignedUploadUrl" | "download" | "remove";
+  op: "createSignedUploadUrl" | "download" | "remove" | "list";
   path: string | string[];
 }
 
@@ -80,7 +80,15 @@ export interface FakeOptions {
   previewParser?: PreviewSourceFn;
   planProcessingRun?: (input: PlanInput) => Result<ProcessingPlan>;
   scheduleDrainThrows?: boolean;
-  storage?: { download?: Blob | null; removeError?: boolean };
+  storage?: {
+    download?: Blob | null;
+    removeError?: boolean;
+    /** Objects per folder for `list` (account deletion); removed objects disappear from later lists. */
+    folders?: Record<string, string[]>;
+    listError?: boolean | ((call: number) => boolean);
+  };
+  /** Account deletion: the auth side. */
+  softDeleteUser?: (profileId: string) => Promise<void>;
   clientIp?: string | null;
 }
 
@@ -94,6 +102,10 @@ export function fakeDeps(options: FakeOptions = {}) {
   const events: string[] = [];
   let actorLookups = 0;
   let refreshes = 0;
+  let listCalls = 0;
+  const authCalls: Array<{ op: "softDeleteUser" | "endSession"; profileId?: string }> = [];
+  const issues: Array<{ event: string; details: Record<string, string | number> }> = [];
+  const folders = new Map(Object.entries(options.storage?.folders ?? {}).map(([k, v]) => [k, [...v]]));
 
   const client = (kind: "admin" | "user"): DbClient => ({
     rpc: async (fn, args) => {
@@ -118,7 +130,20 @@ export function fakeDeps(options: FakeOptions = {}) {
       },
       remove: async (paths) => {
         storageCalls.push({ op: "remove", path: paths });
-        return options.storage?.removeError ? { data: null, error: { message: "unavailable" } } : { data: [], error: null };
+        if (options.storage?.removeError) return { data: null, error: { message: "unavailable" } };
+        for (const p of paths) {
+          const folder = p.slice(0, p.lastIndexOf("/"));
+          const name = p.slice(p.lastIndexOf("/") + 1);
+          folders.set(folder, (folders.get(folder) ?? []).filter((n) => n !== name));
+        }
+        return { data: [], error: null };
+      },
+      list: async (prefix) => {
+        listCalls++;
+        storageCalls.push({ op: "list", path: prefix });
+        const fail = options.storage?.listError;
+        if (fail === true || (typeof fail === "function" && fail(listCalls))) return { data: null, error: { message: "unavailable" } };
+        return { data: (folders.get(prefix) ?? []).map((name) => ({ name, id: `obj-${name}` })), error: null };
       },
     }),
   };
@@ -166,6 +191,20 @@ export function fakeDeps(options: FakeOptions = {}) {
     revalidate: () => {
       refreshes++;
     },
+    accountAuth: {
+      softDeleteUser: async (profileId) => {
+        authCalls.push({ op: "softDeleteUser", profileId });
+        events.push("softDeleteUser");
+        if (options.softDeleteUser) await options.softDeleteUser(profileId);
+      },
+      endSession: async () => {
+        authCalls.push({ op: "endSession" });
+        events.push("endSession");
+      },
+    },
+    logIssue: (event, details) => {
+      issues.push({ event, details });
+    },
   };
 
   return {
@@ -176,6 +215,9 @@ export function fakeDeps(options: FakeOptions = {}) {
     parserInputs,
     planInputs,
     events,
+    authCalls,
+    issues,
+    folders,
     get actorLookups() {
       return actorLookups;
     },

@@ -734,14 +734,7 @@ describe("D27: erasure and account deletion stay fail-closed", () => {
     assert.equal((await privacy.eraseParticipant(anon.deps, { handoverId: H, participantId: P, confirm: true }) as { error: { code: string } }).error.code, "unauthenticated");
   });
 
-  it("deleteAccount checks the typed word on the server, then refuses before any write", async () => {
-    const f = fakeDeps();
-    const r = await account.deleteAccount(f.deps, { confirm: "DELETE", purgeHandoverIds: [H] });
-    assert.equal(!r.ok && r.error.code, "precondition_failed");
-    assert.equal(!r.ok && r.error.details?.reason, "recovery_manifest_unavailable");
-    assert.deepEqual(f.calls, []);
-    assert.equal(f.refreshes, 0);
-
+  it("deleteAccount checks the typed word on the server before anything else (full flow: account-deletion.test.ts)", async () => {
     for (const confirm of ["delete", "DELETE ", true]) {
       const g = fakeDeps();
       const bad = await account.deleteAccount(g.deps, { confirm, purgeHandoverIds: [] } as never);

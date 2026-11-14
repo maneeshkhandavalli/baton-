@@ -4,7 +4,8 @@
 //   * invalid input → `validation_failed`, likewise with no call;
 //   * identity never comes from the input: smuggled actor/role fields are ignored;
 //   * starting processing and draining never approves, publishes or transitions anything (§9, D1);
-//   * erasure and account deletion are fail-closed (D27): precondition_failed before any call.
+//   * erasure is fail-closed (D27): precondition_failed before any call. Account deletion is live since
+//     migration 20261114100100 (decision 2026-11-14) and is covered by r2-account-deletion.test.ts.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
@@ -148,11 +149,9 @@ describe("IT-07 (action side): processing never approves or publishes", () => {
   });
 });
 
-describe("IT-09 (through the actions): erasure and account deletion are fail-closed while D27 is open", () => {
+describe("IT-09 (through the actions): erasure stays fail-closed while D27 is open", () => {
   for (const [label, call] of [
     ["eraseParticipant", ACTIONS.eraseParticipant],
-    ["deleteAccount with a purge list", ACTIONS.deleteAccount],
-    ["deleteAccount with nothing to purge", () => account.deleteAccount({ confirm: "DELETE", purgeHandoverIds: [] })],
   ] as Array<[string, Call]>) {
     it(`${label}: precondition_failed (recovery_manifest_unavailable), no call of any kind`, async () => {
       const w = actionWorld();

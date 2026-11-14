@@ -24,6 +24,7 @@ import {
   createGapInterviewLink,
   createGapQuestion,
   deleteAccountData,
+  deleteOwnAccount,
   getErasureTarget,
 } from "../mutations";
 import { getParseExclusions } from "../pipeline";
@@ -376,6 +377,18 @@ describe("R8 mutations", () => {
     assert.deepEqual(calls[0]?.args, { p_actor_profile_id: R, p_confirmation: "DELETE", p_purge_handover_ids: [H] });
     await deleteAccountData(client, actor, { confirm: "DELETE" });
     assert.deepEqual(calls[1]?.args, { p_profile_id: R, p_confirmation: "DELETE" });
+  });
+
+  it("deleteOwnAccount: same server-side checks, ids lower-cased, and a malformed answer is internal", async () => {
+    const { client, calls } = fakeClient({ delete_own_account: { data: { purgedHandovers: 1, memberships: 2 } } });
+    for (const input of [{ confirm: "delete", purgeHandoverIds: [] }, { confirm: "DELETE", purgeHandoverIds: [H, H.toUpperCase()] }, null]) {
+      await assert.rejects(deleteOwnAccount(client, actor, input), (e: unknown) => e instanceof DbError && e.code === "validation_failed");
+    }
+    assert.equal(calls.length, 0);
+    assert.deepEqual(await deleteOwnAccount(client, actor, { confirm: "DELETE", purgeHandoverIds: [H.toUpperCase()] }), { purgedHandovers: 1, memberships: 2 });
+    assert.deepEqual(calls[0]?.args, { p_actor_profile_id: R, p_confirmation: "DELETE", p_purge_handover_ids: [H.toLowerCase()] });
+    const bad = fakeClient({ delete_own_account: { data: { unexpected: true } } });
+    await assert.rejects(deleteOwnAccount(bad.client, actor, { confirm: "DELETE", purgeHandoverIds: [] }), (e: unknown) => e instanceof DbError && e.code === "internal");
   });
 });
 

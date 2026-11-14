@@ -15,6 +15,7 @@ import { previewSource } from "../parsers/parse-source";
 import { getVerifiedPepper } from "../pipeline/pepper";
 import { planProcessingRun, type AiRunConfig } from "../pipeline/plan";
 import { scheduleDrain } from "../pipeline/worker";
+import { endBrowserSession, logAccountIssue, softDeleteAuthUser } from "../supabase/account-auth";
 import { requireVerifiedActor } from "../supabase/auth";
 import { requestClientIp } from "../supabase/request-ip";
 import { getSiteUrl } from "../supabase/site-url";
@@ -51,6 +52,8 @@ const DEPS: ActionDeps = Object.freeze({
   planProcessingRun,
   scheduleDrain,
   revalidate: () => refresh(),
+  accountAuth: Object.freeze({ softDeleteUser: softDeleteAuthUser, endSession: endBrowserSession }),
+  logIssue: logAccountIssue,
 });
 
 export function actionDeps(): ActionDeps {

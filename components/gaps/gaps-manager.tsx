@@ -296,7 +296,6 @@ function LinkDialog({ handoverId, questions, pointById, onClose }: { handoverId:
                   id="link-level"
                   value={maxAccessLevel}
                   onChange={(e) => setChosenLevel(e.target.value as AccessLevel)}
-                  className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm"
                   aria-describedby="link-level-hint"
                 >
                   {ACCESS_LEVELS.map((l) => (
@@ -362,17 +361,17 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
             <Label htmlFor="ctx">Context (optional)</Label>
             <Input id="ctx" value={context} onChange={(e) => setContext(e.target.value)} />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 sm:items-start">
             <div className="space-y-1.5">
               <Label htmlFor="prio">Priority</Label>
-              <NativeSelect id="prio" value={priority} onChange={(e) => setPriority(e.target.value as GapPriority)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="prio" value={priority} onChange={(e) => setPriority(e.target.value as GapPriority)}>
                 <option value="optional">Optional</option>
                 <option value="required">Required before publishing</option>
               </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pt">Link to a missing point</Label>
-              <NativeSelect id="pt" value={pointId} onChange={(e) => { setPointId(e.target.value); if (e.target.value) setCategory(""); }} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="pt" value={pointId} onChange={(e) => { setPointId(e.target.value); if (e.target.value) setCategory(""); }}>
                 <option value="">None</option>
                 {points.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -388,8 +387,7 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
                 value={category}
                 disabled={!!pointId}
                 onChange={(e) => setCategory(e.target.value as PointCategory | "")}
-                className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm disabled:opacity-60"
-                title={pointId ? "A question about a point uses the point's topic" : undefined}
+                aria-describedby={pointId ? "cat-hint" : undefined}
               >
                 <option value="">{pointId ? "From the linked point" : "None"}</option>
                 {POINT_CATEGORIES.map((c) => (
@@ -401,7 +399,7 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ask-level">Who may see it</Label>
-              <NativeSelect id="ask-level" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)} className="h-8 w-full rounded-lg border border-input bg-card px-2 text-sm">
+              <NativeSelect id="ask-level" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}>
                 {ACCESS_LEVELS.map((l) => (
                   <option key={l} value={l}>
                     {accessLevelMeta[l].label}
@@ -410,7 +408,11 @@ function AskDialog({ handoverId, points, onClose }: { handoverId: string; points
               </NativeSelect>
             </div>
           </div>
-          {pointId && <p className="text-xs text-muted-foreground">If the point is more restricted, the question is raised to its level.</p>}
+          {pointId && (
+            <p id="cat-hint" className="text-xs text-muted-foreground">
+              A question about a point uses the point&rsquo;s topic. If the point is more restricted, the question is raised to its level.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
