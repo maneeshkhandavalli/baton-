@@ -34,6 +34,12 @@
   --dp-conflict-soft: #f6e2ec;
   --dp-shadow: 0 1px 2px rgb(21 25 26 / 0.04), 0 1px 1px rgb(21 25 26 / 0.03);
   --dp-ring: #1f5e66;
+  /* Stage scale ("tide"): outside system tones and petrol; further along = darker. Always paired with the word. */
+  --dp-stage-draft: #c0c7d1;
+  --dp-stage-processing: #93a0b2;
+  --dp-stage-review: #67778f;
+  --dp-stage-published: #3f4f6b;
+  --dp-stage-acknowledged: #15191a;
 
   background: var(--dp-bg);
   color: var(--dp-fg);
@@ -57,25 +63,30 @@
   --dp-fg: #e8eeee;
   --dp-muted-fg: #9fb0b3;
   --dp-primary: #5fb7bf;
-  --dp-primary-hover: #7fc7cd;
+  --dp-primary-hover: #7ccbd2;
   --dp-primary-fg: #8fd3d9;
   --dp-primary-soft: #133238;
   --dp-on-primary: #0f1416;
   --dp-success: #5dbb63;
-  --dp-success-fg: #8ed392;
+  --dp-success-fg: #8ad38e;
   --dp-success-soft: #14281a;
   --dp-warning: #e0a23a;
-  --dp-warning-fg: #edc075;
+  --dp-warning-fg: #efc06e;
   --dp-warning-soft: #2e2311;
   --dp-danger: #f07466;
-  --dp-danger-fg: #f6a197;
+  --dp-danger-fg: #f6a196;
   --dp-danger-soft: #331816;
   --dp-conflict: #e584b6;
-  --dp-conflict-fg: #f0aed0;
+  --dp-conflict-fg: #f0aecf;
   --dp-conflict-soft: #321a28;
   /* Shadows vanish on dark paper: a faint top highlight defines raised surfaces instead. */
   --dp-shadow: inset 0 1px 0 rgb(232 238 238 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
   --dp-ring: #5fb7bf;
+  --dp-stage-draft: #3a4552;
+  --dp-stage-processing: #586577;
+  --dp-stage-review: #7d8ba0;
+  --dp-stage-published: #a9b6c8;
+  --dp-stage-acknowledged: #e8eeee;
 }
 
 .dp .dp-title {

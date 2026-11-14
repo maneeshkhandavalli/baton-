@@ -563,11 +563,11 @@ function Pipeline({ counts, active, onPick }: { counts: Record<StatusFilter, num
 /* ── Register row ────────────────────────────────────────────────────────── */
 
 const STAGE_FILL: Record<Stage, string> = {
-  draft: "bg-(--dp-border-strong)",
-  processing: "bg-(--dp-warning)",
-  review: "bg-(--dp-primary)",
-  published: "bg-(--dp-success)",
-  acknowledged: "bg-(--dp-success-fg)",
+  draft: "bg-transparent ring-1 ring-inset ring-(--dp-stage-draft)",
+  processing: "bg-(--dp-stage-processing)",
+  review: "bg-(--dp-stage-review)",
+  published: "bg-(--dp-stage-published)",
+  acknowledged: "bg-(--dp-stage-acknowledged)",
 };
 
 function StageDot({ stage, health, className }: { stage: Stage; health: DashboardRow["health"]; className?: string }) {
@@ -585,7 +585,7 @@ function StageTrack({ stage, health }: { stage: Stage; health: DashboardRow["hea
             key={s.id}
             className={cn(
               "h-1.5 flex-1 rounded-full",
-              i < idx ? "bg-(--dp-primary) opacity-45" : i === idx ? (health === "failed" ? "bg-(--dp-danger)" : STAGE_FILL[s.id]) : "bg-(--dp-track)",
+              i < idx ? STAGE_FILL[s.id] : i === idx ? (health === "failed" ? "bg-(--dp-danger)" : cn(STAGE_FILL[s.id], "h-2 -translate-y-px")) : "bg-(--dp-track)",
             )}
           />
         ))}
