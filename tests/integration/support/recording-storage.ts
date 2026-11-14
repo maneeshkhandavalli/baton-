@@ -6,7 +6,7 @@
 
 import type { StorageBucketApi, StorageClient } from "../../../lib/db/storage";
 
-type Op = "createSignedUploadUrl" | "download" | "remove";
+type Op = "createSignedUploadUrl" | "download" | "remove" | "list";
 
 export class RecordingStorage implements StorageClient {
   readonly objects = new Map<string, Uint8Array>();
@@ -59,6 +59,14 @@ export class RecordingStorage implements StorageClient {
         if (error("remove")) return { data: null, error: error("remove") };
         for (const p of paths) this.objects.delete(`${bucket}/${p}`);
         return { data: paths, error: null };
+      },
+      // Objects directly under `prefix` (one level, like Supabase Storage list).
+      list: async (prefix: string) => {
+        log("list", [prefix]);
+        if (error("list")) return { data: null, error: error("list") };
+        const start = `${bucket}/${prefix}/`;
+        const names = [...this.objects.keys()].filter((k) => k.startsWith(start) && !k.slice(start.length).includes("/")).map((k) => k.slice(start.length));
+        return { data: names.map((name) => ({ name, id: `obj-${name}` })), error: null };
       },
     };
   }

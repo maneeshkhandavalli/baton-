@@ -563,6 +563,29 @@ export async function deleteAccountData(
   })) as Record<string, number>;
 }
 
+/**
+ * §12.9, decision 2026-11-14 (migration 20261114100100): the verified actor's own deletion in ONE database
+ * transaction: check_account_deletion → purge_handover for each listed handover (as its creator) →
+ * delete_account_data. Any failure rolls everything back. The input is untrusted and parsed with
+ * deleteAccountInput; the database re-checks the word, ownership and completeness. Storage and the auth user
+ * are handled by the caller (lib/actions/core/account.ts).
+ */
+export async function deleteOwnAccount(db: DbClient, actor: VerifiedActor, input: unknown): Promise<{ purgedHandovers: number; memberships: number }> {
+  const parsed = deleteAccountInput.safeParse(input);
+  if (!parsed.success) throw new DbError("validation_failed");
+  const r = (await call(db, actor, "delete_own_account", {
+    p_confirmation: parsed.data.confirm,
+    p_purge_handover_ids: parsed.data.purgeHandoverIds.map((id) => id.toLowerCase()),
+  })) as Record<string, unknown> | null;
+  if (!r || typeof r.purgedHandovers !== "number") throw new DbError("internal");
+  return { purgedHandovers: r.purgedHandovers, memberships: typeof r.memberships === "number" ? r.memberships : 0 };
+}
+
+/** Read (service role, own account only): whether the actor's auth user has a password. */
+export async function accountHasPassword(db: DbClient, actor: VerifiedActor): Promise<boolean> {
+  return (await call(db, actor, "account_has_password")) === true;
+}
+
 /** Read (user-scoped client): the caller's own created handovers. */
 export async function getAccountDeletionBlockers(userDb: DbClient) {
   return (await callRpc(userDb, "get_account_deletion_blockers")) as Array<{ id: string; title: string; deleted: boolean }>;

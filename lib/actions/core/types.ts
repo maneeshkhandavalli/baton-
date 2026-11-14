@@ -41,4 +41,13 @@ export interface ActionDeps {
   scheduleDrain(): void;
   /** Refreshes the client router after a successful write. */
   revalidate(): void;
+  /** Account deletion (§12.9): the auth side, server-only (lib/supabase/account-auth.ts). */
+  accountAuth: {
+    /** Soft-deletes the actor's auth user (Admin API deleteUser(id, true)); throws when it could not. */
+    softDeleteUser(profileId: string): Promise<void>;
+    /** Ends this browser's session (Supabase cookies). Never throws. */
+    endSession(): Promise<void>;
+  };
+  /** Server log for a cleanup step that failed after the point of no return (ids and counts only). */
+  logIssue(event: string, details: Record<string, string | number>): void;
 }

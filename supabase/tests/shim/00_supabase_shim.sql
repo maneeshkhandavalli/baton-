@@ -38,6 +38,7 @@ create table if not exists auth.users (
   email text,
   raw_user_meta_data jsonb not null default '{}',
   email_confirmed_at timestamptz,
+  encrypted_password text, -- as on Supabase (account_has_password)
   created_at timestamptz not null default now(),
   deleted_at timestamptz
 );

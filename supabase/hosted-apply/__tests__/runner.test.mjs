@@ -44,7 +44,13 @@ const GOOD = {
     "claim_generation_column|0|t\nprerequisite_functions_15|15|t\nphase_A_claim_functions|2|t\ngeneration_overloads_absent|0|t",
   "04_verify_all.sql": Array.from({ length: 19 }, (_, i) => `#${i}|t`).join("\n"),
   "r3_post.sql": "history_rows|36|t\nhistory_newest|20261113300900|t\nphase_D_rows_present|5|t\nclaim_generation_not_null|1|t\ngeneration_overloads_8|8|t",
+  "r4_pre.sql": "history_rows|36|t\nhistory_newest|20261113300900|t\nno_delete_own_account|-|t\nno_account_has_password|-|t\n" +
+    "has_check_account_deletion|service_role|t\nhas_delete_account_data|service_role|t\npurge_handover_closed|all API roles|t\nno_restore_role|-|t",
+  "r4_post.sql": "history_rows|37|t\nhistory_newest|20261114100100|t\ndelete_own_account_server_only|service_role|t\n" +
+    "account_has_password_server_only|service_role|t\npurge_handover_still_closed|no role|t\nerase_participant_still_closed|no role|t\n" +
+    "same_owner_as_purge|postgres|t\nsearch_path_pinned|delete_own_account|t\nno_restore_role|-|t",
 };
+const R4_CONFIRM = "apply-account-deletion-to-xnwppnzvrpthukxjfojj";
 
 /** Fake docker: logs argv (and the env-file's PGUSER line, never the password), answers -f /ha/<file>. */
 function fakeDocker({ down = false, outputs = GOOD, txnExit = 0 } = {}) {
@@ -62,6 +68,7 @@ for a in "$@"; do [ "$prev" = "-f" ] && file="$a"; [ "$prev" = "--env-file" ] &&
 [ -n "$envf" ] && grep -E '^(PGUSER|PGHOST|PGPORT)=' "$envf" | sed 's/^/ENV /' >> "${log.replace(/\\/g, "/")}"
 case "$file" in
   /ha/r3_phase_d_txn.sql) echo "TXN" >> "${log.replace(/\\/g, "/")}"; exit ${txnExit} ;;
+  /ha/r4_account_deletion_txn.sql) echo "TXN4" >> "${log.replace(/\\/g, "/")}"; exit ${txnExit} ;;
   /ha/*) cat "${out.replace(/\\/g, "/")}/\${file#/ha/}" 2>/dev/null ;;
 esac
 `);
@@ -269,5 +276,66 @@ describe("the transaction wrapper (static)", () => {
   it("the in-transaction guard checks jobs, history (31 rows, newest 20261113300400), Phase D absence and the column", () => {
     for (const re of [/status in \('queued', 'running'\)/, /v_rows <> 31/, /'20261113300400'/, /20261113300900/, /column_name = 'claim_generation'/])
       assert.match(txn, re);
+  });
+});
+
+describe("r4apply (20261114100100_account_deletion)", () => {
+  const env = (confirm = R4_CONFIRM) => ({ BATON_DEV_SECRETS: secrets(GOOD_URL), BATON_R4_CONFIRM: confirm });
+
+  it("refuses without its own confirmation phrase (the Phase D phrase does not count), before docker", () => {
+    for (const confirm of ["", "yes", CONFIRM, "apply-account-deletion-to-enalguyitewjojgrgzxv"]) {
+      const docker = fakeDocker();
+      const r = run(REPO, "r4apply", { docker, env: env(confirm) });
+      assert.equal(r.code, 3, r.out);
+      assert.match(r.out, /BATON_R4_CONFIRM=apply-account-deletion-to-xnwppnzvrpthukxjfojj/);
+      assert.equal(docker.calls(), "");
+    }
+  });
+
+  for (const [what, from, to] of [
+    ["the original project's history", "history_rows|36|t", "history_rows|18|f"],
+    ["the migration already applied", "no_delete_own_account|-|t", "no_delete_own_account|public.delete_own_account(uuid,text,uuid[])|f"],
+    ["purge_handover granted to a role", "purge_handover_closed|all API roles|t", "purge_handover_closed|all API roles|f"],
+    ["a missing gate row", "\nno_restore_role|-|t", ""],
+  ]) {
+    it(`does not start the transaction when the gate shows ${what}`, () => {
+      const docker = fakeDocker({ outputs: { ...GOOD, "r4_pre.sql": GOOD["r4_pre.sql"].replace(from, to) } });
+      const r = run(REPO, "r4apply", { docker, env: env() });
+      assert.equal(r.code, 5, r.out);
+      assert.match(r.out, /nothing was applied/);
+      assert.doesNotMatch(docker.calls(), /TXN4|r4_account_deletion_txn/);
+    });
+  }
+
+  it("with the gate green: runs the pinned bundle once (not read-only), then the read-only post-check", () => {
+    const docker = fakeDocker();
+    const r = run(REPO, "r4apply", { docker, env: env() });
+    assert.equal(r.code, 0, r.out);
+    const runs = docker.calls().split("\n").filter((l) => l.startsWith("CALL run"));
+    assert.deepEqual(runs.map((l) => /-f \/ha\/(\S+)/.exec(l)?.[1]), ["r4_pre.sql", "r4_account_deletion_txn.sql", "r4_post.sql"]);
+    assert.match(runs[0], /begin read only/);
+    assert.doesNotMatch(runs[1], /begin read only/);
+    assert.match(runs[2], /begin read only/);
+    assert.ok(!r.out.includes(PASSWORD));
+  });
+
+  it("a failed transaction is reported as rolled back (exit 6)", () => {
+    const docker = fakeDocker({ txnExit: 3 });
+    const r = run(REPO, "r4apply", { docker, env: env() });
+    assert.equal(r.code, 6, r.out);
+    assert.match(r.out, /rolled back, nothing applied/);
+  });
+
+  it("the bundle opens a transaction, guards the exact pre-state, and contains the migration verbatim", () => {
+    const bundle = readFileSync(path.join(HOSTED, "r4_account_deletion_txn.sql"), "utf8");
+    const migration = readFileSync(path.join(REPO, "supabase/migrations/20261114100100_account_deletion.sql"), "utf8");
+    const code = bundle.split("\n").filter((l) => l.trim() && !l.trim().startsWith("--"));
+    assert.equal(code[0], "begin;");
+    assert.ok(bundle.indexOf("raise exception 'REFUSED") < bundle.indexOf(migration), "guard before the migration");
+    assert.ok(bundle.includes("from supabase_migrations.schema_migrations) <> 36"));
+    assert.ok(bundle.includes("from supabase_migrations.schema_migrations) <> '20261113300900'"));
+    assert.ok(bundle.includes(migration));
+    assert.ok(bundle.indexOf("values ('20261114100100', 'account_deletion')") < bundle.indexOf("commit;"));
+    assert.ok(!/grant execute on function public\.(purge_handover|erase_participant)/.test(bundle));
   });
 });

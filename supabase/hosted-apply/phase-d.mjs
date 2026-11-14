@@ -4,10 +4,11 @@
 //
 //   node supabase/hosted-apply/phase-d.mjs verify   # pins, migration order, byte-exact bundle rebuild
 //   node supabase/hosted-apply/phase-d.mjs hashes   # print the full SHA-256 of every pinned file
+//   node supabase/hosted-apply/phase-d.mjs write-post-bundles   # rebuild the Round 4 bundle(s) from their migration
 //
 // Paths are derived from this file's location (<repo>/supabase/hosted-apply), never from the working directory.
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +27,14 @@ export const MIGRATIONS = [
   { version: "20261113300900", name: "point_evidence_guard_fields", sha256: "7f7711568d4dc876c896a116ebdca3bb55084ea6e719973984d48a39a97a8449" },
 ];
 
+/**
+ * Reviewed migrations after Phase D (Round 4), each applied on its own with its own pinned bundle. The set of
+ * migrations after Phase A must be EXACTLY Phase D followed by these; anything else still fails verification.
+ */
+export const POST_PHASE_D = [
+  { version: "20261114100100", name: "account_deletion", sha256: "71d87fd92780acc4879c4baddd7ec9cdf00b634efe006390cb67fe41ace1e96d", bundle: "r4_account_deletion_txn.sql" },
+];
+
 /** Every SQL file in this directory, pinned. An unpinned or changed SQL file fails verification. */
 export const PINNED_SQL = {
   "03_phase_D_migrations_14-18.sql": "db184aa314589a8f5b81dc26ad0439f5458d1ce9f575e6b10a7c5c20429e6bc8", // reviewed + rehearsed bundle
@@ -35,6 +44,9 @@ export const PINNED_SQL = {
   "r3_prereq.sql": "9406c4a6e82dbd969e1bd0c90e05a423d9b309e1424a568d4716074a43faffa6",
   "r3_jobs.sql": "2944bac85b359702c134610c52d0ff6b5b06bc6f06dc83be60b9ab4046a8bc2f",
   "r3_post.sql": "7f68925698ad1e6139e527199a554301a5c69e1d4237bf9751298f21a471750c",
+  "r4_account_deletion_txn.sql": "14db5914add5646f2c60843911b3e74d17927ff4fbb4addafacc3a0405f9985e", // rebuilt byte-for-byte below (expectedPostBundle)
+  "r4_pre.sql": "4384885db09d8e7e29065cf53fb11ac0b896ba9b10d5d612eeb38d03915758e3",
+  "r4_post.sql": "4eaa61f168c304796ae858027cd2e6f9c4d1269ef033e53c41aa578c4bc15623",
 };
 
 export const BUNDLE = "03_phase_D_migrations_14-18.sql";
@@ -65,6 +77,38 @@ export function expectedBundle(read = (f) => readFileSync(path.join(MIGRATIONS_D
   return PREFIX + sections.join("\n") + SUFFIX;
 }
 
+// A Round 4 bundle: an in-transaction guard that refuses any database not at the expected state (baton-dev after
+// Phase D, without this migration), the migration verbatim, its history row, commit, schema reload.
+export function expectedPostBundle(m, read = (f) => readFileSync(path.join(MIGRATIONS_DIR, f), "utf8")) {
+  return `-- Baton Round 4 hosted apply: ${fileName(m)}, verbatim, in ONE transaction, on baton-dev (xnwppnzvrpthukxjfojj) only.
+-- Run through run-hosted.sh r4apply. The guard aborts (nothing applied) unless the history is exactly baton-dev's
+-- post-Phase-D state (36 rows, newest 20261113300900) and the new functions do not exist yet.
+begin;
+
+do $$
+begin
+  if (select count(*) from supabase_migrations.schema_migrations) <> 36
+     or (select max(version) from supabase_migrations.schema_migrations) <> '20261113300900'
+     or to_regprocedure('public.delete_own_account(uuid,text,uuid[])') is not null
+     or to_regprocedure('public.account_has_password(uuid)') is not null
+     or to_regprocedure('public.purge_handover(uuid,uuid,uuid)') is null
+     or to_regprocedure('public.delete_account_data(uuid,text)') is null
+  then
+    raise exception 'REFUSED: not baton-dev at the expected migration state; nothing was changed';
+  end if;
+end $$;
+
+-- ===== ${fileName(m)} (verbatim) =====
+${read(fileName(m))}-- ===== end of migration =====
+
+insert into supabase_migrations.schema_migrations (version, name) values ('${m.version}', '${m.name}');
+
+commit;
+
+notify pgrst, 'reload schema';
+`;
+}
+
 /** Returns a list of failures (empty = verified). */
 export function verify() {
   const failures = [];
@@ -86,14 +130,30 @@ export function verify() {
     check(actual === pin, `checksum mismatch: hosted-apply/${f} is ${actual}, pinned ${pin}`);
   }
 
-  // 2. Phase D is exactly these five migrations, after Phase A, in ascending order, nothing more.
+  // 2. After Phase A: exactly Phase D's five migrations, then exactly the reviewed Round 4 ones, in order.
   const after = readdirSync(MIGRATIONS_DIR)
     .filter((f) => /^\d{14}_.+\.sql$/.test(f) && f.slice(0, 14) > PHASE_A_LAST)
     .sort();
+  const reviewed = [...MIGRATIONS, ...POST_PHASE_D].map(fileName);
   check(
-    JSON.stringify(after) === JSON.stringify(MIGRATIONS.map(fileName)),
-    `migrations after ${PHASE_A_LAST} are [${after.join(", ")}], expected exactly [${MIGRATIONS.map(fileName).join(", ")}]`,
+    JSON.stringify(after) === JSON.stringify(reviewed),
+    `migrations after ${PHASE_A_LAST} are [${after.join(", ")}], expected exactly [${reviewed.join(", ")}]`,
   );
+  for (const m of POST_PHASE_D) {
+    let actual = null;
+    try {
+      actual = sha256(readFileSync(path.join(MIGRATIONS_DIR, fileName(m))));
+    } catch {
+      check(false, `missing migration ${fileName(m)}`);
+      continue;
+    }
+    check(actual === m.sha256, `checksum mismatch: migrations/${fileName(m)} is ${actual}, pinned ${m.sha256}`);
+    try {
+      check(readFileSync(path.join(HERE, m.bundle), "utf8") === expectedPostBundle(m), `${m.bundle} is not the verbatim bundle of ${fileName(m)}`);
+    } catch {
+      check(false, `missing ${m.bundle}`);
+    }
+  }
   for (let i = 1; i < MIGRATIONS.length; i++)
     check(MIGRATIONS[i - 1].version < MIGRATIONS[i].version, `apply order is not ascending at ${MIGRATIONS[i].version}`);
 
@@ -129,11 +189,16 @@ export function verify() {
 function main(cmd) {
   if (cmd === "hashes") {
     for (const f of Object.keys(PINNED_SQL)) console.log(`${sha256(readFileSync(path.join(HERE, f)))}  supabase/hosted-apply/${f}`);
-    for (const m of MIGRATIONS) console.log(`${sha256(readFileSync(path.join(MIGRATIONS_DIR, fileName(m))))}  supabase/migrations/${fileName(m)}`);
+    for (const m of [...MIGRATIONS, ...POST_PHASE_D]) console.log(`${sha256(readFileSync(path.join(MIGRATIONS_DIR, fileName(m))))}  supabase/migrations/${fileName(m)}`);
+    return 0;
+  }
+  if (cmd === "write-post-bundles") {
+    // Regenerates each Round 4 bundle from its migration (a reviewed change still needs its pin updated).
+    for (const m of POST_PHASE_D) writeFileSync(path.join(HERE, m.bundle), expectedPostBundle(m));
     return 0;
   }
   if (cmd !== "verify") {
-    console.error("usage: node phase-d.mjs verify|hashes");
+    console.error("usage: node phase-d.mjs verify|hashes|write-post-bundles");
     return 2;
   }
   const failures = verify();

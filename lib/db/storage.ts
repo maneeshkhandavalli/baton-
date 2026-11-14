@@ -38,6 +38,11 @@ export interface StorageBucketApi {
   createSignedUploadUrl(path: string): PromiseLike<{ data: { signedUrl: string; token: string; path: string } | null; error: StorageError | null }>;
   download(path: string): PromiseLike<{ data: Blob | null; error: StorageError | null }>;
   remove(paths: string[]): PromiseLike<{ data: unknown; error: StorageError | null }>;
+  /** Objects directly under a folder (Supabase Storage `list`). Optional so narrow fakes need not implement it. */
+  list?(
+    prefix: string,
+    options?: { limit?: number; offset?: number },
+  ): PromiseLike<{ data: Array<{ name?: unknown; id?: unknown }> | null; error: StorageError | null }>;
 }
 
 export interface StorageClient {
@@ -185,6 +190,33 @@ export function isOwnedRawPath(path: unknown, sourceId: string, handoverId?: str
   }
   if (UUID_RE.test(sourceSeg) && !UUID_RE.test(handoverSeg)) return false;
   return !(UUID_RE.test(sourceSeg) && UUID_RE.test(sourceId)) || sourceSeg.toLowerCase() === sourceId.toLowerCase();
+}
+
+/**
+ * Account deletion (§12.9): removes EVERY object under raw/{handoverId}/, including objects no source row
+ * knows about (an upload that finished after its row was gone), so a purged handover leaves no file behind.
+ * Only plain object names directly under that folder are touched. Throws DbError("internal") when Storage
+ * cannot list or remove; the caller decides whether that is fatal.
+ */
+export async function removeHandoverRawPrefix(adminStorage: StorageClient, handoverId: string): Promise<{ removed: number }> {
+  if (!UUID_RE.test(handoverId)) throw new DbError("validation_failed");
+  const bucket = adminStorage.from(SOURCE_BUCKET);
+  if (typeof bucket.list !== "function") throw new DbError("internal");
+  const prefix = `raw/${handoverId.toLowerCase()}`;
+  let removed = 0;
+  for (let round = 0; round < 50; round++) {
+    const { data, error } = await bucket.list(prefix, { limit: 100, offset: 0 });
+    if (error) throw new DbError("internal");
+    const names = (data ?? [])
+      .filter((o) => o && o.id !== null) // Storage lists sub-folders with id null; raw paths have none
+      .map((o) => o.name)
+      .filter((n): n is string => typeof n === "string" && /^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$/.test(n));
+    if (names.length === 0) return { removed };
+    const { error: removeError } = await bucket.remove(names.map((n) => `${prefix}/${n}`));
+    if (removeError) throw new DbError("internal");
+    removed += names.length;
+  }
+  throw new DbError("internal"); // more than 5000 objects, or Storage keeps listing removed ones
 }
 
 function requireOwnedRawPath(path: unknown, sourceId: string, handoverId?: string): string {

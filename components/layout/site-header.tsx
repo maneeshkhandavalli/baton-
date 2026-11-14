@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { BatonLogo } from "@/components/shared/baton-logo";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+
+import { HeaderAccount } from "./header-account";
 
 /** In-page sections of the landing page. Absolute (`/#…`) so they also work from /demo. */
 const SECTIONS = [
@@ -14,7 +17,11 @@ const SECTIONS = [
   { href: `${routes.home}#for-the-nerds`, label: "For the nerds" },
 ] as const;
 
-/** Public marketing header: translucent paper, sticky, one primary action. */
+/**
+ * Public marketing header: translucent paper, sticky, one primary action ("Open workspace", which sends a
+ * signed-out visitor to sign in). A signed-in visitor also sees their account menu (HeaderAccount, streamed in;
+ * nothing is shown while it loads or when signed out).
+ */
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md supports-backdrop-filter:bg-background/70">
@@ -41,12 +48,13 @@ export function SiteHeader() {
           <Link href={routes.demo} className={cn(buttonVariants({ variant: "ghost" }), "px-2.5 sm:px-3")}>
             Demo
           </Link>
-          <Link href={routes.login} className={cn(buttonVariants({ variant: "ghost" }), "px-2.5 sm:px-3")}>
-            Sign in
-          </Link>
           <ThemeToggle />
-          <Link href={routes.dashboard} className={cn(buttonVariants(), "ml-1 hidden sm:inline-flex")}>
-            Open workspace
+          <Suspense fallback={null}>
+            <HeaderAccount />
+          </Suspense>
+          <Link href={routes.dashboard} className={cn(buttonVariants(), "ml-1 px-3")}>
+            <span className="sm:hidden">Workspace</span>
+            <span className="hidden sm:inline">Open workspace</span>
           </Link>
         </nav>
       </div>

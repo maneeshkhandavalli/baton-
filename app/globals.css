@@ -416,6 +416,10 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
+    /* Interface text is not selectable (a polish choice, NOT a security control: data protection is the
+       database's job). Selection stays on wherever people type or need to copy, below. */
+    -webkit-user-select: none;
+    user-select: none;
     /* Long names, URLs and file names wrap instead of pushing the page wider. */
     overflow-wrap: break-word;
   }
@@ -423,6 +427,17 @@
   html {
     scroll-padding-top: 4.5rem;
     scroll-padding-bottom: 6rem;
+  }
+  /* Editable fields, and text people copy on purpose (support reference codes, read-only share links).
+     Mark any other copyable text with Tailwind's `select-text`. */
+  input,
+  textarea,
+  select,
+  [contenteditable]:not([contenteditable="false"]),
+  code,
+  pre {
+    -webkit-user-select: text;
+    user-select: text;
   }
   ::selection {
     background-color: color-mix(in srgb, var(--primary) 18%, transparent);
