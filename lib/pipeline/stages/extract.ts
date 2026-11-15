@@ -102,8 +102,14 @@ export function planChunkEntries(
   const newShapes = new Map<number, ClaimShape>();
   const local = new PointIndex([], "everyone"); // shapes of this chunk's new points → LOCAL + entry index
   for (const candidate of candidates) {
-    const shape: ClaimShape = { category: candidate.category, statement: candidate.statement, attributes: candidate.attributes as Record<string, unknown> };
     const citations = candidate.citations.filter((c) => chunkMessageIds.has(c.messageId)).map(toCitation); // defence in depth (§10.6)
+    // QA-UI3-X1: the cited messages let a reworded re-extraction (a retry after a failed run) find its point.
+    const shape: ClaimShape = {
+      category: candidate.category,
+      statement: candidate.statement,
+      attributes: candidate.attributes as Record<string, unknown>,
+      citedMessageIds: citations.map((c) => c.messageId),
+    };
     const target = index.find(shape) ?? local.find(shape);
     if (target !== null) {
       if (citations.length === 0) {
