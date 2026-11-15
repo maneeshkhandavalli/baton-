@@ -14,7 +14,12 @@ the lead consolidates here.
 | handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done: 8079f5a scenario + dec6439 sample alignment (npm test 2,115/2,116 pass, 1 Docker todo); review sent (D1-D4) | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
-## Current: landing identity (D18)
+## Current: integrated and QA'd (D19)
+- `ui3/integration` @ dd777dd + docs: lint, typecheck, npm test 2,152 (2,151 pass, 0 fail, 1 Docker todo), production build, smoke 18/18.
+- Functional QA: `docs/design/qa/ui3-functional-qa.md` (8 fixes merged; 2 open items need a decision).
+- Not pushed: waiting for the user to confirm Vercel Preview Deployments are off.
+
+## Previous: landing identity (D18)
 - brand → `ui3/agent1-identity` @ 207c495: AI-SLOP-AUDIT.md, three directions at `/design/directions`, chosen "Graphite & Highlighter" (Host Grotesk / Atkinson Hyperlegible Next / Atkinson Hyperlegible Mono) scoped to marketing routes. npm test 2,103/2,102/0 fail. Lead verified `/` and `/demo`: 1440/390, light/dark, no overflow, 0 console errors; the interactive evidence preview works.
 - shell acknowledged the token set (dashboard adopts only after user approval).
 - [~] Checkpoint B4 (awaiting the user): direction and landing preview.
