@@ -14,7 +14,13 @@ the lead consolidates here.
 | handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done: 8079f5a scenario + dec6439 sample alignment (npm test 2,115/2,116 pass, 1 Docker todo); review sent (D1-D4) | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
-## Recovery milestone (D15/D16), 2026-11-15
+## Current: refine the earlier minimal landing and dashboard (D17)
+- brand → `ui3/agent1-landing` (new, from master): polish master's landing; carry over cast, a11y and reduced-motion fixes.
+- shell → `ui3/agent2-shell`: polish master's real `/dashboard` and `/preview/dashboard`; dashboard v2 stopped.
+- handover, demo: holding.
+- [~] Checkpoint B3 (awaiting the user): revised landing + dashboard previews before any integration.
+
+## Recovery milestone (D15/D16), superseded by D17, 2026-11-15
 | Agent | Delivered | Branch head | Next |
 |---|---|---|---|
 | brand | `/design/variant-a` (immersive system) and `/design/variant-b` (editorial transfer) on :3101; "Harbour" app palette in design-system.md §0; Dribbble notes in research | `ui3/agent1-brand` @ d7754bf | Waits for the user's pick |
