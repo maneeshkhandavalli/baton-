@@ -1,4 +1,4 @@
-import { Database, KeyRound, Layers, Lock, ScanSearch, ShieldCheck, Sparkles, UserCheck, Users } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -15,72 +15,62 @@ import { cn } from "@/lib/utils";
  */
 
 const FLOW = [
-  { icon: Layers, step: "Parse", where: "server", body: "WhatsApp exports and documents become messages with authors, times and stable IDs." },
-  { icon: ShieldCheck, step: "Mask", where: "server", body: "Phone numbers, emails, UPI handles, bank details, IDs and secrets are replaced before storage or AI." },
-  { icon: Sparkles, step: "Extract", where: "Gemini", body: "Structured JSON against a schema, validated with Zod. Claims cite message quotes; a claim without one is marked inferred." },
-  { icon: ScanSearch, step: "Quote check", where: "deterministic", body: "Each quote must exist in the cited message. No AI involved, so it can't be talked round." },
-  { icon: Sparkles, step: "Support check", where: "second model", body: "A separate call judges whether the quote actually backs the claim." },
-  { icon: UserCheck, step: "Human review", where: "people", body: "Approve, edit or reject each point, settle conflicts, answer the gaps. Then publish." },
+  { step: "Parse", where: "server", body: "Exports and documents become messages with authors, times and stable IDs." },
+  { step: "Mask", where: "server", body: "Personal and financial details are replaced before anything is stored or sent to AI." },
+  { step: "Extract", where: "Gemini", body: "Schema-validated JSON; every claim cites message quotes or is marked inferred." },
+  { step: "Quote check", where: "deterministic", body: "Each quote must exist in the cited message. No AI involved." },
+  { step: "Support check", where: "second model", body: "A separate call judges whether the quote backs the claim." },
+  { step: "Human review", where: "people", body: "Approve, edit or reject each point, settle conflicts, answer gaps, then publish." },
 ] as const;
 
-const DETAILS = [
+/** One row per topic, a one-line summary visible, the detail on demand. No repetition of the flow above. */
+const TOPICS = [
   {
-    icon: Database,
-    title: "Postgres does the enforcing",
+    title: "PII masking and privacy",
+    summary: "Masked before storage or AI; raw uploads deleted after processing.",
     points: [
-      "Row-level security is authoritative for every read.",
-      "Browser roles have no direct write grants: every write is a SECURITY DEFINER function that checks role, clearance and lifecycle state.",
-      "Default privileges are revoked, then granted back table by table and column by column.",
-    ],
-  },
-  {
-    icon: Users,
-    title: "Roles and clearance",
-    points: [
-      "Members are outgoing, incoming, lead or reviewer. The creator is an authority, not a role.",
-      "Sources carry an access level: everyone, leads only or reviewer only.",
-      "A point inherits the strictest level of the sources behind it, and members only see what their clearance allows.",
-    ],
-  },
-  {
-    icon: ScanSearch,
-    title: "Evidence you can check",
-    points: [
-      "Quotes match exactly or after normalisation (Unicode format characters, NFC, curly quotes and dashes, whitespace), and only on whole characters.",
-      "Quotes shorter than 12 characters or 3 words don't count, so a point can't be propped up by \"ok sure\".",
-      "The support check sees the claim, the quote and up to three neighbouring messages, never the extractor's reasoning.",
-    ],
-  },
-  {
-    icon: Lock,
-    title: "Chats are data, never instructions",
-    points: [
-      "Messages that read like instructions to the model can't raise a point's status: the verdict is downgraded and a person decides.",
-      "Statuses (sourced, inferred, conflicting, missing) are computed from the evidence, not chosen by the model.",
-      "Pipeline jobs are fenced by a claim generation, so a slow or retried worker can never overwrite newer results.",
-    ],
-  },
-  {
-    icon: ShieldCheck,
-    title: "Privacy by construction",
-    points: [
-      "Masking happens before anything is stored or sent to AI. Raw uploads are deleted once processing succeeds.",
+      "Phone numbers, emails, UPI handles, bank and card details, IDs, passwords and keys become tokens like [PHONE_1]. The same value always gets the same token.",
       "People who ask to be left out are matched by HMAC-SHA256 identity hashes with a server-side pepper, never by stored numbers.",
-      "AI runs on the Gemini Developer API free tier. The upload step says so plainly, including what that means for your content.",
+      "AI runs on the Gemini Developer API free tier, and the upload step says so before anything is sent.",
     ],
   },
   {
-    icon: KeyRound,
-    title: "Sessions and secrets",
+    title: "Evidence and source traceability",
+    summary: "Every point links to the exact message and line it came from.",
     points: [
-      "Supabase Auth with Google (OAuth, PKCE) or email and password, both linked to one account per verified address.",
-      "Sessions live in httpOnly cookies. Every server action re-verifies the user with Supabase before acting.",
-      "The service key and AI key exist only on the server. The browser holds nothing but the public key.",
+      "Quotes match exactly or after normalisation (Unicode, curly quotes, dashes, whitespace), on whole characters only.",
+      "Quotes under 12 characters or 3 words don't count, so “ok sure” can't prop up a point.",
+      "Sourced, inferred, conflicting and missing are computed from the evidence, not chosen by the model.",
+    ],
+  },
+  {
+    title: "AI extraction and verification",
+    summary: "The model drafts; it never decides.",
+    points: [
+      "The support check sees the claim, the quote and up to three neighbouring messages, never the extractor's reasoning.",
+      "Messages that read like instructions to a model can't raise a point's status; the verdict is downgraded and a person decides.",
+    ],
+  },
+  {
+    title: "Human review",
+    summary: "Nothing is published until a person has signed off.",
+    points: [
+      "Publishing stays locked while any point is pending, an inferred point is unconfirmed, a conflict is open or a required gap is unanswered.",
+      "Edits create a new revision; the original text and its evidence are kept.",
+    ],
+  },
+  {
+    title: "Publishing and access controls",
+    summary: "Postgres row-level security decides who sees what.",
+    points: [
+      "Roles are outgoing, incoming, lead and reviewer; each source is visible to everyone, leads only or reviewers only, and a point takes the strictest level of its evidence.",
+      "Browsers have no direct write access: every write is a database function that checks role, clearance and lifecycle state.",
+      "Sessions live in httpOnly cookies, and service and AI keys exist only on the server.",
     ],
   },
 ] as const;
 
-const STACK = ["Next.js 16 · App Router", "Supabase Postgres, Auth, Storage", "Vercel Fluid compute", "Gemini 3.x Flash", "Zod schemas", "TypeScript"] as const;
+const STACK = ["Next.js 16", "Supabase Postgres, Auth, Storage", "Vercel", "Gemini 3.x Flash", "Zod", "TypeScript"] as const;
 
 export function ForTheNerds() {
   return (
@@ -90,46 +80,54 @@ export function ForTheNerds() {
           <h2 id="nerds-title" className="bi-h2">
             For the nerds: how Baton keeps AI honest.
           </h2>
-          <p className="bi-lede">
-            The model drafts; it never decides. Deterministic checks, database rules and people sit between every AI output and what the incoming person
-            reads.
-          </p>
+          <p className="bi-lede">Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.</p>
         </div>
 
-        {/* The pipeline, in order, as a manifest */}
-        <figure className="mt-12">
-          <figcaption className="sr-only">From upload to published handover, in order</figcaption>
-          <ol className="border-b border-border">
-            {FLOW.map((f, i) => (
-              <li key={f.step} className="grid gap-1 border-t border-border py-4 sm:grid-cols-[3rem_10rem_1fr_9rem] sm:items-baseline sm:gap-6 [&>*]:min-w-0">
-                <span className="bi-mono text-sm text-muted-foreground tabular-nums">
-                  <span className="sr-only">Step </span>
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3 className="bi-h3">{f.step}</h3>
-                <p className="bi-body">{f.body}</p>
-                <span className={cn("bi-mono text-sm sm:text-right", f.where === "people" ? "text-foreground" : "text-muted-foreground")}>{f.where}</span>
-              </li>
+        <div className="mt-12 grid gap-12 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+          {/* The pipeline, in order */}
+          <figure>
+            <figcaption className="bi-mono text-xs text-muted-foreground">From upload to published handover</figcaption>
+            <ol className="mt-3 border-b border-border">
+              {FLOW.map((f, i) => (
+                <li key={f.step} className="grid grid-cols-[2rem_1fr] gap-x-4 border-t border-border py-3 sm:grid-cols-[2rem_8rem_1fr] [&>*]:min-w-0">
+                  <span className="bi-mono text-sm text-muted-foreground tabular-nums">
+                    <span className="sr-only">Step </span>
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span>
+                    <span className="bi-h3 block text-[0.9375rem]">{f.step}</span>
+                    <span className={cn("bi-mono text-xs", f.where === "people" ? "text-foreground" : "text-muted-foreground")}>{f.where}</span>
+                  </span>
+                  <p className="bi-body col-start-2 text-sm sm:col-start-3">{f.body}</p>
+                </li>
+              ))}
+            </ol>
+          </figure>
+
+          {/* The details, collapsed by default */}
+          <div className="border-b border-border">
+            {TOPICS.map((t) => (
+              <details key={t.title} className="group border-t border-border">
+                <summary className="flex cursor-pointer list-none items-start justify-between gap-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0">
+                    <span className="bi-h3 block text-[0.9375rem]">{t.title}</span>
+                    <span className="bi-body block text-sm">{t.summary}</span>
+                  </span>
+                  <ChevronDown aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+                </summary>
+                <ul className="space-y-2 pb-4">
+                  {t.points.map((p) => (
+                    <li key={p} className="bi-body text-sm">
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             ))}
-          </ol>
-        </figure>
-
-        <div className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-          {DETAILS.map((d) => (
-            <article key={d.title}>
-              <h3 className="bi-h3">{d.title}</h3>
-              <ul className="mt-3 space-y-2">
-                {d.points.map((p) => (
-                  <li key={p} className="bi-body text-sm">
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ))}
+          </div>
         </div>
 
-        <p className="bi-mono mt-14 border-t border-border pt-5 text-xs text-muted-foreground">Built with {STACK.join(" · ")}</p>
+        <p className="bi-mono mt-12 text-xs text-muted-foreground">Built with {STACK.join(" · ")}</p>
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CircleHelp } from "lucide-react";
 
+import { ComingNext } from "@/components/marketing/coming-next";
 import { EvidencePreview } from "@/components/marketing/evidence-preview";
 import { ForTheNerds } from "@/components/marketing/for-the-nerds";
 import { HowItWorksSteps } from "@/components/marketing/how-it-works";
@@ -211,6 +212,9 @@ export default function HomePage() {
       </section>
 
       <ForTheNerds />
+
+      {/* ── Round 3 previews (not available yet) ─────────── */}
+      <ComingNext />
 
       {/* ── Closing ──────────────────────────────────────── */}
       <section aria-labelledby="cta-title" className="border-t border-border">
