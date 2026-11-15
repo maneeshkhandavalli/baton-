@@ -33,6 +33,7 @@ import { PointDetailPanel } from "./point-detail-panel";
 import { ReadinessPanel, type SectionFilter } from "./readiness-panel";
 import { ReviewDialogs, type ReviewDialogState } from "./review-dialogs";
 import { sampleForm } from "./sample-point";
+import { directApproveInput } from "./evidence-state";
 
 interface ReviewWorkspaceProps {
   handover: HandoverSummary;
@@ -152,12 +153,9 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
     }
     switch (action) {
       case "approve": {
-        const needsInput =
-          (point.evidenceStatus === "inferred" && !point.inferredConfirmation) ||
-          (point.evidenceStatus === "conflicting" && !point.conflictResolution) ||
-          point.evidenceStatus === "missing";
-        if (needsInput) setDialog({ kind: "approve", point });
-        else void submit({ action: "approve", pointId: point.id, expectedRevisionId: point.currentRevisionId });
+        const direct = directApproveInput(point);
+        if (!direct) setDialog({ kind: "approve", point });
+        else void submit(direct);
         break;
       }
       case "reject":
