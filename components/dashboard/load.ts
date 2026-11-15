@@ -50,7 +50,8 @@ async function cardFor(queries: BatonQueries, h: HandoverSummary, routes: Dashbo
 
   const [readiness, processing] = await Promise.all([
     queries.getReadiness(h.id),
-    h.state === "processing" ? queries.getProcessingStatus(h.id) : Promise.resolve(null),
+    // QA-UI3-D1: a draft that reached this point has parsed sources, so it may hold a failed or cancelled run.
+    h.state === "processing" || h.state === "draft" ? queries.getProcessingStatus(h.id) : Promise.resolve(null),
   ]);
   input.readiness = readiness.ok ? (readiness.data as ReadinessReport) : null;
   input.processing = processing && processing.ok ? (processing.data as ProcessingStatus) : null;

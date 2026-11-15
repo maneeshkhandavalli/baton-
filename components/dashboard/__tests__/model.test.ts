@@ -60,6 +60,20 @@ describe("dashboard classify()", () => {
     assert.equal(row.href, "/p/h1");
   });
 
+  it("QA-UI3-D1: a draft whose run failed says so and asks for attention (not 'not started yet')", () => {
+    const run = (status: "failed" | "cancelled") => ({ handoverState: "draft" as const, sources: [], run: { id: "r", status, startedAt: null, finishedAt: null, stages: [], error: null } });
+    const failed = classify({ summary: base({ state: "draft" }), processing: run("failed") } as Parameters<typeof classify>[0], LINKS);
+    assert.equal(failed.health, "failed");
+    assert.equal(failed.status, "Processing stopped before finishing");
+    assert.equal(failed.attention[0]?.kind, "failed");
+    assert.equal(failed.href, "/p/h1");
+    const cancelled = classify({ summary: base({ state: "draft" }), processing: run("cancelled") } as Parameters<typeof classify>[0], LINKS);
+    assert.equal(cancelled.status, "Processing cancelled · start again when ready");
+    assert.equal(cancelled.attention.length, 0);
+    const fresh = classify({ summary: base({ state: "draft" }) }, LINKS);
+    assert.equal(fresh.status, "Sources added · not started yet");
+  });
+
   it("resumes a draft at its next wizard step", () => {
     const row = classify({ summary: base({ state: "draft" }), draft: { step: 3, steps: ["a", "b", "c", "d"], sources: 2 } }, LINKS);
     assert.equal(row.status, "Step 3 of 4: c");
