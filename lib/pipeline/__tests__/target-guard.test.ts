@@ -32,7 +32,9 @@ describe("worker target guard", () => {
 
   it("plain `npm run dev` with .env.local (original project) never starts the dev worker loop", () => {
     assert.equal(devDrainAllowed({ NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: ORIGINAL }), false);
-    assert.equal(devDrainAllowed({ NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: BATON_DEV }), true);
+    // QA-UI3-P1: baton-dev is hosted (and used by production), so the loop needs an explicit opt-in.
+    assert.equal(devDrainAllowed({ NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: BATON_DEV }), false);
+    assert.equal(devDrainAllowed({ NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: BATON_DEV, BATON_DEV_WORKER: "1" }), true);
   });
 
   it("drainJobs refuses before any database call (static wiring check)", async () => {

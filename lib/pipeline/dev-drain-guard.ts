@@ -4,14 +4,28 @@ import { workerTargetAllowed } from "./target-guard";
  * Whether the local development drain loop may start (BTN-004). Pure, so it is unit-tested: only under
  * `next dev` (NODE_ENV exactly "development"), only when Supabase is configured, and never when
  * BATON_DEV_WORKER is "0". Production, test, staging and an unset NODE_ENV all refuse, and so does a
- * Supabase URL naming the original project (target-guard.ts).
+ * Supabase URL naming the original project (target-guard.ts). A hosted (non-local) project also needs
+ * BATON_DEV_WORKER=1 (QA-UI3-P1).
  * (The service key is read only by lib/supabase/admin.ts, boundary H1; without it each drain fails there
  * and the loop logs that once.)
  */
 export function devDrainAllowed(env: Readonly<Record<string, string | undefined>>): boolean {
   if (env.NODE_ENV !== "development" || env.BATON_DEV_WORKER === "0") return false;
-  // Never against the original Supabase project (.env.local still points at it): see target-guard.ts.
-  return workerTargetAllowed(env.NEXT_PUBLIC_SUPABASE_URL);
+  // Never against the original Supabase project: see target-guard.ts.
+  if (!workerTargetAllowed(env.NEXT_PUBLIC_SUPABASE_URL)) return false;
+  // QA-UI3-P1: a hosted project may be the one production uses. A laptop's dev loop (possibly with the fake
+  // AI provider) must not claim its jobs unless explicitly asked; a local Supabase stack keeps the default.
+  return isLocalSupabase(env.NEXT_PUBLIC_SUPABASE_URL as string) || env.BATON_DEV_WORKER === "1";
+}
+
+/** A Supabase stack on this machine (`supabase start`): localhost, 127.0.0.1, ::1 or *.localhost. */
+export function isLocalSupabase(supabaseUrl: string): boolean {
+  try {
+    const host = new URL(supabaseUrl).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1" || host.endsWith(".localhost");
+  } catch {
+    return false;
+  }
 }
 
 /**

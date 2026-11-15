@@ -4,10 +4,11 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createDevDrainTick, DEV_DRAIN_BUDGET, DEV_TICK_TIMEOUT_MS, devDrainAllowed } from "../dev-drain-guard";
+import { createDevDrainTick, DEV_DRAIN_BUDGET, DEV_TICK_TIMEOUT_MS, devDrainAllowed, isLocalSupabase } from "../dev-drain-guard";
 import { DEFAULT_MIN_REMAINING_MS } from "../runner";
 
-const CREDS = { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co" };
+const CREDS = { NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321" };
+const HOSTED = { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co" };
 
 describe("devDrainAllowed (BTN-004)", () => {
   it("runs only under next dev with Supabase configured", () => {
@@ -17,6 +18,14 @@ describe("devDrainAllowed (BTN-004)", () => {
     for (const NODE_ENV of ["production", "test", "staging", undefined, "Development", ""]) {
       assert.equal(devDrainAllowed({ ...CREDS, NODE_ENV }), false, String(NODE_ENV));
     }
+  });
+  it("QA-UI3-P1: a hosted project needs an explicit BATON_DEV_WORKER=1; a local stack does not", () => {
+    assert.equal(devDrainAllowed({ ...HOSTED, NODE_ENV: "development" }), false);
+    assert.equal(devDrainAllowed({ ...HOSTED, NODE_ENV: "development", BATON_DEV_WORKER: "1" }), true);
+    assert.equal(devDrainAllowed({ ...HOSTED, NODE_ENV: "production", BATON_DEV_WORKER: "1" }), false);
+    assert.equal(devDrainAllowed({ ...CREDS, NODE_ENV: "development" }), true);
+    for (const url of ["http://localhost:54321", "http://127.0.0.1:54321", "http://[::1]:54321", "http://api.supabase.localhost"]) assert.equal(isLocalSupabase(url), true, url);
+    for (const url of ["https://example.supabase.co", "https://localhost.example.com", "not a url"]) assert.equal(isLocalSupabase(url), false, url);
   });
   it("refuses without Supabase or when switched off", () => {
     assert.equal(devDrainAllowed({ NODE_ENV: "development" }), false);
