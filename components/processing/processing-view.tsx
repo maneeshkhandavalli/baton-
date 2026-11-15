@@ -275,11 +275,18 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
                   "Start processing"
                 )}
               </Button>
-              {handoverState === "draft" && (
-                <Link href={`${routes.handover.new}?draft=${encodeURIComponent(handoverId)}`} className={buttonVariants({ variant: "outline", size: "lg" })}>
-                  Add or change sources
-                </Link>
-              )}
+              {handoverState === "draft" &&
+                // QA-UI3-H1: the wizard only reopens a draft none of whose sources were read; after that it
+                // redirects straight back here, so offer Settings → Sources (remove a source) instead.
+                (sources.some((s) => s.state === "parsed" || s.state === "parsing") ? (
+                  <Link href={`${routes.handover.settings(handoverId)}#sources`} className={buttonVariants({ variant: "outline", size: "lg" })}>
+                    Manage sources
+                  </Link>
+                ) : (
+                  <Link href={`${routes.handover.new}?draft=${encodeURIComponent(handoverId)}`} className={buttonVariants({ variant: "outline", size: "lg" })}>
+                    Add or change sources
+                  </Link>
+                ))}
             </div>
             {sources.length === 0 ? (
               <p className="text-caption text-muted-foreground">This handover has no sources yet. Add at least one to start.</p>
