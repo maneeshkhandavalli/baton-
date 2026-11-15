@@ -22,7 +22,7 @@ const LINKS: DashboardLinks = {
   gaps: () => "/preview/review",
   settings: () => "/preview/review",
   draft: (_id, step) => `/preview/wizard?step=${step}`,
-  offers: "/account",
+  offers: () => "/account",
 };
 
 /**

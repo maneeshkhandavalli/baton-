@@ -8,7 +8,7 @@
 import type { GapQuestionSummary, HandoverSummary, MemberSummary, ProcessingStatus, ReadinessReport } from "@/lib/contracts/dto";
 import type { HandoverState, MemberRole } from "@/lib/contracts/enums";
 
-/** Where each kind of destination lives. Production passes real routes; previews pass /preview/* routes. */
+/** Where each kind of destination lives (each a function of the handover id). Production passes real routes; previews pass /preview/* routes. */
 export interface DashboardLinks {
   review: (id: string) => string;
   processing: (id: string) => string;
@@ -16,7 +16,7 @@ export interface DashboardLinks {
   gaps: (id: string) => string;
   settings: (id: string) => string;
   draft: (id: string, step: number) => string;
-  offers: string;
+  offers: (id: string) => string;
 }
 
 /** A draft the viewer manages: which wizard step is next (1-based) of how many. */
@@ -128,7 +128,7 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
 
   // A creatorship offer addressed to the viewer always comes first.
   if (h.pendingCreatorTransfer && !h.viewerIsCreator) {
-    attention.push({ kind: "offer", label: "Offer", reason: "You've been offered creatorship of this handover.", cta: "Review offer", href: links.offers, rank: 0 });
+    attention.push({ kind: "offer", label: "Offer", reason: "You've been offered creatorship. Accept or decline it in settings.", cta: "Review offer", href: links.offers(h.id), rank: 0 });
   }
 
   if (stage === "draft") {

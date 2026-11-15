@@ -12,7 +12,7 @@ const LINKS: DashboardLinks = {
   gaps: (id) => `/g/${id}`,
   settings: (id) => `/s/${id}`,
   draft: (id, step) => `/new?draft=${id}&step=${step}`,
-  offers: "/account",
+  offers: () => "/account",
 };
 
 const base = (over: Partial<HandoverSummary> = {}): HandoverSummary => ({
