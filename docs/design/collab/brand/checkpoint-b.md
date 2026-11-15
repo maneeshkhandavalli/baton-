@@ -62,7 +62,7 @@ new `components/shared/{evidence-mark,evidence-stamp}.tsx`, `components/shared/_
 `components/marketing/landing.css` (new), `components/marketing/product-preview.tsx` (deleted),
 `docs/design/design-system.md` (rewritten), `docs/design/research/ui3-research.md` (new).
 
-## Screenshots (git-ignored, `C:/Users/manee/Documents/programing/baton/.claude/ui3/shots/brand/`)
+## Screenshots (git-ignored, `<repo>/.claude/ui3/shots/brand/`)
 - Landing contact sheets: `landing/_final-1440-light.jpg`, `_final-1440-dark.jpg`, `_final-1024-light.jpg`,
   `_final-390-light.jpg`, `_final-390-dark.jpg`; individual frames `landing/home-<width>-<theme>-s<n>.jpg`.
 - Reduced motion: `landing/home-1440-light-rm-s0..4.jpg`, `home-390-light-rm-s0..4.jpg`.

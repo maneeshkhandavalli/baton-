@@ -3,8 +3,8 @@
 Author: `shell` (Agent 2). Baseline: `ui3/agent2-shell` at `fc5651a` (= production `c781620` + design lab).
 Method: code read in the shell worktree, plus headless Chrome against the running dev server at `http://localhost:3000`
 (not signed in, no forms submitted), 390x844 (mobile), 1024x900 and 1440x900, light and dark (`localStorage
-baton-theme=dark`), keyboard Tab walk, `prefers-color-scheme: dark` emulation. Screenshots: 
-`C:/Users/manee/Documents/programing/baton/.claude/ui3/shots/shell/` (git-ignored; `x_*` = interaction shots).
+baton-theme=dark`), keyboard Tab walk, `prefers-color-scheme: dark` emulation. Screenshots:
+`<repo>/.claude/ui3/shots/shell/` (git-ignored; `x_*` = interaction shots).
 Zero console errors on every route checked. No horizontal overflow on any product route (one 6px overflow on the
 dev-only `/design/b` at 390).
 

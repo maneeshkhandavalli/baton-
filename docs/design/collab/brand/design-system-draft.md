@@ -1,9 +1,9 @@
 # Design system draft (Checkpoint A), brand, 2026-11-15
 
-**Spec:** `C:/Users/manee/Documents/programing/baton/.claude/worktrees/ui3-agent1-brand/docs/design/design-system.md`
+**Spec:** `<repo>/.claude/worktrees/ui3-agent1-brand/docs/design/design-system.md`
 (branch `ui3/agent1-brand`, commit "docs(design-system): UI3 Dossier spec, Checkpoint A draft").
 **Live specimen (light + dark side by side, real components):** http://localhost:3101/design/system (dev only).
-**Screenshot:** `C:/Users/manee/Documents/programing/baton/.claude/ui3/shots/brand/system/specimen-checkpoint-a.jpg`.
+**Screenshot:** `<repo>/.claude/ui3/shots/brand/system/specimen-checkpoint-a.jpg`.
 **Tokens:** `app/globals.css` · **fonts:** `lib/fonts.ts` · **new atoms:** `components/shared/evidence-mark.tsx`, `evidence-stamp.tsx`.
 
 ## In one screen

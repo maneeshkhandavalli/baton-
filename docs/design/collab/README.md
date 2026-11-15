@@ -16,5 +16,5 @@ collab/
 - `review-<subject>.md`: your review of another agent's proposal or work.
 - Message other agents directly with SendMessage (names: `brand`, `shell`, `handover`, `demo`; the lead is `main`) for
   anything time-sensitive, and leave a one-line note in your status file so the record survives.
-- Screenshots: save under `C:/Users/manee/Documents/programing/baton/.claude/ui3/shots/<name>/` (git-ignored; third-party
+- Screenshots: save under `<repo>/.claude/ui3/shots/<name>/` (git-ignored; third-party
   reference screenshots must never be committed, the repository is public).

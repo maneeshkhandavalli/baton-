@@ -6,13 +6,13 @@ Baseline: production `master` at `c781620`. Integration branch: `ui3/integration
 
 | Agent | Name (for messages) | Branch | Worktree (absolute) | Dev port |
 |---|---|---|---|---|
-| Lead / orchestrator | `main` | `ui3/integration` | `C:/Users/manee/Documents/programing/baton/.claude/worktrees/ui3-lead` | 3100 (integration review) |
+| Lead / orchestrator | `main` | `ui3/integration` | `<repo>/.claude/worktrees/ui3-lead` | 3100 (integration review) |
 | 1 Landing, brand, design system | `brand` | `ui3/agent1-brand` | `.../.claude/worktrees/ui3-agent1-brand` | 3101 |
 | 2 Dashboard, app shell, account, theme | `shell` | `ui3/agent2-shell` | `.../.claude/worktrees/ui3-agent2-shell` | 3102 |
 | 3 Handover creation, review, report, Gap Interview | `handover` | `ui3/agent3-handover` | `.../.claude/worktrees/ui3-agent3-handover` | 3103 |
 | 4 Demo experience | `demo` | `ui3/agent4-demo` | `.../.claude/worktrees/ui3-agent4-demo` | 3104 |
 
-Start a dev server for a worktree with `node C:/Users/manee/Documents/programing/baton/.claude/ui3/dev.mjs <worktree> <port>`
+Start a dev server for a worktree with `node <repo>/.claude/ui3/dev.mjs <worktree> <port>`
 (baton-dev only, processing worker off, no env values printed). `npm ci` in the worktree first.
 
 ## File ownership (one owner per path; everyone may READ everything)

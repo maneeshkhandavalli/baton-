@@ -24,6 +24,10 @@ approved (one streamed listMyHandovers, no new query); theme logic (`hooks/use-t
 Phase C (opened by lead): dev-only dashboard redesign preview at http://localhost:3102/design/dashboard-preview
 (commits 4e7fee6, 2943553), pure model `components/dashboard/model.ts` + tests; handoverNav move 8d97c44 (sent to
 handover).
-ON HOLD (lead): preview is with the user alongside brand's landing variants. Real /dashboard and the
-Light/Dark/System control wait for the user's decision on palette and IA.
+Direction (lead, user): refine master's dashboard in place, keep it simple. Done on ui3/agent2-shell:
+5f672b5 (Dashboard current on /handover/[id]/*, tested), d176e6b (Up next panel from classify, status wording,
+points-decided progress, draft step N of M, first-run steps, skeleton, wider layout; /preview/dashboard renders the
+same components via the shared loader). v2 experiment parked in 0311c13 (not extended). Research:
+research-dashboard-v2.md. Screenshots: .claude/ui3/shots/shell/v3/.
+Lead verified v3 and approved the render-determinism.test.ts change. ON HOLD until the user reviews.
 Blockers: none.
