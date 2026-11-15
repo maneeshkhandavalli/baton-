@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { HandoverSummary, ReadinessReport } from "@/lib/contracts/dto";
 
-import { attentionQueue, classify, filterRows, relativeTime, resumeTarget, sortRows, stageOf, type DashboardLinks } from "../model";
+import { attentionQueue, classify, filterRows, groupActivityByDay, relativeTime, resumeTarget, sortRows, stageOf, type ActivityItem, type DashboardLinks } from "../model";
 
 const LINKS: DashboardLinks = {
   review: (id) => `/r/${id}`,
@@ -112,5 +112,17 @@ describe("dashboard filtering and ordering", () => {
     assert.equal(relativeTime("2026-11-15T11:30:00Z", now), "30 min ago");
     assert.equal(relativeTime("2026-11-14T12:00:00Z", now), "yesterday");
     assert.equal(relativeTime("not a date", now), "");
+  });
+});
+
+describe("activity timeline grouping", () => {
+  it("buckets by local calendar day in a fixed order and skips bad dates", () => {
+    const now = new Date(2026, 10, 15, 12, 0);
+    const item = (id: string, at: Date | string): ActivityItem => ({ id, at: typeof at === "string" ? at : at.toISOString(), text: "x", handover: "h", href: "/", tone: "neutral" });
+    const groups = groupActivityByDay(
+      [item("a", new Date(2026, 10, 15, 9)), item("b", new Date(2026, 10, 14, 22)), item("c", new Date(2026, 10, 11, 8)), item("d", new Date(2026, 9, 1)), item("e", "nope")],
+      now,
+    );
+    assert.deepEqual(groups.map((g) => [g.label, g.items.map((i) => i.id)]), [["Today", ["a"]], ["Yesterday", ["b"]], ["Earlier this week", ["c"]], ["Earlier", ["d"]]]);
   });
 });

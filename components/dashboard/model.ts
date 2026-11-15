@@ -336,3 +336,20 @@ export function relativeTime(iso: string, now: Date): string {
   if (d < 7) return `${d} days ago`;
   return new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
+
+/** Activity grouped for a timeline: "Today", "Yesterday", "Earlier this week", "Earlier" (by local calendar day). */
+export function groupActivityByDay(items: readonly ActivityItem[], now: Date): { label: string; items: ActivityItem[] }[] {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = startOfDay(now);
+  const DAY = 86_400_000;
+  const order = ["Today", "Yesterday", "Earlier this week", "Earlier"] as const;
+  const buckets = new Map<string, ActivityItem[]>();
+  for (const it of items) {
+    const t = Date.parse(it.at);
+    if (Number.isNaN(t)) continue;
+    const d = startOfDay(new Date(t));
+    const label = d >= today ? order[0] : d >= today - DAY ? order[1] : d >= today - 6 * DAY ? order[2] : order[3];
+    buckets.set(label, [...(buckets.get(label) ?? []), it]);
+  }
+  return order.filter((l) => buckets.has(l)).map((label) => ({ label, items: buckets.get(label)! }));
+}
