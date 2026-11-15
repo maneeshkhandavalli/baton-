@@ -5,6 +5,14 @@ Tokens live in `app/globals.css`; primitives in `components/ui/**`; product-leve
 `components/shared/**`; frames in `components/layout/**`. This document is the contract every page follows
 in milestone 2.
 
+> **UI3 update (2026-11-15, branch `ui3/agent1-landing`).** The user chose master's minimal direction as the foundation
+> (Dossier and the two experimental variants live on `ui3/agent1-brand` only). Changes to this system, values only,
+> token names unchanged: success `#2e7d32` / dark `#7cc35a` (hover `#256628` / `#94d074`, fg `#23622a` / `#a3d98a`,
+> soft `#e5f2e6` / `#16260f`) so it is clearly apart from evidence sourced (ΔE 5.7 → ≥ 20 under deuteranopia); warning
+> `#ad4f0e` / dark `#d9803a` (white text 4.3:1 → 5.4:1; apart from inferred ochre); `focus-ring` / `focus-ring-within`
+> utilities (solid 2px ring, ≥ 6.7:1) replace the 40%-alpha halo (2.0:1); input placeholders use `muted-foreground`
+> (3.5:1 → 6.2:1); reduced motion also zeroes animation/transition delays; one landing-only scroll style (`.how-progress`).
+
 ---
 
 ## 1. Audit (baseline `24320e1` + plan commit)
@@ -95,8 +103,8 @@ System tones — each has `base`, `-fg` (text on paper/soft), `-soft` (tint); so
 | Tone | base | fg | soft | Meaning |
 |---|---|---|---|---|
 | primary / info | `#2c42c9` | `#2335a6` | `#eaedfb` | The primary action; current location; neutral guidance |
-| success | `#127a58` | `#0b6146` | `#e3f2eb` | Saved, approved, done |
-| warning | `#c25e0c` | `#8e4307` | `#fcecdc` | Needs attention, reversible risk, "in review" |
+| success | `#2e7d32` | `#23622a` | `#e5f2e6` | Saved, approved, done (UI3: leaf green, apart from evidence sourced) |
+| warning | `#ad4f0e` | `#8e4307` | `#fcecdc` | Needs attention, reversible risk, "in review" (UI3: white text 5.4:1) |
 | danger (`destructive`) | `#c2364b` | `#9f2638` | `#f9e5e8` | Failure, irreversible, reject/delete |
 
 Evidence status (only for evidence; logo uses all four):
