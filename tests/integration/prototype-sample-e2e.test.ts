@@ -35,7 +35,8 @@ import { PgBackedStorage, PgContainer, PsqlDbClient, lit } from "./support/pg";
 import { allowFakeAi, currentUserId, flushAfter, installCustomBackends, resetPlatform, signInAs } from "./support/platform";
 
 const ENABLED = process.env.BATON_IT_PG === "1";
-const PLANTED = ["99999 00003", "sponsors@example.org"];
+// Synthetic numbers planted in the core chat (lib/demo/scenario/sources.ts): Mr. Desai, Ishaan, the opted-out member.
+const PLANTED = ["99999 00008", "99999 00009", "99999 00007"];
 
 function ok<T>(r: { ok: true; data: T } | { ok: false; error: unknown }, label: string): T {
   assert.ok(r.ok, `${label}: ${JSON.stringify(!r.ok && r.error)}`);

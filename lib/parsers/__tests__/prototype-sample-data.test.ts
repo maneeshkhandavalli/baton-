@@ -9,7 +9,8 @@ import { CODECELL_SAMPLE_POINTS, CODECELL_SAMPLE_SOURCES, isSampleFileName, miss
 import { parseSource } from "../parse-source";
 
 const bytes = (s: string) => new TextEncoder().encode(s);
-const PLANTED = ["99999 00003", "sponsors@example.org"];
+// Synthetic numbers planted in the core chat (lib/demo/scenario/sources.ts): Mr. Desai, Ishaan, the opted-out member.
+const PLANTED = ["99999 00008", "99999 00009", "99999 00007"];
 
 describe("prototype sample sources", () => {
   it("are exactly the registered sample file names, all recognisable as sample data", () => {
@@ -40,7 +41,8 @@ describe("prototype sample sources", () => {
     assert.ok(r.data.participants.length >= 4, "Kabir, Neha, Priya and Arjun");
     const all = JSON.stringify(r.data);
     for (const p of PLANTED) assert.ok(!all.includes(p), `${p} must be masked`);
-    assert.ok(text.some((m) => m.body.includes("[PHONE_1]")) && text.some((m) => m.body.includes("[EMAIL_1]")));
+    // Mr. Desai's and Ishaan's numbers (token numbers depend on what else was masked first, e.g. a system line).
+    assert.ok(new Set(text.flatMap((m) => m.body.match(/\[PHONE_\d+\]/g) ?? [])).size >= 2);
   });
 
   it("the Markdown sample parses with the real parser", async () => {
