@@ -14,7 +14,11 @@ the lead consolidates here.
 | handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done: 8079f5a scenario + dec6439 sample alignment (npm test 2,115/2,116 pass, 1 Docker todo); review sent (D1-D4) | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
-## Current: integrated and QA'd (D19)
+## Current: data-integrity fixes (G1, X1)
+- `ui3/fix-gap-answer-point` and `ui3/fix-retry-duplicates` merged; migrations 20261115100100 and 20261115100200 tested on isolated Postgres only, NOT applied to baton-dev.
+- npm test 2,162 (2,161 pass, 0 fail, 1 todo); SQL 22/22; integration SQL 11/11; build and smoke pass.
+
+## Previous: integrated and QA'd (D19)
 - `ui3/integration` @ dd777dd + docs: lint, typecheck, npm test 2,152 (2,151 pass, 0 fail, 1 Docker todo), production build, smoke 18/18.
 - Functional QA: `docs/design/qa/ui3-functional-qa.md` (8 fixes merged; 2 open items need a decision).
 - Not pushed: waiting for the user to confirm Vercel Preview Deployments are off.
