@@ -5,6 +5,8 @@ import { accountNav, workspaceNav, type NavItem } from "@/config/navigation";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
+import { isNavActive } from "./nav-match";
+
 export interface WorkspaceNavListProps {
   /** Current pathname, or null when not yet known (static prerender fallback). */
   pathname: string | null;
@@ -14,15 +16,13 @@ export interface WorkspaceNavListProps {
 const itemClass =
   "flex h-9 w-full items-center gap-2.5 max-lg:h-10 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40";
 
-function isActive(pathname: string | null, href: string) {
-  return pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));
-}
 
 function NavLinks({ items, pathname }: { items: readonly NavItem[]; pathname: string | null }) {
   return (
     <ul className="space-y-0.5">
-      {items.map(({ title, href, icon: Icon }) => {
-        const active = isActive(pathname, href);
+      {items.map((item) => {
+        const { title, href, icon: Icon } = item;
+        const active = isNavActive(pathname, item);
         return (
           <li key={href}>
             <Link

@@ -81,11 +81,15 @@ describe("first-week due dates (QA-R3-12-R1)", () => {
 });
 
 describe("dashboard draft rows", () => {
-  it("DraftRow lives in its own module and both dashboards import it from there", () => {
+  it("DraftRow lives in its own module and both dashboards render it from there", () => {
     assert.match(read("components/dashboard/draft-row.tsx"), /export function DraftRow\(/);
+    // UI3: both dashboards render the shared DashboardView, which imports DraftRow from its own module.
+    const view = read("components/dashboard/dashboard-view.tsx");
+    assert.match(view, /import \{ DraftRow \} from "\.\/draft-row";/);
+    assert.doesNotMatch(view, /DraftRow[^;]*from "\.\/handover-card"/);
     for (const page of ["app/(workspace)/dashboard/page.tsx", "app/(preview)/preview/dashboard/page.tsx"]) {
       const src = read(page);
-      assert.match(src, /import \{ DraftRow \} from "@\/components\/dashboard\/draft-row";/, page);
+      assert.match(src, /import \{ DashboardView \} from "@\/components\/dashboard\/dashboard-view";/, page);
       assert.doesNotMatch(src, /DraftRow[^;]*from "@\/components\/dashboard\/handover-card"/, page);
     }
     // handover-card only re-exports it (no second definition, no direct client-component import).

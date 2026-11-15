@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 
-import { handoverNav } from "@/config/navigation";
+import { handoverNav } from "@/config/handover-navigation";
 import { cn } from "@/lib/utils";
 
 /**
