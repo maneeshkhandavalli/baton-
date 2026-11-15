@@ -490,6 +490,25 @@
     }
   }
 }
+/* Landing "How it works": the rule joining the steps fills as the section scrolls through (the page's one
+   scroll-linked moment). Full and static where unsupported or under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .how-progress {
+      animation: how-fill linear both;
+      animation-timeline: view();
+      animation-range: entry 30% cover 55%;
+    }
+  }
+}
+@keyframes how-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
 @keyframes reveal-in {
   from {
     opacity: 0;

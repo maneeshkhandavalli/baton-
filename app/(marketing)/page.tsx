@@ -1,20 +1,8 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  BadgeCheck,
-  BookOpen,
-  Check,
-  Eye,
-  FileLock2,
-  FileText,
-  ListChecks,
-  ScanSearch,
-  ShieldCheck,
-  Upload,
-  UserCheck,
-} from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, Circle, Eye, FileLock2, ShieldCheck, UserCheck } from "lucide-react";
 
 import { ForTheNerds } from "@/components/marketing/for-the-nerds";
+import { HowItWorksSteps } from "@/components/marketing/how-it-works";
 import { ProductPreview } from "@/components/marketing/product-preview";
 import { FadeIn } from "@/components/shared/fade-in";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -35,38 +23,19 @@ const PROMISES = [
 /** What the extractor looks for (lib/contracts/enums.ts POINT_CATEGORIES, plus due dates on tasks). */
 const EXTRACTS = ["Decisions", "Owners", "Open tasks", "Deadlines", "Blockers", "Risks", "Contacts", "Account access"] as const;
 
-const STEPS = [
-  {
-    icon: Upload,
-    title: "Bring the real record",
-    body: "Export the team's WhatsApp groups and add handbooks, MoUs and notes. Choose the dates and conversations that matter, and who may see each source.",
-    detail: "WhatsApp .txt or .zip · PDF · Word · Markdown · text",
-  },
-  {
-    icon: ScanSearch,
-    title: "Baton drafts, with receipts",
-    body: "Personal details are masked first. AI then drafts the handover, and every quote it cites is matched against the original text and checked separately to confirm it backs the point.",
-    detail: null,
-  },
-  {
-    icon: ListChecks,
-    title: "People review every claim",
-    body: "The outgoing member and reviewers approve, edit or reject each point and settle disagreements. Whatever no source covers goes to a short Gap Interview.",
-    detail: null,
-  },
-  {
-    icon: BookOpen,
-    title: "Hand over with confidence",
-    body: "The incoming person gets a clear handover and a first-week checklist, and acknowledges that they have read it.",
-    detail: null,
-  },
-] as const;
-
 const STATUS_DETAIL = {
   sourced: "A quote that exists word for word in the source, checked separately to make sure it actually backs the claim.",
   inferred: "A reasonable reading with no quote that states it outright. A reviewer must confirm it before it's published.",
   conflicting: "Sources disagree. Both sides stay visible, newest first, until a person records what's true now.",
   missing: "Something a handover should cover that nobody wrote down. It becomes a Gap Interview question.",
+} as const;
+
+/** One real point per label from the fictional CodeCell demo (lib/demo/scenario). */
+const STATUS_EXAMPLE = {
+  sourced: { title: "DevForge 2027 runs on two days, daytime only", ref: "Priya Raman · 21 Aug 2026 · Core Team 26-27 · line 15" },
+  inferred: { title: "The weekly meeting is on Thursdays", ref: "3 messages mention it; none states it as a rule" },
+  conflicting: { title: "Workshop fee for non-members", ref: "Priya, 4 Aug: ₹100 · Kabir, 18 Sep: free for everyone" },
+  missing: { title: "Who runs the Discord server?", ref: "No source · sent to the Gap Interview" },
 } as const;
 
 const STATUS_ACCENT = {
@@ -82,6 +51,13 @@ const PUBLISH_GATES = [
   "an inferred point is unconfirmed",
   "a conflict is unresolved",
   "a required gap question is unanswered",
+] as const;
+
+/** What usually goes missing in a handover (the categories Baton extracts). */
+const LOST = [
+  { title: "Decisions and why", body: "Buried in months of group chat, with the reasoning scattered across replies." },
+  { title: "Who owns what", body: "Owners, deadlines and account access that only the outgoing person remembers." },
+  { title: "What nobody wrote down", body: "The gaps the next person discovers in their first week, the hard way." },
 ] as const;
 
 const PRIVACY = [
@@ -130,6 +106,23 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── The problem ──────────────────────────────────── */}
+      <section aria-labelledby="problem-title" className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6 sm:pb-24">
+        <div className="reveal grid gap-8 border-t border-border pt-10 lg:grid-cols-[1fr_2fr] lg:gap-12">
+          <h2 id="problem-title" className="type-section-title">
+            What leaves with the person who leaves.
+          </h2>
+          <ul className="grid gap-6 sm:grid-cols-3">
+            {LOST.map((l) => (
+              <li key={l.title}>
+                <h3 className="type-heading">{l.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{l.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       {/* ── How it works ─────────────────────────────────── */}
       <section id="how-it-works" aria-labelledby="how-title" className="border-y border-border/70 bg-card/50">
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
@@ -152,28 +145,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <ol className="reveal-group mt-12 grid gap-4 sm:grid-cols-2 lg:mt-14 xl:grid-cols-4">
-            {STEPS.map((step, i) => (
-              <li key={step.title} className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-xs transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-raised sm:p-6">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-primary-soft text-primary-fg">
-                    <step.icon aria-hidden="true" className="size-4.5" />
-                  </span>
-                  <span className="ml-auto font-mono text-xs text-muted-foreground">
-                    <span className="sr-only">Step </span>0{i + 1}
-                  </span>
-                </div>
-                <h3 className="mt-5 type-heading">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
-                {step.detail && (
-                  <p className="mt-auto flex items-start gap-1.5 pt-4 text-caption text-muted-foreground">
-                    <FileText aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                    {step.detail}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ol>
+          <HowItWorksSteps />
         </div>
       </section>
 
@@ -190,25 +162,39 @@ export default function HomePage() {
         </div>
         <dl className="reveal-group mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {EVIDENCE_STATUSES.map((s) => (
-            <div key={s} className={cn("space-y-3 rounded-2xl border border-t-2 border-border bg-card p-5", STATUS_ACCENT[s])}>
+            <div key={s} className={cn("flex flex-col gap-3 rounded-2xl border border-t-2 border-border bg-card p-5", STATUS_ACCENT[s])}>
               <dt>
                 <StatusBadge status={s} />
               </dt>
-              <dd className="text-sm leading-relaxed text-muted-foreground">
-                {STATUS_DETAIL[s]}
-                <span className="sr-only"> {statusConfig[s].description}</span>
+              <dd className="flex flex-1 flex-col text-sm leading-relaxed text-muted-foreground">
+                <span>
+                  {STATUS_DETAIL[s]}
+                  <span className="sr-only"> {statusConfig[s].description}</span>
+                </span>
+                <span className="mt-auto block border-t border-border pt-3 text-foreground">
+                  <span className="block text-caption font-medium">{STATUS_EXAMPLE[s].title}</span>
+                  <span className="mt-0.5 block font-mono text-2xs text-muted-foreground">↳ {STATUS_EXAMPLE[s].ref}</span>
+                </span>
               </dd>
             </div>
           ))}
         </dl>
-        <div className="reveal mt-6 flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-5 sm:flex-row sm:items-start sm:gap-4 sm:p-6">
-          <UserCheck aria-hidden="true" className="size-5 shrink-0 text-primary" />
-          <div className="space-y-1.5">
-            <h3 className="type-heading">A person signs off before anything is published</h3>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Baton won&rsquo;t publish a handover while {PUBLISH_GATES.slice(0, -1).join(", ")}, or {PUBLISH_GATES[PUBLISH_GATES.length - 1]}.
-            </p>
+        <div className="reveal mt-6 grid gap-6 rounded-2xl border border-border bg-muted/40 p-5 sm:p-6 lg:grid-cols-[1fr_1.2fr] lg:items-center lg:gap-10">
+          <div className="flex gap-3">
+            <UserCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
+            <div className="space-y-1.5">
+              <h3 className="type-heading">A person signs off before anything is published</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">Publishing stays locked while any of these is true.</p>
+            </div>
           </div>
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+            {PUBLISH_GATES.map((g) => (
+              <li key={g} className="flex items-center gap-2.5 px-4 py-2.5 text-sm">
+                <Circle aria-hidden="true" className="size-3 shrink-0 text-warning" />
+                <span className="first-letter:uppercase">{g}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -225,7 +211,20 @@ export default function HomePage() {
               details. You confirm the group was told, and anyone can ask to be left out.
             </p>
           </div>
-          <ul className="reveal-group grid gap-8 sm:grid-cols-3 sm:gap-6 lg:grid-cols-1 xl:grid-cols-3">
+          <div className="space-y-8">
+          <figure className="reveal rounded-2xl border border-inverse-muted/25 bg-inverse-foreground/5 p-5 sm:p-6">
+            <figcaption className="text-caption text-inverse-muted">One message from the fictional demo, as received and as stored</figcaption>
+            <p className="mt-3 font-mono text-xs leading-relaxed text-inverse-muted sm:text-sm">
+              our contact at orbitstack is farah khan, partnerships manager. <s className="decoration-inverse-foreground/60">farah.khan@example.org</s>,
+              office line <s className="decoration-inverse-foreground/60">99999 00010</s>
+            </p>
+            <p className="mt-2 font-mono text-xs leading-relaxed sm:text-sm">
+              our contact at orbitstack is farah khan, partnerships manager.{" "}
+              <span className="rounded bg-inverse-foreground/15 px-1 py-px">[EMAIL_1]</span>, office line{" "}
+              <span className="rounded bg-inverse-foreground/15 px-1 py-px">[PHONE_1]</span>
+            </p>
+          </figure>
+          <ul className="reveal-group grid gap-8 sm:grid-cols-3 sm:gap-6">
             {PRIVACY.map((p) => (
               <li key={p.title} className="space-y-2 border-t border-inverse-muted/30 pt-5">
                 <p.icon aria-hidden="true" className="size-5 text-inverse-muted" />
@@ -234,6 +233,7 @@ export default function HomePage() {
               </li>
             ))}
           </ul>
+          </div>
         </div>
       </section>
 
