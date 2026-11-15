@@ -52,6 +52,14 @@ describe("QA-R3-12: invalid date-like values never throw", () => {
     assert.equal(formatDayOrRaw("next Friday"), "next Friday");
     assert.equal(formatDayOrRaw(null), null);
   });
+  it("QA-UI3-K1: a full ISO date-time shows its calendar day, not the raw timestamp", () => {
+    assert.equal(validIsoDay("2026-09-05T04:50:00+00:00"), "2026-09-05");
+    assert.equal(validIsoDay("2026-09-05T04:50Z"), "2026-09-05");
+    assert.equal(validIsoDay("2026-09-05T23:59:59.123+05:30"), "2026-09-05");
+    assert.equal(validIsoDay("2026-02-31T10:00:00Z"), null);
+    assert.equal(validIsoDay("2026-09-05 lunch"), null);
+    assert.equal(formatDayOrRaw("2026-09-05T04:50:00+00:00"), formatDayOrRaw("2026-09-05"));
+  });
   it("key facts render raw text instead of crashing", () => {
     assert.doesNotThrow(() => keyFacts("decision", { decidedAt: "2026-13-45" }));
     assert.equal(keyFacts("decision", { decidedAt: "2026-13-45" })[0].value, "2026-13-45");
