@@ -394,6 +394,10 @@ export interface PipelinePoint {
   redacted: boolean;
   newestEvidenceAt: string | null;
   lastSupportedAt: string | null;
+  /** QA-UI3-X1: source messages the point's active evidence cites (absent from older databases). */
+  citedMessageIds?: string[];
+  /** QA-UI3-X1: the first revision's statement (the extractor's wording), null when redacted. */
+  originalStatement?: string | null;
 }
 
 /** DB-6: non-erased points with their current revision (§10.9 dedup and coverage, §10.10 ordering). */

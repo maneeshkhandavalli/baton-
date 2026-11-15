@@ -33,7 +33,7 @@ export function ReadinessRing({ value, size = 56, strokeWidth = 5, label = "Read
           strokeDashoffset={c * (1 - pct / 100)}
           className={cn(
             "transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none",
-            pct === 100 ? "stroke-status-sourced" : "stroke-primary",
+            pct === 100 ? "stroke-success" : "stroke-primary",
           )}
         />
       </svg>

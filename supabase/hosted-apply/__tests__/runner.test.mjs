@@ -49,8 +49,16 @@ const GOOD = {
   "r4_post.sql": "history_rows|37|t\nhistory_newest|20261114100100|t\ndelete_own_account_server_only|service_role|t\n" +
     "account_has_password_server_only|service_role|t\npurge_handover_still_closed|no role|t\nerase_participant_still_closed|no role|t\n" +
     "same_owner_as_purge|postgres|t\nsearch_path_pinned|delete_own_account|t\nno_restore_role|-|t",
+  "r5_pre.sql": "history_rows|37|t\nhistory_newest|20261114100100|t\nno_r5_history|-|t\nreview_gap_answer_secdef|postgres|t\n" +
+    "review_gap_answer_server_only|service_role|t\nreview_gap_answer_is_old|-|t\nlist_points_secdef|postgres|t\n" +
+    "list_points_server_only|service_role|t\nlist_points_is_old|-|t",
+  "r5_post.sql": "history_rows|39|t\nhistory_newest|20261115100200|t\nr5_history|-|t\nreview_gap_answer_secdef|postgres|t\n" +
+    "review_gap_answer_server_only|service_role|t\nreview_gap_answer_is_new|-|t\nlist_points_secdef|postgres|t\n" +
+    "list_points_server_only|service_role|t\nlist_points_is_new|-|t",
+  "r5_backup.sql": "-- a\nCREATE OR REPLACE FUNCTION public.list_points_for_pipeline(x)\n-- b\nCREATE OR REPLACE FUNCTION public.review_gap_answer(x)",
 };
 const R4_CONFIRM = "apply-account-deletion-to-xnwppnzvrpthukxjfojj";
+const R5_CONFIRM = "apply-ui3-fixes-to-xnwppnzvrpthukxjfojj";
 
 /** Fake docker: logs argv (and the env-file's PGUSER line, never the password), answers -f /ha/<file>. */
 function fakeDocker({ down = false, outputs = GOOD, txnExit = 0 } = {}) {
@@ -69,6 +77,7 @@ for a in "$@"; do [ "$prev" = "-f" ] && file="$a"; [ "$prev" = "--env-file" ] &&
 case "$file" in
   /ha/r3_phase_d_txn.sql) echo "TXN" >> "${log.replace(/\\/g, "/")}"; exit ${txnExit} ;;
   /ha/r4_account_deletion_txn.sql) echo "TXN4" >> "${log.replace(/\\/g, "/")}"; exit ${txnExit} ;;
+  /ha/r5_ui3_fixes_txn.sql) echo "TXN5" >> "${log.replace(/\\/g, "/")}"; exit ${txnExit} ;;
   /ha/*) cat "${out.replace(/\\/g, "/")}/\${file#/ha/}" 2>/dev/null ;;
 esac
 `);
@@ -337,5 +346,43 @@ describe("r4apply (20261114100100_account_deletion)", () => {
     assert.ok(bundle.includes(migration));
     assert.ok(bundle.indexOf("values ('20261114100100', 'account_deletion')") < bundle.indexOf("commit;"));
     assert.ok(!/grant execute on function public\.(purge_handover|erase_participant)/.test(bundle));
+  });
+});
+
+describe("r5apply (UI3 fixes: 20261115100100 + 20261115100200)", () => {
+  const backup = () => path.join(tmp("baton-r5-backup-"), "functions.sql");
+  const env = (confirm = R5_CONFIRM, out = backup()) => ({ BATON_DEV_SECRETS: secrets(GOOD_URL), BATON_R5_CONFIRM: confirm, BATON_R5_BACKUP: out });
+
+  it("refuses without its own confirmation phrase or without a backup path, before docker", () => {
+    for (const confirm of ["", "yes", R4_CONFIRM]) {
+      const docker = fakeDocker();
+      const r = run(REPO, "r5apply", { docker, env: env(confirm) });
+      assert.equal(r.code, 3, r.out);
+      assert.equal(docker.calls(), "");
+    }
+    const docker = fakeDocker();
+    const r = run(REPO, "r5apply", { docker, env: { BATON_DEV_SECRETS: secrets(GOOD_URL), BATON_R5_CONFIRM: R5_CONFIRM } });
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /BATON_R5_BACKUP/);
+  });
+
+  it("does not back up or apply when the gate shows the fixes already applied", () => {
+    const docker = fakeDocker({ outputs: { ...GOOD, "r5_pre.sql": GOOD["r5_pre.sql"].replace("review_gap_answer_is_old|-|t", "review_gap_answer_is_old|-|f") } });
+    const r = run(REPO, "r5apply", { docker, env: env() });
+    assert.equal(r.code, 5, r.out);
+    assert.doesNotMatch(docker.calls(), /TXN5|r5_backup/);
+  });
+
+  it("with the gate green: pre-check, backup (2 functions saved), the pinned bundle once, then the post-check", () => {
+    const docker = fakeDocker();
+    const out = backup();
+    const r = run(REPO, "r5apply", { docker, env: env(R5_CONFIRM, out) });
+    assert.equal(r.code, 0, r.out);
+    const runs = docker.calls().split("\n").filter((l) => l.startsWith("CALL run"));
+    assert.deepEqual(runs.map((l) => /-f \/ha\/(\S+)/.exec(l)?.[1]), ["r5_pre.sql", "r5_backup.sql", "r5_ui3_fixes_txn.sql", "r5_post.sql"]);
+    assert.match(runs[1], /begin read only/);
+    assert.doesNotMatch(runs[2], /begin read only/);
+    assert.equal((readFileSync(out, "utf8").match(/CREATE OR REPLACE FUNCTION/g) ?? []).length, 2);
+    assert.ok(!r.out.includes(PASSWORD));
   });
 });

@@ -1,0 +1,255 @@
+/*
+ * Identity preview: "Graphite & Highlighter" (docs/design/AI-SLOP-AUDIT.md, /design/directions).
+ * SCOPED to the marketing routes via `.brand-identity` on app/(marketing)/layout.tsx. The app keeps the values in
+ * app/globals.css until the user approves the direction. Token NAMES are the global names, so going app-wide later
+ * means moving these values into :root / .dark.
+ *
+ * One accent: the highlighter (--highlight). It only ever marks evidence: a quoted line, a source reference, the
+ * selected point, focus. Primary actions are ink. Evidence colours (status-*) never equal system colours.
+ */
+
+.brand-identity {
+  /* Fonts: re-point the global font variables inside this scope (next/font variables are set on the wrapper). */
+  --font-inter: var(--font-atkinson-next);
+  --font-instrument-serif: var(--font-host-grotesk);
+  --font-jetbrains-mono: var(--font-atkinson-mono);
+
+  --background: #f6f6f4;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --muted: #eeeeeb;
+  --muted-foreground: #55555c;
+  --accent: #eeeeeb;
+  --accent-foreground: #18181b;
+  --secondary: #eeeeeb;
+  --secondary-foreground: #18181b;
+  --border: #e1e1dc;
+  --border-strong: #c9c9c2;
+  --input: #8e8e86;
+  --ring: #4f5a00;
+  --overlay: rgb(24 24 27 / 0.4);
+  --inverse: #18181b;
+  --inverse-foreground: #f6f6f4;
+  --inverse-muted: #a6a6ad;
+  --sunken: #e7e7e3;
+  --faint-foreground: #6e6e75;
+  --highlight: #e3ee6b;
+  --highlight-ink: #4f5a00;
+  --on-highlight: #18181b;
+
+  --primary: #18181b;
+  --primary-hover: #2e2e33;
+  --primary-foreground: #ffffff;
+  --primary-soft: #eeeeeb;
+  --primary-fg: #4f5a00;
+
+  --success: #2c7a3f;
+  --success-hover: #23633a;
+  --success-foreground: #ffffff;
+  --success-soft: #e4f1e6;
+  --success-fg: #22602f;
+  --warning: #a5520f;
+  --warning-soft: #f8ead9;
+  --warning-fg: #84400a;
+  --destructive: #b8372b;
+  --destructive-hover: #9a2d23;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #f8e1de;
+  --destructive-fg: #962c22;
+  --info: #45454c;
+  --info-soft: #ececee;
+  --info-fg: #45454c;
+
+  --status-sourced: #2b5f9e;
+  --status-sourced-fg: #224c80;
+  --status-sourced-soft: #e3ebf6;
+  --status-inferred: #94700f;
+  --status-inferred-fg: #73560a;
+  --status-inferred-soft: #f4ecd4;
+  --status-conflicting: #8a3b7c;
+  --status-conflicting-fg: #6e2f63;
+  --status-conflicting-soft: #f2e3ef;
+  --status-missing: #6a6a72;
+  --status-missing-fg: #4f4f56;
+  --status-missing-soft: #ececee;
+
+  --elevation-xs: 0 1px 1px 0 rgb(24 24 27 / 0.04);
+  --elevation-soft: 0 1px 2px 0 rgb(24 24 27 / 0.05);
+  --elevation-raised: 0 2px 4px -1px rgb(24 24 27 / 0.06), 0 12px 28px -10px rgb(24 24 27 / 0.18);
+  --elevation-overlay: 0 4px 10px -2px rgb(24 24 27 / 0.08), 0 28px 56px -14px rgb(24 24 27 / 0.28);
+
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
+}
+
+.dark .brand-identity {
+  --background: #101011;
+  --foreground: #ededef;
+  --card: #1c1c1f;
+  --card-foreground: #ededef;
+  --popover: #27272b;
+  --popover-foreground: #ededef;
+  --muted: #27272b;
+  --muted-foreground: #a6a6ad;
+  --accent: #27272b;
+  --accent-foreground: #ededef;
+  --secondary: #27272b;
+  --secondary-foreground: #ededef;
+  --border: #35353a;
+  --border-strong: #48484e;
+  --input: #6b6b72;
+  --ring: #dbe57a;
+  --overlay: rgb(0 0 0 / 0.62);
+  --inverse: #27272b;
+  --inverse-foreground: #ededef;
+  --inverse-muted: #a6a6ad;
+  --sunken: #0a0a0b;
+  --faint-foreground: #8b8b92;
+  --highlight: #d8e36a;
+  --highlight-ink: #dbe57a;
+  --on-highlight: #101011;
+
+  --primary: #ededef;
+  --primary-hover: #ffffff;
+  --primary-foreground: #101011;
+  --primary-soft: #27272b;
+  --primary-fg: #dbe57a;
+
+  --success: #6cc07f;
+  --success-hover: #86cd96;
+  --success-foreground: #0b170e;
+  --success-soft: #15251a;
+  --success-fg: #94d4a2;
+  --warning: #e0954a;
+  --warning-soft: #2e1f10;
+  --warning-fg: #efb57c;
+  --destructive: #f07a6c;
+  --destructive-hover: #f4978c;
+  --destructive-foreground: #1a0a08;
+  --destructive-soft: #341714;
+  --destructive-fg: #f6a59b;
+  --info: #b9b9c0;
+  --info-soft: #232326;
+  --info-fg: #c9c9cf;
+
+  --status-sourced: #84aeea;
+  --status-sourced-fg: #a9c6f1;
+  --status-sourced-soft: #15233a;
+  --status-inferred: #d8b24e;
+  --status-inferred-fg: #e7cb84;
+  --status-inferred-soft: #2a2310;
+  --status-conflicting: #db8ccc;
+  --status-conflicting-fg: #e9b0de;
+  --status-conflicting-soft: #2f1a2b;
+  --status-missing: #a0a0a8;
+  --status-missing-fg: #c2c2c8;
+  --status-missing-soft: #232326;
+
+  --elevation-xs: 0 1px 1px 0 rgb(0 0 0 / 0.4);
+  --elevation-soft: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --elevation-raised: inset 0 1px 0 0 rgb(255 255 255 / 0.05), 0 12px 28px -10px rgb(0 0 0 / 0.6);
+  --elevation-overlay: inset 0 1px 0 0 rgb(255 255 255 / 0.06), 0 28px 56px -14px rgb(0 0 0 / 0.7);
+}
+
+/* ── Landing type and layout (bi-*) ──────────────────────────────────────────── */
+.bi-wrap {
+  width: min(1160px, 100% - 2.5rem);
+  margin-inline: auto;
+}
+.bi-display {
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 620;
+  font-size: clamp(2.25rem, 1.6rem + 2.2vw, 3.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+.bi-h2 {
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: clamp(1.6rem, 1.3rem + 1vw, 2.25rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.bi-h3 {
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 1.0625rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+.bi-lede {
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+  text-wrap: pretty;
+}
+.bi-body {
+  font-size: 0.975rem;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  text-wrap: pretty;
+}
+.bi-mono {
+  font-family: var(--font-atkinson-mono), ui-monospace, monospace;
+}
+.bi-ref {
+  font-family: var(--font-atkinson-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--highlight-ink);
+}
+.bi-rule {
+  border-top: 1px solid var(--border);
+}
+
+/* Highlighted source line (the one accent). */
+.bi-mark {
+  background: var(--highlight);
+  color: var(--on-highlight);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.05em 0.15em;
+  border-radius: 2px;
+}
+
+/* Evidence preview: the selected point and its source lines. */
+.bi-point {
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.bi-point[aria-pressed="true"] {
+  background: var(--muted);
+  box-shadow: inset 2px 0 0 var(--highlight-ink);
+}
+.bi-line {
+  transition: opacity 200ms ease;
+}
+.bi-transcript[data-has-selection="true"] .bi-line:not([data-hit="true"]) {
+  opacity: 0.45;
+}
+.bi-line mark {
+  background: transparent;
+  color: inherit;
+  transition: background-color 200ms ease;
+}
+.bi-line[data-hit="true"] mark {
+  background: var(--highlight);
+  color: var(--on-highlight);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  border-radius: 2px;
+}
+
+/* Meter track (shell review): visible at 0% on cards in both themes. */
+.brand-identity {
+  --track: #d6d6cf;
+}
+.dark .brand-identity {
+  --track: #3e3e44;
+}

@@ -1,17 +1,19 @@
 "use client";
 
-import { FileText, MessageCircle, UserX } from "lucide-react";
+import { ChevronDown, FileText, MessageCircle, UserX } from "lucide-react";
 
 import { formatCount, formatDate } from "@/components/handover/format";
 import { accessLevelMeta, identityKindLabel } from "@/components/handover/labels";
 import { MaskedText } from "@/components/shared/masked-text";
 import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { ChoiceCard } from "@/components/ui/choice-card";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ACCESS_LEVELS } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
+import { deselectAll, selectAll, selectionSummary, toggleConversation } from "./conversation-selection";
 import type { DraftSource } from "./draft-state";
 
 const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
@@ -76,31 +78,65 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
                         </span>
                       </>
                     }
-                    description="Untick conversations that aren't about this role."
+                    description="Untick conversations that aren't about this role. Open one to see its preview and who took part."
                   >
-                    <ul className="divide-y divide-border rounded-lg border border-border">
-                      {p.conversations.map((c) => {
-                        const included = !s.excludedConversations.includes(c.localId);
-                        return (
-                          <li key={c.localId}>
-                            <label className={cn("flex cursor-pointer items-start gap-3 p-3 text-sm transition-colors hover:bg-muted/40", !included && "bg-muted/50 text-muted-foreground")}>
-                              <input
-                                type="checkbox"
-                                className="mt-0.5 size-4 shrink-0 accent-primary"
-                                checked={included}
-                                onChange={() => update(s.localId, { excludedConversations: toggle(s.excludedConversations, c.localId) })}
-                              />
-                              <span className="min-w-0">
-                                <MaskedText text={c.preview} className={cn("block type-quote [overflow-wrap:anywhere]", !included && "line-through")} />
-                                <span className="text-caption text-muted-foreground">
-                                  {formatDate(c.startedAt)} – {formatDate(c.endedAt)} · {formatCount(c.messageCount)} messages
-                                </span>
-                              </span>
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    {(() => {
+                      const sum = selectionSummary(p.conversations, s.excludedConversations);
+                      const labelOf = new Map(p.participants.map((x) => [x.localId, x.displayLabel]));
+                      return (
+                        <div className="rounded-lg border border-border">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                            <p className="text-caption text-muted-foreground" aria-live="polite">
+                              <span className="font-medium text-foreground tabular-nums">{sum.selected}</span> of {sum.total} conversations ·{" "}
+                              <span className="font-medium text-foreground tabular-nums">{formatCount(sum.selectedMessages)}</span> of {formatCount(sum.totalMessages)} messages selected
+                            </p>
+                            <div className="flex gap-1.5">
+                              <Button type="button" size="sm" variant="ghost" disabled={sum.selected === sum.total} onClick={() => update(s.localId, { excludedConversations: selectAll() })}>
+                                Select all
+                              </Button>
+                              <Button type="button" size="sm" variant="ghost" disabled={sum.selected === 0} onClick={() => update(s.localId, { excludedConversations: deselectAll(p.conversations) })}>
+                                Deselect all
+                              </Button>
+                            </div>
+                          </div>
+                          <ul className="max-h-[26rem] divide-y divide-border overflow-y-auto" aria-label={`Conversations in ${s.name}`}>
+                            {p.conversations.map((c) => {
+                              const included = !s.excludedConversations.includes(c.localId);
+                              const people = c.participantLocalIds.map((id) => labelOf.get(id)).filter(Boolean);
+                              return (
+                                <li key={c.localId} className={cn(!included && "bg-muted/50 text-muted-foreground")}>
+                                  <details className="group">
+                                    <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2 text-sm hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                                      <input
+                                        type="checkbox"
+                                        className="size-4 shrink-0 accent-primary"
+                                        checked={included}
+                                        aria-label={`Include conversation from ${formatDate(c.startedAt)}: ${c.preview || "no text preview"}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={() => update(s.localId, { excludedConversations: toggleConversation(s.excludedConversations, c.localId) })}
+                                      />
+                                      <MaskedText text={c.preview || "(no text preview)"} className={cn("min-w-0 flex-1 truncate", !included && "line-through")} />
+                                      <span className="hidden shrink-0 text-caption text-muted-foreground tabular-nums sm:inline">
+                                        {formatDate(c.startedAt)}
+                                        {c.endedAt && formatDate(c.endedAt) !== formatDate(c.startedAt) ? ` – ${formatDate(c.endedAt)}` : ""} · {formatCount(c.messageCount)}
+                                      </span>
+                                      <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+                                    </summary>
+                                    <div className="space-y-1.5 px-3 pb-3 pl-10 text-sm">
+                                      <MaskedText text={c.preview || "(no text preview)"} className="block type-quote [overflow-wrap:anywhere]" />
+                                      <p className="text-caption text-muted-foreground">
+                                        {formatDate(c.startedAt)} – {formatDate(c.endedAt)} · {formatCount(c.messageCount)} messages
+                                        {people.length > 0 && ` · ${people.join(", ")}`}
+                                      </p>
+                                    </div>
+                                  </details>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    })()}
                   </FieldGroup>
 
                   <FieldGroup

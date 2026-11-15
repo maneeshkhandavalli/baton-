@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FilePlus2, Inbox } from "lucide-react";
+import { connection } from "next/server";
+import { FilePlus2 } from "lucide-react";
 import { Suspense } from "react";
 
-import { DraftRow } from "@/components/dashboard/draft-row";
-import { HandoverCard, type HandoverCardData } from "@/components/dashboard/handover-card";
+import { DashboardBodySkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
+import type { HandoverCardData } from "@/components/dashboard/handover-card";
+import { DRAFT_STEPS, loadDashboard, type DashboardRoutes } from "@/components/dashboard/load";
+import { classify } from "@/components/dashboard/model";
 import { PageContainer } from "@/components/layout/page-container";
-import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { SectionHeading } from "@/components/shared/section-heading";
-import { DashboardSkeleton } from "@/components/shared/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import type { HandoverSummary } from "@/lib/contracts/dto";
 import { MOCK_VIEWER_ID } from "@/lib/mocks/fixtures/profiles";
@@ -19,7 +20,22 @@ import { createMockQueries } from "@/lib/mocks/queries";
 // Titles only in development: a production 404 for this route must not name it.
 export const metadata: Metadata = { ...(process.env.NODE_ENV === "development" ? { title: "Preview · Dashboard" } : {}), robots: { index: false, follow: false } };
 
-/** Dev-only: the dashboard from synthetic data (lib/mocks). `?empty=1` shows the empty state. */
+/** Every destination is a working dev-only preview page. */
+const PREVIEW_ROUTES: DashboardRoutes = {
+  wizard: () => "/preview/wizard?step=2",
+  draft: (_id, step) => `/preview/wizard?step=${step}`,
+  review: () => "/preview/review",
+  processing: () => "/preview/processing",
+  published: () => "/preview/published",
+  gaps: () => "/preview/review",
+  settings: () => "/preview/review",
+  offers: () => "/preview/review",
+};
+
+/**
+ * Dev-only: the real dashboard components (components/dashboard/dashboard-view) over synthetic data, loaded through
+ * the same loader as /dashboard with createMockQueries. `?empty=1` shows the first-run state.
+ */
 export default function PreviewDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (process.env.NODE_ENV !== "development") notFound();
   const newHandoverLink = (
@@ -29,118 +45,52 @@ export default function PreviewDashboardPage({ searchParams }: { searchParams: P
     </Link>
   );
   return (
-    <PageContainer className="space-y-10 lg:space-y-12">
-      <PageHeader
-        eyebrow="Workspace"
-        title="Your handovers"
-        description="Pick up a draft where you left it, keep reviews moving, and read what was handed over to you."
-        actions={newHandoverLink}
-      />
-      <Suspense fallback={<DashboardSkeleton />}>
+    <PageContainer width="wide" className="space-y-8 lg:space-y-10">
+      <PageHeader title="Your handovers" description="What needs you comes first. Drafts, reviews and handovers you've received are below." actions={newHandoverLink} />
+      <Suspense fallback={<DashboardBodySkeleton />}>
         <Content searchParams={searchParams} newHandoverLink={newHandoverLink} />
       </Suspense>
     </PageContainer>
   );
 }
 
-const isReview = (h: HandoverSummary) => h.viewerRole === "outgoing" || h.viewerRole === "reviewer";
+/** Two synthetic drafts (one nearly ready, one fresh) so "Drafts to finish" shows both shapes; the mocks have none. */
+function previewDrafts(base: HandoverSummary): HandoverCardData[] {
+  const make = (id: string, title: string, teamName: string, next: (typeof DRAFT_STEPS)[number], sources: number, hoursAgo: number): HandoverCardData => {
+    const summary: HandoverSummary = {
+      ...base,
+      id,
+      title,
+      teamName,
+      state: "draft",
+      viewerIsCreator: true,
+      viewerRole: "outgoing",
+      pendingCreatorTransfer: null,
+      currentPublicationId: null,
+      updatedAt: new Date(Date.parse(base.updatedAt) + hoursAgo * 3_600_000).toISOString(),
+    };
+    const step = DRAFT_STEPS.indexOf(next) + 1;
+    return {
+      handover: summary,
+      readiness: null,
+      href: PREVIEW_ROUTES.draft(id, step),
+      cta: "Continue editing",
+      isDemo: false,
+      draft: { sources, next },
+      row: classify({ summary, draft: { step, steps: DRAFT_STEPS, sources } }, PREVIEW_ROUTES),
+    };
+  };
+  return [
+    make("00000000-0000-4000-8000-0000000000d1", "Treasurer handover, Robotics Society 2026–27", "Robotics Society", "Scope and start", 3, 2),
+    make("00000000-0000-4000-8000-0000000000d2", "Events lead", "Literary Club", "Consent and sources", 0, -30),
+  ];
+}
 
 async function Content({ searchParams, newHandoverLink }: { searchParams: Promise<Record<string, string | string[] | undefined>>; newHandoverLink: React.ReactNode }) {
+  await connection();
   const query = await searchParams;
-  if (query.empty === "1") {
-    return (
-      <EmptyState
-        icon={<Inbox />}
-        title="No handovers yet"
-        description="Start a handover to gather your team's chats and documents and turn them into source-backed knowledge for whoever comes next."
-        action={
-          <>
-            {newHandoverLink}
-            <Link href="/demo" className={buttonVariants({ size: "lg", variant: "outline" })}>
-              Explore the demo
-            </Link>
-          </>
-        }
-      />
-    );
-  }
-
-  const queries = createMockQueries(MOCK_VIEWER_ID);
-  const list = await queries.listMyHandovers();
-  const all = list.ok ? list.data : [];
-  const cards: HandoverCardData[] = await Promise.all(
-    all.map(async (h) => {
-      if (!isReview(h)) return { handover: h, readiness: null, href: "/preview/published", cta: "Read handover", isDemo: false };
-      const r = await queries.getReadiness(h.id);
-      return {
-        handover: h,
-        readiness: r.ok ? r.data.score : null,
-        href: h.state === "processing" ? "/preview/processing" : "/preview/review",
-        cta: h.state === "in_review" ? "Continue review" : h.state === "processing" ? "View progress" : "Open",
-        isDemo: false,
-      };
-    }),
-  );
-
-  // Two synthetic drafts (one fresh, one nearly ready) so the "Drafts to finish" list shows both shapes.
-  const base = all.find(isReview) ?? all[0];
-  const drafts: HandoverCardData[] = base
-    ? [
-        {
-          handover: { ...base, id: "00000000-0000-4000-8000-0000000000d1", title: "Treasurer handover, Robotics Society 2026–27", teamName: "Robotics Society", state: "draft", viewerIsCreator: true, viewerRole: "outgoing", pendingCreatorTransfer: null, currentPublicationId: null },
-          readiness: null,
-          href: "/preview/wizard?step=4",
-          cta: "Continue",
-          isDemo: false,
-          draft: { sources: 3, next: "Scope and start" },
-        },
-        {
-          handover: { ...base, id: "00000000-0000-4000-8000-0000000000d2", title: "Events lead", teamName: "Literary Club", state: "draft", viewerIsCreator: true, viewerRole: "reviewer", pendingCreatorTransfer: null, currentPublicationId: null },
-          readiness: null,
-          href: "/preview/wizard?step=2",
-          cta: "Continue",
-          isDemo: false,
-          draft: { sources: 0, next: "Consent and sources" },
-        },
-      ]
-    : [];
-  const preparing = cards.filter((c) => isReview(c.handover));
-  const receiving = cards.filter((c) => !isReview(c.handover));
-
-  return (
-    <div className="space-y-12">
-      <section aria-labelledby="drafts" className="space-y-4">
-        <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} description="Saved as you go. Continue from the step you reached." />
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
-          {drafts.map((c) => (
-            <DraftRow key={c.handover.id} data={c} preview />
-          ))}
-        </ul>
-      </section>
-      {preparing.length > 0 && (
-        <section aria-labelledby="preparing" className="space-y-4">
-          <SectionHeading id="preparing" title="Preparing and reviewing" count={preparing.length} />
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {preparing.map((c) => (
-              <li key={c.handover.id}>
-                <HandoverCard data={c} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {receiving.length > 0 && (
-        <section aria-labelledby="receiving" className="space-y-4">
-          <SectionHeading id="receiving" title="Handed over to you" count={receiving.length} description="Read the handover, work through the first week, and acknowledge it." />
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {receiving.map((c) => (
-              <li key={c.handover.id}>
-                <HandoverCard data={c} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
-  );
+  if (query.empty === "1") return <DashboardView result={{ ok: true, cards: [] }} newHandover={newHandoverLink} demoHref="/demo" preview />;
+  const result = await loadDashboard(createMockQueries(MOCK_VIEWER_ID), PREVIEW_ROUTES);
+  const withDrafts = result.ok && result.cards[0] ? { ok: true as const, cards: [...previewDrafts(result.cards[0].handover), ...result.cards] } : result;
+  return <DashboardView result={withDrafts} newHandover={newHandoverLink} demoHref="/demo" preview />;
 }

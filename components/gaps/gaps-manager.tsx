@@ -83,7 +83,7 @@ export function GapsManager({ handoverId, questions, points, canManage }: GapsMa
         )
       ) : (
         <>
-          <Group title="Answers to review" description="Accepting an answer adds it as testimony evidence to the linked point." questions={needsReview} pointById={pointById} handoverId={handoverId} canManage={canManage} pending={isPending} run={run} />
+          <Group title="Answers to review" description="Accepting an answer adds it as testimony evidence to the point it's about. An answer to a general question becomes a new point for you to review before publishing." questions={needsReview} pointById={pointById} handoverId={handoverId} canManage={canManage} pending={isPending} run={run} />
           <Group title="Open questions" description="Waiting for the outgoing member or someone else who knows." questions={open} pointById={pointById} handoverId={handoverId} canManage={canManage} pending={isPending} run={run} />
           <Group title="Closed" questions={closed} pointById={pointById} handoverId={handoverId} canManage={canManage} pending={isPending} run={run} />
         </>

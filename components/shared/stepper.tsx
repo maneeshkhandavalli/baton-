@@ -73,7 +73,7 @@ export function Stepper({ steps, current, onStepClick, label = "Progress", class
                 <button
                   type="button"
                   onClick={() => onStepClick(i)}
-                  className="-m-1 flex items-center gap-2 rounded-md p-1 transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40"
+                  className="-m-1 flex items-center gap-2 rounded-md p-1 transition-colors outline-none hover:bg-muted focus-ring"
                 >
                   {content}
                 </button>

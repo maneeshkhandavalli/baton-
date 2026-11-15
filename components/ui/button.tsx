@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
  * (approve / delete); their outline siblings carry the same intent at lower emphasis.
  */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-standard outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/40 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-busy:cursor-progress aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-standard outline-none select-none focus-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-busy:cursor-progress aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -16,12 +16,12 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-accent aria-expanded:bg-accent",
         outline: "border-border-strong bg-card text-foreground shadow-xs hover:bg-muted aria-expanded:bg-muted",
         ghost: "text-foreground hover:bg-muted aria-expanded:bg-muted",
-        success: "bg-success text-success-foreground shadow-xs hover:bg-success-hover focus-visible:ring-success/30",
-        "success-outline": "border-success/35 bg-card text-success-fg shadow-xs hover:bg-success-soft focus-visible:ring-success/25",
-        destructive: "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive-hover focus-visible:ring-destructive/30",
+        success: "bg-success text-success-foreground shadow-xs hover:bg-success-hover",
+        "success-outline": "border-success/35 bg-card text-success-fg shadow-xs hover:bg-success-soft",
+        destructive: "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive-hover",
         "destructive-outline":
-          "border-destructive/35 bg-card text-destructive-fg shadow-xs hover:bg-destructive-soft focus-visible:ring-destructive/25",
-        "destructive-ghost": "text-destructive-fg hover:bg-destructive-soft focus-visible:ring-destructive/25",
+          "border-destructive/35 bg-card text-destructive-fg shadow-xs hover:bg-destructive-soft",
+        "destructive-ghost": "text-destructive-fg hover:bg-destructive-soft",
         link: "border-0 text-primary-fg underline-offset-4 hover:underline",
       },
       size: {
