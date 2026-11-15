@@ -462,7 +462,11 @@ const PROSE_WORDS = new Set(
     "reset resets change changed changes changing manager managers protected protection required requirement " +
     "requirements expired expires expiry sent send policy policies field fields hint hints recovery strength link links " +
     "email mail update updated updates page screen button form flow login logout details info issue issues problem " +
-    "problems sharing shared share holder holders"
+    "problems sharing shared share holder holders " +
+    // QA-UI3-M1: time words and requests that follow "wifi codes", "wifi:" etc. in ordinary chat
+    // ("send the guest wifi codes last time", "guest wifi for the event: ask IT").
+    "last next first final time times today tomorrow yesterday tonight week weekend month year " +
+    "ask asked asking tell told call called check checked contact see talk ping message messaged"
   ).split(" "),
 );
 
@@ -597,6 +601,10 @@ function credentialSpans(view: string, re: RegExp, strength: Strength, kindFor: 
     } else if (strength === "weak" && NETWORK_KEYWORD.test(keyword) && !/^[ \t]*(?:[:=]|->|=>|\u2192|\u21d2)/.test(explicit)) {
       // "wifi is down" is prose; "wifi is HomeNet5" / "wifi: HomeNet" are credentials.
       accept = proseSafeCredential(value);
+    } else if (strength === "weak" && NETWORK_KEYWORD.test(keyword) && /^[ \t]*:/.test(explicit) && /[ \t]/.test(m[0].slice(m[1].length + keyword.length, m[0].length - value.length).split(":")[0])) {
+      // QA-UI3-M1: a qualifier before the colon ("guest wifi for the event: ask IT") reads as prose;
+      // the value is masked unless it is an ordinary word. "wifi: HomeNet" (no qualifier) still masks.
+      accept = !PROSE_WORDS.has(stripPunctuation(value).toLowerCase());
     } else {
       accept = true;
     }

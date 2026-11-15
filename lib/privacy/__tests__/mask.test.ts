@@ -265,11 +265,24 @@ describe("QA-L5: credentials with whitespace and other separators", () => {
     "a pass-through cable",
     "We are passing: the baton to next year",
     "pin code 560001",
+    // QA-UI3-M1: ordinary chat after "wifi codes" / "wifi …:" must survive.
+    "send the guest wifi codes last time",
+    "the wifi codes next week, not today",
+    "guest wifi for the event: ask IT a week before",
+    "wifi for the hall: check with the front desk",
   ];
   for (const text of prose) {
     it(`leaves prose ${JSON.stringify(text)}`, () => assert.equal(m(text).text, text));
   }
 
+  it("QA-UI3-M1: still masks real wifi credentials next to the new prose words", () => {
+    assert.equal(m("wifi codes 4821").text, "wifi codes [PASSWORD]");
+    assert.equal(m("guest wifi codes Lab3Guest").text, "guest wifi codes [PASSWORD]");
+    assert.equal(m("guest wifi for the event: CodeCell2026").text, "guest wifi for the event: [PASSWORD]");
+    assert.equal(m("wifi for the hall: Hall-5G").text, "wifi for the hall: [PASSWORD]");
+    assert.equal(m("WiFi: HomeNet_5G").text, "WiFi: [PASSWORD]");
+    assert.equal(m("wifi password: last").text, "wifi password: [PASSWORD]");
+  });
   it("is still deterministic and keeps the fixed [PASSWORD] token", () => {
     const text = "pin 4821 / otp 556677 / login bob/secret";
     assert.deepEqual(m(text), m(text));
