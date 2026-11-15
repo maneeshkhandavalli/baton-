@@ -38,7 +38,9 @@ const MEET = point({ pointId: "p-meet", category: "decision", statement: "The in
 
 const shape = (category: ClaimShape["category"], statement: string, cited: string[] = []): ClaimShape => ({ category, statement, attributes: {}, citedMessageIds: cited });
 
-function candidate(category: ClaimShape["category"], statement: string, messageId: string) {
+type Candidate = Parameters<typeof planChunkEntries>[0][number];
+
+function candidate(category: ClaimShape["category"], statement: string, messageId: string): Candidate {
   return {
     category,
     title: statement.slice(0, 40),
@@ -46,8 +48,9 @@ function candidate(category: ClaimShape["category"], statement: string, messageI
     attributes: {},
     inferenceRationale: null,
     citations: [{ messageId, quote: "q", stance: "supports" as const, quoteCheck: "exact" as const, quoteStart: 0, quoteEnd: 1, matchedText: "q" }],
-  };
+  } as unknown as Candidate;
 }
+const target = (e: ReturnType<typeof planChunkEntries>["entries"][number]) => ("pointId" in e ? e.pointId : "new");
 
 describe("retry idempotency (QA-UI3-X1)", () => {
   it("an identical re-extraction attaches to the existing point", () => {
@@ -90,8 +93,7 @@ describe("retry idempotency (QA-UI3-X1)", () => {
     const counters = { merged: 0, duplicatesWithoutEvidence: 0 };
     const { entries } = planChunkEntries([candidate("open_task", "The first sponsor invoice needs to be issued to Orbitstack by 20 September.", M7)], new Set([M7]), idx, counters);
     assert.equal(entries.length, 1);
-    assert.equal(entries[0].pointId, "p-edited");
-    assert.equal("point" in entries[0] && entries[0].point !== undefined, false, "no new point, no rewrite: citations only");
+    assert.equal(target(entries[0]), "p-edited", "no new point, no rewrite: citations only");
     assert.equal(counters.merged, 1);
   });
 
@@ -114,7 +116,7 @@ describe("retry idempotency (QA-UI3-X1)", () => {
       idx,
       counters,
     );
-    assert.deepEqual(entries.map((e) => ("point" in e && e.point ? "new" : e.pointId)), ["p-invoice", "p-meet", "new"]);
+    assert.deepEqual(entries.map(target), ["p-invoice", "p-meet", "new"]);
     assert.equal(counters.merged, 2);
   });
 
