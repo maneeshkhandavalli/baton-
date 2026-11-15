@@ -31,11 +31,13 @@ function text(v: unknown): string | null {
  */
 export function validIsoDay(v: unknown): string | null {
   if (typeof v !== "string") return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+  // QA-UI3-K1: the extractor sometimes returns a full ISO date-time ("2026-09-05T04:50:00+00:00"). Its calendar day,
+  // as written (no timezone conversion, so server and client renders stay identical), is the day to show.
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(v.trim());
   if (!m) return null;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const t = new Date(Date.UTC(y, mo - 1, d));
-  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d ? m[0] : null;
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
 /** Formats a valid day; anything else (including an unexpected Intl error) is shown as written. Never throws. */
