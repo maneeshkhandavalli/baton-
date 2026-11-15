@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, Database, KeyRound, Layers, Lock, ScanSearch, ShieldCheck, Sparkles, UserCheck, Users } from "lucide-react";
+import { Database, KeyRound, Layers, Lock, ScanSearch, ShieldCheck, Sparkles, UserCheck, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -84,94 +84,52 @@ const STACK = ["Next.js 16 · App Router", "Supabase Postgres, Auth, Storage", "
 
 export function ForTheNerds() {
   return (
-    <section id="for-the-nerds" aria-labelledby="nerds-title" className="border-b border-border/70 bg-card/50">
-      <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-12">
-          <div className="reveal space-y-3">
-            <p className="type-eyebrow text-muted-foreground">
-              <span aria-hidden="true" className="font-mono text-primary-fg">
-                {"</>"}{" "}
-              </span>
-              For the nerds
-            </p>
-            <h2 id="nerds-title" className="type-section-title sm:text-4xl">
-              How Baton keeps AI honest.
-            </h2>
-          </div>
-          <div className="reveal space-y-3">
-            <p className="type-body text-muted-foreground">
-              The model drafts; it never decides. Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.
-            </p>
-            <ul aria-label="Built with" className="flex flex-wrap gap-1.5">
-              {STACK.map((s) => (
-                <li key={s} className="rounded-md border border-border bg-background px-2 py-1 font-mono text-[0.7rem] leading-none text-foreground/80">
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
+    <section id="for-the-nerds" aria-labelledby="nerds-title" className="border-t border-border">
+      <div className="bi-wrap py-20 sm:py-24">
+        <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-16">
+          <h2 id="nerds-title" className="bi-h2">
+            For the nerds: how Baton keeps AI honest.
+          </h2>
+          <p className="bi-lede">
+            The model drafts; it never decides. Deterministic checks, database rules and people sit between every AI output and what the incoming person
+            reads.
+          </p>
         </div>
 
-        {/* Architecture flow: a list, drawn as a pipeline. */}
-        <figure className="mt-12 lg:mt-14">
+        {/* The pipeline, in order, as a manifest */}
+        <figure className="mt-12">
           <figcaption className="sr-only">From upload to published handover, in order</figcaption>
-          <ol className="reveal-group grid gap-2 md:grid-cols-3 md:gap-3 xl:grid-cols-6">
+          <ol className="border-b border-border">
             {FLOW.map((f, i) => (
-              <li key={f.step} className="group relative">
-                <div
-                  className={cn(
-                    "flex h-full flex-col rounded-xl border bg-background p-4 transition-[transform,border-color] duration-300 hover:-translate-y-0.5",
-                    f.where === "people" ? "border-primary/40" : "border-border hover:border-foreground/20",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <f.icon aria-hidden="true" className={cn("size-4", f.where === "people" ? "text-primary" : "text-muted-foreground")} />
-                    <span className="font-mono text-[0.7rem] text-muted-foreground">
-                      <span className="sr-only">Step </span>
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="ml-auto rounded-full bg-muted px-2 py-0.5 font-mono text-[0.65rem] text-muted-foreground">{f.where}</span>
-                  </div>
-                  <h3 className="mt-3 font-semibold">{f.step}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{f.body}</p>
-                </div>
-                {i < FLOW.length - 1 ? (
-                  <>
-                    <ArrowDown aria-hidden="true" className="mx-auto my-0.5 size-4 text-muted-foreground/60 md:hidden" />
-                    <ArrowRight
-                      aria-hidden="true"
-                      className={cn(
-                        "absolute top-1/2 -right-3 z-10 hidden size-4 -translate-y-1/2 rounded-full bg-card/80 text-muted-foreground/70",
-                        i % 3 === 2 ? "xl:block" : "md:block",
-                      )}
-                    />
-                  </>
-                ) : null}
+              <li key={f.step} className="grid gap-1 border-t border-border py-4 sm:grid-cols-[3rem_10rem_1fr_9rem] sm:items-baseline sm:gap-6 [&>*]:min-w-0">
+                <span className="bi-mono text-sm text-muted-foreground tabular-nums">
+                  <span className="sr-only">Step </span>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <h3 className="bi-h3">{f.step}</h3>
+                <p className="bi-body">{f.body}</p>
+                <span className={cn("bi-mono text-sm sm:text-right", f.where === "people" ? "text-foreground" : "text-muted-foreground")}>{f.where}</span>
               </li>
             ))}
           </ol>
         </figure>
 
-        <div className="reveal-group mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {DETAILS.map((d) => (
-            <article key={d.title} className="rounded-2xl border border-border bg-background p-5 transition-shadow duration-300 hover:shadow-raised sm:p-6">
-              <div className="flex items-center gap-2.5">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-primary-soft text-primary-fg">
-                  <d.icon aria-hidden="true" className="size-4" />
-                </span>
-                <h3 className="type-heading">{d.title}</h3>
-              </div>
-              <ul className="mt-4 space-y-2.5">
+            <article key={d.title}>
+              <h3 className="bi-h3">{d.title}</h3>
+              <ul className="mt-3 space-y-2">
                 {d.points.map((p) => (
-                  <li key={p} className="flex gap-2.5 text-sm leading-relaxed text-muted-foreground">
-                    <span aria-hidden="true" className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground/60" />
-                    <span>{p}</span>
+                  <li key={p} className="bi-body text-sm">
+                    {p}
                   </li>
                 ))}
               </ul>
             </article>
           ))}
         </div>
+
+        <p className="bi-mono mt-14 border-t border-border pt-5 text-xs text-muted-foreground">Built with {STACK.join(" · ")}</p>
       </div>
     </section>
   );

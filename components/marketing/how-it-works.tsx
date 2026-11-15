@@ -1,48 +1,44 @@
-import { Check, FileText, Lock, MessageSquareText, Pencil, ScanSearch, X } from "lucide-react";
+import { Check, FileText, Lock, MessageSquareText } from "lucide-react";
 
 /**
- * "How it works": four steps, each with a small, real piece of the product (fictional CodeCell data), joined by a rule
- * that fills as the section scrolls through the viewport (the page's one scroll-linked moment; CSS only, complete and
- * static without support or under reduced motion). Copy matches the previous landing.
+ * "How it works" as a ledger: four rows on one rule (step · what happens · what you see). No cards; each row's
+ * fragment is a small, plain piece of the product with fictional CodeCell data. Rows arrive in sequence (.reveal-group,
+ * CSS scroll-driven; complete without it).
  */
 
 const STEPS = [
   {
-    title: "Bring the real record",
-    body: "Export the team's WhatsApp groups and add handbooks, MoUs and notes. Choose the dates and conversations that matter, and who may see each source.",
-    visual: "sources",
+    title: "Bring the record the team already has",
+    body: "Export the WhatsApp groups and add handbooks, MoUs and notes. Choose the dates that matter and who may see each source.",
   },
   {
-    title: "Baton drafts, with receipts",
-    body: "Personal details are masked first. AI then drafts the handover, and every quote it cites is matched against the original text and checked separately to confirm it backs the point.",
-    visual: "draft",
+    title: "Personal details are masked, then AI drafts",
+    body: "Masking happens before anything is stored or sent to AI. Every quote the draft cites is matched against the original text, word for word, and checked separately to confirm it backs the point.",
   },
   {
-    title: "People review every claim",
-    body: "The outgoing member and reviewers approve, edit or reject each point and settle disagreements. Whatever no source covers goes to a short Gap Interview.",
-    visual: "review",
+    title: "People review every point",
+    body: "The outgoing member and reviewers approve, edit or reject each point and settle disagreements. What no source covers goes to a short Gap Interview.",
   },
   {
-    title: "Hand over with confidence",
-    body: "The incoming person gets a clear handover and a first-week checklist, and acknowledges that they have read it.",
-    visual: "handover",
+    title: "The next person reads it and signs",
+    body: "The incoming person gets the handover and a first-week checklist, and acknowledges that they have read it.",
   },
 ] as const;
 
-function Visual({ kind }: { kind: (typeof STEPS)[number]["visual"] }) {
-  if (kind === "sources") {
+function Fragment({ i }: { i: number }) {
+  if (i === 0) {
     return (
-      <ul className="space-y-1.5">
+      <ul className="space-y-2 text-sm">
         {[
-          { name: "Core Team 26-27.txt", access: "Everyone", Icon: MessageSquareText },
-          { name: "CodeCell Leads.txt", access: "Leads only", Icon: MessageSquareText },
+          { name: "WhatsApp Chat with CodeCell Core Team 26-27.txt", access: "Everyone", Icon: MessageSquareText },
+          { name: "WhatsApp Chat with CodeCell Leads.txt", access: "Leads only", Icon: MessageSquareText },
           { name: "infra-notes.md", access: "Everyone", Icon: FileText },
         ].map(({ name, access, Icon }) => (
-          <li key={name} className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-xs">
-            <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+          <li key={name} className="flex items-center gap-2.5">
+            <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 truncate">{name}</span>
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-2xs text-muted-foreground">
-              {access === "Leads only" ? <Lock className="size-2.5" /> : null}
+            <span className="bi-mono ml-auto inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              {access === "Leads only" ? <Lock aria-hidden="true" className="size-3" /> : null}
               {access}
             </span>
           </li>
@@ -50,80 +46,62 @@ function Visual({ kind }: { kind: (typeof STEPS)[number]["visual"] }) {
       </ul>
     );
   }
-  if (kind === "draft") {
+  if (i === 1) {
     return (
-      <div className="space-y-1.5 text-xs">
-        <p className="rounded-md border border-border bg-background px-2 py-1.5 leading-relaxed">
-          office line <span className="rounded bg-foreground/8 px-1 text-[0.85em] text-muted-foreground">[PHONE_1]</span>
+      <div className="space-y-2 text-sm">
+        <p className="leading-relaxed text-muted-foreground">
+          …his number is <span className="bi-mono rounded-sm bg-foreground/10 px-1 text-[0.8em]">[PHONE_1]</span> if it&rsquo;s urgent
         </p>
-        <p className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
-          <ScanSearch className="size-3.5 shrink-0 text-status-sourced" />
-          Quote found word for word
-          <Check className="ml-auto size-3.5 text-status-sourced" />
+        <p className="flex items-center gap-2">
+          <Check aria-hidden="true" className="size-4 text-status-sourced" /> Quote found word for word, line 29
         </p>
-        <p className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
-          <Check className="size-3.5 shrink-0 text-status-sourced" />
-          Support checked separately
+        <p className="flex items-center gap-2">
+          <Check aria-hidden="true" className="size-4 text-status-sourced" /> A second check confirmed it backs the point
         </p>
       </div>
     );
   }
-  if (kind === "review") {
+  if (i === 2) {
     return (
-      <div className="space-y-2 text-xs">
-        <p className="truncate rounded-md border border-border bg-background px-2 py-1.5">Workshop fee for non-members</p>
-        <div className="flex gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded-md bg-success px-2 py-1 font-medium text-success-foreground">
-            <Check className="size-3" /> Approve
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-md border border-border-strong bg-background px-2 py-1">
-            <Pencil className="size-3" /> Edit
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-md border border-destructive/35 bg-background px-2 py-1 text-destructive-fg">
-            <X className="size-3" /> Reject
-          </span>
-        </div>
+      <div className="text-sm">
+        <p className="font-semibold">Workshop fee for non-members</p>
+        <p className="mt-1 text-muted-foreground">Supports · Priya, 4 Aug: &ldquo;non-members pay ₹100&rdquo;</p>
+        <p className="text-muted-foreground">Contradicts · Kabir, 18 Sep: &ldquo;free for everyone&rdquo;</p>
+        <p className="mt-2 inline-flex items-center gap-2 rounded-md border border-border-strong px-2 py-1 text-caption font-medium">
+          Record what&rsquo;s true now
+        </p>
       </div>
     );
   }
   return (
-    <div className="space-y-1.5 rounded-md border border-border bg-background p-2 text-xs">
-      <p className="font-medium">First week</p>
-      <p className="flex items-center gap-1.5 text-muted-foreground">
-        <span className="size-3 shrink-0 rounded-sm border border-border-strong" /> Move the domain to the club card
+    <div className="text-sm">
+      <p className="font-semibold">First week</p>
+      <p className="mt-1 flex items-center gap-2 text-muted-foreground">
+        <span aria-hidden="true" className="size-3.5 shrink-0 rounded-sm border border-border-strong" /> Move the domain to the club card before 12 Dec
       </p>
-      <p className="mt-1.5 border-t border-border pt-1.5 text-2xs text-muted-foreground">
-        <Check className="mr-1 inline size-3 text-success" />
-        Read and acknowledged · Neha Kulkarni
-      </p>
+      <p className="mt-3 border-t border-foreground pt-2 text-caption">Read and acknowledged · Neha Kulkarni</p>
     </div>
   );
 }
 
 export function HowItWorksSteps() {
   return (
-    <div className="relative mt-12 lg:mt-14">
-      {/* The rule that joins the steps (desktop), filling as the section scrolls */}
-      <div aria-hidden="true" className="absolute top-[1.125rem] right-[12.5%] left-[12.5%] hidden h-px bg-border xl:block">
-        <div className="how-progress h-full origin-left bg-primary/70" />
-      </div>
-      <ol className="reveal-group relative grid gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
-        {STEPS.map((step, i) => (
-          <li key={step.title} className="flex flex-col">
-            <span className="mx-auto hidden size-9 items-center justify-center rounded-full border border-border bg-background font-mono text-xs text-muted-foreground xl:flex">
-              <span className="sr-only">Step </span>0{i + 1}
-            </span>
-            <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card p-5 shadow-xs transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-raised sm:p-6 xl:mt-4">
-              <span className="font-mono text-xs text-muted-foreground xl:hidden">0{i + 1}</span>
-              <h3 className="mt-1 type-heading xl:mt-0">{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
-              <div aria-hidden="true" className="mt-auto pt-5">
-                <Visual kind={step.visual} />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
+    <ol className="reveal-group mt-10 border-b border-border">
+      {STEPS.map((s, i) => (
+        <li key={s.title} className="grid gap-4 border-t border-border py-7 md:grid-cols-[3rem_1fr_1fr] md:gap-8 lg:py-8 [&>*]:min-w-0">
+          <span className="bi-mono text-sm text-muted-foreground tabular-nums">
+            <span className="sr-only">Step </span>
+            {String(i + 1).padStart(2, "0")}
+          </span>
+          <div>
+            <h3 className="bi-h3">{s.title}</h3>
+            <p className="bi-body mt-2 max-w-[48ch]">{s.body}</p>
+          </div>
+          <div aria-hidden="true" className="rounded-md bg-muted/60 p-4">
+            <Fragment i={i} />
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
