@@ -14,7 +14,12 @@ the lead consolidates here.
 | handover | Full handover-workflow audit; document/editorial UI research; implementation plan | Done; review sent (approve with changes A1, A2, A4, A5, A7 blocking; B1-B9 additions). Reuse contract agreed with demo; H-1..H-7 agreed with shell | Design system (approval) | Review brand's proposal (Checkpoint A) |
 | demo | Demo audit; coherent CodeCell scenario; data + interaction + architecture plan | Done: 8079f5a scenario + dec6439 sample alignment (npm test 2,115/2,116 pass, 1 Docker todo); review sent (D1-D4) | Design system (visuals only) | Review brand's proposal (Checkpoint A) |
 
-## Current: refine the earlier minimal landing and dashboard (D17)
+## Current: landing identity (D18)
+- brand → `ui3/agent1-identity` @ 207c495: AI-SLOP-AUDIT.md, three directions at `/design/directions`, chosen "Graphite & Highlighter" (Host Grotesk / Atkinson Hyperlegible Next / Atkinson Hyperlegible Mono) scoped to marketing routes. npm test 2,103/2,102/0 fail. Lead verified `/` and `/demo`: 1440/390, light/dark, no overflow, 0 console errors; the interactive evidence preview works.
+- shell acknowledged the token set (dashboard adopts only after user approval).
+- [~] Checkpoint B4 (awaiting the user): direction and landing preview.
+
+## Previous: refine the earlier minimal landing and dashboard (D17)
 - brand → `ui3/agent1-landing` (new, from master): polish master's landing; carry over cast, a11y and reduced-motion fixes.
 - shell → `ui3/agent2-shell`: polish master's real `/dashboard` and `/preview/dashboard`; dashboard v2 stopped.
 - Delivered: landing `ui3/agent1-landing` @ 9151eb0 (npm test 2,103/2,102/0 fail); dashboard `ui3/agent2-shell` @ d176e6b (npm test 2,115/2,114/0 fail). Lead verified both: no overflow, 0 console errors, 1440/390, light/dark.
