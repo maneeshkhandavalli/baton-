@@ -17,6 +17,7 @@ import type { EvidenceStatus } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 import { EvidenceQuote } from "./evidence-quote";
+import { isStaleEvidence } from "./evidence-state";
 
 export type PointAction = "approve" | "edit" | "reject" | "resolve" | "reopen" | "ask_gap" | "details";
 
@@ -55,7 +56,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
   const status = point.evidenceStatus;
   const decided = point.reviewState !== "pending";
   const rejected = point.reviewState === "rejected";
-  const stale = point.evidence.some((e) => !e.excluded && !e.isCurrentRevisionVerdict && e.supportVerdict !== "irrelevant");
+  const stale = point.evidence.some(isStaleEvidence);
   const approveLabel =
     status === "missing"
       ? "Approve as gap"
