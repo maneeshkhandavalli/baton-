@@ -1,6 +1,6 @@
 import { UserX } from "lucide-react";
 
-import { segmentMaskedText } from "./mask-tokens";
+import { maskTokenLabel, segmentMaskedText } from "./mask-tokens";
 
 const EXCLUDED_DESCRIPTION = "Someone who asked to be left out was mentioned here. Their name was removed before processing.";
 
@@ -20,10 +20,12 @@ export function MaskedText({ text, className }: { text: string; className?: stri
           return (
             <span
               key={i}
-              title="Masked by Baton before processing. The original value is never stored."
+              data-token="mask"
+              title={`${maskTokenLabel(seg.token)}: masked by Baton before processing. The original value is never stored.`}
               className="rounded bg-foreground/8 px-1 py-px text-[0.85em] text-muted-foreground"
             >
-              {seg.token}
+              <span className="sr-only">{maskTokenLabel(seg.token)} </span>
+              <span aria-hidden="true">{seg.token}</span>
             </span>
           );
         }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { EXCLUDED_PARTICIPANT_TOKEN } from "../../../lib/contracts/parser";
-import { isMaskToken, segmentMaskedText } from "../mask-tokens";
+import { isMaskToken, maskTokenLabel, segmentMaskedText } from "../mask-tokens";
 
 describe("segmentMaskedText (§12.1, D31)", () => {
   it("renders [EXCLUDED_PARTICIPANT] as its own segment, never as a mask", () => {
@@ -45,5 +45,15 @@ describe("maskedTextToPlain (plain-text contexts)", () => {
     const { maskedTextToPlain } = await import("../mask-tokens");
     assert.equal(maskedTextToPlain(`ask ${EXCLUDED_PARTICIPANT_TOKEN} or call [PHONE_1]`), "ask excluded participant or call [PHONE_1]");
     assert.doesNotMatch(maskedTextToPlain(EXCLUDED_PARTICIPANT_TOKEN), /\[|mask/i);
+  });
+});
+
+describe("maskTokenLabel (accessible names for mask chips)", () => {
+  it("names numbered and unnumbered tokens", () => {
+    assert.equal(maskTokenLabel("[PHONE_1]"), "masked phone number 1");
+    assert.equal(maskTokenLabel("[EMAIL_12]"), "masked email address 12");
+    assert.equal(maskTokenLabel("[API_KEY]"), "masked API key");
+    assert.equal(maskTokenLabel("[PASSWORD]"), "masked password");
+    assert.equal(maskTokenLabel("not a token"), "masked detail");
   });
 });
