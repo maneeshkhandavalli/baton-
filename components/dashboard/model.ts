@@ -141,9 +141,19 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
       cta = "Continue";
       href = links.draft(h.id, step);
     } else if (h.viewerIsCreator) {
-      status = "Sources added · not started yet";
-      cta = "Continue setup";
-      href = links.processing(h.id);
+      const run = input.processing?.run ?? null;
+      if (run && run.status === "failed") {
+        // QA-UI3-D1: a failed run returns the handover to draft; say so instead of "not started yet".
+        health = "failed";
+        status = "Processing stopped before finishing";
+        cta = "See what failed";
+        href = links.processing(h.id);
+        attention.push({ kind: "failed", label: "Processing failed", reason: "Baton couldn't finish reading the sources. Retry or remove the source that failed.", cta, href, rank: 1 });
+      } else {
+        status = run && run.status === "cancelled" ? "Processing cancelled · start again when ready" : "Sources added · not started yet";
+        cta = "Continue setup";
+        href = links.processing(h.id);
+      }
     } else {
       status = "Being set up by the creator";
       href = links.processing(h.id);
