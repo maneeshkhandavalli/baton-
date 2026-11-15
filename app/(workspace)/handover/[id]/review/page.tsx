@@ -74,7 +74,11 @@ async function ReviewContent({ params }: { params: Promise<{ id: string }> }) {
   const readOnlyReason =
     state === "processing"
       ? "Processing is running. Review opens again when it finishes."
-      : state === "approved" || state === "acknowledged"
+      : state === "draft"
+        ? // QA-UI3-H3: points from a run that stopped part-way are shown, but the server refuses review actions on
+          // a draft ("That isn't possible at this stage"), so don't offer them.
+          "Processing didn't finish, so review hasn't opened yet. Start it again on the Processing page."
+        : state === "approved" || state === "acknowledged"
         ? data.handover.viewerIsCreator
           ? "This handover is published. Start a revision in Settings to make changes."
           : "This handover is published. Only the creator can start a revision."
