@@ -20,7 +20,7 @@ function Card({
       className={cn(
         "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-soft [--card-spacing:--spacing(5)] has-data-[slot=card-footer]:pb-0 data-[size=lg]:[--card-spacing:--spacing(6)] data-[size=sm]:[--card-spacing:--spacing(4)] data-[size=sm]:has-data-[slot=card-footer]:pb-0",
         interactive &&
-          "transition-[box-shadow,border-color,transform] duration-200 ease-emphasized hover:-translate-y-px hover:border-border-strong hover:shadow-raised has-focus-visible:ring-3 has-focus-visible:ring-ring/30 motion-reduce:hover:translate-y-0",
+          "transition-[box-shadow,border-color,transform] duration-200 ease-emphasized hover:-translate-y-px hover:border-border-strong hover:shadow-raised focus-ring-within motion-reduce:hover:translate-y-0",
         className
       )}
       {...props}

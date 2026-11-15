@@ -46,3 +46,24 @@ export function maskedTextToPlain(text: string): string {
     .map((s) => (s.kind === "text" ? s.text : s.kind === "mask" ? s.token : "excluded participant"))
     .join("");
 }
+
+/** Spoken names for mask tokens: "[PHONE_1]" → "masked phone number 1". */
+const TOKEN_NAMES: Record<string, string> = {
+  PHONE: "phone number",
+  EMAIL: "email address",
+  UPI: "UPI handle",
+  BANK: "bank account number",
+  IFSC: "IFSC code",
+  CARD: "card number",
+  ID: "ID number",
+  PASSWORD: "password",
+  API_KEY: "API key",
+  SECRET: "secret",
+};
+
+export function maskTokenLabel(token: string): string {
+  const m = /^\[([A-Z_]+?)(?:_(\d+))?\]$/.exec(token);
+  if (!m) return "masked detail";
+  const name = TOKEN_NAMES[m[1]] ?? "detail";
+  return m[2] ? `masked ${name} ${m[2]}` : `masked ${name}`;
+}

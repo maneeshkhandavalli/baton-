@@ -32,7 +32,7 @@ export function SiteHeader() {
         Skip to content
       </a>
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-        <Link href={routes.home} aria-label="Baton home" className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
+        <Link href={routes.home} aria-label="Baton home" className="shrink-0 rounded-md outline-none focus-ring">
           <BatonLogo />
         </Link>
         <nav aria-label="Main" className="flex items-center gap-1">

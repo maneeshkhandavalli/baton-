@@ -178,13 +178,15 @@
   --primary-soft: #eaedfb;
   --primary-fg: #2335a6;
 
-  --success: #127a58;
-  --success-hover: #0d6248;
+  /* UI3: leaf green, kept clearly apart from evidence "sourced" (was #127a58, ΔE 5.7 under deuteranopia) */
+  --success: #2e7d32;
+  --success-hover: #256628;
   --success-foreground: #ffffff;
-  --success-soft: #e3f2eb;
-  --success-fg: #0b6146;
+  --success-soft: #e5f2e6;
+  --success-fg: #23622a;
 
-  --warning: #c25e0c;
+  /* UI3: darker so white text passes 4.5:1 (was #c25e0c, 4.3:1) and it separates from "inferred" ochre */
+  --warning: #ad4f0e;
   --warning-soft: #fcecdc;
   --warning-fg: #8e4307;
 
@@ -270,13 +272,13 @@
   --primary-soft: #1f2752;
   --primary-fg: #b3bdfb;
 
-  --success: #3cc28f;
-  --success-hover: #5bd3a5;
-  --success-foreground: #07150f;
-  --success-soft: #10291f;
-  --success-fg: #74dcb2;
+  --success: #7cc35a;
+  --success-hover: #94d074;
+  --success-foreground: #0b1708;
+  --success-soft: #16260f;
+  --success-fg: #a3d98a;
 
-  --warning: #f08a3c;
+  --warning: #d9803a;
   --warning-soft: #301d0e;
   --warning-fg: #f6ad73;
 
@@ -323,6 +325,22 @@
   --elevation-soft: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 0 rgb(0 0 0 / 0.2);
   --elevation-raised: 0 2px 4px -1px rgb(0 0 0 / 0.3), 0 12px 28px -8px rgb(0 0 0 / 0.5);
   --elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 0.35), 0 24px 56px -12px rgb(0 0 0 / 0.6);
+}
+
+/* Focus: a solid 2px ring-coloured outline with a 2px gap (≥ 6.7:1 on paper and card in both themes, WCAG 1.4.11).
+   Replaces the 40%-alpha halo (2.0:1). `focus-ring` for the element itself, `focus-ring-within` for a wrapper whose
+   control is visually hidden. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+@utility focus-ring-within {
+  &:has(:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 /* ── Type roles ───────────────────────────────────────────
@@ -472,6 +490,25 @@
     }
   }
 }
+/* Landing "How it works": the rule joining the steps fills as the section scrolls through (the page's one
+   scroll-linked moment). Full and static where unsupported or under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .how-progress {
+      animation: how-fill linear both;
+      animation-timeline: view();
+      animation-range: entry 30% cover 55%;
+    }
+  }
+}
+@keyframes how-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
 @keyframes reveal-in {
   from {
     opacity: 0;
@@ -490,8 +527,10 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
   .animate-spin {

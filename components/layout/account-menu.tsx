@@ -57,7 +57,7 @@ export function AccountMenu({ name, email }: { name: string; email: string | nul
       <Menu.Root>
         <Menu.Trigger
           aria-label={`Account menu for ${name}`}
-          className="inline-flex h-9 max-w-[11rem] items-center gap-2 rounded-md px-1.5 text-sm font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40 data-[popup-open]:bg-muted sm:px-2"
+          className="inline-flex h-9 max-w-[11rem] items-center gap-2 rounded-md px-1.5 text-sm font-medium text-foreground outline-none hover:bg-muted focus-ring data-[popup-open]:bg-muted sm:px-2"
         >
           <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-fg">
             {initial}

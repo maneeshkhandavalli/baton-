@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
  * Tones map 1:1 to tokens. Evidence tones are only for evidence status.
  */
 const badgeVariants = cva(
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border font-medium whitespace-nowrap transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border font-medium whitespace-nowrap transition-colors focus-ring [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       tone: {
@@ -49,7 +49,7 @@ const badgeVariants = cva(
 
 /** Dot colours for pills that lead with a status dot. */
 const badgeDotClass: Record<NonNullable<VariantProps<typeof badgeVariants>["tone"]>, string> = {
-  neutral: "bg-status-missing",
+  neutral: "bg-muted-foreground",
   outline: "bg-border-strong",
   primary: "bg-primary",
   info: "bg-info",
