@@ -59,7 +59,8 @@ async function cardFor(queries: BatonQueries, h: HandoverSummary, routes: Dashbo
     h.pendingCreatorTransfer && !h.viewerIsCreator
       ? { href: routes.settings(h.id), cta: "Review the offer" }
       : h.state === "draft" || h.state === "processing"
-        ? { href: routes.processing(h.id), cta: h.state === "draft" ? "Continue setup" : "View progress" }
+        ? // QA-UI3-D2: only the creator (or outgoing member) sets a draft up; a reviewer just follows its progress.
+          { href: routes.processing(h.id), cta: h.state === "draft" && (h.viewerIsCreator || h.viewerRole === "outgoing") ? "Continue setup" : "View progress" }
         : h.state === "in_review"
           ? { href: routes.review(h.id), cta: "Continue review" }
           : { href: routes.review(h.id), cta: "Open" };
