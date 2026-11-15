@@ -35,6 +35,52 @@ export const POST_PHASE_D = [
   { version: "20261114100100", name: "account_deletion", sha256: "71d87fd92780acc4879c4baddd7ec9cdf00b634efe006390cb67fe41ace1e96d", bundle: "r4_account_deletion_txn.sql" },
 ];
 
+/**
+ * Round 5 (UI3 data-integrity fixes): two reviewed function replacements applied together in ONE transaction,
+ * after Round 4. Bundle = guard + both migrations verbatim, each followed by its history row.
+ */
+export const POST_UI3 = [
+  { version: "20261115100100", name: "gap_answer_point", sha256: "00372d7e3f34fdb6e690ca648f45e946cea16169355d7378b83abba563e93258" },
+  { version: "20261115100200", name: "pipeline_points_cited_messages", sha256: "2305288e1ed8ddfd5a5be875d8093c44eb1abf9c372885be5c9101e9a98360a6" },
+];
+export const UI3_BUNDLE = "r5_ui3_fixes_txn.sql";
+
+export function expectedUi3Bundle(read = (f) => readFileSync(path.join(MIGRATIONS_DIR, f), "utf8")) {
+  const sections = POST_UI3.map(
+    (m) =>
+      `-- ===== ${fileName(m)} (verbatim) =====
+${read(fileName(m))}-- ===== end of migration =====
+
+` +
+      `insert into supabase_migrations.schema_migrations (version, name) values ('${m.version}', '${m.name}');
+`,
+  );
+  return `-- Baton Round 5 hosted apply: the UI3 fixes (${POST_UI3.map(fileName).join(", ")}), verbatim, in ONE transaction,
+-- on baton-dev (xnwppnzvrpthukxjfojj) only. Run through run-hosted.sh r5apply. The guard aborts (nothing applied) unless the
+-- history is exactly baton-dev's post-Round-4 state (37 rows, newest 20261114100100) and both functions are the old ones.
+begin;
+set local lock_timeout = '10s';
+
+do $$
+begin
+  if (select count(*) from supabase_migrations.schema_migrations) <> 37
+     or (select max(version) from supabase_migrations.schema_migrations) <> '20261114100100'
+     or to_regprocedure('public.review_gap_answer(uuid,uuid,text,text)') is null
+     or to_regprocedure('public.list_points_for_pipeline(uuid)') is null
+     or (select prosrc from pg_proc where oid = to_regprocedure('public.review_gap_answer(uuid,uuid,text,text)')) like '%QA-UI3-G1%'
+     or (select prosrc from pg_proc where oid = to_regprocedure('public.list_points_for_pipeline(uuid)')) like '%citedMessageIds%'
+  then
+    raise exception 'REFUSED: not baton-dev at the expected migration state; nothing was changed';
+  end if;
+end $$;
+
+${sections.join("\n")}
+commit;
+
+notify pgrst, 'reload schema';
+`;
+}
+
 /** Every SQL file in this directory, pinned. An unpinned or changed SQL file fails verification. */
 export const PINNED_SQL = {
   "03_phase_D_migrations_14-18.sql": "db184aa314589a8f5b81dc26ad0439f5458d1ce9f575e6b10a7c5c20429e6bc8", // reviewed + rehearsed bundle
@@ -47,6 +93,10 @@ export const PINNED_SQL = {
   "r4_account_deletion_txn.sql": "14db5914add5646f2c60843911b3e74d17927ff4fbb4addafacc3a0405f9985e", // rebuilt byte-for-byte below (expectedPostBundle)
   "r4_pre.sql": "4384885db09d8e7e29065cf53fb11ac0b896ba9b10d5d612eeb38d03915758e3",
   "r4_post.sql": "4eaa61f168c304796ae858027cd2e6f9c4d1269ef033e53c41aa578c4bc15623",
+  "r5_ui3_fixes_txn.sql": "418abe4faa114caa6b1f14457dce01b2471569d6751d643fe5baeee13cc7d0ab", // rebuilt byte-for-byte below (expectedUi3Bundle)
+  "r5_pre.sql": "050529c4d69f679e9f58af44e5a2647cd49cb3850626eba1f97d5123aa50ca5d",
+  "r5_post.sql": "c1241aa4238804e50706557e40e1f7be70ee82951ecc517b717b981d375643a9",
+  "r5_backup.sql": "c04e251425ae34befa83265f0482f332a3fbab13bc06f89ba5aba799c37ff550",
 };
 
 export const BUNDLE = "03_phase_D_migrations_14-18.sql";
@@ -134,7 +184,7 @@ export function verify() {
   const after = readdirSync(MIGRATIONS_DIR)
     .filter((f) => /^\d{14}_.+\.sql$/.test(f) && f.slice(0, 14) > PHASE_A_LAST)
     .sort();
-  const reviewed = [...MIGRATIONS, ...POST_PHASE_D].map(fileName);
+  const reviewed = [...MIGRATIONS, ...POST_PHASE_D, ...POST_UI3].map(fileName);
   check(
     JSON.stringify(after) === JSON.stringify(reviewed),
     `migrations after ${PHASE_A_LAST} are [${after.join(", ")}], expected exactly [${reviewed.join(", ")}]`,
@@ -153,6 +203,21 @@ export function verify() {
     } catch {
       check(false, `missing ${m.bundle}`);
     }
+  }
+  for (const m of POST_UI3) {
+    let actual = null;
+    try {
+      actual = sha256(readFileSync(path.join(MIGRATIONS_DIR, fileName(m))));
+    } catch {
+      check(false, `missing migration ${fileName(m)}`);
+      continue;
+    }
+    check(actual === m.sha256, `checksum mismatch: migrations/${fileName(m)} is ${actual}, pinned ${m.sha256}`);
+  }
+  try {
+    check(readFileSync(path.join(HERE, UI3_BUNDLE), "utf8") === expectedUi3Bundle(), `${UI3_BUNDLE} is not the verbatim bundle of the UI3 fixes`);
+  } catch {
+    check(false, `missing ${UI3_BUNDLE}`);
   }
   for (let i = 1; i < MIGRATIONS.length; i++)
     check(MIGRATIONS[i - 1].version < MIGRATIONS[i].version, `apply order is not ascending at ${MIGRATIONS[i].version}`);
@@ -189,12 +254,13 @@ export function verify() {
 function main(cmd) {
   if (cmd === "hashes") {
     for (const f of Object.keys(PINNED_SQL)) console.log(`${sha256(readFileSync(path.join(HERE, f)))}  supabase/hosted-apply/${f}`);
-    for (const m of [...MIGRATIONS, ...POST_PHASE_D]) console.log(`${sha256(readFileSync(path.join(MIGRATIONS_DIR, fileName(m))))}  supabase/migrations/${fileName(m)}`);
+    for (const m of [...MIGRATIONS, ...POST_PHASE_D, ...POST_UI3]) console.log(`${sha256(readFileSync(path.join(MIGRATIONS_DIR, fileName(m))))}  supabase/migrations/${fileName(m)}`);
     return 0;
   }
   if (cmd === "write-post-bundles") {
     // Regenerates each Round 4 bundle from its migration (a reviewed change still needs its pin updated).
     for (const m of POST_PHASE_D) writeFileSync(path.join(HERE, m.bundle), expectedPostBundle(m));
+    writeFileSync(path.join(HERE, UI3_BUNDLE), expectedUi3Bundle());
     return 0;
   }
   if (cmd !== "verify") {

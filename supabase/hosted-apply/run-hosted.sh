@@ -10,6 +10,10 @@
 #   bash supabase/hosted-apply/run-hosted.sh r4state        READ-ONLY: prerequisites for 20261114100100_account_deletion
 #   bash supabase/hosted-apply/run-hosted.sh r4apply        WRITES: 20261114100100 in one transaction (guarded bundle)
 #   bash supabase/hosted-apply/run-hosted.sh r4verify       READ-ONLY: state after 20261114100100
+#   bash supabase/hosted-apply/run-hosted.sh r5state        READ-ONLY: prerequisites for the UI3 fixes (20261115100100 + 20261115100200)
+#   bash supabase/hosted-apply/run-hosted.sh r5backup       READ-ONLY: saves both current function definitions to $BATON_R5_BACKUP
+#   bash supabase/hosted-apply/run-hosted.sh r5apply        WRITES: both UI3 fixes in one guarded transaction (after r5backup)
+#   bash supabase/hosted-apply/run-hosted.sh r5verify       READ-ONLY: state after the UI3 fixes
 #
 # Every command first runs phase-d.mjs verify (pinned SHA-256 of every SQL file and of the five migrations,
 # migration order, bundle rebuilt byte-for-byte from the migration files) and refuses on any mismatch.
@@ -36,11 +40,12 @@ TARGET_REF=xnwppnzvrpthukxjfojj
 FORBIDDEN_REFS="enalguyitewjojgrgzxv enalguyitewjojgrgzv" # the original project (real 20-char ref + a known misspelling)
 CONFIRM_PHRASE="apply-phase-d-to-${TARGET_REF}"
 R4_CONFIRM_PHRASE="apply-account-deletion-to-${TARGET_REF}"
+R5_CONFIRM_PHRASE="apply-ui3-fixes-to-${TARGET_REF}"
 IMG="${BATON_PG_IMAGE:-postgres:17-alpine}"
 
 case "$CMD" in
-  verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll|r4state|r4apply|r4verify) ;;
-  *) echo "usage: run-hosted.sh verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll|r4state|r4apply|r4verify" >&2; exit 2 ;;
+  verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll|r4state|r4apply|r4verify|r5state|r5backup|r5apply|r5verify) ;;
+  *) echo "usage: run-hosted.sh verify-files|r3jobs|r3verifyA|r3phaseD|r3verifyAll|r4state|r4apply|r4verify|r5state|r5backup|r5apply|r5verify" >&2; exit 2 ;;
 esac
 
 # ── 1. offline file verification (always) ────────────────────────────────────────────────────────────
@@ -50,6 +55,14 @@ node "$HERE/phase-d.mjs" verify || exit 2
 # ── 2. explicit approval for the only writing command, before any connection ─────────────────────────
 if [[ "$CMD" == r3phaseD && "${BATON_PHASE_D_CONFIRM:-}" != "$CONFIRM_PHRASE" ]]; then
   echo "REFUSED: r3phaseD writes to baton-dev. Set BATON_PHASE_D_CONFIRM=$CONFIRM_PHRASE to approve this run." >&2
+  exit 3
+fi
+if [[ "$CMD" == r5apply && "${BATON_R5_CONFIRM:-}" != "$R5_CONFIRM_PHRASE" ]]; then
+  echo "REFUSED: r5apply writes to baton-dev. Set BATON_R5_CONFIRM=$R5_CONFIRM_PHRASE to approve this run." >&2
+  exit 3
+fi
+if [[ ( "$CMD" == r5apply || "$CMD" == r5backup ) && -z "${BATON_R5_BACKUP:-}" ]]; then
+  echo "REFUSED: set BATON_R5_BACKUP to the file (outside the repo) that receives the current function definitions" >&2
   exit 3
 fi
 if [[ "$CMD" == r4apply && "${BATON_R4_CONFIRM:-}" != "$R4_CONFIRM_PHRASE" ]]; then
@@ -151,5 +164,27 @@ case "$CMD" in
     fi
     echo "[r4apply] FAILED: the transaction was rolled back, nothing applied. Current state:" >&2
     check r4_pre.sql 8 "r4 prerequisites (unchanged)" || true
+    exit 6 ;;
+  r5state)
+    echo "[r5state] prerequisites for the UI3 fixes (read-only)"; check r5_pre.sql 9 "r5 prerequisites" ;;
+  r5verify)
+    echo "[r5verify] state after the UI3 fixes (read-only)"; check r5_post.sql 9 "r5 post state" ;;
+  r5backup|r5apply)
+    echo "[$CMD] prerequisites (read-only)"
+    check r5_pre.sql 9 "r5 prerequisites" || { echo "REFUSED: a read-only gate failed; nothing was applied" >&2; exit 5; }
+    echo "[$CMD] saving the current definitions of review_gap_answer and list_points_for_pipeline"
+    psql_ro r5_backup.sql > "$BATON_R5_BACKUP" || { echo "REFUSED: backup failed; nothing was applied" >&2; exit 5; }
+    n="$(grep -c 'CREATE OR REPLACE FUNCTION' "$BATON_R5_BACKUP" || true)"
+    [[ "$n" -eq 2 ]] || { echo "REFUSED: backup has $n functions, expected 2; nothing was applied" >&2; exit 5; }
+    echo "  backup: 2 functions saved"
+    [[ "$CMD" == r5backup ]] && exit 0
+    echo "[r5apply] applying 20261115100100 + 20261115100200 in one guarded transaction"
+    if dk run --rm -i --env-file "$ENVFILE" -v "$HA:/ha:ro" "$IMG" psql -X -v ON_ERROR_STOP=1 -f /ha/r5_ui3_fixes_txn.sql; then
+      echo "[r5apply] committed. Post-apply verification:"
+      check r5_post.sql 9 "r5 post state"
+      exit $?
+    fi
+    echo "[r5apply] FAILED: the transaction was rolled back, nothing applied. Current state:" >&2
+    check r5_pre.sql 9 "r5 prerequisites (unchanged)" || true
     exit 6 ;;
 esac

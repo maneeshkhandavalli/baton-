@@ -109,3 +109,31 @@ Since then:
 
 - Only Round 3 code (≥ `0bb1b96`) may run against baton-dev.
 - No hosted processing run has used the claim-generation path yet.
+
+## Round 5: UI3 data-integrity fixes (20261115100100 + 20261115100200)
+
+Two reviewed function replacements, applied together in ONE transaction: `review_gap_answer` (QA-UI3-G1, accepted
+Gap Interview answers always reach the handover) and `list_points_for_pipeline` (QA-UI3-X1, adds `citedMessageIds`
+and `originalStatement` for retry dedup). Both are `create or replace` with the same signature: owner, SECURITY
+DEFINER, `search_path=''` and the `service_role`-only grants are unchanged. No table, column, policy or data change.
+
+```bash
+export BATON_DEV_SECRETS=/path/outside/the/repo/baton-dev.env
+export BATON_R5_BACKUP=/path/outside/the/repo/baton-dev-r5-functions.sql
+bash supabase/hosted-apply/run-hosted.sh r5state        # read-only gate: 9 rows, all t
+bash supabase/hosted-apply/run-hosted.sh r5backup       # read-only: saves both current definitions (2 functions)
+BATON_R5_CONFIRM=apply-ui3-fixes-to-xnwppnzvrpthukxjfojj \
+bash supabase/hosted-apply/run-hosted.sh r5apply        # WRITES: gate → backup → r5_ui3_fixes_txn.sql → r5verify
+bash supabase/hosted-apply/run-hosted.sh r5verify       # read-only: 9 rows, all t
+```
+
+`r5_ui3_fixes_txn.sql` is rebuilt byte-for-byte by `phase-d.mjs verify` (both migrations verbatim, each followed by its
+history row) and its in-transaction guard refuses any database that is not baton-dev at 37 history rows (newest
+20261114100100) with the OLD bodies of both functions. Rehearsed on a throwaway `postgres:17-alpine` with
+`--network none`: gate, backup, apply, post-check, a refused second apply, and recovery.
+
+**Recovery:** run the saved `$BATON_R5_BACKUP` file (two `CREATE OR REPLACE FUNCTION` statements, each preceded by a
+comment with its owner and ACL), then
+`delete from supabase_migrations.schema_migrations where version in ('20261115100100','20261115100200');` and
+`notify pgrst, 'reload schema';`. Grants are unchanged by the migration, so none need restoring. Points already created
+from accepted gap answers stay (they are ordinary pending/approved points).
