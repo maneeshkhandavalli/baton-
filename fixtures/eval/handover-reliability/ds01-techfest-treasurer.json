@@ -1,0 +1,52 @@
+{
+  "id": "ds01-techfest-treasurer",
+  "description": "Synthetic college tech-fest committee chat; the outgoing treasurer hands over. English, Indian context. Pseudonymised and masked as stored by Baton.",
+  "team": { "name": "Techfest core team", "roleTitle": "Treasurer" },
+  "messages": [
+    { "id": "m01", "author": "[PERSON_1]", "sentAt": "2026-08-01T10:02:00+05:30", "body": "Hi all, creating this group for the fest finance work" },
+    { "id": "m02", "author": "[PERSON_2]", "sentAt": "2026-08-01T10:05:00+05:30", "body": "great 👍" },
+    { "id": "m03", "author": "[PERSON_1]", "sentAt": "2026-08-01T10:20:00+05:30", "body": "We decided to keep the registration fee at ₹200 per student for all events" },
+    { "id": "m04", "author": "[PERSON_3]", "sentAt": "2026-08-01T11:00:00+05:30", "body": "lol the canteen samosa is back" },
+    { "id": "m05", "author": "[PERSON_1]", "sentAt": "2026-08-02T09:30:00+05:30", "body": "[PERSON_2] is in charge of the sponsor money and the bank deposits from now on" },
+    { "id": "m06", "author": "[PERSON_2]", "sentAt": "2026-08-02T09:31:00+05:30", "body": "ok noted" },
+    { "id": "m07", "author": "[PERSON_1]", "sentAt": "2026-08-02T18:00:00+05:30", "body": "Sponsorship invoices must be sent to all three sponsors by 15 August, otherwise the payment gets delayed to next quarter" },
+    { "id": "m08", "author": "[PERSON_3]", "sentAt": "2026-08-03T12:10:00+05:30", "body": "Sound vendor wants ₹25,000 advance before they confirm the booking" },
+    { "id": "m09", "author": "[PERSON_1]", "sentAt": "2026-08-03T12:40:00+05:30", "body": "I'll transfer the sound advance on Friday once the dean signs the approval form" },
+    { "id": "m10", "author": "[PERSON_3]", "sentAt": "2026-08-03T13:00:00+05:30", "body": "We cannot pay any vendor until the dean approves the budget sheet" },
+    { "id": "m11", "author": "[PERSON_2]", "sentAt": "2026-08-04T08:45:00+05:30", "body": "good morning everyone" },
+    { "id": "m12", "author": "[PERSON_1]", "sentAt": "2026-08-05T16:20:00+05:30", "body": "Actually the registration fee is now ₹250, the council changed it in today's meeting" },
+    { "id": "m13", "author": "[PERSON_3]", "sentAt": "2026-08-05T16:25:00+05:30", "body": "Does anyone know where the receipt book for cash registrations is kept?" },
+    { "id": "m14", "author": "[PERSON_2]", "sentAt": "2026-08-05T16:40:00+05:30", "body": "no idea, ask around" },
+    { "id": "m15", "author": "[PERSON_1]", "sentAt": "2026-08-06T10:00:00+05:30", "body": "The fest bank account login is with [PERSON_2], the registered email is [EMAIL_1]" },
+    { "id": "m16", "author": "[PERSON_3]", "sentAt": "2026-08-06T10:05:00+05:30", "body": "haha ok" },
+    { "id": "m17", "author": "[PERSON_1]", "sentAt": "2026-08-07T19:00:00+05:30", "body": "Reimbursements for volunteers are paid within 7 days of submitting bills, [PERSON_3] handles the reimbursement sheet" },
+    { "id": "m18", "author": "[PERSON_2]", "sentAt": "2026-08-08T09:00:00+05:30", "body": "Sponsor 2 said they will pay only after the fest, not before" },
+    { "id": "m19", "author": "[PERSON_1]", "sentAt": "2026-08-08T09:30:00+05:30", "body": "That contradicts what they wrote in the MoU, the MoU says 50% before the fest" },
+    { "id": "m20", "author": "[PERSON_3]", "sentAt": "2026-08-09T14:00:00+05:30", "body": "Who will collect the cash from the help desk every evening?" },
+    { "id": "m21", "author": "[PERSON_2]", "sentAt": "2026-08-09T20:00:00+05:30", "body": "gn" },
+    { "id": "m22", "author": "[PERSON_1]", "sentAt": "2026-08-10T11:00:00+05:30", "body": "Budget for the food stalls is capped at ₹40,000 total, decided with the faculty advisor" },
+    { "id": "m23", "author": "[PERSON_3]", "sentAt": "2026-08-10T11:05:00+05:30", "body": "sounds fine" }
+  ],
+  "labels": [
+    { "id": "L01", "kind": "decision", "messageIds": ["m03"], "keywords": ["registration", "fee"], "owner": null },
+    { "id": "L02", "kind": "reversed_decision", "messageIds": ["m03"], "reversedBy": ["m12"], "keywords": ["registration", "fee"], "owner": null },
+    { "id": "L03", "kind": "responsibility", "messageIds": ["m05"], "keywords": ["sponsor", "bank", "deposit"], "owner": "[PERSON_2]" },
+    { "id": "L04", "kind": "deadline", "messageIds": ["m07"], "keywords": ["invoice", "sponsor"], "owner": null },
+    { "id": "L05", "kind": "financial_commitment", "messageIds": ["m08", "m09"], "keywords": ["sound", "advance"], "owner": "[PERSON_1]" },
+    { "id": "L06", "kind": "dependency", "messageIds": ["m10", "m09"], "keywords": ["dean", "approv"], "owner": null },
+    { "id": "L07", "kind": "unresolved_question", "messageIds": ["m13"], "keywords": ["receipt", "book"], "owner": null },
+    { "id": "L08", "kind": "responsibility", "messageIds": ["m15"], "keywords": ["bank", "login", "account"], "owner": "[PERSON_2]" },
+    { "id": "L09", "kind": "responsibility", "messageIds": ["m17"], "keywords": ["reimburse"], "owner": "[PERSON_3]" },
+    { "id": "L10", "kind": "contradiction", "messageIds": ["m18", "m19"], "keywords": ["sponsor", "pay", "fest"], "owner": null },
+    { "id": "L11", "kind": "unresolved_question", "messageIds": ["m20"], "keywords": ["cash", "help desk"], "owner": null },
+    { "id": "L12", "kind": "financial_commitment", "messageIds": ["m22"], "keywords": ["food", "budget"], "owner": null }
+  ],
+  "supportPairs": [
+    { "id": "S01", "claim": { "category": "decision", "title": "Registration fee", "statement": "The registration fee is ₹200 per student.", "attributes": {} }, "messageId": "m03", "quote": "keep the registration fee at ₹200 per student", "expected": "supports" },
+    { "id": "S02", "claim": { "category": "decision", "title": "Registration fee", "statement": "The registration fee is ₹200 per student.", "attributes": {} }, "messageId": "m12", "quote": "the registration fee is now ₹250", "expected": "contradicts" },
+    { "id": "S03", "claim": { "category": "owner", "title": "Sponsor money", "statement": "[PERSON_2] is responsible for the sponsor money and bank deposits.", "attributes": { "responsibility": "Sponsor money", "ownerLabel": "[PERSON_2]", "since": null } }, "messageId": "m05", "quote": "[PERSON_2] is in charge of the sponsor money and the bank deposits", "expected": "supports" },
+    { "id": "S04", "claim": { "category": "owner", "title": "Reimbursements", "statement": "[PERSON_3] handles the reimbursement sheet.", "attributes": { "responsibility": "Reimbursements", "ownerLabel": "[PERSON_3]", "since": null } }, "messageId": "m22", "quote": "Budget for the food stalls is capped at ₹40,000 total", "expected": "irrelevant" },
+    { "id": "S05", "claim": { "category": "open_task", "title": "Sponsor invoices", "statement": "Sponsor invoices must be sent by 15 August.", "attributes": { "assigneeLabel": null, "dueDate": "2026-08-15", "progressNote": null } }, "messageId": "m07", "quote": "Sponsorship invoices must be sent to all three sponsors by 15 August", "expected": "supports" },
+    { "id": "S06", "claim": { "category": "dependency", "title": "Dean approval", "statement": "Vendor payments can be made without the dean's approval.", "attributes": { "dependsOnLabel": null, "dependencyType": null } }, "messageId": "m10", "quote": "We cannot pay any vendor until the dean approves the budget sheet", "expected": "contradicts" }
+  ]
+}

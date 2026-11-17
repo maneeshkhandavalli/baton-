@@ -22,6 +22,8 @@ interface ReadinessPanelProps {
   gapsHref: string | null;
   canPublish: boolean;
   onPublish: (() => void) | null;
+  /** R3 Task 03: extra panels under readiness (extraction coverage, unreviewed signals). */
+  extra?: React.ReactNode;
   className?: string;
 }
 
@@ -49,7 +51,7 @@ function NavButton({ active, onClick, children, count, dots }: { active: boolean
   );
 }
 
-export function ReadinessPanel({ points, readiness, section, onSection, onBlocker, gapsHref, canPublish, onPublish, className }: ReadinessPanelProps) {
+export function ReadinessPanel({ points, readiness, section, onSection, onBlocker, gapsHref, canPublish, onPublish, extra, className }: ReadinessPanelProps) {
   const live = points.filter((p) => p.reviewState !== "rejected");
   const conflicts = live.filter((p) => p.evidenceStatus === "conflicting");
   const gaps = live.filter((p) => p.evidenceStatus === "missing");
@@ -101,6 +103,8 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
           </>
         )}
       </section>
+
+      {extra}
 
       <nav aria-label="Sections" className="space-y-0.5">
         <NavButton active={section === "all"} onClick={() => onSection("all")} count={points.length}>

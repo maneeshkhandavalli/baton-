@@ -1,5 +1,6 @@
 /** Handover lifecycle actions (§9, §11.3, §12.9). */
 
+import { blockingExtractionGaps } from "../../contracts/extraction";
 import type { Result } from "../../contracts/api";
 import type { HandoverSummary, PublicationSummary } from "../../contracts/dto";
 import {
@@ -169,6 +170,19 @@ export async function cancelProcessing(deps: ActionDeps, input: { handoverId: st
 
 export async function publishHandover(deps: ActionDeps, input: PublishHandoverInput): Promise<Result<PublicationSummary>> {
   return action(deps, publishHandoverInput, input, async (actor, v) => {
+    // R3 Task 03 (EXT-3): a source that was only partly analysed (or failed while others succeeded) must be
+    // acknowledged explicitly; the handover can otherwise look complete when it is not.
+    const report = await deps.queries.getExtractionReport(v.handoverId);
+    if (!report.ok && report.error.code === "internal") return report;
+    if (report.ok && v.acknowledgeExtractionGaps !== true) {
+      const gaps = blockingExtractionGaps(report.data);
+      if (gaps.length > 0) {
+        return failWith("precondition_failed", {
+          details: { reason: "extraction_incomplete", sources: gaps.reduce((a, g) => a + g.sourceIds.length, 0) },
+          message: "Part of a source was not analysed. Confirm that you want to publish anyway.",
+        });
+      }
+    }
     const summary = v.summary?.trim() ? createInputMasker().text(v.summary.trim()) : undefined;
     const publicationId = await mutations.publishHandover(deps.adminDb(), actor, { handoverId: v.handoverId, summary });
     const handover = await deps.queries.getHandover(v.handoverId);

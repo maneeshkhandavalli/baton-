@@ -1,0 +1,45 @@
+{
+  "id": "ds03-society-sponsorship",
+  "description": "Synthetic university robotics society; the outgoing sponsorship lead hands over. Long messages, an unknown name the model may invent, and several later changes. Pseudonymised and masked as stored by Baton.",
+  "team": { "name": "Robotics society", "roleTitle": "Sponsorship lead" },
+  "messages": [
+    { "id": "m01", "author": "[PERSON_1]", "sentAt": "2026-07-10T14:00:00+01:00", "body": "Summary of today's committee meeting: we agreed to approach five companies for the competition season, and the minimum package is £500" },
+    { "id": "m02", "author": "[PERSON_2]", "sentAt": "2026-07-10T14:30:00+01:00", "body": "nice one" },
+    { "id": "m03", "author": "[PERSON_1]", "sentAt": "2026-07-11T09:00:00+01:00", "body": "[PERSON_3] owns the relationship with the laser-cutting sponsor, please route all their emails through [PERSON_3]" },
+    { "id": "m04", "author": "[PERSON_3]", "sentAt": "2026-07-11T09:10:00+01:00", "body": "will do" },
+    { "id": "m05", "author": "[PERSON_1]", "sentAt": "2026-07-12T16:00:00+01:00", "body": "The sponsor deck has to be updated before the freshers fair on 22 September" },
+    { "id": "m06", "author": "[PERSON_2]", "sentAt": "2026-07-13T10:00:00+01:00", "body": "Has anyone heard back from the electronics distributor about the components discount?" },
+    { "id": "m07", "author": "[PERSON_1]", "sentAt": "2026-07-14T11:00:00+01:00", "body": "Treasurer confirmed we will reimburse up to £60 per person for competition travel" },
+    { "id": "m08", "author": "[PERSON_3]", "sentAt": "2026-07-15T12:00:00+01:00", "body": "Ordering the motors depends on the student union releasing the grant, they said early August" },
+    { "id": "m09", "author": "[PERSON_2]", "sentAt": "2026-07-16T19:00:00+01:00", "body": "anyone up for pizza later" },
+    { "id": "m10", "author": "[PERSON_1]", "sentAt": "2026-07-18T10:00:00+01:00", "body": "Correction: travel reimbursement is £45 per person, not £60, the union capped it" },
+    { "id": "m11", "author": "[PERSON_1]", "sentAt": "2026-07-19T09:00:00+01:00", "body": "Social media accounts: the Instagram login is in the shared password manager, [PERSON_2] has admin access" },
+    { "id": "m12", "author": "[PERSON_3]", "sentAt": "2026-07-20T13:00:00+01:00", "body": "We decided not to accept sponsorship from betting companies, unanimous vote" },
+    { "id": "m13", "author": "[PERSON_2]", "sentAt": "2026-07-21T08:00:00+01:00", "body": "morning!" },
+    { "id": "m14", "author": "[PERSON_1]", "sentAt": "2026-07-22T15:00:00+01:00", "body": "The laser-cutting sponsor is paying £1,200 this year, invoice goes out once the logo is on the robot" },
+    { "id": "m15", "author": "[PERSON_3]", "sentAt": "2026-07-25T18:00:00+01:00", "body": "Laser-cutting sponsor just emailed, they can only do £800 this year because of budget cuts" },
+    { "id": "m16", "author": "[PERSON_2]", "sentAt": "2026-07-26T12:00:00+01:00", "body": "Who is going to book the minibus for the competition trip?" },
+    { "id": "m17", "author": "[PERSON_1]", "sentAt": "2026-07-27T12:00:00+01:00", "body": "thanks all, great work this term" }
+  ],
+  "labels": [
+    { "id": "L01", "kind": "decision", "messageIds": ["m01"], "keywords": ["five", "companies", "package"], "owner": null },
+    { "id": "L02", "kind": "responsibility", "messageIds": ["m03"], "keywords": ["laser", "relationship"], "owner": "[PERSON_3]" },
+    { "id": "L03", "kind": "deadline", "messageIds": ["m05"], "keywords": ["deck", "freshers"], "owner": null },
+    { "id": "L04", "kind": "unresolved_question", "messageIds": ["m06"], "keywords": ["distributor", "discount"], "owner": null },
+    { "id": "L05", "kind": "financial_commitment", "messageIds": ["m07"], "keywords": ["reimburse", "travel"], "owner": null },
+    { "id": "L06", "kind": "reversed_decision", "messageIds": ["m07"], "reversedBy": ["m10"], "keywords": ["reimburse", "travel"], "owner": null },
+    { "id": "L07", "kind": "dependency", "messageIds": ["m08"], "keywords": ["motors", "grant"], "owner": null },
+    { "id": "L08", "kind": "responsibility", "messageIds": ["m11"], "keywords": ["instagram", "admin"], "owner": "[PERSON_2]" },
+    { "id": "L09", "kind": "decision", "messageIds": ["m12"], "keywords": ["betting"], "owner": null },
+    { "id": "L10", "kind": "financial_commitment", "messageIds": ["m14"], "keywords": ["laser", "sponsor", "1,200"], "owner": null },
+    { "id": "L11", "kind": "contradiction", "messageIds": ["m14", "m15"], "keywords": ["laser", "sponsor"], "owner": null },
+    { "id": "L12", "kind": "unresolved_question", "messageIds": ["m16"], "keywords": ["minibus"], "owner": null }
+  ],
+  "supportPairs": [
+    { "id": "S01", "claim": { "category": "owner", "title": "Laser-cutting sponsor", "statement": "[PERSON_3] owns the relationship with the laser-cutting sponsor.", "attributes": { "responsibility": "Laser-cutting sponsor", "ownerLabel": "[PERSON_3]", "since": null } }, "messageId": "m03", "quote": "[PERSON_3] owns the relationship with the laser-cutting sponsor", "expected": "supports" },
+    { "id": "S02", "claim": { "category": "decision", "title": "Travel reimbursement", "statement": "Travel is reimbursed up to £60 per person.", "attributes": {} }, "messageId": "m10", "quote": "travel reimbursement is £45 per person, not £60", "expected": "contradicts" },
+    { "id": "S03", "claim": { "category": "decision", "title": "No betting sponsors", "statement": "The society does not accept sponsorship from betting companies.", "attributes": {} }, "messageId": "m12", "quote": "We decided not to accept sponsorship from betting companies", "expected": "supports" },
+    { "id": "S04", "claim": { "category": "owner", "title": "Laser-cutting sponsor", "statement": "Kabir owns the relationship with the laser-cutting sponsor.", "attributes": { "responsibility": "Laser-cutting sponsor", "ownerLabel": "Kabir", "since": null } }, "messageId": "m09", "quote": "anyone up for pizza later", "expected": "irrelevant" },
+    { "id": "S05", "claim": { "category": "dependency", "title": "Motor order", "statement": "Ordering the motors depends on the student union grant.", "attributes": { "dependsOnLabel": "Student union", "dependencyType": null } }, "messageId": "m08", "quote": "Ordering the motors depends on the student union releasing the grant", "expected": "supports" }
+  ]
+}

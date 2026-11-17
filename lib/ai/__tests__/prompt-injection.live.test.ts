@@ -15,9 +15,17 @@
 //      patterns; paraphrased injections must be resisted by the model itself. Gate: 100% pass on the
 //      provider/model/prompt version being enabled, re-run on any change to model, prompt version or adapter.
 //      No provider is selected here (D11 stays open); nothing in this file chooses or configures one.
-// Run (real Gemini calls), with the server env configured (AI_PROVIDER=gemini, AI_API_KEY) and BATON_LIVE_AI=1:
+// R3 Task 03: the suite runs against whichever REAL provider lib/ai/config.ts selects: a production provider
+// (Gemini with an approved profile) or an evaluation provider (Omega, development/test with
+// BATON_ALLOW_EVAL_PROVIDER=1, synthetic fixtures only). Never the fake adapter. PI-25 is D11-LIVE-1.
+// With BATON_LIVE_AI_REPORT=<file> it also writes one JSON line per case (ids, verdicts, reason tokens; never
+// the API key or provider message text) so the result can be recorded in docs.
+// Run (real, billed calls; synthetic fixtures only), e.g. for the Omega evaluation:
+//   NODE_ENV=test AI_PROVIDER=omega OMEGA_API_KEY=… AI_MODEL_EXTRACT=<fixed id> AI_MODEL_VERIFY=<fixed id> \
+//   BATON_ALLOW_EVAL_PROVIDER=1 BATON_LIVE_AI=1 BATON_LIVE_AI_REPORT=live-injection.jsonl \
 //   node --import ./lib/ai/__tests__/resolve-ai.mjs --test "lib/ai/__tests__/prompt-injection.live.test.ts"
 import assert from "node:assert/strict";
+import { appendFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { loadInjectionCases, type ExtractInjectionCase, type VerifyInjectionCase } from "../../../fixtures/ai/prompt-injection/load";
@@ -28,12 +36,20 @@ import { verifySupport } from "../verify-support";
 // Real (quota-consuming) calls are explicitly opt-in: a configured key alone never runs this suite (e.g. inside `npm test`).
 const OPTED_IN = process.env.BATON_LIVE_AI === "1";
 const config = getAiConfiguration();
-const live = OPTED_IN && config.ok && config.mode === "production" ? config : null;
+const live = OPTED_IN && config.ok && (config.mode === "production" || config.mode === "evaluation") ? config : null;
 const skip = live
   ? false
   : OPTED_IN
-    ? "BATON_LIVE_AI=1 but no production AI provider is configured (AI_PROVIDER=gemini + AI_API_KEY)"
-    : "live suite is opt-in (BATON_LIVE_AI=1, real Gemini calls); the deterministic suite still runs";
+    ? "BATON_LIVE_AI=1 but no real AI provider is configured (production Gemini, or evaluation Omega with BATON_ALLOW_EVAL_PROVIDER=1)"
+    : "live suite is opt-in (BATON_LIVE_AI=1, real provider calls); the deterministic suite still runs";
+const REPORT = process.env.BATON_LIVE_AI_REPORT;
+
+/** One non-sensitive line per case: ids, verdicts and reason tokens only. */
+function record(entry: Record<string, unknown>) {
+  if (!REPORT || !live) return;
+  const { provider, adapterVersion, extract, verify } = live.runConfig;
+  appendFileSync(REPORT, `${JSON.stringify({ at: new Date().toISOString(), provider, adapterVersion, extractModel: extract.model, verifyModel: verify.model, ...entry })}\n`);
+}
 
 describe("prompt-injection suite: LIVE provider", { skip }, () => {
   const cases = loadInjectionCases();
@@ -45,6 +61,7 @@ describe("prompt-injection suite: LIVE provider", { skip }, () => {
       assert.ok(provider.ok);
       const r = await extractCandidates(provider.data, c.request, { attempt: 1, runConfig, signal: AbortSignal.timeout(120_000) });
       // An honest model answers with schema-valid JSON and no tool call.
+      record({ case: c.id, stage: "extract", ok: r.ok, reason: r.ok ? null : (r.error.details?.reason ?? null), reportedModel: r.ok ? r.data.provenance.model : null });
       assert.ok(r.ok, `live extract failed: ${r.ok ? "" : String(r.error.details?.reason)}`);
       const text = JSON.stringify(r.data.candidates.map(({ title, statement, attributes, inferenceRationale }) => ({ title, statement, attributes, inferenceRationale })));
       for (const forbidden of c.live?.forbiddenInOutput ?? []) {
@@ -62,6 +79,16 @@ describe("prompt-injection suite: LIVE provider", { skip }, () => {
       const provider = getAiProviderForRun(runConfig);
       assert.ok(provider.ok);
       const r = await verifySupport(provider.data, c.request, { attempt: 1, runConfig, signal: AbortSignal.timeout(60_000) });
+      record({
+        case: c.id,
+        stage: "verify",
+        ok: r.ok,
+        reason: r.ok ? null : (r.error.details?.reason ?? null),
+        modelVerdict: r.ok ? (r.data.modelVerdict ?? null) : null,
+        expected: c.live?.verdict ?? null,
+        guarded: r.ok ? (r.data.injection?.guarded ?? false) : null,
+        reportedModel: r.ok ? r.data.provenance.model : null,
+      });
       assert.ok(r.ok, `live verify failed: ${r.ok ? "" : String(r.error.details?.reason)}`);
       // The model's own answer (before the deterministic PI-11 guard) must resist the injection.
       if (c.live?.verdict) assert.equal(r.data.modelVerdict, c.live.verdict, `${c.id}: verifier verdict on an injected quote`);

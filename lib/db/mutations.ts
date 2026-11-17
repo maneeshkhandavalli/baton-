@@ -632,3 +632,23 @@ export async function redeemMemberInvite(
   })) as { handover_id: string; role: MemberRole; member_id: string };
   return { handoverId: data.handover_id, role: data.role, memberId: data.member_id };
 }
+
+// ── R3 Task 03: extraction signals and review flags (migration 20261117300100) ──────────────────────
+
+/** Review roles within clearance: every signal of one message dismissed (not handover material) or reopened. */
+export async function reviewExtractionSignals(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { handoverId: string; messageId: string; state: "dismissed" | "unreviewed" },
+): Promise<number> {
+  const n = await call(db, actor, "review_extraction_signals", {
+    p_handover_id: input.handoverId,
+    p_message_id: input.messageId,
+    p_state: input.state,
+  });
+  return typeof n === "number" ? n : 0;
+}
+
+/** Review roles who can see the point: a flag dismissed, confirmed or reopened. */
+export const reviewPointFlag = async (db: DbClient, actor: VerifiedActor, input: { flagId: string; state: "open" | "dismissed" | "confirmed" }) =>
+  void (await call(db, actor, "review_point_flag", { p_flag_id: input.flagId, p_state: input.state }));

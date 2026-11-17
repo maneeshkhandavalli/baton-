@@ -1,0 +1,380 @@
+{
+  "label": "fake adapter (deterministic plumbing baseline; NOT a model)",
+  "provider": "fake",
+  "adapterVersion": "fake@1",
+  "extractModel": "fake-extract-v1",
+  "verifyModel": "fake-verify-v1",
+  "extractPrompt": "extract@1",
+  "verifyPrompt": "support@1",
+  "detectorVersion": "signals@1",
+  "datasets": [
+    {
+      "dataset": "ds01-techfest-treasurer",
+      "messages": 23,
+      "labels": 12,
+      "chunks": 1,
+      "failedChunks": [],
+      "candidates": 4,
+      "droppedByLib": {},
+      "unmatchedLabels": [
+        "L02",
+        "L04",
+        "L05",
+        "L06",
+        "L07",
+        "L08",
+        "L10",
+        "L11"
+      ],
+      "metrics": {
+        "detectionRecall": {
+          "num": 11,
+          "den": 14,
+          "value": 0.7857
+        },
+        "detectionPrecision": {
+          "num": 11,
+          "den": 11,
+          "value": 1
+        },
+        "extractionRecall": {
+          "num": 4,
+          "den": 12,
+          "value": 0.3333
+        },
+        "citationAccuracy": {
+          "num": 4,
+          "den": 4,
+          "value": 1
+        },
+        "supportPrecision": {
+          "num": 3,
+          "den": 3,
+          "value": 1
+        },
+        "supportAccuracy": {
+          "num": 4,
+          "den": 6,
+          "value": 0.6667
+        },
+        "unsupportedClaimRate": {
+          "num": 0,
+          "den": 4,
+          "value": 0
+        },
+        "attributionAccuracy": {
+          "num": 0,
+          "den": 0,
+          "value": null
+        },
+        "contradictionRecall": {
+          "num": 1,
+          "den": 2,
+          "value": 0.5
+        }
+      },
+      "attributionResolutions": {},
+      "supportConfusion": [
+        {
+          "pair": "S01",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S02",
+          "expected": "contradicts",
+          "modelVerdict": "partial",
+          "verdict": "partial",
+          "guarded": false
+        },
+        {
+          "pair": "S03",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S04",
+          "expected": "irrelevant",
+          "modelVerdict": "irrelevant",
+          "verdict": "irrelevant",
+          "guarded": false
+        },
+        {
+          "pair": "S05",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S06",
+          "expected": "contradicts",
+          "modelVerdict": "irrelevant",
+          "verdict": "irrelevant",
+          "guarded": false
+        }
+      ]
+    },
+    {
+      "dataset": "ds02-fooddrive-hinglish",
+      "messages": 20,
+      "labels": 12,
+      "chunks": 1,
+      "failedChunks": [],
+      "candidates": 2,
+      "droppedByLib": {},
+      "unmatchedLabels": [
+        "L01",
+        "L02",
+        "L05",
+        "L06",
+        "L07",
+        "L08",
+        "L09",
+        "L11",
+        "L12"
+      ],
+      "metrics": {
+        "detectionRecall": {
+          "num": 12,
+          "den": 14,
+          "value": 0.8571
+        },
+        "detectionPrecision": {
+          "num": 12,
+          "den": 12,
+          "value": 1
+        },
+        "extractionRecall": {
+          "num": 3,
+          "den": 12,
+          "value": 0.25
+        },
+        "citationAccuracy": {
+          "num": 2,
+          "den": 2,
+          "value": 1
+        },
+        "supportPrecision": {
+          "num": 2,
+          "den": 2,
+          "value": 1
+        },
+        "supportAccuracy": {
+          "num": 3,
+          "den": 5,
+          "value": 0.6
+        },
+        "unsupportedClaimRate": {
+          "num": 0,
+          "den": 2,
+          "value": 0
+        },
+        "attributionAccuracy": {
+          "num": 0,
+          "den": 0,
+          "value": null
+        },
+        "contradictionRecall": {
+          "num": 1,
+          "den": 2,
+          "value": 0.5
+        }
+      },
+      "attributionResolutions": {},
+      "supportConfusion": [
+        {
+          "pair": "S01",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S02",
+          "expected": "contradicts",
+          "modelVerdict": "partial",
+          "verdict": "partial",
+          "guarded": false
+        },
+        {
+          "pair": "S03",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S04",
+          "expected": "supports",
+          "modelVerdict": "partial",
+          "verdict": "partial",
+          "guarded": false
+        },
+        {
+          "pair": "S05",
+          "expected": "irrelevant",
+          "modelVerdict": "irrelevant",
+          "verdict": "irrelevant",
+          "guarded": false
+        }
+      ]
+    },
+    {
+      "dataset": "ds03-society-sponsorship",
+      "messages": 17,
+      "labels": 12,
+      "chunks": 1,
+      "failedChunks": [],
+      "candidates": 3,
+      "droppedByLib": {},
+      "unmatchedLabels": [
+        "L03",
+        "L04",
+        "L05",
+        "L06",
+        "L07",
+        "L08",
+        "L10",
+        "L11",
+        "L12"
+      ],
+      "metrics": {
+        "detectionRecall": {
+          "num": 11,
+          "den": 12,
+          "value": 0.9167
+        },
+        "detectionPrecision": {
+          "num": 11,
+          "den": 12,
+          "value": 0.9167
+        },
+        "extractionRecall": {
+          "num": 3,
+          "den": 12,
+          "value": 0.25
+        },
+        "citationAccuracy": {
+          "num": 3,
+          "den": 3,
+          "value": 1
+        },
+        "supportPrecision": {
+          "num": 3,
+          "den": 3,
+          "value": 1
+        },
+        "supportAccuracy": {
+          "num": 5,
+          "den": 5,
+          "value": 1
+        },
+        "unsupportedClaimRate": {
+          "num": 0,
+          "den": 3,
+          "value": 0
+        },
+        "attributionAccuracy": {
+          "num": 0,
+          "den": 0,
+          "value": null
+        },
+        "contradictionRecall": {
+          "num": 2,
+          "den": 2,
+          "value": 1
+        }
+      },
+      "attributionResolutions": {},
+      "supportConfusion": [
+        {
+          "pair": "S01",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S02",
+          "expected": "contradicts",
+          "modelVerdict": "contradicts",
+          "verdict": "contradicts",
+          "guarded": false
+        },
+        {
+          "pair": "S03",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S04",
+          "expected": "irrelevant",
+          "modelVerdict": "irrelevant",
+          "verdict": "irrelevant",
+          "guarded": false
+        },
+        {
+          "pair": "S05",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "detectionRecall": {
+      "num": 34,
+      "den": 40,
+      "value": 0.85
+    },
+    "detectionPrecision": {
+      "num": 34,
+      "den": 35,
+      "value": 0.9714
+    },
+    "extractionRecall": {
+      "num": 10,
+      "den": 36,
+      "value": 0.2778
+    },
+    "citationAccuracy": {
+      "num": 9,
+      "den": 9,
+      "value": 1
+    },
+    "supportPrecision": {
+      "num": 8,
+      "den": 8,
+      "value": 1
+    },
+    "supportAccuracy": {
+      "num": 12,
+      "den": 16,
+      "value": 0.75
+    },
+    "unsupportedClaimRate": {
+      "num": 0,
+      "den": 9,
+      "value": 0
+    },
+    "attributionAccuracy": {
+      "num": 0,
+      "den": 0,
+      "value": null
+    },
+    "contradictionRecall": {
+      "num": 4,
+      "den": 6,
+      "value": 0.6667
+    }
+  }
+}

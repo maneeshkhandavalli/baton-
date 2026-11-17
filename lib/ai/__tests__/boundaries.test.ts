@@ -111,8 +111,25 @@ describe("lib/ai boundaries", () => {
           );
         }
       }
-      assert.doesNotMatch(code(f.text), /\bfetch\s*\(|XMLHttpRequest|WebSocket|child_process|\beval\s*\(|new Function\s*\(/, f.rel);
+      // R3 Task 03: the Omega adapter is the one file allowed a raw `fetch` (its pinned host, from config.ts).
+      const forbidden = NETWORK_ALLOWED.has(f.rel)
+        ? /XMLHttpRequest|WebSocket|child_process|\beval\s*\(|new Function\s*\(/
+        : /\bfetch\s*\(|XMLHttpRequest|WebSocket|child_process|\beval\s*\(|new Function\s*\(/;
+      assert.doesNotMatch(code(f.text), forbidden, f.rel);
     }
+  });
+
+  const NETWORK_ALLOWED: ReadonlySet<string> = new Set(["providers/omega.ts"]);
+
+  it("only providers/omega.ts calls fetch, only to the configured /v1/messages URL, and reads no environment", () => {
+    for (const f of files) {
+      const fetches = (code(f.text).match(/\bfetch\s*\(/g) ?? []).length;
+      if (!NETWORK_ALLOWED.has(f.rel)) assert.equal(fetches, 0, f.rel);
+    }
+    const omega = files.find((f) => f.rel === "providers/omega.ts")!;
+    assert.equal((code(omega.text).match(/\bfetch\s*\(/g) ?? []).length, 1, "one call site");
+    assert.match(omega.text, /\/v1\/messages`/);
+    assert.doesNotMatch(code(omega.text), /process\.env/, "configuration comes only from config.ts");
   });
 
   it("no rendering of model output as HTML", () => {

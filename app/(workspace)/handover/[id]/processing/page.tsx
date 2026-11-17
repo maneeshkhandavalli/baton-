@@ -29,7 +29,7 @@ async function ProcessingContent({ params }: { params: Promise<{ id: string }> }
   const handover = await queries.getHandover(id);
   if (!handover.ok) notFound();
   const h = handover.data;
-  const status = await queries.getProcessingStatus(id);
+  const [status, extraction] = await Promise.all([queries.getProcessingStatus(id), queries.getExtractionReport(id)]);
   if (!status.ok) {
     return <EmptyState icon={<Lock />} title="Processing is for reviewers" description="Only the creator, outgoing member and reviewers can see processing details." />;
   }
@@ -39,6 +39,7 @@ async function ProcessingContent({ params }: { params: Promise<{ id: string }> }
       status={status.data}
       canStart={h.viewerIsCreator || h.viewerRole === "outgoing"}
       canCancel={h.viewerIsCreator}
+      extraction={extraction.ok ? extraction.data : null}
     />
   );
 }
