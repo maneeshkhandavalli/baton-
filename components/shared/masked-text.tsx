@@ -1,6 +1,7 @@
 import { UserX } from "lucide-react";
 
 import { maskTokenLabel, segmentMaskedText } from "./mask-tokens";
+import { PersonToken } from "./person-token";
 
 const EXCLUDED_DESCRIPTION = "Someone who asked to be left out was mentioned here. Their name was removed before processing.";
 
@@ -16,6 +17,8 @@ export function MaskedText({ text, className }: { text: string; className?: stri
     <span className={className}>
       {segmentMaskedText(text).map((seg, i) => {
         if (seg.kind === "text") return <span key={i}>{seg.text}</span>;
+        // R3 Task 02: participant placeholder, a name only for viewers with clearance (person-token.tsx)
+        if (seg.kind === "person") return <PersonToken key={i} ordinal={seg.ordinal} />;
         if (seg.kind === "mask") {
           return (
             <span

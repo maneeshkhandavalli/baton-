@@ -7,6 +7,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { sessionCookieOptions } from "./cookie-options";
 import { getSupabasePublicEnv, isSupabaseConfigured } from "./env";
 
 export async function updateSession(request: NextRequest): Promise<{ response: NextResponse; userId: string | null }> {
@@ -15,6 +16,7 @@ export async function updateSession(request: NextRequest): Promise<{ response: N
 
   const { url, anonKey } = getSupabasePublicEnv();
   const supabase = createServerClient(url, anonKey, {
+    cookieOptions: sessionCookieOptions(), // R3 Task 02 (PRIV-4): httpOnly
     cookies: {
       getAll() {
         return request.cookies.getAll();

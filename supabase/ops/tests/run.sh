@@ -166,6 +166,40 @@ for r in anon authenticated; do
 done
 check "no cron command contains the key" "$(pg -c "select count(*) from cron.job where position('$KEY' in command) > 0")" "0"
 
+echo "== schedule-raw-retention.sql (R3 Task 02): same infrastructure, purpose-bound signature"
+check "refused before the retention migration" "$(pg -f - <"$OPS/schedule-raw-retention.sql" 2>&1 | grep -c 'apply migration 20261117200200')" "1"
+# Stand-ins for the migration's two tables (their real definitions are tested in it22_raw_retention.sql).
+pg <<'SQL' >/dev/null
+create table public.raw_retention_items (source_id uuid primary key);
+create table public.raw_retention_runs (id uuid primary key);
+revoke all on public.raw_retention_items, public.raw_retention_runs from public, anon, authenticated;
+SQL
+pg -f - <"$OPS/schedule-raw-retention.sql" >/dev/null 2>"$WORK/ret1.err" || { cat "$WORK/ret1.err"; exit 1; }
+pg -f - <"$OPS/schedule-raw-retention.sql" >/dev/null 2>"$WORK/ret2.err" || { cat "$WORK/ret2.err"; exit 1; }
+check "idempotent: retention jobs once each, worker jobs untouched" \
+  "$(pg -c "select string_agg(jobname || '=' || n, ',' order by jobname) from (select jobname, count(*) n from cron.job where jobname like 'baton-%' group by jobname) x")" \
+  "baton-pipeline-worker=1,baton-pipeline-worker-housekeeping=1,baton-raw-retention=1,baton-raw-retention-housekeeping=1"
+pg -c "select cron.alter_job((select jobid from cron.job where jobname = 'baton-raw-retention'), active := false)" >/dev/null
+check "without its URL secret: not_sent" "$(pg -c "select baton_ops.retention_tick()")" "not_sent"
+pg -c "select vault.create_secret('http://host.docker.internal:$PORT/api/cron/retention', 'baton_retention_url', 'test')" >/dev/null
+check "retention tick dispatches" "$(pg -c "select baton_ops.retention_tick()")" "dispatched"
+RID="$(pg -c "select max(id) from baton_ops.retention_dispatches")"
+for _ in $(seq 1 30); do
+  [[ "$(pg -c "select count(*) from net._http_response h join baton_ops.retention_dispatches d on d.request_id = h.id where d.id = $RID")" == "1" ]] && break; sleep 0.5
+done
+pg -c "select baton_ops.reconcile_retention_dispatches()" >/dev/null
+check "ok:200 with counts" "$(pg -c "select outcome || ':' || status_code || '/' || deleted from baton_ops.retention_dispatches where id = $RID")" "ok:200/2"
+check "retention signature valid, NOT valid as a drain dispatch, no Authorization, key never seen" \
+  "$(grep '"path":"/retention"' "$LOG" | tail -1 | node -e "const l=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log([l.retentionValid,l.dispatchValid,l.hasAuthorization,l.keySeen].join(','))")" \
+  "true,false,false,false"
+check "drain dispatches are not valid retention dispatches" "$(grep '"path":"/ok"' "$LOG" | tail -1 | node -e "const l=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log(l.retentionValid)")" "false"
+pg -c "insert into baton_ops.retention_dispatches (request_id) values (999999970)" >/dev/null
+check "an in-flight retention dispatch blocks the next tick" "$(pg -c "select baton_ops.retention_tick()")" "in_flight"
+pg -c "delete from baton_ops.retention_dispatches where request_id = 999999970" >/dev/null
+for r in anon authenticated; do
+  check "$r: cannot run the retention tick" "$(admin -c "select has_function_privilege('$r', 'baton_ops.retention_tick()', 'EXECUTE')")" "f"
+done
+
 echo "== harden-pg-net.sql: a no-op as postgres, effective as the owner, pg_net still delivers"
 check "postgres cannot change it" "$(pg -f - <"$OPS/harden-pg-net.sql" 2>&1 | grep -c 'nothing changed')" "1"
 check "anon still reads the queue (Supabase default)" "$(admin -c "select has_table_privilege('anon', 'net.http_request_queue', 'SELECT')")" "t"

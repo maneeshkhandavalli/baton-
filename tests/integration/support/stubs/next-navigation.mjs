@@ -27,3 +27,7 @@ export function usePathname() {
 export function useSearchParams() {
   return new URLSearchParams();
 }
+
+export function useParams() {
+  return globalThis.__batonIt?.params ?? {};
+}

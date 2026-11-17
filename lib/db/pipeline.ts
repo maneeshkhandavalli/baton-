@@ -528,3 +528,64 @@ export async function renewWorkerSlot(adminDb: DbClient, slot: WorkerSlot, lease
 export async function releaseWorkerSlot(adminDb: DbClient, slot: WorkerSlot): Promise<boolean> {
   return (await slotRpc(adminDb, "release_pipeline_worker_slot", { p_slot: slot.slot, p_token: slot.token })) === true;
 }
+
+// ── Identity vault (Round 3 Task 02, PRIV-1) ─────────────────────────────────────────────────────────────
+
+/** A person of the handover as stored: placeholder number, keyed person key, sealed (encrypted) label. */
+export interface SealedPerson {
+  ordinal: number;
+  personKey: string;
+  sealed: string | null;
+  keyVersion: string;
+}
+
+const sealedPersonSchema = z.strictObject({
+  ordinal: z.number().int().min(1),
+  personKey: z.string().regex(/^[0-9a-f]{64}$/),
+  sealed: z.string().nullable(),
+  keyVersion: z.string(),
+});
+const sealedPeopleSchema = z.array(sealedPersonSchema);
+
+function parsePeople(data: unknown): SealedPerson[] {
+  const parsed = sealedPeopleSchema.safeParse(data);
+  if (!parsed.success) throw new DbError("internal");
+  // Base64 from Postgres' encode() wraps lines every 76 characters.
+  return parsed.data.map((p) => ({ ...p, sealed: p.sealed === null ? null : p.sealed.replace(/\s+/g, "") }));
+}
+
+/**
+ * Parse job (fenced): registers people not yet known by person key and returns ALL the handover's people
+ * with their ordinals. Serialised per handover in SQL, so ordinals are never handed out twice.
+ */
+export async function reserveHandoverPeople(
+  adminDb: DbClient,
+  claim: JobClaim,
+  people: ReadonlyArray<{ personKey: string; sealed: string | null; keyVersion: string }>,
+): Promise<SealedPerson[]> {
+  return parsePeople(await fencedRpc(adminDb, "pipeline_reserve_handover_people", claim, { p_people: people }));
+}
+
+/** Parse / extract / verify_support jobs (fenced): the handover's people and whether the job's source is pseudonymised. */
+export async function listHandoverPeopleForJob(
+  adminDb: DbClient,
+  claim: JobClaim,
+): Promise<{ people: SealedPerson[]; sourceIdentityScheme: "person_v1" | null }> {
+  const data = (await fencedRpc(adminDb, "pipeline_list_handover_people", claim, {})) as
+    | { people?: unknown; sourceIdentityScheme?: unknown }
+    | null;
+  if (!data || typeof data !== "object") throw new DbError("internal");
+  return {
+    people: parsePeople(data.people),
+    sourceIdentityScheme: data.sourceIdentityScheme === "person_v1" ? "person_v1" : null,
+  };
+}
+
+/** Parse job (fenced): persists like persistParsedSource, refuses any label that is not a known [PERSON_n], marks the source pseudonymised. */
+export const persistPseudonymizedSource = async (adminDb: DbClient, claim: JobClaim, parsed: ParsedSource, pepperVersion: "p1") =>
+  void (await fencedRpc(adminDb, "pipeline_persist_pseudonymized_source", claim, { p_parsed: parsed, p_pepper_version: pepperVersion }));
+
+/** Server actions: the sealed labels a verified member may see (clearance checked in SQL); not_found otherwise. */
+export async function resolveHandoverPeopleSealed(adminDb: DbClient, actorProfileId: string, handoverId: string): Promise<SealedPerson[]> {
+  return parsePeople(await callRpc(adminDb, "resolve_handover_people", { p_actor_profile_id: actorProfileId, p_handover_id: handoverId }));
+}

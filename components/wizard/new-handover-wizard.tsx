@@ -29,7 +29,7 @@ import { inviteMember } from "@/lib/actions/members";
 import { addExclusion, confirmIdentityMatch, confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent, removeSource } from "@/lib/actions/sources";
 import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 import { routes } from "@/lib/routes";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseUploadClient } from "@/lib/supabase/client";
 
 import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTarget, TOO_LARGE_MESSAGE, type DraftSource } from "./draft-state";
 import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
@@ -417,7 +417,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     let uploadError = !target;
     if (target) {
       try {
-        const { error } = await createSupabaseBrowserClient().storage.from(target.bucket).uploadToSignedUrl(target.path, token, entry.file, {
+        const { error } = await createSupabaseUploadClient().storage.from(target.bucket).uploadToSignedUrl(target.path, token, entry.file, {
           contentType: entry.file.type || MIME[entry.kind],
           upsert: false,
         });

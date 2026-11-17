@@ -12,6 +12,9 @@
  *   the stage records the guarded verdict and logs only the count.
  * - Per-run budget: ≤ 2000 calls. `progress_done` counts calls, so the budget survives yields and retries.
  * - The provider is only resolved when there is something to verify.
+ * - R3 Task 02 (PRIV-1): every string sent (claim, quote, context, author labels) is pseudonymised with the
+ *   handover's known people first, so a name a reviewer typed into a point never reaches the verifier, and a
+ *   rationale that names a known participant is not stored (the verdict is kept).
  */
 
 import { verifyRequestWithinLimits } from "../../ai/limits";
@@ -20,6 +23,8 @@ import type { PointAttributes } from "../../contracts/schemas";
 import { DbError } from "../../db/errors";
 import { listLinksNeedingSupport, recordSupportVerdict, type LinkNeedingSupport } from "../../db/pipeline";
 import { mapAiFailure } from "../ai";
+import { findsIdentity, loadJobIdentity } from "../identity";
+import type { Pseudonymizer } from "../../privacy/pseudonymize";
 import { claimOf, type StageContext } from "../stage-context";
 import { failure, type AttemptRecord, type StageOutcome } from "../types";
 import { callSignal, startAiStage } from "./ai-prelude";
@@ -29,17 +34,32 @@ export const VERIFY_YIELD_MARGIN_MS = 20_000;
 const PAGE = 100;
 const HEARTBEAT_EVERY = 10;
 
-/** The request for one link, with context trimmed to the limits; null when even the bare pair is too large. */
-export function buildVerifyRequest(link: LinkNeedingSupport): VerifySupportRequest | null {
+/** Applies `f` to every string inside a JSON-like value. */
+function mapStrings<T>(value: T, f: (s: string) => string): T {
+  if (typeof value === "string") return f(value) as T;
+  if (Array.isArray(value)) return value.map((v) => mapStrings(v, f)) as T;
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mapStrings(v, f)])) as T;
+  }
+  return value;
+}
+
+/**
+ * The request for one link, with context trimmed to the limits; null when even the bare pair is too large.
+ * `detector` (R3 Task 02) pseudonymises every string before the limits are applied.
+ */
+export function buildVerifyRequest(link: LinkNeedingSupport, detector?: Pseudonymizer): VerifySupportRequest | null {
+  const p = (text: string): string => (detector && !detector.isEmpty ? detector.apply(text).text : text);
+  const pn = (text: string | null): string | null => (text === null ? null : p(text));
   const req: VerifySupportRequest = {
     claim: {
       category: link.claim.category,
-      title: link.claim.title,
-      statement: link.claim.statement,
-      attributes: link.claim.attributes as PointAttributes,
+      title: p(link.claim.title),
+      statement: p(link.claim.statement),
+      attributes: mapStrings(link.claim.attributes as PointAttributes, p),
     },
-    quote: { text: link.quote.text, authorLabel: link.quote.authorLabel, sentAt: link.quote.sentAt },
-    context: link.context.slice(0, 3).map((c) => ({ authorLabel: c.authorLabel, sentAt: c.sentAt, body: c.body })),
+    quote: { text: p(link.quote.text), authorLabel: pn(link.quote.authorLabel), sentAt: link.quote.sentAt },
+    context: link.context.slice(0, 3).map((c) => ({ authorLabel: pn(c.authorLabel), sentAt: c.sentAt, body: p(c.body) })),
   };
   while (!verifyRequestWithinLimits(req)) {
     if (req.context.length === 0) return null;
@@ -53,7 +73,8 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
   let calls = Math.max(0, ctx.job.job.progressDone ?? 0);
   const callsAtStart = calls;
   const skip = new Set<string>();
-  const counts = { verdicts: 0, tooLarge: 0, discarded: 0, injectionGuarded: 0 };
+  const counts = { verdicts: 0, tooLarge: 0, discarded: 0, injectionGuarded: 0, rationaleWithheld: 0 };
+  let detector: Pseudonymizer | null = null;
   let ai: { provider: AiProvider; runConfig: AiRunConfig } | null = null;
   let lastAttempt: AttemptRecord | undefined;
   const withAttempt = () => (lastAttempt ? { attemptRecord: lastAttempt } : {});
@@ -71,16 +92,22 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
         log(ctx, calls, counts);
         return { kind: "failed", failure: failure("payload_too_large", "ai_budget_exceeded"), progress: { done: calls, total: calls }, ...withAttempt() };
       }
-      const req = buildVerifyRequest(link);
+      if (ai === null) {
+        // Provider first: a configuration refusal happens before any identity read (as in extract).
+        const prelude = await startAiStage(ctx, "verify");
+        if (!prelude.ok) return { kind: "failed", failure: prelude.failure };
+        ai = { provider: prelude.provider, runConfig: prelude.runConfig };
+      }
+      if (detector === null) {
+        const ident = await loadJobIdentity(ctx, { sourceScoped: false });
+        if (!ident.ok) return { kind: "failed", failure: ident.failure, progress: { done: calls, total: calls }, ...withAttempt() };
+        detector = ident.identity.detector;
+      }
+      const req = buildVerifyRequest(link, detector);
       if (req === null) {
         skip.add(link.pointEvidenceId);
         counts.tooLarge += 1;
         continue;
-      }
-      if (ai === null) {
-        const prelude = await startAiStage(ctx, "verify");
-        if (!prelude.ok) return { kind: "failed", failure: prelude.failure };
-        ai = { provider: prelude.provider, runConfig: prelude.runConfig };
       }
 
       const result = await ctx.ai.verifySupport(ai.provider, req, { attempt: ctx.claimed.attempt, runConfig: ai.runConfig, signal: callSignal(ctx) });
@@ -95,13 +122,15 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
         };
       }
       lastAttempt = result.data.attempt;
+      const rationale = rationaleFor(result.data.rationale, detector);
+      if (rationale !== result.data.rationale) counts.rationaleWithheld += 1;
 
       try {
         await recordSupportVerdict(ctx.db, claimOf(ctx), {
           pointEvidenceId: link.pointEvidenceId,
           revisionId: link.revisionId,
           verdict: result.data.verdict,
-          rationale: result.data.rationale,
+          rationale,
           provenance: verdictProvenance(result.data),
           verifiedQuoteText: link.quote.text,
         });
@@ -136,6 +165,12 @@ export function verdictProvenance(data: {
     ...base,
     injectionGuard: { guarded: true, modelVerdict: data.modelVerdict ?? null, patterns: [...data.injection.patterns], fields: [...data.injection.fields] },
   };
+}
+
+/** A rationale that names a known participant is not stored (R3 Task 02); the verdict still is. */
+function rationaleFor(rationale: string | null, detector: Pseudonymizer): string | null {
+  if (rationale === null || !findsIdentity([rationale], detector, null)) return rationale;
+  return null;
 }
 
 function log(ctx: StageContext, calls: number, c: { verdicts: number; tooLarge: number; discarded: number }) {

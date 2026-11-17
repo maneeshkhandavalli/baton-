@@ -11,7 +11,7 @@ import type { ExtractionMessage, JobContext, RunJobState } from "../../db/pipeli
 import type { CheckedCandidate, ExtractOutcome } from "../ai";
 import { createMemoryLogger } from "../log";
 import { createDrainer } from "../runner";
-import { attemptRecord, fakeAi, fakeChunkStore, fakeStorage, IDS, jobContext, provenance, rpcError } from "./fakes";
+import { attemptRecord, fakeAi, fakeChunkStore, fakeStorage, IDS, identityDefaults, jobContext, provenance, rpcError } from "./fakes";
 
 const NOW = Date.UTC(2026, 10, 13, 1, 0, 0);
 const SRC_A = IDS.source;
@@ -52,6 +52,7 @@ function world(sources: Array<{ sourceId: string; jobId: string; messages: Extra
   const runStatus = () => (finished.length > 0 ? "succeeded" : "running");
 
   const handlers: Record<string, (a: Record<string, unknown>) => unknown> = {
+    ...(identityDefaults({}) as Record<string, (a: Record<string, unknown>) => unknown>), // R3 Task 02
     list_finishable_runs: () => [],
     claim_ready_processing_jobs: () => {
       const j = [...jobs.values()].find((x) => x.status === "queued" && x.attempt < 3 && (!x.nextAttemptAt || Date.parse(x.nextAttemptAt) <= NOW + 3_600_000));

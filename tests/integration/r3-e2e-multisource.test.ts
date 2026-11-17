@@ -64,6 +64,8 @@ describe("Tier E (R3): multi-source run with one failing source, and a real conf
     resetPlatform();
     allowFakeAi();
     process.env.IDENTITY_PEPPER = TEST_PEPPER;
+    process.env.IDENTITY_MAP_KEY = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"; // R3 Task 02: synthetic
+    process.env.IDENTITY_MAP_KEY_VERSION = "k1";
     process.env.IDENTITY_PEPPER_VERSION = "p1";
     process.env.IDENTITY_PEPPER_CANARY = computeIdentityPepperCanary(TEST_PEPPER);
     installCustomBackends({ adminDb, userDb, adminStorage: storage, userStorage: storage });

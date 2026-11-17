@@ -389,3 +389,10 @@ remain. Re-check the beta schema when adopting it. Do not use it on Hobby, where
 - **pg_net PUBLIC grants** remain on hosted Supabase unless Supabase applies `harden-pg-net.sql`. The queue
   holds only short-lived signatures.
 - **No external alerting.** `baton_ops.worker_health` is query-based.
+
+## Addendum (Round 3 Task 02): raw-upload retention reuses this infrastructure
+
+`supabase/ops/schedule-raw-retention.sql` adds an hourly `baton-raw-retention` job on the same pg_cron / pg_net / Vault / `baton_ops`
+setup, with its own dispatch log (`baton_ops.retention_dispatches`) and its own Vault URL secret (`baton_retention_url`); it signs with
+the same `baton_worker_secret`, but the signature is bound to its purpose (`v1.<ts>.<id>.retention`), so a drain header and a retention
+header are never interchangeable (`lib/pipeline/worker-auth.ts`). Opt-in; see docs/round3/privacy-and-data-protection.md §5.
