@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { blockingExtractionGaps, buildExtractionReport, sourceExtractionState, type RawSourceCoverage } from "../extraction";
+import { blockingExtractionGaps, buildExtractionReport, extractionAcknowledgements, sourceExtractionState, type RawSourceCoverage } from "../extraction";
 import { evidenceLayers, pointLayers } from "../verification";
 
 const S = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -118,5 +118,41 @@ describe("verification layers (VER-1)", () => {
       openContradictionFlags: 1,
     });
     assert.deepEqual(p, { quoteMatched: true, aiJudgedSupportive: true, human: "confirmed", conflictIdentified: true });
+  });
+});
+
+describe("database publish gate in the report (R3 Task 04)", () => {
+  const FP = (c: string) => `cov1:${c.repeat(32)}`;
+  const dbSources = [
+    src({ sourceId: S(1), gapState: "complete" }),
+    src({ sourceId: S(2), jobStatus: "failed", chunksDone: 2, chunksTotal: 5, gapState: "partial", coverageFingerprint: FP("a") }),
+    src({ sourceId: S(3), jobStatus: "cancelled", chunksDone: 0, chunksTotal: 0, gapState: "failed", coverageFingerprint: FP("b") }),
+  ];
+
+  it("blocks on exactly the database's unacknowledged partial/failed sources and lists their fingerprints", () => {
+    const r = buildExtractionReport({ available: true, sources: dbSources });
+    assert.deepEqual(blockingExtractionGaps(r).map((b) => [b.kind, b.sourceIds]), [
+      ["source_partially_extracted", [S(2)]],
+      ["source_extraction_failed", [S(3)]],
+    ]);
+    assert.deepEqual(extractionAcknowledgements(r), [
+      { sourceId: S(2), fingerprint: FP("a") },
+      { sourceId: S(3), fingerprint: FP("b") },
+    ]);
+  });
+
+  it("an acknowledged source no longer blocks; a malformed fingerprint is never forwarded", () => {
+    const r = buildExtractionReport({
+      available: true,
+      sources: [dbSources[0], { ...dbSources[1], gapAcknowledged: true }, { ...dbSources[2], coverageFingerprint: "not-a-fingerprint" }],
+    });
+    assert.deepEqual(blockingExtractionGaps(r).map((b) => b.sourceIds), [[S(3)]]);
+    assert.deepEqual(extractionAcknowledgements(r), [], "no fingerprint, nothing to acknowledge (the database will refuse)");
+  });
+
+  it("a failed source blocks even when every source failed (the database gate's policy)", () => {
+    const r = buildExtractionReport({ available: true, sources: [dbSources[2]] });
+    assert.equal(r.completion, "failed");
+    assert.deepEqual(blockingExtractionGaps(r).map((b) => b.kind), ["source_extraction_failed"]);
   });
 });

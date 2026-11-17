@@ -79,6 +79,13 @@ export interface SourceExtractionCoverage {
   discardedByReason: Record<string, number>;
   pointsCreated: number;
   pointsMerged: number;
+  /**
+   * R3 Task 04: the database's own publish-gate view (migration 20261117400200), null on older databases.
+   * `partial` / `failed` need an acknowledgement for exactly `coverageFingerprint` before publishing.
+   */
+  gapState: "complete" | "partial" | "failed" | "in_progress" | "not_processed" | null;
+  coverageFingerprint: string | null;
+  gapAcknowledged: boolean;
 }
 
 export interface ExtractionReport {
@@ -124,6 +131,9 @@ export interface RawSourceCoverage {
   discarded?: Record<string, unknown> | null;
   pointsCreated?: number | null;
   pointsMerged?: number | null;
+  gapState?: string | null;
+  coverageFingerprint?: string | null;
+  gapAcknowledged?: boolean | null;
 }
 
 export interface RawExtractionReport {
@@ -133,6 +143,9 @@ export interface RawExtractionReport {
   sources?: RawSourceCoverage[] | null;
   flags?: { possibleContradictions?: number; unresolvedAttribution?: number; inferredAttribution?: number } | null;
 }
+
+const GAP_STATES: ReadonlySet<string> = new Set(["complete", "partial", "failed", "in_progress", "not_processed"]);
+const FINGERPRINT = /^cov1:[0-9a-f]{32}$/;
 
 const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 
@@ -192,6 +205,9 @@ export function buildExtractionReport(raw: RawExtractionReport | null | undefine
       discardedByReason,
       pointsCreated: n(r.pointsCreated),
       pointsMerged: n(r.pointsMerged),
+      gapState: GAP_STATES.has(r.gapState ?? "") ? (r.gapState as SourceExtractionCoverage["gapState"]) : null,
+      coverageFingerprint: typeof r.coverageFingerprint === "string" && FINGERPRINT.test(r.coverageFingerprint) ? r.coverageFingerprint : null,
+      gapAcknowledged: r.gapAcknowledged === true,
     };
   });
 
@@ -221,9 +237,17 @@ export function buildExtractionReport(raw: RawExtractionReport | null | undefine
     const discarded = sources.filter((s) => s.candidatesDiscarded > 0);
     const unreviewed = sources.filter((s) => s.signalMessagesUnreviewed > 0);
     const unrecorded = processed.filter((s) => !s.coverageRecorded && s.state !== "in_progress");
-    add("source_partially_extracted", "blocking", partial, partial.length);
-    // A failed source matters only when the run went ahead without it (another source succeeded).
-    if (completion !== "failed") add("source_extraction_failed", "blocking", failed, failed.length);
+    if (sources.some((s) => s.gapState !== null)) {
+      // R3 Task 04: the database enforces the gate; block on exactly its unacknowledged partial/failed sources.
+      const dbPartial = sources.filter((s) => s.gapState === "partial" && !s.gapAcknowledged);
+      const dbFailed = sources.filter((s) => s.gapState === "failed" && !s.gapAcknowledged);
+      add("source_partially_extracted", "blocking", dbPartial, dbPartial.length);
+      add("source_extraction_failed", "blocking", dbFailed, dbFailed.length);
+    } else {
+      add("source_partially_extracted", "blocking", partial, partial.length);
+      // A failed source matters only when the run went ahead without it (another source succeeded).
+      if (completion !== "failed") add("source_extraction_failed", "blocking", failed, failed.length);
+    }
     add("oversize_messages_skipped", "advisory", skipped, sum((s) => s.oversizeSkipped));
     add("candidates_discarded", "advisory", discarded, sum((s) => s.candidatesDiscarded));
     add("unreviewed_signals", "advisory", unreviewed, sum((s) => s.signalMessagesUnreviewed));
@@ -251,6 +275,17 @@ export function buildExtractionReport(raw: RawExtractionReport | null | undefine
     flags,
     blockers,
   };
+}
+
+/**
+ * R3 Task 04: what the publish call must acknowledge, one entry per blocking source: its id and the exact coverage
+ * fingerprint the reviewer saw. Empty on a database without the gate (no fingerprints).
+ */
+export function extractionAcknowledgements(report: ExtractionReport): Array<{ sourceId: string; fingerprint: string }> {
+  const blocking = new Set(blockingExtractionGaps(report).flatMap((b) => b.sourceIds));
+  return report.sources
+    .filter((s) => blocking.has(s.sourceId) && s.coverageFingerprint !== null)
+    .map((s) => ({ sourceId: s.sourceId, fingerprint: s.coverageFingerprint as string }));
 }
 
 /** Blocking extraction gaps that publishing must have acknowledged. */

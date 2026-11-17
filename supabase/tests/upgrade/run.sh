@@ -94,6 +94,12 @@ if [[ $status -eq 0 ]]; then
   echo "== post-apply verification"
   if out=$(psql_file "$HERE/verify.sql" 2>&1); then
     echo "PASS verify.sql"
+    # R3 Task 04: prove the protected-overload check still detects what it must (runs on the same database).
+    if out=$(psql_file "$HERE/verify_selftest.sql" 2>&1); then
+      echo "PASS verify_selftest.sql"
+    else
+      echo "FAIL verify_selftest.sql"; echo "$out" | grep -E "ERROR|ASSERTION|CONTEXT" | sed 's/^/     /'; status=1
+    fi
   else
     echo "FAIL verify.sql"; echo "$out" | grep -E "ERROR|ASSERTION|CONTEXT" | sed 's/^/     /'; status=1
   fi
