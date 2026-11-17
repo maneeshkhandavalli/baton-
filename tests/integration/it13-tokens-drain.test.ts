@@ -4,7 +4,8 @@
 //   * token answers and invitation flows consume the rate limits first and never pass the raw token or the
 //     client IP to the database; invalid, exhausted and held all look alike;
 //   * magic links go only to the invited address, with a redirect built from BATON_SITE_URL, never headers;
-//   * POST /api/pipeline/drain needs `Bearer CRON_SECRET` (≥ 32 chars) and answers 401 otherwise.
+//   * POST (and, for Vercel cron jobs, GET) /api/pipeline/drain needs `Bearer CRON_SECRET` (≥ 32 chars) and
+//     answers 401 otherwise.
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
@@ -218,10 +219,47 @@ describe("IT-13 / QA-M9: POST /api/pipeline/drain", () => {
     return w;
   }
 
-  it("only POST is exported", () => {
-    const exported = Object.keys(drainRoute).filter((k) => /^(GET|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(k));
+  it("only POST and GET are exported (JOB-1: Vercel cron jobs call with GET)", () => {
+    const exported = Object.keys(drainRoute).filter((k) => /^(PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(k));
     assert.deepEqual(exported, []);
     assert.equal(typeof drainRoute.POST, "function");
+    assert.equal(typeof drainRoute.GET, "function");
+  });
+
+  const get = (headers: Record<string, string> = {}) =>
+    drainRoute.GET(new Request("https://baton.example.test/api/pipeline/drain", { method: "GET", headers }));
+
+  it("GET is refused exactly like POST: 401 without the secret, and no job is touched", async () => {
+    for (const headers of [{}, { authorization: `Bearer ${SECRET.slice(0, -1)}x` }, { "user-agent": "vercel-cron/1.0" }] as Array<Record<string, string>>) {
+      const w = world();
+      const response = await get(headers);
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.deepEqual(allCalls(w), []);
+    }
+  });
+
+  it("GET with the right secret runs the same fixed budget and answers counts only", async () => {
+    const w = world();
+    const response = await get({ authorization: `Bearer ${SECRET}`, "user-agent": "vercel-cron/1.0" });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as Record<string, unknown>;
+    assert.ok(Object.values(body).every((v) => typeof v === "number"), JSON.stringify(body));
+    assert.deepEqual(w.adminDb.fns(), ["list_finishable_runs", "claim_ready_processing_jobs"]);
+    assert.equal(w.adminDb.last("claim_ready_processing_jobs")?.args.p_limit, 1);
+  });
+
+  it("logs the trigger and counts, never the secret or the raw headers", async () => {
+    world();
+    const { result: response, lines } = await captureConsole(() =>
+      post({ authorization: `Bearer ${SECRET}`, "x-baton-trigger": "pg_cron", "user-agent": "pg_net/0.10" }));
+    assert.equal(response.status, 200);
+    const text = JSON.stringify(lines);
+    assert.match(text, /worker_invoked/);
+    assert.match(text, /worker_finished/);
+    assert.match(text, /pg_cron/);
+    assert.doesNotMatch(text, new RegExp(SECRET.slice(0, 12)));
+    assert.doesNotMatch(text, /pg_net\/0\.10/);
   });
 
   const REFUSED: Array<[string, string | null, Record<string, string>]> = [

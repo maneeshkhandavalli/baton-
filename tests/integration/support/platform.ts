@@ -166,6 +166,16 @@ export async function flushAfter(): Promise<number> {
   return queue.length;
 }
 
+/**
+ * Drops every queued `after()` callback WITHOUT running it: the invocation that scheduled them ended (tab
+ * closed, function frozen or crashed) before its post-response drain ran. Returns how many were dropped.
+ */
+export function discardAfter(): number {
+  const dropped = (state().after ?? []).length;
+  state().after = [];
+  return dropped;
+}
+
 export function pendingAfter(): number {
   return (state().after ?? []).length;
 }
