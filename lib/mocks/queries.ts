@@ -12,6 +12,7 @@ import type { CreatorTransferOffer, HandoverSummary, MemberSummary, PublishedHan
 import { POINT_CATEGORIES } from "@/lib/contracts/enums";
 import { MESSAGE_CONTEXT_DEFAULT, MESSAGE_CONTEXT_MAX, type BatonQueries, type PointListFilter } from "@/lib/contracts/queries";
 import { uuidSchema } from "@/lib/contracts/schemas";
+import { buildExtractionReport } from "@/lib/contracts/extraction";
 
 import {
   activeMember,
@@ -317,6 +318,30 @@ export function createMockQueries(profileId: string): BatonQueries {
       if (!isReviewRole(v.member.role)) return fail("forbidden", "Readiness is only available to reviewers.");
       tickRuns(store, handoverId);
       return ok(computeReadiness(store, handoverId, v.member.clearance));
+    },
+
+    // R3 Task 03: the mock store has no extraction coverage, signals or flags; it reports them as unavailable.
+    async getExtractionReport(handoverId) {
+      await requestTime();
+      const store = getStore();
+      const v = visibleHandover(store, handoverId, profileId);
+      if (!v) return NOT_FOUND();
+      if (!isReviewRole(v.member.role)) return NOT_FOUND();
+      return ok(buildExtractionReport({ available: false }));
+    },
+
+    async listUnreviewedSignals(handoverId) {
+      await requestTime();
+      const v = visibleHandover(getStore(), handoverId, profileId);
+      if (!v || !isReviewRole(v.member.role)) return NOT_FOUND();
+      return ok([]);
+    },
+
+    async listPointFlags(handoverId) {
+      await requestTime();
+      const v = visibleHandover(getStore(), handoverId, profileId);
+      if (!v || !isReviewRole(v.member.role)) return NOT_FOUND();
+      return ok([]);
     },
 
     async getPublishedHandover(handoverId) {

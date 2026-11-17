@@ -105,11 +105,11 @@ function parseInternal(input: ParseSourceInput, exclusions: CompiledExclusions):
     }
     case "pdf": {
       const doc = parsePdf(bytes, warnings);
-      return buildDocumentSource(common(doc.totalLines, null), doc.blocks);
+      return buildDocumentSource(common(doc.totalLines, null), doc.blocks, input.identityPepper);
     }
     case "docx": {
       const doc = parseDocx(bytes);
-      return buildDocumentSource(common(doc.totalLines, null), doc.blocks);
+      return buildDocumentSource(common(doc.totalLines, null), doc.blocks, input.identityPepper);
     }
     case "markdown":
     case "text": {
@@ -119,7 +119,7 @@ function parseInternal(input: ParseSourceInput, exclusions: CompiledExclusions):
       const lines = splitLines(decodeText(bytes));
       const blocks = parseMarkdownLines(lines, kind === "markdown");
       const totalLines = lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
-      return buildDocumentSource(common(totalLines, null), blocks);
+      return buildDocumentSource(common(totalLines, null), blocks, input.identityPepper);
     }
     default: {
       // Unreachable: `validateInput` accepts only SOURCE_KINDS. A new kind without a parser is a defect.

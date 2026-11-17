@@ -6,6 +6,7 @@ import type { ClaimedJob, JobClaim, JobContext } from "../db/pipeline";
 import type { StorageClient } from "../db/storage";
 import type { PipelineAi } from "./ai";
 import type { PipelineLogger } from "./log";
+import type { IdentityMapKeyResult } from "../privacy/identity-vault";
 import type { VerifiedPepper } from "./pepper-core";
 import type { JobProgress, StageOutcome } from "./types";
 
@@ -19,6 +20,8 @@ export interface StageContext {
   /** Epoch ms after which a long handler should checkpoint and return `yield`. */
   deadlineAt: number;
   getPepper(): Result<VerifiedPepper>;
+  /** R3 Task 02: the identity-vault key. Absent → read from the server environment (IDENTITY_MAP_KEY). */
+  getIdentityMapKey?(): IdentityMapKeyResult;
   ai: PipelineAi;
   /** Extends the lease and records progress. Throws `LeaseLostError` when the claim is no longer ours. */
   heartbeat(progress?: JobProgress): Promise<void>;

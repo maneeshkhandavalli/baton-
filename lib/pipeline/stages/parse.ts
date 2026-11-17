@@ -6,8 +6,13 @@
  * 3. Raw bytes re-verified against the confirmed size and SHA-256 (`downloadVerifiedRawSourceWithMeta`).
  * 4. `parseSource` drops excluded content and masks in memory; nothing is persisted before step 6.
  * 5. Any `identityMatches` entry stops here (`identity_confirmation_required`).
- * 6. `persistParsedSource`: participants, conversations and masked messages in ONE transaction.
- * 7. Only after that commit, `deleteParsedRawSource`. A failed delete is left to the retention sweep.
+ * 6. R3 Task 02 (PRIV-1): pseudonymisation. Every chat sender of this source AND of the run's other
+ *    unparsed chat sources is registered in the handover's encrypted identity vault (stable [PERSON_n]
+ *    across sources, whatever order the parse jobs run in); labels become placeholders and mentions of every
+ *    known person are replaced. Excluded people are never registered (the parser already dropped them).
+ * 7. `persistPseudonymizedSource`: participants, conversations and messages in ONE transaction, refused
+ *    unless every label is a known placeholder; the source is marked `person_v1`.
+ * 8. Only after that commit, `deleteParsedRawSource`. A failed delete is left to the retention sweep.
  *
  * Every failure before the commit keeps the raw upload for a retry; non-retryable ones mark the source
  * `failed` with a structural error code.
@@ -15,9 +20,17 @@
 
 import { isParserInputFailure, type ParsedSource } from "../../contracts/parser";
 import { DbError } from "../../db/errors";
-import { getParseExclusions, markSourceParseFailed, persistParsedSource } from "../../db/pipeline";
-import { deleteParsedRawSource, downloadVerifiedRawSourceWithMeta } from "../../db/storage";
-import { parseSource } from "../../parsers/parse-source";
+import {
+  getParseExclusions,
+  markSourceParseFailed,
+  persistPseudonymizedSource,
+  reserveHandoverPeople,
+} from "../../db/pipeline";
+import { deleteParsedRawSource, downloadVerifiedRawSourceWithMeta, readRawSourceForPeople } from "../../db/storage";
+import { parseSource, previewSource } from "../../parsers/parse-source";
+import { personKeyFor, sealLabel, type IdentityMapKey } from "../../privacy/identity-vault";
+import { pseudonymizeParsedSource } from "../../privacy/pseudonymize-source";
+import { identityMapKeyFor, openPeople, vaultLabelFor } from "../identity";
 import { claimOf, type StageContext } from "../stage-context";
 import { failed, type FailureReason, type StageOutcome } from "../types";
 
@@ -58,6 +71,12 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
   if (!pepper.ok) {
     ctx.logger.error("identity_pepper_unverified", { jobId: ctx.claimed.id, sourceId, check: String(pepper.error.details?.check ?? "") });
     return failed("processing_failed", "identity_pepper_unverified", true);
+  }
+
+  const mapKey = identityMapKeyFor(ctx);
+  if (!mapKey.ok) {
+    ctx.logger.error("identity_map_key_unverified", { jobId: ctx.claimed.id, sourceId, reason: mapKey.reason });
+    return failed("processing_failed", "identity_map_key_unverified", true);
   }
 
   let exclusions;
@@ -104,8 +123,35 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
 
   await ctx.heartbeat(); // never persist under a claim that is no longer ours
 
+  // 6. Pseudonymisation (R3 Task 02). Nothing has been persisted yet.
+  const handoverId = ctx.job.job.handoverId;
+  const key = mapKey.key;
+  const own = parsed.participants.map((p) => ({
+    localId: p.localId,
+    personKey: personKeyFor(key, handoverId, p.identityKind, p.identityHash),
+    label: vaultLabelFor(p.displayLabel),
+  }));
+  const others = await peopleOfOtherChatSources(ctx, key, pepper.data.pepper);
+  const people = await reserveHandoverPeople(
+    ctx.db,
+    claimOf(ctx),
+    [...own, ...others.people].map((p) => ({
+      personKey: p.personKey,
+      sealed: p.label === null ? null : sealLabel(key, handoverId, p.personKey, p.label).sealed,
+      keyVersion: key.version,
+    })),
+  );
+  const ordinalByKey = new Map(people.map((p) => [p.personKey, p.ordinal]));
+  const ordinalOf = new Map<string, number>();
+  for (const o of own) {
+    const ordinal = ordinalByKey.get(o.personKey);
+    if (ordinal === undefined) return failed("internal", "internal"); // reserve always returns every requested person
+    ordinalOf.set(o.localId, ordinal);
+  }
+  const pseudo = pseudonymizeParsedSource(parsed, { ordinalOf, people: openPeople(key, handoverId, people) });
+
   try {
-    await persistParsedSource(ctx.db, claimOf(ctx), parsed, pepper.data.version);
+    await persistPseudonymizedSource(ctx.db, claimOf(ctx), pseudo.parsed, pepper.data.version);
   } catch (e) {
     if (e instanceof DbError && !e.retryable) {
       if (e.code === "precondition_failed") {
@@ -125,6 +171,10 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
     messages: parsed.messages.length,
     participants: parsed.participants.length,
     messagesExcluded: parsed.stats.messagesExcluded,
+    peopleKnown: people.length,
+    mentionsPseudonymized: pseudo.replaced,
+    otherChatsRead: others.read,
+    otherChatsSkipped: others.skipped,
   });
 
   await deleteRaw(ctx, sourceId); // §10.3 step 4: only after the commit above
@@ -137,4 +187,49 @@ async function deleteRaw(ctx: StageContext, sourceId: string): Promise<void> {
   } catch (e) {
     ctx.logger.warn("raw_delete_deferred", { jobId: ctx.claimed.id, sourceId, code: e instanceof DbError ? e.code : "internal" });
   }
+}
+
+/**
+ * People of the run's OTHER chat sources that are not parsed yet, so a name is replaced in this source even
+ * when its sender's own chat is parsed later. Each is read with that source's own exclusion rules (excluded
+ * people are never registered); a source that cannot be read or needs an identity decision is skipped and
+ * its people are registered by its own parse. Already-parsed sources registered their people when parsed.
+ */
+async function peopleOfOtherChatSources(
+  ctx: StageContext,
+  key: IdentityMapKey,
+  pepper: string,
+): Promise<{ people: Array<{ personKey: string; label: string | null }>; read: number; skipped: number }> {
+  const handoverId = ctx.job.job.handoverId;
+  const own = ctx.job.job.sourceId?.toLowerCase();
+  const people: Array<{ personKey: string; label: string | null }> = [];
+  let read = 0;
+  let skipped = 0;
+  for (const otherId of ctx.job.run.sourceIds) {
+    if (otherId.toLowerCase() === own) continue;
+    const raw = await readRawSourceForPeople(ctx.db, ctx.storage, otherId, handoverId);
+    if (raw === null) continue; // not a chat, already parsed, or unreadable
+    try {
+      const preview = await previewSource({
+        kind: raw.kind,
+        fileName: raw.originalFilename,
+        bytes: raw.bytes,
+        timezone: raw.timezone,
+        ...(raw.dateOrder ? { dateOrder: raw.dateOrder } : {}),
+        exclusions: await getParseExclusions(ctx.db, otherId),
+        identityPepper: pepper,
+      });
+      if (!preview.ok || preview.data.identityMatches.length > 0) {
+        skipped += 1;
+        continue;
+      }
+      for (const p of preview.data.participants) {
+        people.push({ personKey: personKeyFor(key, handoverId, p.identityKind, p.identityHash), label: vaultLabelFor(p.displayLabel) });
+      }
+      read += 1;
+    } catch {
+      skipped += 1;
+    }
+  }
+  return { people, read, skipped };
 }

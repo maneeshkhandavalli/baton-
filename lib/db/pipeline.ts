@@ -480,3 +480,174 @@ export async function listFinishableRuns(adminDb: DbClient, limit = 20): Promise
 export async function setPointSortKeys(adminDb: DbClient, claim: JobClaim, keys: Array<{ pointId: string; sortKey: number }>): Promise<number> {
   return Number(await fencedRpc(adminDb, "pipeline_set_point_sort_keys", claim, { p_keys: keys }));
 }
+
+/**
+ * Task 01B: one global worker slot per concurrent sweep (migration 20261117100100). A sweep holds a slot
+ * for its whole drain; `null` means every slot is held (the caller returns a no-work result). The token
+ * fences renew/release: a worker whose slot expired and was taken can neither extend nor free it.
+ * A database without these functions throws `PipelineSchemaError` (the worker then refuses to drain).
+ */
+export interface WorkerSlot {
+  slot: number;
+  token: string;
+  generation: number;
+}
+
+const workerSlotSchema = z.object({ slot: z.number().int().min(1), token: z.string().uuid(), generation: z.coerce.number().int() });
+
+async function slotRpc(adminDb: DbClient, fn: string, args: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await callRpc(adminDb, fn, args);
+  } catch (e) {
+    if (e instanceof DbError && e.sqlState !== undefined && MISSING_FUNCTION_STATES.has(e.sqlState)) throw new PipelineSchemaError(fn);
+    throw e;
+  }
+}
+
+export async function acquireWorkerSlot(
+  adminDb: DbClient,
+  input: { maxSlots: number; leaseSeconds: number; trigger: string },
+): Promise<WorkerSlot | null> {
+  const data = await slotRpc(adminDb, "acquire_pipeline_worker_slot", {
+    p_max_slots: input.maxSlots,
+    p_lease_seconds: input.leaseSeconds,
+    p_trigger: input.trigger,
+  });
+  if (data === null || data === undefined) return null;
+  const parsed = workerSlotSchema.safeParse(data);
+  if (!parsed.success) throw new DbError("internal");
+  return parsed.data;
+}
+
+/** True while the slot is still this worker's (lease extended); false once it expired or was taken. */
+export async function renewWorkerSlot(adminDb: DbClient, slot: WorkerSlot, leaseSeconds: number): Promise<boolean> {
+  return (await slotRpc(adminDb, "renew_pipeline_worker_slot", { p_slot: slot.slot, p_token: slot.token, p_lease_seconds: leaseSeconds })) === true;
+}
+
+/** Frees the slot if this worker still holds it; false when a newer worker holds it (nothing changes). */
+export async function releaseWorkerSlot(adminDb: DbClient, slot: WorkerSlot): Promise<boolean> {
+  return (await slotRpc(adminDb, "release_pipeline_worker_slot", { p_slot: slot.slot, p_token: slot.token })) === true;
+}
+
+// ── Identity vault (Round 3 Task 02, PRIV-1) ─────────────────────────────────────────────────────────────
+
+/** A person of the handover as stored: placeholder number, keyed person key, sealed (encrypted) label. */
+export interface SealedPerson {
+  ordinal: number;
+  personKey: string;
+  sealed: string | null;
+  keyVersion: string;
+}
+
+const sealedPersonSchema = z.strictObject({
+  ordinal: z.number().int().min(1),
+  personKey: z.string().regex(/^[0-9a-f]{64}$/),
+  sealed: z.string().nullable(),
+  keyVersion: z.string(),
+});
+const sealedPeopleSchema = z.array(sealedPersonSchema);
+
+function parsePeople(data: unknown): SealedPerson[] {
+  const parsed = sealedPeopleSchema.safeParse(data);
+  if (!parsed.success) throw new DbError("internal");
+  // Base64 from Postgres' encode() wraps lines every 76 characters.
+  return parsed.data.map((p) => ({ ...p, sealed: p.sealed === null ? null : p.sealed.replace(/\s+/g, "") }));
+}
+
+/**
+ * Parse job (fenced): registers people not yet known by person key and returns ALL the handover's people
+ * with their ordinals. Serialised per handover in SQL, so ordinals are never handed out twice.
+ */
+export async function reserveHandoverPeople(
+  adminDb: DbClient,
+  claim: JobClaim,
+  people: ReadonlyArray<{ personKey: string; sealed: string | null; keyVersion: string }>,
+): Promise<SealedPerson[]> {
+  return parsePeople(await fencedRpc(adminDb, "pipeline_reserve_handover_people", claim, { p_people: people }));
+}
+
+/** Parse / extract / verify_support jobs (fenced): the handover's people and whether the job's source is pseudonymised. */
+export async function listHandoverPeopleForJob(
+  adminDb: DbClient,
+  claim: JobClaim,
+): Promise<{ people: SealedPerson[]; sourceIdentityScheme: "person_v1" | null }> {
+  const data = (await fencedRpc(adminDb, "pipeline_list_handover_people", claim, {})) as
+    | { people?: unknown; sourceIdentityScheme?: unknown }
+    | null;
+  if (!data || typeof data !== "object") throw new DbError("internal");
+  return {
+    people: parsePeople(data.people),
+    sourceIdentityScheme: data.sourceIdentityScheme === "person_v1" ? "person_v1" : null,
+  };
+}
+
+/** Parse job (fenced): persists like persistParsedSource, refuses any label that is not a known [PERSON_n], marks the source pseudonymised. */
+export const persistPseudonymizedSource = async (adminDb: DbClient, claim: JobClaim, parsed: ParsedSource, pepperVersion: "p1") =>
+  void (await fencedRpc(adminDb, "pipeline_persist_pseudonymized_source", claim, { p_parsed: parsed, p_pepper_version: pepperVersion }));
+
+/** Server actions: the sealed labels a verified member may see (clearance checked in SQL); not_found otherwise. */
+export async function resolveHandoverPeopleSealed(adminDb: DbClient, actorProfileId: string, handoverId: string): Promise<SealedPerson[]> {
+  return parsePeople(await callRpc(adminDb, "resolve_handover_people", { p_actor_profile_id: actorProfileId, p_handover_id: handoverId }));
+}
+
+// ── R3 Task 03 (EXT-1/2/3, VER-2/3): signals, coverage, chunk stats, review flags ──────────────────
+// Migration 20261117300100. Fenced like every other writer. A database without the migration raises
+// PipelineSchemaError; lib/pipeline/coverage.ts turns that into "coverage unavailable", never a failed run.
+
+export interface SourceSignalCoverage {
+  detectorVersion: string;
+  messagesInspected: number;
+  messagesWithSignals: number;
+  signals: number;
+  oversizeSkipped: number;
+  emptySkipped: number;
+  chunksTotal: number;
+}
+
+export interface StoredSignal {
+  messageId: string;
+  kind: string;
+  strength: "strong" | "weak";
+  start: number;
+  end: number;
+  value: string | null;
+}
+
+/** Fenced (extract): upserts the source's coverage row and inserts signals (existing ones are kept). */
+export async function storeSourceSignals(
+  adminDb: DbClient,
+  claim: JobClaim,
+  input: { coverage: SourceSignalCoverage; signals: StoredSignal[] },
+): Promise<number> {
+  const data = await fencedRpc(adminDb, "pipeline_store_source_signals", claim, { p_coverage: input.coverage, p_signals: input.signals });
+  return typeof data === "number" ? data : 0;
+}
+
+export interface ExtractChunkStats {
+  chunkTotal: number;
+  messages: number;
+  candidates: number;
+  inserted: number;
+  merged: number;
+  /** Counts by reason token. */
+  dropped: Record<string, number>;
+}
+
+/** Fenced (extract): one chunk's counts (upsert by chunk index). */
+export const recordExtractChunkStats = async (adminDb: DbClient, claim: JobClaim, chunkIndex: number, stats: ExtractChunkStats) =>
+  void (await fencedRpc(adminDb, "pipeline_record_extract_chunk_stats", claim, { p_chunk_index: chunkIndex, p_stats: stats }));
+
+export interface NewPointFlag {
+  pointId: string;
+  revisionId: string;
+  kind: "possible_contradiction" | "attribution_unresolved" | "attribution_inferred";
+  messageId: string | null;
+  detail: Record<string, unknown>;
+  dedupeKey: string;
+}
+
+/** Fenced (analyze): review flags for the current revision of points in the job's handover. */
+export async function storePointFlags(adminDb: DbClient, claim: JobClaim, flags: NewPointFlag[]): Promise<number> {
+  const data = await fencedRpc(adminDb, "pipeline_store_point_flags", claim, { p_flags: flags });
+  return typeof data === "number" ? data : 0;
+}

@@ -29,6 +29,8 @@ import type { ActionDeps } from "./core/types";
 function aiRunConfig(): Result<AiRunConfig> {
   const config = getAiConfiguration();
   if (!config.ok) {
+    // R3 Task 02: say why to operators (a token, never a value); users see the same message as before.
+    if (config.detail) console.warn(JSON.stringify({ scope: "ai", event: config.detail }));
     return failWith("precondition_failed", {
       message: "AI processing isn't set up on this server yet. Ask the workspace admin.",
       details: { reason: "provider_not_configured" },

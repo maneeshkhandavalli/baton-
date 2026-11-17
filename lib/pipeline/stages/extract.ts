@@ -17,6 +17,15 @@
  *    an inferred claim (it carries an inference rationale). Near the deadline the job yields.
  * 6. DB-12: every write carries this claim (job id + attempt); a stale claim throws ClaimLostError and
  *    the runner drops the job without recording anything.
+ * 8. R3 Task 03 (EXT-1/2/3): before the first chunk, the deterministic signal pass (lib/signals) scans every
+ *    loaded message and stores the source's coverage row and signals; it runs before any AI call and does
+ *    not depend on the provider. After each committed chunk its counts (candidates, inserted, merged,
+ *    discards by reason) are stored. Both are reporting only (lib/pipeline/coverage.ts): a database without
+ *    the migration processes normally and reports coverage as unavailable.
+ * 7. R3 Task 02 (PRIV-1/PRIV-3): a legacy source (parsed before pseudonymisation) is refused
+ *    (`source_not_pseudonymized`) unless the owner override is set; the team name and role title are
+ *    pseudonymised before they are sent; a candidate whose model text names a known participant or an
+ *    excluded person (found by hash) is dropped (`identityDropped`), never re-written.
  */
 
 import type { AiAttemptRecord, ExtractRequest } from "../../ai/provider";
@@ -25,8 +34,10 @@ import type { AccessLevel } from "../../contracts/enums";
 import { POINT_CATEGORIES } from "../../contracts/enums";
 import { DbError } from "../../db/errors";
 import {
+  getParseExclusions,
   listExtractionMessages,
   listPointsForPipeline,
+  recordExtractChunkStats,
   storeExtractChunk,
   type ExtractChunkCitation,
   type ExtractChunkEntry,
@@ -35,7 +46,9 @@ import {
 import type { CheckedCandidate } from "../ai";
 import { mapAiFailure } from "../ai";
 import { planChunks } from "../chunk";
+import { CoverageWriter, scanAndStoreSignals } from "../coverage";
 import { PointIndex, type ClaimShape } from "../dedup";
+import { collectStrings, excludedGuardFrom, findsIdentity, loadJobIdentity, type ExcludedGuard } from "../identity";
 import { claimOf, type StageContext } from "../stage-context";
 import { failed, failure, type StageOutcome } from "../types";
 import { callSignal, startAiStage } from "./ai-prelude";
@@ -72,6 +85,8 @@ interface Counters {
   /** New claims not stored because every citation was rejected and they carry no inference rationale. */
   unsupported: number;
   dropped: number;
+  /** R3 Task 02: candidates refused because their model text named a participant or an excluded person. */
+  identityDropped: number;
 }
 
 /** Local id of a point created earlier in the SAME chunk (resolved after the chunk commits). */
@@ -144,13 +159,39 @@ export async function runExtract(ctx: StageContext): Promise<StageOutcome> {
   const prelude = await startAiStage(ctx, "extract");
   if (!prelude.ok) return { kind: "failed", failure: prelude.failure };
 
+  const ident = await loadJobIdentity(ctx, { sourceScoped: true });
+  if (!ident.ok) return { kind: "failed", failure: ident.failure };
+  const { detector } = ident.identity;
+  let excludedGuard: ExcludedGuard | null;
+  try {
+    const pepper = ctx.getPepper();
+    const guard = excludedGuardFrom(await getParseExclusions(ctx.db, sourceId), pepper.ok ? pepper.data.pepper : null);
+    if (guard === "pepper_required") return failed("processing_failed", "identity_pepper_unverified", true);
+    excludedGuard = guard;
+  } catch (e) {
+    if (e instanceof DbError && e.code === "internal" && !e.sqlState) return failed("internal", "exclusions_invalid");
+    throw e;
+  }
+
   const loaded = await loadMessages(ctx, sourceId);
   if (!loaded.ok) return failed("conflict", "source_changed", true);
   const { accessLevel } = loaded;
 
-  const handover = { teamName: ctx.job.handover.teamName, roleTitle: ctx.job.handover.roleTitle };
+  const handover = {
+    teamName: detector.apply(ctx.job.handover.teamName).text,
+    roleTitle: ctx.job.handover.roleTitle === null ? null : detector.apply(ctx.job.handover.roleTitle).text,
+  };
   const plan = planChunks(loaded.messages, handover, EXTRACT_REQUEST_LIMITS);
   const total = plan.chunks.length;
+  const coverage = new CoverageWriter(ctx);
+  if ((ctx.job.job.progressDone ?? 0) === 0) {
+    // EXT-1: provider-independent discovery over every loaded message, before any AI call.
+    await scanAndStoreSignals(ctx, coverage, loaded.messages, {
+      oversizeSkipped: plan.skippedOversize,
+      emptySkipped: plan.skippedEmpty,
+      chunksTotal: total,
+    });
+  }
   const budget = Math.floor(EXTRACT_CALLS_PER_RUN / Math.max(1, ctx.job.run.sourceIds.length));
   if (total > budget) {
     ctx.logger.warn("extract_budget_exceeded", { jobId: ctx.claimed.id, sourceId, chunks: total, budget });
@@ -159,7 +200,7 @@ export async function runExtract(ctx: StageContext): Promise<StageOutcome> {
 
   const start = Math.min(Math.max(0, ctx.job.job.progressDone ?? 0), total);
   let index = new PointIndex(await listPointsForPipeline(ctx.db, ctx.job.job.handoverId), accessLevel);
-  const counters: Counters = { inserted: 0, merged: 0, duplicatesWithoutEvidence: 0, citations: 0, citationsRejected: 0, unsupported: 0, dropped: 0 };
+  const counters: Counters = { inserted: 0, merged: 0, duplicatesWithoutEvidence: 0, citations: 0, citationsRejected: 0, unsupported: 0, dropped: 0, identityDropped: 0 };
   let lastAttempt: AiAttemptRecord | undefined;
 
   for (let i = start; i < total; i += 1) {
@@ -185,7 +226,10 @@ export async function runExtract(ctx: StageContext): Promise<StageOutcome> {
     lastAttempt = result.data.attempt;
     counters.dropped += Object.values(result.data.dropped).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
     const ids = new Set(chunk.map((m) => m.id));
-    const { entries, newShapes } = planChunkEntries(result.data.candidates, ids, index, counters);
+    const before = { inserted: counters.inserted, merged: counters.merged, unsupported: counters.unsupported, identityDropped: counters.identityDropped };
+    const safe = result.data.candidates.filter((c) => !findsIdentity(candidateStrings(c), detector, excludedGuard));
+    counters.identityDropped += result.data.candidates.length - safe.length;
+    const { entries, newShapes } = planChunkEntries(safe, ids, index, counters);
     let stored: Awaited<ReturnType<typeof storeExtractChunk>>;
     try {
       stored = await storeExtractChunk(ctx.db, claimOf(ctx), {
@@ -220,6 +264,29 @@ export async function runExtract(ctx: StageContext): Promise<StageOutcome> {
         }
       });
     }
+    if (!stored.alreadyCommitted) {
+      // EXT-2: what this chunk returned and what was discarded, by reason (counts only).
+      const dropped: Record<string, number> = {};
+      // `unknown_message` counts removed CITATIONS (not candidates), so it is kept apart as `citations_unknown_message`.
+      for (const [reason, count] of Object.entries(result.data.dropped)) {
+        if (Number.isFinite(count) && count > 0) dropped[reason === "unknown_message" ? "citations_unknown_message" : reason] = count;
+      }
+      const identityDropped = counters.identityDropped - before.identityDropped;
+      const unsupported = counters.unsupported - before.unsupported;
+      if (identityDropped > 0) dropped.identity_dropped = identityDropped;
+      if (unsupported > 0) dropped.unsupported = unsupported;
+      const modelDropped = Object.entries(result.data.dropped).reduce((a, [k, v]) => (k === "unknown_message" || !Number.isFinite(v) ? a : a + v), 0);
+      await coverage.run(() =>
+        recordExtractChunkStats(ctx.db, claimOf(ctx), i, {
+          chunkTotal: total,
+          messages: chunk.length,
+          candidates: result.data.candidates.length + modelDropped,
+          inserted: counters.inserted - before.inserted,
+          merged: counters.merged - before.merged,
+          dropped,
+        }),
+      );
+    }
     await ctx.heartbeat({ done: i + 1, total });
   }
 
@@ -240,7 +307,17 @@ function log(ctx: StageContext, sourceId: string, c: Counters, done: number, tot
     citationsRejected: c.citationsRejected,
     unsupported: c.unsupported,
     dropped: c.dropped,
+    identityDropped: c.identityDropped,
     skippedOversize: plan.skippedOversize,
     skippedEmpty: plan.skippedEmpty,
   });
+}
+
+/** Every string the model wrote for a candidate, quotes included (R3 Task 02 output guard). */
+export function candidateStrings(c: CheckedCandidate): string[] {
+  const out = [c.title, c.statement];
+  if (c.inferenceRationale !== null) out.push(c.inferenceRationale);
+  collectStrings(c.attributes, out);
+  for (const q of c.citations) out.push(q.quote);
+  return out;
 }

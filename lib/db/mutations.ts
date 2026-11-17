@@ -114,8 +114,19 @@ export async function startProcessing(
 export const cancelProcessing = async (db: DbClient, actor: VerifiedActor, handoverId: string) =>
   void (await call(db, actor, "cancel_processing", { p_handover_id: handoverId }));
 
-export async function publishHandover(db: DbClient, actor: VerifiedActor, input: { handoverId: string; summary?: string }): Promise<string> {
-  return asUuid(await call(db, actor, "publish_handover", { p_handover_id: input.handoverId, p_summary: input.summary ?? null }));
+export async function publishHandover(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { handoverId: string; summary?: string; acknowledgements?: Array<{ sourceId: string; fingerprint: string }> },
+): Promise<string> {
+  // R3 Task 04: with acknowledgements, the 4-argument overload records them and publishes in one transaction; the
+  // database gate (migration 20261117400200) refuses any publication whose partial/failed sources are unacknowledged.
+  const acks = input.acknowledgements ?? [];
+  return asUuid(await call(db, actor, "publish_handover", {
+    p_handover_id: input.handoverId,
+    p_summary: input.summary ?? null,
+    ...(acks.length > 0 ? { p_acknowledgements: acks } : {}),
+  }));
 }
 
 export const startRevision = async (db: DbClient, actor: VerifiedActor, handoverId: string) =>
@@ -310,12 +321,14 @@ export async function submitGapAnswersWithToken(
 export const reviewGapAnswer = async (
   db: DbClient,
   actor: VerifiedActor,
-  input: { answerId: string; decision: "accept" | "reject"; note?: string },
+  input: { answerId: string; decision: "accept" | "reject"; note?: string; pointDetail?: string },
 ) =>
   void (await call(db, actor, "review_gap_answer", {
     p_answer_id: input.answerId,
     p_decision: input.decision,
     p_note: input.note ?? null,
+    // R3 Task 04: the 5-argument overload only when a detail is given, so older databases keep working otherwise.
+    ...(input.pointDetail !== undefined ? { p_point_detail: input.pointDetail } : {}),
   }));
 
 /** Creator: any token of the handover. Other review roles: Gap Interview links only (§11.3). */
@@ -632,3 +645,23 @@ export async function redeemMemberInvite(
   })) as { handover_id: string; role: MemberRole; member_id: string };
   return { handoverId: data.handover_id, role: data.role, memberId: data.member_id };
 }
+
+// ── R3 Task 03: extraction signals and review flags (migration 20261117300100) ──────────────────────
+
+/** Review roles within clearance: every signal of one message dismissed (not handover material) or reopened. */
+export async function reviewExtractionSignals(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { handoverId: string; messageId: string; state: "dismissed" | "unreviewed" },
+): Promise<number> {
+  const n = await call(db, actor, "review_extraction_signals", {
+    p_handover_id: input.handoverId,
+    p_message_id: input.messageId,
+    p_state: input.state,
+  });
+  return typeof n === "number" ? n : 0;
+}
+
+/** Review roles who can see the point: a flag dismissed, confirmed or reopened. */
+export const reviewPointFlag = async (db: DbClient, actor: VerifiedActor, input: { flagId: string; state: "open" | "dismissed" | "confirmed" }) =>
+  void (await call(db, actor, "review_point_flag", { p_flag_id: input.flagId, p_state: input.state }));

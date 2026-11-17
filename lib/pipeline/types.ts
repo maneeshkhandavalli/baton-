@@ -26,6 +26,10 @@ export type FailureReason =
   | "ai_budget_exceeded"
   | "source_changed"
   | "identity_pepper_unverified"
+  /** R3 Task 02: IDENTITY_MAP_KEY missing or invalid (retryable, like the pepper). */
+  | "identity_map_key_unverified"
+  /** R3 Task 02: a legacy source (parsed before pseudonymisation) may not be sent to the AI. */
+  | "source_not_pseudonymized"
   | "integrity_mismatch"
   | "raw_unavailable"
   | `parser:${ParserErrorCode}`

@@ -10,6 +10,8 @@ import type { ErrorCode, Result } from "../contracts/api";
 import type { SourceSummary } from "../contracts/dto";
 import type { AccessTokenFilter, BatonQueries, MessageContextWindow, PointListFilter } from "../contracts/queries";
 import { MESSAGE_CONTEXT_DEFAULT, MESSAGE_CONTEXT_MAX } from "../contracts/queries";
+import { buildExtractionReport, type RawExtractionReport } from "../contracts/extraction";
+import { mapPointReviewFlag, mapUnreviewedSignal } from "./mappers-extraction";
 import { EVIDENCE_STATUSES, POINT_CATEGORIES, REVIEW_STATES, TOKEN_PURPOSES } from "../contracts/enums";
 import type { DbClientFactories } from "./client";
 import { DbError, fail, ok, toAppError } from "./errors";
@@ -65,6 +67,19 @@ function requireFound(data: unknown): unknown {
 export function clampWindow(value: number | undefined): number {
   if (value === undefined || !Number.isFinite(value)) return MESSAGE_CONTEXT_DEFAULT;
   return Math.min(MESSAGE_CONTEXT_MAX, Math.max(0, Math.trunc(value)));
+}
+
+/** SQLSTATEs meaning "this database has no such function" (R3 Task 03 readers on an unmigrated database). */
+const MISSING_FUNCTION = new Set(["PGRST202", "42883"]);
+
+/** Runs an optional reader; a database without it yields `fallback` instead of an error. */
+async function optional<T>(work: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await work();
+  } catch (e) {
+    if (e instanceof DbError && e.sqlState !== undefined && MISSING_FUNCTION.has(e.sqlState)) return fallback;
+    throw e;
+  }
 }
 
 function asArray(data: unknown): unknown[] {
@@ -151,6 +166,29 @@ export function createDbQueries(clients: DbClientFactories): BatonQueries {
     getReadiness: (handoverId) =>
       byId(handoverId, async (id) =>
         mapReadiness(requireFound(await callRpc(await user(), "api_get_readiness", { p_handover_id: id })))),
+
+    // R3 Task 03: optional on a database without migration 20261117300100 (reported as unavailable).
+    getExtractionReport: (handoverId) =>
+      byId(handoverId, async (id) =>
+        optional(
+          async () => buildExtractionReport(requireFound(await callRpc(await user(), "api_get_extraction_report", { p_handover_id: id })) as RawExtractionReport),
+          buildExtractionReport({ available: false }),
+        )),
+
+    listUnreviewedSignals: (handoverId, limit?: number) =>
+      byId(handoverId, async (id) =>
+        optional(
+          async () =>
+            asArray(await callRpc(await user(), "api_list_unreviewed_signals", {
+              p_handover_id: id,
+              p_limit: Math.min(200, Math.max(1, Math.trunc(limit ?? 50))),
+            })).map(mapUnreviewedSignal),
+          [],
+        )),
+
+    listPointFlags: (handoverId) =>
+      byId(handoverId, async (id) =>
+        optional(async () => asArray(await callRpc(await user(), "api_list_point_flags", { p_handover_id: id })).map(mapPointReviewFlag), [])),
 
     getPublishedHandover: (handoverId) =>
       byId(handoverId, async (id) =>

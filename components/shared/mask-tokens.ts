@@ -3,7 +3,9 @@
  *
  * Only the canonical mask tokens count as masks: `[PHONE_n]`, `[EMAIL_n]`, `[UPI_n]`, `[BANK_n]`,
  * `[IFSC_n]`, `[CARD_n]`, `[ID_n]`, `[PASSWORD]`, `[API_KEY]` and `[SECRET]`. `[EXCLUDED_PARTICIPANT]`
- * is a separate parser token: never a mask, never numbered. Any other bracketed text is left as is.
+ * is a separate parser token: never a mask, never numbered. R3 Task 02: `[PERSON_n]` is a participant
+ * placeholder (and `[PERSON]` an ambiguous one); it is resolved to a name only for viewers with clearance
+ * (components/shared/person-token.tsx). Any other bracketed text is left as is.
  */
 
 import { EXCLUDED_PARTICIPANT_TOKEN } from "@/lib/contracts/parser";
@@ -11,13 +13,18 @@ import { EXCLUDED_PARTICIPANT_TOKEN } from "@/lib/contracts/parser";
 export type MaskedSegment =
   | { kind: "text"; text: string }
   | { kind: "mask"; token: string }
-  | { kind: "excluded_participant" };
+  | { kind: "excluded_participant" }
+  | { kind: "person"; ordinal: number | null };
 
 const NUMBERED = ["PHONE", "EMAIL", "UPI", "BANK", "IFSC", "CARD", "ID"];
 const UNNUMBERED = ["PASSWORD", "API_KEY", "SECRET"];
 
 const MASK_TOKEN = new RegExp(`^\\[(?:(?:${NUMBERED.join("|")})_\\d+|${UNNUMBERED.join("|")})\\]$`);
-const ANY_TOKEN = new RegExp(`(\\[(?:(?:${NUMBERED.join("|")})_\\d+|${UNNUMBERED.join("|")}|EXCLUDED_PARTICIPANT)\\])`, "g");
+const ANY_TOKEN = new RegExp(
+  `(\\[(?:(?:${NUMBERED.join("|")})_\\d+|${UNNUMBERED.join("|")}|EXCLUDED_PARTICIPANT|PERSON(?:_[1-9]\\d{0,5})?)\\])`,
+  "g",
+);
+const PERSON_TOKEN = /^\[PERSON(?:_([1-9]\d{0,5}))?\]$/;
 
 export const isMaskToken = (s: string) => MASK_TOKEN.test(s);
 
@@ -25,7 +32,9 @@ export function segmentMaskedText(text: string): MaskedSegment[] {
   const out: MaskedSegment[] = [];
   for (const part of text.split(ANY_TOKEN)) {
     if (part === "") continue;
+    const person = PERSON_TOKEN.exec(part);
     if (part === EXCLUDED_PARTICIPANT_TOKEN) out.push({ kind: "excluded_participant" });
+    else if (person) out.push({ kind: "person", ordinal: person[1] ? Number(person[1]) : null });
     else if (isMaskToken(part)) out.push({ kind: "mask", token: part });
     else {
       const last = out[out.length - 1];
@@ -43,8 +52,15 @@ export function segmentMaskedText(text: string): MaskedSegment[] {
  */
 export function maskedTextToPlain(text: string): string {
   return segmentMaskedText(text)
-    .map((s) => (s.kind === "text" ? s.text : s.kind === "mask" ? s.token : "excluded participant"))
+    .map((s) =>
+      s.kind === "text" ? s.text : s.kind === "mask" ? s.token : s.kind === "person" ? personPlainLabel(s.ordinal) : "excluded participant",
+    )
     .join("");
+}
+
+/** A placeholder without a resolved name: "Person 3", or "a participant" for an ambiguous mention. */
+export function personPlainLabel(ordinal: number | null): string {
+  return ordinal === null ? "a participant" : `Person ${ordinal}`;
 }
 
 /** Spoken names for mask tokens: "[PHONE_1]" → "masked phone number 1". */

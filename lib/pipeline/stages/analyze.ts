@@ -6,10 +6,24 @@
  * written here. What remains is the D21 coverage check: a checklist category with no live point gets
  * its checklist questions as category-level system gap questions. Idempotent: a system question with the
  * same category and text is never created twice.
+ *
+ * R3 Task 03 (VER-2, VER-3): it also stores review flags (lib/pipeline/review-flags.ts): possible
+ * contradictions found in LATER messages beyond the cited ones, and person fields the model wrote that the
+ * evidence does not back. Deterministic, no AI; reporting only (a database without the migration skips it).
  */
 
 import type { PointCategory } from "../../contracts/enums";
-import { createSystemGapQuestion, listGapQuestionsForPipeline, listPointsForPipeline, type PipelinePoint } from "../../db/pipeline";
+import { DbError } from "../../db/errors";
+import {
+  createSystemGapQuestion,
+  listExtractionMessages,
+  listGapQuestionsForPipeline,
+  listPointsForPipeline,
+  type PipelinePoint,
+} from "../../db/pipeline";
+import type { RetrievalMessage } from "../../signals/contradictions";
+import { CoverageWriter, storeFlagsInBatches } from "../coverage";
+import { buildReviewFlags } from "../review-flags";
 import { EXPECTED_KNOWLEDGE_CHECKLIST, gapPriority, type ChecklistItem } from "../checklist";
 import { claimOf, type StageContext } from "../stage-context";
 import type { StageOutcome } from "../types";
@@ -49,6 +63,36 @@ export async function runAnalyze(ctx: StageContext): Promise<StageOutcome> {
     });
     created += 1;
   }
-  ctx.logger.info("analyze_done", { jobId: ctx.claimed.id, points: points.length, checklistQuestions: created });
+  const messages = await loadHandoverMessages(ctx);
+  const flags = buildReviewFlags(points, messages);
+  const flagsStored = await storeFlagsInBatches(ctx, new CoverageWriter(ctx), flags);
+  ctx.logger.info("analyze_done", { jobId: ctx.claimed.id, points: points.length, checklistQuestions: created, reviewFlags: flags.length, flagsStored });
   return { kind: "succeeded", progress: { done: 1, total: 1 } };
+}
+
+const MESSAGE_PAGE = 2000;
+
+/**
+ * Every text message of the run's PARSED sources (stored, masked, pseudonymised), for contradiction retrieval.
+ * A source whose parse failed, or that was removed since, has no messages to compare and is skipped.
+ */
+async function loadHandoverMessages(ctx: StageContext): Promise<RetrievalMessage[]> {
+  const out: RetrievalMessage[] = [];
+  for (const sourceId of ctx.job.run.sourceIds) {
+    let afterSeq = -1;
+    for (;;) {
+      let page: Awaited<ReturnType<typeof listExtractionMessages>>;
+      try {
+        page = await listExtractionMessages(ctx.db, { sourceId, afterSeq, limit: MESSAGE_PAGE });
+      } catch (e) {
+        if (e instanceof DbError && (e.code === "invalid_transition" || e.code === "not_found")) break; // not parsed / gone
+        throw e;
+      }
+      const rows = page?.messages ?? [];
+      for (const m of rows) out.push({ id: m.id, sourceId, seq: m.seq, sentAt: m.sentAt, authorLabel: m.authorLabel, body: m.body });
+      if (rows.length === 0) break;
+      afterSeq = rows[rows.length - 1].seq;
+    }
+  }
+  return out;
 }

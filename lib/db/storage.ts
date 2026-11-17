@@ -426,6 +426,34 @@ export async function downloadVerifiedRawSourceWithMeta(
 }
 
 /**
+ * R3 Task 02: another source's raw upload, read by a parse job only to learn that chat's participants
+ * (pseudonymisation needs every chat sender of the run before any source is persisted). Verified against
+ * the confirmed size and SHA-256 like the parse job's own read, but it NEVER changes anything: any problem
+ * (gone, mismatched, not a chat, wrong handover) returns null and that source is simply skipped.
+ */
+export async function readRawSourceForPeople(
+  db: DbClient,
+  adminStorage: StorageClient,
+  sourceId: string,
+  handoverId: string,
+): Promise<(RawSourceMeta & { bytes: Uint8Array }) | null> {
+  try {
+    const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as
+      | (RawSourceRow & { state?: string })
+      | null;
+    if (!source || !source.raw_storage_path || source.kind !== "whatsapp_export") return null;
+    if (source.state !== "uploaded" && source.state !== "parsing" && source.state !== "failed") return null;
+    if (!isOwnedRawPath(source.raw_storage_path, sourceId, handoverId)) return null;
+    const bytes = await download(adminStorage, source.raw_storage_path);
+    const measured = await measureBytes(bytes);
+    if (measured.sizeBytes !== Number(source.size_bytes) || measured.sha256 !== source.sha256.toLowerCase()) return null;
+    return { bytes, ...rawMeta(source) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * R2 (integration), previewSource (§10.3 step 1): the actor must manage the source's handover (checked in
  * SQL), the source must be uploaded or failed with its raw object present and consent recorded. The bytes
  * are re-measured (M5); a mismatch is precondition_failed and, unlike the parse job, changes NOTHING:

@@ -38,6 +38,7 @@ import {
   normalizeSenderIdentity,
 } from "../privacy/identity";
 import { createExcludedMentionRedactor } from "../privacy/excluded-mentions";
+import { discoverExcludedNames } from "../privacy/excluded-discovery";
 import { createMasker, type Masker } from "../privacy/mask";
 import { foldDigits } from "../privacy/phone";
 import { ParserAbort } from "./errors";
@@ -88,7 +89,7 @@ function emptyStats(totalLines: number): ParsedSource["stats"] {
   return { totalLines, messagesKept: 0, messagesExcluded: 0, systemMessages: 0, mediaOmitted: 0 };
 }
 
-function truncatePreview(text: string): string {
+export function truncatePreview(text: string): string {
   const firstLine = text.split("\n").find((l) => l.trim() !== "") ?? "";
   const chars = Array.from(firstLine.trim());
   if (chars.length <= LIMITS.maxPreviewChars) return chars.join("");
@@ -184,6 +185,11 @@ export function buildChatSource(
     if (excluded) addExcluded(m.systemAttribution);
     return excluded;
   });
+  // R3 Task 02 (PRIV-3 parity): excluded people who are NOT senders in this chat (excluded handover-wide,
+  // known only by hash) are found in the message text by hashing candidate names (excluded-discovery.ts).
+  if (exclusions.applyCount > 0) {
+    for (const name of discoverExcludedNames(raw.map((m) => m.body), exclusions, identityPepper)) addExcluded(name);
+  }
 
   // System lines naming an excluded identity ("Ravi left") are dropped too (substring match,
   // deliberately broad: dropping an extra system line is the safe failure).
@@ -361,7 +367,11 @@ export function buildChatSource(
   };
 }
 
-export function buildDocumentSource(common: BuildCommon, blocks: readonly RawDocumentBlock[]): ParsedSource {
+export function buildDocumentSource(
+  common: BuildCommon,
+  blocks: readonly RawDocumentBlock[],
+  identityPepper?: string,
+): ParsedSource {
   if (blocks.length > LIMITS.maxMessagesPerSource) {
     throw new ParserAbort("too_large", `The document has more than ${LIMITS.maxMessagesPerSource} blocks.`);
   }
@@ -369,6 +379,25 @@ export function buildDocumentSource(common: BuildCommon, blocks: readonly RawDoc
   // senders, no timestamps); a conversation rule is still checked against this parse's context, so a
   // rule chosen elsewhere fails instead of being silently ignored (D32).
   conversationIdsFor(common.exclusions, common.parseContext);
+
+  // R3 Task 02 (PRIV-3): the same mention redaction as chats, before masking. Participant rules carry only a
+  // hash, so excluded people are found in the text by hashing candidate names (excluded-discovery.ts).
+  const excludedNames =
+    identityPepper !== undefined && common.exclusions.applyCount > 0
+      ? discoverExcludedNames(
+          blocks.flatMap((b) => (b.heading === undefined ? [b.body] : [b.heading, b.body])),
+          common.exclusions,
+          identityPepper,
+        )
+      : [];
+  const redactor = createExcludedMentionRedactor(excludedNames);
+  let redactedMentions = 0;
+  const redact = (text: string): string => {
+    if (redactor.isEmpty || text === "") return text;
+    const r = redactor.redact(text);
+    redactedMentions += r.count;
+    return r.text;
+  };
 
   const masker = createMasker();
   const headingCache = new Map<string, string>();
@@ -378,7 +407,7 @@ export function buildDocumentSource(common: BuildCommon, blocks: readonly RawDoc
     if (b.heading !== undefined) {
       let h = headingCache.get(b.heading);
       if (h === undefined) {
-        h = masker.mask(b.heading, "document").text;
+        h = masker.mask(redact(b.heading), "document").text;
         headingCache.set(b.heading, h);
       }
       location.heading = h;
@@ -389,12 +418,18 @@ export function buildDocumentSource(common: BuildCommon, blocks: readonly RawDoc
       participantLocalId: null,
       sentAt: null,
       kind: "document_block",
-      body: masker.mask(b.body, "document").text,
+      body: masker.mask(redact(b.body), "document").text,
       location,
     };
   });
   const stats = emptyStats(common.totalLines);
   stats.messagesKept = messages.length;
+  if (redactedMentions > 0) {
+    common.warnings.summary(
+      "excluded_mentions_redacted",
+      `${redactedMentions} mention(s) of excluded participants were removed from the document.`,
+    );
+  }
   return {
     kind: common.kind,
     parserVersion: PARSER_VERSION,

@@ -48,7 +48,11 @@ const CASES: Case[] = [
   {
     name: "publishHandover (summary)",
     rpc: "publish_handover",
-    setup: (w) => w.adminDb.returns("publish_handover", randomUUID()),
+    // R3 Task 03: publishing first reads the extraction report (RLS); nothing in it is partial here.
+    setup: (w) => {
+      w.adminDb.returns("publish_handover", randomUUID());
+      w.userDb.returns("api_get_extraction_report", { available: true, runId: null, runStatus: null, sources: [], flags: {} });
+    },
     run: (w) => handovers.publishHandover({ handoverId: w.ids.handover, summary: `Call ${P.phone}, mail ${P.email}` }),
   },
   {

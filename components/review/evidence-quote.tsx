@@ -1,9 +1,10 @@
-import { CircleAlert, CircleCheck, CircleDashed, FileText, MessageCircle, ShieldAlert, UserRound } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleDashed, FileText, MessageCircle, ShieldAlert, Sparkles, UserRound } from "lucide-react";
 
 import { formatDate, formatDateTime } from "@/components/handover/format";
 import { MaskedText } from "@/components/shared/masked-text";
 import { isGuardedVerdict } from "@/components/shared/support-guard";
 import type { EvidenceKind, QuoteCheck, SupportVerdict } from "@/lib/contracts/enums";
+import { AI_LAYER_LABEL, evidenceLayers, QUOTE_LAYER_LABEL } from "@/lib/contracts/verification";
 import type { MessageLocation } from "@/lib/contracts/parser";
 import { cn } from "@/lib/utils";
 
@@ -29,20 +30,11 @@ interface EvidenceQuoteProps {
   className?: string;
 }
 
-const QUOTE_SHORT: Record<QuoteCheck, string> = {
-  exact: "Found word for word",
-  normalized: "Found in source",
-  not_found: "Not found in source",
-  pending: "Not checked yet",
-};
-
-const VERDICT_SHORT: Partial<Record<SupportVerdict, string>> = {
-  supports: "supports the point",
-  partial: "partly supports it",
-  contradicts: "contradicts the point",
-  irrelevant: "not relevant",
-};
-
+/**
+ * R3 Task 03 (VER-1): two separate chips. The first is the DETERMINISTIC quote check (the words exist in the
+ * source); the second is the AI's JUDGEMENT of support, always labelled as such. Neither is a human
+ * confirmation, and the two are never merged into one "verified" signal.
+ */
 function VerificationChip({
   kind,
   quoteCheck,
@@ -56,32 +48,44 @@ function VerificationChip({
   verdictRationale?: string | null;
   guarded?: boolean;
 }) {
-  if (isGuardedVerdict({ supportVerdict, verdictRationale, guarded })) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-1.5 py-px font-medium text-warning-fg">
-        <ShieldAlert aria-hidden="true" className="size-3 shrink-0" />
-        Check flagged · read the quote yourself
-      </span>
-    );
-  }
-  const quoteOk = kind === "testimony" || quoteCheck === "exact" || quoteCheck === "normalized";
-  const bad = quoteCheck === "not_found" || supportVerdict === "contradicts" || supportVerdict === "irrelevant";
-  const good = quoteOk && supportVerdict === "supports";
-  const Icon = good ? CircleCheck : bad ? CircleAlert : CircleDashed;
-  const parts = [kind === "testimony" ? "Accepted answer" : QUOTE_SHORT[quoteCheck], VERDICT_SHORT[supportVerdict]].filter(Boolean);
+  const isGuarded = isGuardedVerdict({ supportVerdict, verdictRationale, guarded });
+  const layers = evidenceLayers({ kind, quoteCheck, supportVerdict, guarded: isGuarded });
+  const quoteOk = layers.quote === "matched_exact" || layers.quote === "matched_normalized" || layers.quote === "testimony";
+  const quoteBad = layers.quote === "not_found";
+  const QuoteIcon = quoteOk ? CircleCheck : quoteBad ? CircleAlert : CircleDashed;
+  const aiLabel = AI_LAYER_LABEL[layers.ai];
+  const aiGood = layers.ai === "judged_supportive";
+  const aiBad = layers.ai === "judged_contradicting" || layers.ai === "judged_irrelevant";
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
-        good && "bg-status-sourced-soft text-status-sourced-fg",
-        bad && "bg-status-conflicting-soft text-status-conflicting-fg",
-        !good && !bad && "bg-muted text-muted-foreground",
+    <>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
+          quoteOk && "bg-status-sourced-soft text-status-sourced-fg",
+          quoteBad && "bg-status-conflicting-soft text-status-conflicting-fg",
+          !quoteOk && !quoteBad && "bg-muted text-muted-foreground",
+        )}
+      >
+        <QuoteIcon aria-hidden="true" className="size-3 shrink-0" />
+        <span className="sr-only">Quote check: </span>
+        {QUOTE_LAYER_LABEL[layers.quote]}
+      </span>
+      {aiLabel && (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
+            layers.ai === "guarded" && "bg-warning-soft text-warning-fg",
+            aiGood && "bg-muted text-foreground/80",
+            aiBad && "bg-status-conflicting-soft text-status-conflicting-fg",
+            !aiGood && !aiBad && layers.ai !== "guarded" && "bg-muted text-muted-foreground",
+          )}
+        >
+          {layers.ai === "guarded" ? <ShieldAlert aria-hidden="true" className="size-3 shrink-0" /> : <Sparkles aria-hidden="true" className="size-3 shrink-0" />}
+          <span className="sr-only">Not a human confirmation: </span>
+          {aiLabel}
+        </span>
       )}
-    >
-      <Icon aria-hidden="true" className="size-3 shrink-0" />
-      <span className="sr-only">Verification: </span>
-      {parts.join(" · ")}
-    </span>
+    </>
   );
 }
 
@@ -130,7 +134,11 @@ export function EvidenceQuote({
       <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
         <SourceIcon aria-hidden="true" className="size-3.5 shrink-0" />
         <span className="flex min-w-0 flex-wrap items-center gap-y-1">
-          {authorLabel && <span className={cn(sep, "font-medium text-foreground/85")}>{authorLabel}</span>}
+          {authorLabel && (
+            <span className={cn(sep, "font-medium text-foreground/85")}>
+              <MaskedText text={authorLabel} />
+            </span>
+          )}
           {kind === "testimony" && <span className={sep}>Gap Interview answer</span>}
           {sentAt && (
             <time className={cn(sep, "tabular-nums")} dateTime={sentAt}>

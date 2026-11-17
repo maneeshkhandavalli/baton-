@@ -1,14 +1,20 @@
 /**
- * Browser Supabase client (§12.3). User-scoped: RLS applies to everything it can reach. UI code should
- * not query data with it (UI imports only lib/data, §11.1); it exists for client-side auth state and for
- * uploading a file to a signed upload URL.
+ * Browser Supabase client for ONE purpose: uploading a file to a signed upload URL (§10 step 2).
+ *
+ * R3 Task 02 (PRIV-4): it has NO session. Session cookies are httpOnly (cookie-options.ts), so page
+ * JavaScript cannot read them, and this client neither reads nor stores one (no cookies, no localStorage, no
+ * refresh). The upload is authorised by the single-use token the server issued with the user's own storage
+ * client (lib/db/storage.ts createSourceUpload, after the role, lifecycle and source-limit checks), not by the
+ * browser's identity. UI code must not query data with it (§11.1).
  */
 
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 import { getSupabasePublicEnv } from "./env";
 
-export function createSupabaseBrowserClient() {
+export function createSupabaseUploadClient() {
   const { url, anonKey } = getSupabasePublicEnv();
-  return createBrowserClient(url, anonKey);
+  return createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
 }

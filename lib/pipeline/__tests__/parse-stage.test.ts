@@ -86,15 +86,15 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_outcome, "succeeded");
     assert.equal(report.succeeded, 1);
 
-    const persist = db.called("pipeline_persist_parsed_source")[0].args;
+    const persist = db.called("pipeline_persist_pseudonymized_source")[0].args;
     assert.equal(persist.p_pepper_version, "p1");
     const parsed = persist.p_parsed as ParsedSource;
     assert.equal(parsed.messages.length, 3);
     assert.ok(parsed.messages.every((m) => !m.body.includes("99999")), "phone numbers are masked before persisting");
 
     assert.equal(removed.length, 1);
-    assert.ok(log.indexOf("rpc:pipeline_persist_parsed_source") < log.indexOf("storage:remove"), "raw deleted only after persist");
-    assert.ok(log.indexOf("rpc:heartbeat_processing_job") < log.indexOf("rpc:pipeline_persist_parsed_source"), "lease checked before persisting");
+    assert.ok(log.indexOf("rpc:pipeline_persist_pseudonymized_source") < log.indexOf("storage:remove"), "raw deleted only after persist");
+    assert.ok(log.indexOf("rpc:heartbeat_processing_job") < log.indexOf("rpc:pipeline_persist_pseudonymized_source"), "lease checked before persisting");
     assert.equal(db.called("mark_source_raw_deleted").length, 1);
 
     const logged = JSON.stringify(logger.records);
@@ -108,7 +108,7 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_error_message, "identity_pepper_unverified");
     assert.equal(completion?.p_next_attempt_at, new Date(Date.UTC(2026, 10, 12) + 30_000).toISOString());
     assert.ok(!log.includes("storage:download"));
-    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_pseudonymized_source").length, 0);
     assert.equal(db.called("pipeline_mark_source_parse_failed").length, 0, "the source is not failed for a configuration problem");
   });
 
@@ -122,7 +122,7 @@ describe("parse stage (§10.3, D14)", () => {
       mode: "detect",
     };
     const { db, removed, completion } = await scenario({ rules: [rule] });
-    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_pseudonymized_source").length, 0);
     assert.equal(removed.length, 0, "raw upload kept");
     assert.equal(completion?.p_outcome, "failed");
     assert.equal(completion?.p_error_code, "precondition_failed");
@@ -141,7 +141,7 @@ describe("parse stage (§10.3, D14)", () => {
     };
     const { db, completion } = await scenario({ rules: [rule] });
     assert.equal(completion?.p_outcome, "succeeded");
-    const parsed = db.called("pipeline_persist_parsed_source")[0].args.p_parsed as ParsedSource;
+    const parsed = db.called("pipeline_persist_pseudonymized_source")[0].args.p_parsed as ParsedSource;
     assert.equal(parsed.messages.length, 2);
     assert.ok(!JSON.stringify(parsed).includes("Ravi"));
   });
@@ -166,7 +166,7 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_outcome, "failed");
     assert.match(String(completion?.p_error_message), /^parser:[a-z_]+$/);
     assert.ok(["parse_failed", "unsupported_file_type"].includes(String(completion?.p_error_code)));
-    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_pseudonymized_source").length, 0);
     assert.equal(removed.length, 0);
     assert.equal(db.called("pipeline_mark_source_parse_failed").length, 1);
   });
@@ -175,7 +175,7 @@ describe("parse stage (§10.3, D14)", () => {
     const { db, completion } = await scenario({ declaredSha: "00".repeat(32) });
     assert.equal(completion?.p_outcome, "failed");
     assert.equal(completion?.p_error_message, "integrity_mismatch");
-    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_pseudonymized_source").length, 0);
     // DB-12: the mismatch is written through the fenced writer under this job's claim, never the unfenced one.
     const marked = db.called("pipeline_mark_source_parse_failed");
     assert.equal(marked.length, 1);
@@ -190,13 +190,13 @@ describe("parse stage (§10.3, D14)", () => {
     assert.equal(completion?.p_outcome, "retry");
     assert.equal(completion?.p_error_message, "raw_unavailable");
     assert.equal(db.called("pipeline_mark_source_parse_failed").length, 0);
-    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_pseudonymized_source").length, 0);
   });
 
   it("is idempotent for an already parsed source: deletes a leftover raw upload, persists nothing", async () => {
     const { db, removed, completion } = await scenario({ sourceState: "parsed", rawState: () => "parsed" });
     assert.equal(completion?.p_outcome, "succeeded");
-    assert.equal(db.called("pipeline_persist_parsed_source").length, 0);
+    assert.equal(db.called("pipeline_persist_pseudonymized_source").length, 0);
     assert.equal(removed.length, 1);
   });
 

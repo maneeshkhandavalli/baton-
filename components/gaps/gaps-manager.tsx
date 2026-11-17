@@ -21,6 +21,7 @@ import { useAction } from "@/hooks/use-action";
 import type { CreatedLink, GapQuestionSummary, PointSummary } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel, type GapAnswerStatus, type GapPriority, type PointCategory } from "@/lib/contracts/enums";
 import { createGapInterviewLink, createGapQuestion, reviewGapAnswer } from "@/lib/actions/gaps";
+import { checklistPointDetail, GAP_POINT_REQUIRED_FIELD } from "@/lib/pipeline/checklist";
 
 import { linkLevelAtLeast, questionLevelAtLeast } from "./gap-access";
 import { routes } from "@/lib/routes";
@@ -105,6 +106,55 @@ function Stat({ label, value, hint }: { label: string; value: number; hint: stri
   );
 }
 
+const DETAIL_LABEL = { responsibility: "Responsibility", nameLabel: "Contact name", system: "System or account" } as const;
+
+/**
+ * R3 Task 04: accepting an answer to an owner, contact or account question without a point creates a point that needs
+ * one detail (its responsibility, contact name or system). The checklist question may already name it; otherwise the
+ * reviewer types it from the answer. Nothing is invented: without it the server refuses and the answer stays open.
+ */
+function AcceptAnswer({
+  answerId,
+  question,
+  hasPoint,
+  pending,
+  run,
+}: {
+  answerId: string;
+  question: GapQuestionSummary;
+  hasPoint: boolean;
+  pending: boolean;
+  run: ReturnType<typeof useAction>["run"];
+}) {
+  const [detail, setDetail] = useState("");
+  const category = question.category ?? "next_action";
+  const field = hasPoint ? undefined : GAP_POINT_REQUIRED_FIELD[category];
+  const fromQuestion = field ? checklistPointDetail(question.category, question.question) : null;
+  const needsInput = !!field && !fromQuestion;
+  const accept = () =>
+    run(() => reviewGapAnswer({ answerId, decision: "accept", ...(field && detail.trim() ? { pointDetail: detail.trim() } : {}) }), {
+      success: hasPoint ? "Accepted and added as evidence" : "Answer accepted",
+    });
+  return (
+    <>
+      {field && (
+        <Input
+          aria-label={DETAIL_LABEL[field]}
+          className="h-7 w-44 text-xs"
+          placeholder={fromQuestion ? `${fromQuestion} (from the question)` : `${DETAIL_LABEL[field]} (from the answer)`}
+          value={detail}
+          maxLength={200}
+          onChange={(e) => setDetail(e.target.value)}
+        />
+      )}
+      <Button size="xs" disabled={pending || (needsInput && !detail.trim())} onClick={accept}>
+        <Check aria-hidden="true" data-icon="inline-start" />
+        Accept
+      </Button>
+    </>
+  );
+}
+
 function Group({
   title,
   description,
@@ -179,10 +229,7 @@ function Group({
                               <X aria-hidden="true" data-icon="inline-start" />
                               Reject
                             </Button>
-                            <Button size="xs" disabled={pending} onClick={() => run(() => reviewGapAnswer({ answerId: a.id, decision: "accept" }), { success: point ? "Accepted and added as evidence" : "Answer accepted" })}>
-                              <Check aria-hidden="true" data-icon="inline-start" />
-                              Accept
-                            </Button>
+                            <AcceptAnswer answerId={a.id} question={q} hasPoint={!!point} pending={pending} run={run} />
                           </span>
                         )}
                       </div>

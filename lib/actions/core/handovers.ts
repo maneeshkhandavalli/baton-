@@ -1,5 +1,6 @@
 /** Handover lifecycle actions (§9, §11.3, §12.9). */
 
+import { blockingExtractionGaps, extractionAcknowledgements } from "../../contracts/extraction";
 import type { Result } from "../../contracts/api";
 import type { HandoverSummary, PublicationSummary } from "../../contracts/dto";
 import {
@@ -130,7 +131,8 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
 }
 
 /**
- * Round 2 hosted preview: keeps an active run moving where no background loop exists (Vercel). The
+ * Accelerator (JOB-1): the scheduled worker (app/api/pipeline/drain, docs/round3/autonomous-worker.md) advances
+ * runs with no page open; this only adds drains between its ticks. The
  * processing page calls this every ~20 s while its run is queued/running; it schedules ONE more fenced
  * drain (`scheduleDrain`, the same `after()` drain startProcessing uses, with the same budget). Claim
  * fencing, stage order, retries and backoff all still come from the database, so overlapping drains are
@@ -168,8 +170,21 @@ export async function cancelProcessing(deps: ActionDeps, input: { handoverId: st
 
 export async function publishHandover(deps: ActionDeps, input: PublishHandoverInput): Promise<Result<PublicationSummary>> {
   return action(deps, publishHandoverInput, input, async (actor, v) => {
+    // R3 Task 03 (EXT-3): a source that was only partly analysed (or failed while others succeeded) must be
+    // acknowledged explicitly; the handover can otherwise look complete when it is not.
+    const report = await deps.queries.getExtractionReport(v.handoverId);
+    if (!report.ok && report.error.code === "internal") return report;
+    const gaps = report.ok ? blockingExtractionGaps(report.data) : [];
+    if (gaps.length > 0 && v.acknowledgeExtractionGaps !== true) {
+      return failWith("precondition_failed", {
+        details: { reason: "extraction_incomplete", sources: gaps.reduce((a, g) => a + g.sourceIds.length, 0) },
+        message: "Part of a source was not analysed. Confirm that you want to publish anyway.",
+      });
+    }
+    // R3 Task 04: the acknowledgement is recorded by the database, bound to the exact coverage the reviewer saw.
+    const acknowledgements = report.ok && v.acknowledgeExtractionGaps === true ? extractionAcknowledgements(report.data) : [];
     const summary = v.summary?.trim() ? createInputMasker().text(v.summary.trim()) : undefined;
-    const publicationId = await mutations.publishHandover(deps.adminDb(), actor, { handoverId: v.handoverId, summary });
+    const publicationId = await mutations.publishHandover(deps.adminDb(), actor, { handoverId: v.handoverId, summary, acknowledgements });
     const handover = await deps.queries.getHandover(v.handoverId);
     if (!handover.ok) return handover;
     const published = await deps.queries.getPublishedHandover(v.handoverId);

@@ -18,12 +18,17 @@ import type { MaskKind } from "@/lib/contracts/enums";
 import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
 import { routes } from "@/lib/routes";
+import { ExtractionCoverageSummary } from "@/components/review/extraction-coverage";
+import type { ExtractionReport } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
 import { sourceErrorText } from "./source-error";
 
 const POLL_MS = 3_000; // D10
-/** Hosted (Vercel) has no background drain loop: while the run is active this page keeps it moving. */
+/**
+ * Accelerator only (JOB-1): the scheduled worker (docs/round3/autonomous-worker.md) advances runs without this
+ * page; while the page is open it also asks for an extra drain so the run moves between scheduler ticks.
+ */
 const NUDGE_MS = 20_000;
 
 interface ProcessingViewProps {
@@ -31,9 +36,11 @@ interface ProcessingViewProps {
   status: ProcessingStatus;
   canStart: boolean;
   canCancel: boolean;
+  /** R3 Task 03 (EXT-3): per-source extraction coverage; null when unavailable. */
+  extraction?: ExtractionReport | null;
 }
 
-export function ProcessingView({ handoverId, status, canStart, canCancel }: ProcessingViewProps) {
+export function ProcessingView({ handoverId, status, canStart, canCancel, extraction = null }: ProcessingViewProps) {
   const router = useRouter();
   const { run, isPending } = useAction();
   const [consent, setConsent] = useState(emptyConsent());
@@ -296,6 +303,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel }: Proc
             )}
           </div>
         )}
+
+        <ExtractionCoverageSummary report={extraction} className="shadow-none" />
 
         {r?.status === "succeeded" && (
           <div className="flex flex-wrap gap-2 border-t border-border pt-5">

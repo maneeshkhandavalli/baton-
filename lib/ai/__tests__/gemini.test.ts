@@ -307,7 +307,8 @@ describe("Gemini adapter: errors are sanitised", () => {
 });
 
 describe("Gemini configuration (lib/ai/config.ts)", () => {
-  const base = { AI_PROVIDER: "gemini", AI_API_KEY: KEY, NODE_ENV: "production" };
+  // R3 Task 02: production also needs an approved data-governance profile (provider-governance.test.ts).
+  const base = { AI_PROVIDER: "gemini", AI_API_KEY: KEY, NODE_ENV: "production", AI_DATA_GOVERNANCE: "gemini-paid-dpa" };
 
   it("AI_PROVIDER=gemini + key → production mode, default model gemini-3.6-flash for both stages", () => {
     const c = getAiConfiguration(base);

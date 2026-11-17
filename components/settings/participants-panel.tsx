@@ -5,6 +5,7 @@ import { UserX } from "lucide-react";
 import { formatCount, formatDate } from "@/components/handover/format";
 import { exclusionKindLabel, identityKindLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { maskedTextToPlain } from "@/components/shared/mask-tokens";
 import { MaskedText } from "@/components/shared/masked-text";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/hooks/use-action";
@@ -50,7 +51,9 @@ export function ParticipantsPanel({ handoverId, participants, exclusions, source
                 {people.map((p) => (
                   <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{p.displayLabel}</p>
+                      <p className="truncate text-sm">
+                        <MaskedText text={p.displayLabel} />
+                      </p>
                       <p className="text-xs text-muted-foreground" title={identityKindLabel[p.identityKind].description}>
                         {identityKindLabel[p.identityKind].label} · {formatCount(p.messageCount)} messages
                         {p.excluded && " · left out"}
@@ -59,12 +62,12 @@ export function ParticipantsPanel({ handoverId, participants, exclusions, source
                     {creator && !p.excluded && (
                       <ConfirmDialog
                         trigger={
-                          <Button size="xs" variant="ghost" aria-label={`Erase ${p.displayLabel}`}>
+                          <Button size="xs" variant="ghost" aria-label={`Erase ${maskedTextToPlain(p.displayLabel)}`}>
                             <UserX aria-hidden="true" data-icon="inline-start" />
                             Erase
                           </Button>
                         }
-                        title={`Erase ${p.displayLabel}?`}
+                        title={`Erase ${maskedTextToPlain(p.displayLabel)}?`}
                         description={
                           p.identityKind === "name"
                             ? "Their messages and quotes in this chat are deleted, affected points go to privacy review and published versions are redacted. Names are weak identities: people with the same saved name in other chats are reported, not erased. This can't be undone."

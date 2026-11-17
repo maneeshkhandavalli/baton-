@@ -18,7 +18,7 @@ import * as members from "../../lib/actions/members";
 import * as privacy from "../../lib/actions/privacy";
 import * as review from "../../lib/actions/review";
 import * as sources from "../../lib/actions/sources";
-import { ACTOR, WRITE_RPCS, actionWorld, allCalls, type ActionWorld } from "./support/actions";
+import { ACTOR, WRITE_RPCS, actionWorld, allCalls, type ActionWorld, workerSlot } from "./support/actions";
 import { allowFakeAi, flushAfter, pendingAfter } from "./support/platform";
 import { pointDetailRow, sourceRow } from "./support/rows";
 
@@ -121,6 +121,8 @@ describe("D35: identity, role and creator never come from the browser", () => {
     const w = actionWorld();
     w.adminDb.returns("reject_point", null).returns("delete_handover", null).returns("publish_handover", randomUUID());
     w.userDb.returns("api_get_point", pointDetailRow(w.ids.point));
+    // R3 Task 03: publishing first reads the extraction report (RLS) for unacknowledged partial extraction.
+    w.userDb.returns("api_get_extraction_report", { available: true, runId: null, runStatus: null, sources: [], flags: {} });
     await review.reviewPoint({ action: "reject", pointId: w.ids.point, reason: "No", ...SMUGGLED } as never);
     await handovers.deleteHandover({ handoverId: w.ids.handover, ...SMUGGLED } as never);
     await handovers.publishHandover({ handoverId: w.ids.handover, ...SMUGGLED } as never);
@@ -140,6 +142,7 @@ describe("IT-07 (action side): processing never approves or publishes", () => {
     w.userDb.returns("api_list_sources", [sourceRow(w.ids.source, w.ids.handover, { state: "parsed" })]);
     w.adminDb.returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", [])
       .returns("list_finishable_runs", []); // DB-15: read-only sweep the drain starts with
+    workerSlot(w.adminDb); // Task 01B: the after() drain holds the global worker slot
     const result = await handovers.startProcessing({ handoverId: w.ids.handover });
     assert.ok(result.ok, JSON.stringify(result));
     assert.equal(await flushAfter(), 1, "the drain ran after the response");

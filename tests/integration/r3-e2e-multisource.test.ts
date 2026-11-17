@@ -22,7 +22,9 @@ import { fileURLToPath } from "node:url";
 import { getAiProviderForRun } from "../../lib/ai/config";
 import { extractCandidates } from "../../lib/ai/extract";
 import { verifySupport } from "../../lib/ai/verify-support";
-import { createHandover, startProcessing } from "../../lib/actions/handovers";
+import { reviewGapAnswer, submitGapAnswers } from "../../lib/actions/gaps";
+import { createHandover, publishHandover, startProcessing } from "../../lib/actions/handovers";
+import { inviteMember } from "../../lib/actions/members";
 import { reviewPoint } from "../../lib/actions/review";
 import { confirmSourceUploaded, createSourceUpload, recordSourceConsent } from "../../lib/actions/sources";
 import { getQueries } from "../../lib/data";
@@ -64,6 +66,8 @@ describe("Tier E (R3): multi-source run with one failing source, and a real conf
     resetPlatform();
     allowFakeAi();
     process.env.IDENTITY_PEPPER = TEST_PEPPER;
+    process.env.IDENTITY_MAP_KEY = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"; // R3 Task 02: synthetic
+    process.env.IDENTITY_MAP_KEY_VERSION = "k1";
     process.env.IDENTITY_PEPPER_VERSION = "p1";
     process.env.IDENTITY_PEPPER_CANARY = computeIdentityPepperCanary(TEST_PEPPER);
     installCustomBackends({ adminDb, userDb, adminStorage: storage, userStorage: storage });
@@ -166,5 +170,49 @@ describe("Tier E (R3): multi-source run with one failing source, and a real conf
       resolutionNote: "The handbook is newer: the deadline is 31 January." }), "approve with resolution");
     const after = ok(await queries.getPoint(ids.point), "getPoint after");
     assert.equal(after.reviewState, "approved");
+  });
+
+  // R3 Task 04: the broken source's extraction is a "failed" gap; publishing needs the creator's acknowledgement,
+  // which the database records and checks in the publishing transaction (migration 20261117400200).
+  it("6. the failed source must be acknowledged; the database records it and only then publishes", async () => {
+    signInAs(users.ann, "ann@example.test");
+    const queries = getQueries();
+    ok(await inviteMember({ handoverId, email: "inc@example.test", role: "incoming", expiresInDays: 7 }), "invite");
+    const open = ok(await queries.listGapQuestions(handoverId), "gaps").filter((q) => q.status === "open" && q.priority === "required");
+    if (open.length > 0) {
+      ok(await submitGapAnswers({ answers: open.map((q) => ({ gapQuestionId: q.id, answerText: "Ravi handles this; see the shared drive." })) }), "answers");
+      for (const q of ok(await queries.listGapQuestions(handoverId), "gaps")) {
+        // checklist questions name their own subject (Task 04 Gap Interview fix): no detail needed here
+        for (const a of q.answers.filter((x) => x.status === "submitted")) ok(await reviewGapAnswer({ answerId: a.id, decision: "accept" }), "accept");
+      }
+    }
+    for (const summary of ok(await queries.listPoints(handoverId), "points").filter((p) => p.reviewState === "pending")) {
+      const p = ok(await queries.getPoint(summary.id), "point");
+      ok(await reviewPoint({
+        action: "approve", pointId: p.id, expectedRevisionId: p.currentRevisionId,
+        ...(p.evidenceStatus === "inferred" ? { confirmInferred: true } : {}),
+        ...(p.evidenceStatus === "conflicting" ? { resolutionNote: "Checked." } : {}),
+        ...(p.evidenceStatus === "missing" ? { asKnownGap: true } : {}),
+      }), `approve ${p.evidenceStatus}`);
+    }
+    assert.ok(ok(await queries.getReadiness(handoverId), "readiness").canPublish, "readiness itself is satisfied");
+
+    const report = ok(await queries.getExtractionReport(handoverId), "report");
+    const broken = report.sources.find((s) => s.sourceId === ids["broken-export.txt"]);
+    assert.equal(broken?.gapState, "failed", "the broken source is a failed gap");
+    assert.match(broken?.coverageFingerprint ?? "", /^cov1:[0-9a-f]{32}$/);
+
+    const refused = await publishHandover({ handoverId });
+    assert.ok(!refused.ok && refused.error.details?.reason === "extraction_incomplete", "refused without the acknowledgement");
+    // A path that skips the action (the 3-argument database function, as any service-role caller could) is refused too.
+    await assert.rejects(pg.json(`select to_jsonb(public.publish_handover(${lit(users.ann)}, ${lit(handoverId)}, null))`), /extraction_incomplete/);
+
+    const published = ok(await publishHandover({ handoverId, summary: "Published with one source not analysed.", acknowledgeExtractionGaps: true }), "publish");
+    assert.equal(published.handoverState, "approved");
+    const acks = await pg.json<Array<{ src: string; by: string; fp: string; state: string }>>(`
+      select jsonb_agg(jsonb_build_object('src', source_id, 'by', acknowledged_by, 'fp', coverage_fingerprint, 'state', gap_state))
+        from public.publication_source_acknowledgements where handover_id = ${lit(handoverId)}`);
+    assert.deepEqual(acks, [{ src: ids["broken-export.txt"], by: users.ann, fp: broken!.coverageFingerprint, state: "failed" }],
+                     "one acknowledgement: that source, that exact coverage state, by the verified creator");
   });
 });

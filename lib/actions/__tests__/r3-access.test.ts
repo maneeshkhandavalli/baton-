@@ -132,7 +132,10 @@ describe("unauthorised access is refused with typed errors on every handover-sco
         assert.equal(r.error.code, code);
         assert.ok(!r.error.message.includes("raw SQL"), "Postgres messages never reach the client");
         assert.ok(f.calls.some((c) => c.fn === fn && c.client === "admin" && c.args?.p_actor_profile_id === ACTOR_ID));
-        assert.deepEqual(f.queryCalls, [], "nothing is re-read after a refusal");
+        // R3 Task 03: publishHandover reads the extraction report (RLS, user-scoped) BEFORE the publish RPC; that
+        // pre-check can only refuse more. Nothing at all is read after the refusal.
+        const pre = name === "publishHandover" ? ["getExtractionReport"] : [];
+        assert.deepEqual(f.queryCalls.map((q) => q.name), pre, "nothing is re-read after a refusal");
         assert.equal(f.refreshes, 0);
       });
     }

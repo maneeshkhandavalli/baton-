@@ -11,7 +11,7 @@ import { afterEach, describe, it } from "node:test";
 
 import * as drainRoute from "../../app/api/pipeline/drain/route";
 import { claimed, jobContext } from "../../lib/pipeline/__tests__/fakes";
-import { actionWorld } from "./support/actions";
+import { actionWorld, workerSlot } from "./support/actions";
 import { captureConsole } from "./support/console-capture";
 import { allowFakeAi, setAiEnv } from "./support/platform";
 
@@ -56,6 +56,7 @@ function world(stage: "extract" | "verify_support") {
     .on("list_links_needing_support", () => (stage === "verify_support" ? [LINK] : []))
     .on("complete_processing_job", (args) => (args.p_outcome === "failed" ? "failed" : "succeeded"))
     .returns("list_run_jobs", { runStatus: "running", jobs: [] });
+  workerSlot(w.adminDb); // Task 01B
   return w;
 }
 

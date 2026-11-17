@@ -16,6 +16,7 @@ import type {
   RevokeAccessTokenInput,
   SubmitGapAnswersInput,
 } from "../../contracts/schemas";
+import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { isWellFormedToken } from "../../db/tokens";
 import { routes } from "../../routes";
@@ -130,8 +131,23 @@ export async function submitGapAnswers(deps: ActionDeps, input: SubmitGapAnswers
 /** Review roles; precondition_failed while the answer is privacy-held (SQL). */
 export async function reviewGapAnswer(deps: ActionDeps, input: ReviewGapAnswerInput): Promise<Result<null>> {
   return action(deps, reviewGapAnswerInput, input, async (actor, v) => {
-    const note = v.note?.trim() ? createInputMasker().text(v.note.trim()) : undefined;
-    await mutations.reviewGapAnswer(deps.adminDb(), actor, { answerId: v.answerId, decision: v.decision, note });
+    const masker = createInputMasker();
+    const note = v.note?.trim() ? masker.text(v.note.trim()) : undefined;
+    // R3 Task 04: the reviewer-supplied required attribute is free text like any other (§12.1).
+    const pointDetail = v.pointDetail?.trim() ? masker.text(v.pointDetail.trim()) : undefined;
+    try {
+      await mutations.reviewGapAnswer(deps.adminDb(), actor, { answerId: v.answerId, decision: v.decision, note, pointDetail });
+    } catch (e) {
+      // The database refuses to accept an answer that would create an owner, contact or account point without its
+      // required attribute (migration 20261117400100). The answer stays submitted and the question open.
+      if (v.decision === "accept" && pointDetail === undefined && isDbError(e) && e.code === "validation_failed") {
+        return failWith("validation_failed", {
+          message: "Add the missing detail from the answer (who or what it is about) to accept it.",
+          details: { reason: "gap_answer_needs_details" },
+        });
+      }
+      throw e;
+    }
     return ok(null);
   });
 }

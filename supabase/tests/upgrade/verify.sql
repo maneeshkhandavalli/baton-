@@ -49,6 +49,45 @@ select tests.ok((select e -> 'guarded' = 'false'::jsonb and e -> 'model_verdict'
                   where e ->> 'point_evidence_id' = tests.id('pr2_link')::text), '300900: a reset verdict is no longer guarded');
 select tests.as_owner();
 
+-- ── 300800: the protected fenced writers have EXACTLY their expected overloads ─
+-- (R3 Task 04) Each of the 8 fenced writers of 300100/300300 has precisely two overloads: the attempt-only original
+-- and the 300800 generation-checked twin. This replaces a count of every `pipeline_*` function whose third argument
+-- is `p_claim_generation`, which also matched unrelated later writers (Task 02's pipeline_list_handover_people) and
+-- stopped the script. Signatures are compared by name and argument TYPES, so a missing twin, a renamed one, or any
+-- extra overload of a protected name (whatever its argument names) is reported. Self-test: verify_selftest.sql.
+create or replace function upgrade.protected_overload_problems()
+returns text[]
+language sql
+stable
+as $fn$
+  with expected(sig) as (values
+    ('pipeline_set_job_provenance(uuid,integer,jsonb)'),
+    ('pipeline_set_job_provenance(uuid,integer,bigint,jsonb)'),
+    ('pipeline_persist_parsed_source(uuid,integer,jsonb,text)'),
+    ('pipeline_persist_parsed_source(uuid,integer,bigint,jsonb,text)'),
+    ('pipeline_mark_source_parse_failed(uuid,integer,text)'),
+    ('pipeline_mark_source_parse_failed(uuid,integer,bigint,text)'),
+    ('pipeline_record_quote_check(uuid,integer,uuid,text)'),
+    ('pipeline_record_quote_check(uuid,integer,bigint,uuid,text)'),
+    ('pipeline_record_support_verdict(uuid,integer,uuid,uuid,text,text,jsonb,bytea)'),
+    ('pipeline_record_support_verdict(uuid,integer,bigint,uuid,uuid,text,text,jsonb,bytea)'),
+    ('pipeline_create_system_gap_question(uuid,integer,uuid,text,text,text,text,text)'),
+    ('pipeline_create_system_gap_question(uuid,integer,bigint,uuid,text,text,text,text,text)'),
+    ('pipeline_set_point_sort_keys(uuid,integer,jsonb)'),
+    ('pipeline_set_point_sort_keys(uuid,integer,bigint,jsonb)'),
+    ('pipeline_store_extract_chunk(uuid,integer,integer,integer,text,jsonb,jsonb)'),
+    ('pipeline_store_extract_chunk(uuid,integer,bigint,integer,integer,text,jsonb,jsonb)')),
+  protected_names as (select distinct split_part(sig, '(', 1) as proname from expected),
+  actual as (
+    select p.proname || '(' || replace(oidvectortypes(p.proargtypes), ', ', ',') || ')' as sig
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname in (select proname from protected_names))
+  select coalesce(array_agg(x order by x), '{}'::text[]) from (
+    select 'unexpected overload: ' || a.sig as x from actual a where a.sig not in (select sig from expected)
+    union all
+    select 'missing overload: ' || e.sig from expected e where e.sig not in (select sig from actual)) d
+$fn$;
+
 -- ── every Round 3 function exists with its signature and grants ─────────────
 do $$
 declare
@@ -97,16 +136,23 @@ begin
     perform tests.ok(pg_get_functiondef(to_regprocedure(f)) like '%_require_actor%', '100500: ' || f || ' validates the actor');
   end loop;
   -- 300800: the new overloads are granted to service_role ONLY (no PUBLIC grant, no other role)
-  perform tests.eq((select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-                     where n.nspname = 'public' and p.proname like 'pipeline\_%' and p.proargnames[3] = 'p_claim_generation'),
-                   8, '300800: exactly 8 generation-checked overloads');
+  perform tests.eq(upgrade.protected_overload_problems(), '{}'::text[],
+                   '300800: each protected writer has exactly its attempt-only original and its generation-checked twin');
   perform tests.eq((select array_agg(distinct coalesce(r.rolname::text, 'PUBLIC') order by coalesce(r.rolname::text, 'PUBLIC'))
                       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                       cross join lateral aclexplode(p.proacl) a
                       left join pg_roles r on r.oid = a.grantee
-                     where n.nspname = 'public' and p.proname like 'pipeline\_%' and p.proargnames[3] = 'p_claim_generation'
+                     where n.nspname = 'public' and p.proargnames[3] = 'p_claim_generation'
+                       and p.proname in ('pipeline_set_job_provenance', 'pipeline_persist_parsed_source', 'pipeline_mark_source_parse_failed',
+                                         'pipeline_record_quote_check', 'pipeline_record_support_verdict',
+                                         'pipeline_create_system_gap_question', 'pipeline_set_point_sort_keys', 'pipeline_store_extract_chunk')
                        and a.privilege_type = 'EXECUTE' and a.grantee <> p.proowner),
                    array['service_role']::text[], '300800: the overloads'' only EXECUTE grantee besides the owner is service_role');
+  -- (R3 Task 04) no pipeline_* function at all (incl. the Task 02/03 writers) is executable by PUBLIC, anon or authenticated
+  perform tests.eq((select array_agg(p.oid::regprocedure::text order by 1) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                     where n.nspname = 'public' and p.proname like 'pipeline\_%'
+                       and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'))),
+                   null::text[], 'no pipeline_* function is executable by a browser role');
   -- 300800: the internal helpers stay executable by no API role
   foreach f in array array['public._pipeline_use_generation(bigint)', 'public._pipeline_claim(uuid,integer,text[])'] loop
     perform tests.ok(to_regprocedure(f) is not null
