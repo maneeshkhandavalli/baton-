@@ -110,13 +110,75 @@ vault and the exclusion rules. No second source identity exists.
 - **Nothing new is stored:** no message digests (decision 11), no copies of raw uploads. Retention is unchanged, and a
   pending update that is never finished expires like any unfinished upload.
 
+## Task 05C: scoped processing and the publication gate
+
+Migration `supabase/migrations/20261117500200_scoped_version_processing.sql` (requires approval before any hosted
+apply; requires 20261117500100).
+
+**Scoped run:**
+- `start_source_update_processing(actor, handover, pipeline, ai_config, jobs)` is server-only, for the creator or an
+  outgoing member, in review only, after a succeeded run, with at least one pending update.
+- **Scope:** derived under the handover lock by `_source_update_scope`, never taken from a request. It is the current
+  versions whose update is `awaiting_processing` or `failed`, plus current sources never extracted.
+- **Required job set:** exactly, per scoped source, `parse` (only when not parsed), `extract` and `verify_quotes`,
+  plus `verify_support`, `analyze` and `prepare_review` once each. Jobs for another source or the superseded version
+  are a conflict; a missing handover-wide stage is invalid.
+- **`source_ids`:** all current included sources. This lets `analyze` compare against every current source;
+  `verify_support` already covers every unverified link of the handover.
+- **Starting it:**
+  - `source_update_processing_scope` tells the server `scoped` or `full`.
+  - `startProcessing` plans with `scopeSourceIds` and calls the scoped function.
+  - An older database, a draft, or nothing pending gets the unchanged full `start_processing`.
+- The existing worker claims, leases, fences and retries these jobs like any others. A second request while a run is
+  active is refused.
+
+**Update lifecycle** (`source_version_changes.state`), recorded by triggers on every path:
+
+| from | to | when |
+|---|---|---|
+| `awaiting_processing` or `failed` | `processing` | an extract job for the new version is created (a retry reuses the same record) |
+| `processing` | `awaiting_detection` | the run succeeded **and** the new version was fully extracted. This is not "ready": comparing it with the handover is 05D |
+| `processing` | `failed` | otherwise. `error_code` is one of `extraction_partial`, `extraction_failed`, `run_failed`, `run_cancelled` |
+| `awaiting_processing`, `failed` or `awaiting_detection` | `superseded` | a newer version became current |
+
+**Publication gate** (`_assert_source_updates_settled`):
+- It is attached to the same two trigger points as Task 04: a new publication row, and in_review → approved. It
+  therefore covers the 3- and 4-argument `publish_handover` and any direct write.
+- These states of a current version's update **block** publication (`source_update_pending`), and no acknowledgement
+  lifts them:
+  - `awaiting_processing`, `processing`, `awaiting_detection`;
+  - `failed` with `run_failed` or `run_cancelled` (the extraction was complete but the handover-wide checks were not:
+    process it again).
+- A `failed` update with an extraction gap (`extraction_partial` or `extraction_failed`) uses Task 04's explicit
+  acknowledgement, unchanged. The update **stays `failed`**, and the publication writes
+  `publication.source_updates_unverified` to the audit log.
+- 05D adds open review items to the same assertion.
+- A refused publication rolls back everything, including any acknowledgement written in the same call.
+- Incoming members keep reading the last publication throughout.
+
+**Task 04 scope, same signatures.** A scoped run extracts only some sources, so `_extraction_publish_gaps` and
+`api_get_extraction_report` judge each source of the latest run and each current source by **its own** latest
+extraction:
+- For a full run this is exactly the previous result.
+- It is never weaker: an older, unacknowledged gap of a source the scoped run did not touch stays a gap.
+- The report lists `sourceUpdates`, each with `blocksPublication`.
+
+**Application:**
+- The publish action refuses early with `source_update_pending` and plain instructions.
+- The publish dialog explains the block and disables Publish.
+- The processing page lists source updates and offers "Process the new version" after an earlier successful run.
+- Settings → Sources shows each update's state.
+
+**Consequence until 05D.** A successfully processed update waits in `awaiting_detection`, which blocks publication by
+design. A new revision with a processed source update therefore cannot be published until change detection exists.
+The previous publication stays available.
+
 ## Not in this stage
 
 The following are deferred to later stages:
 
 | stage | work |
 |---|---|
-| 05C | scoped processing |
 | 05D | change detection: `source_version_changes` states `detecting`, `ready`, `failed`, `detector_version`, `error_code` |
 | 05E | the reviewer queue and decisions |
 | later | freshness UI and provider events |
@@ -125,11 +187,9 @@ The following are deferred to later stages:
 
 ## Risks and decisions
 
-- **Publishing an unprocessed version:** a handover in review can still be published after a new version is activated
-  but before it is processed. Nothing claims that the publication was checked against it, and the transition record
-  stays `awaiting_processing`. A freshness gate belongs to 05C/05D and needs a product decision.
+- **Publishing an unprocessed version:** closed in 05C. The database gate refuses it.
 - **Re-uploading an earlier version's exact file** as a new version is refused as a duplicate, because that file is
   still a live, superseded source.
 - **Versions need the handover in draft or review.** After publishing, the creator starts a revision first. Whether an
-  update should start the revision automatically is a product decision for 05C.
+  update should start the revision automatically is still an open product decision (05C did not change it).
 - **Conversation exclusions block versioning** (see Privacy).

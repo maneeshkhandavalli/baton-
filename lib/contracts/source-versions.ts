@@ -20,6 +20,28 @@ export function isSupersededSourceVersion(s: Pick<SourceSummary, "version">): bo
   return !!s.version && s.version.supersededAt !== null;
 }
 
+/** R3 Task 05C: a plain description of where a source update stands. */
+export function sourceUpdateStateLabel(state: string | null, errorCode: string | null): string {
+  switch (state) {
+    case "awaiting_processing":
+      return "waiting to be processed";
+    case "processing":
+      return "being processed";
+    case "awaiting_detection":
+      return "processed; Baton hasn't yet checked how it changes the handover";
+    case "failed":
+      return errorCode === "extraction_partial"
+        ? "only partly read: process it again, or acknowledge it when publishing"
+        : errorCode === "extraction_failed"
+          ? "couldn't be read: process it again, or acknowledge it when publishing"
+          : "processing didn't finish: process it again";
+    case "superseded":
+      return "replaced by a newer version";
+    default:
+      return "";
+  }
+}
+
 /** The outcomes `create_source_version` returns (see the migration). */
 export const SOURCE_VERSION_OUTCOMES = [
   "created",

@@ -140,7 +140,8 @@ describe("IT-07 (action side): processing never approves or publishes", () => {
     const w = actionWorld();
     allowFakeAi();
     w.userDb.returns("api_list_sources", [sourceRow(w.ids.source, w.ids.handover, { state: "parsed" })]);
-    w.adminDb.returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", [])
+    w.adminDb.returns("source_update_processing_scope", { mode: "full", sourceIds: [] }) // R3 Task 05C: read-only scope lookup
+      .returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", [])
       .returns("list_finishable_runs", []); // DB-15: read-only sweep the drain starts with
     workerSlot(w.adminDb); // Task 01B: the after() drain holds the global worker slot
     const result = await handovers.startProcessing({ handoverId: w.ids.handover });

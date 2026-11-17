@@ -129,7 +129,8 @@ describe("Tier E (R3 Task 05B): a new version of a source", { skip: !ENABLED && 
     // fresh consent activates it; the access level defaults to version 1's
     const s = ok(await recordSourceConsent({ sourceId: v2, consentStatementVersion: "consent@1", consentConfirmed: true, timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent v2");
     assert.equal(s.accessLevel, "everyone");
-    assert.deepEqual(s.version, { lineageId: v1, versionNumber: 2, supersedesSourceId: v1, supersededAt: null, supersededBySourceId: null });
+    assert.deepEqual(s.version, { lineageId: v1, versionNumber: 2, supersedesSourceId: v1, supersededAt: null, supersededBySourceId: null,
+      updateState: "awaiting_processing", updateError: null }); // R3 Task 05C: the update's state is reported too
     const old = await pg.json<{ state: string; deleted: boolean; by: string }>(
       `select jsonb_build_object('state', state, 'deleted', deleted_at is not null, 'by', superseded_by_source_id) from public.sources where id = ${lit(v1)}`);
     assert.deepEqual(old, { state: "parsed", deleted: false, by: v2 });

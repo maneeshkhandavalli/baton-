@@ -104,7 +104,9 @@ select tests.eq((select array_agg(sig order by sig) from it_fns
                       -- R3 Task 03 read API (SECURITY INVOKER, RLS)
                       'api_get_extraction_report', 'api_list_unreviewed_signals', 'api_list_point_flags',
                       -- R3 Task 04: pure, table-free helpers of the extraction report
-                      'extraction_gap_state', 'extraction_coverage_fingerprint'])),
+                      'extraction_gap_state', 'extraction_coverage_fingerprint',
+                      -- R3 Task 05C: pure, table-free helper of the same report
+                      'source_update_blocks_publication'])),
                 null::text[], 'authenticated may execute only the read API and RLS helpers (no mutation, worker or token function)');
 
 -- spot checks of the server-only surface

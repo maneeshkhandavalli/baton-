@@ -221,7 +221,9 @@ begin
        -- R3 Task 03: extraction coverage, unreviewed signals, review flags (SECURITY INVOKER, RLS)
        'api_get_extraction_report', 'api_list_unreviewed_signals', 'api_list_point_flags',
        -- R3 Task 04: pure, table-free helpers used by the SECURITY INVOKER extraction report
-       'extraction_gap_state', 'extraction_coverage_fingerprint');
+       'extraction_gap_state', 'extraction_coverage_fingerprint',
+       -- R3 Task 05C: pure, table-free helper of the same report (does an update block publication?)
+       'source_update_blocks_publication');
   perform tests.ok(v_unexpected is null, 'authenticated executes only reads and RLS helpers; unexpected: ' || coalesce(v_unexpected, ''));
   perform tests.ok(not has_function_privilege('anon', 'public.api_list_my_handovers()', 'EXECUTE'), 'anon executes nothing');
 

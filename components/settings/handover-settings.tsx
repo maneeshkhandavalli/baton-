@@ -22,7 +22,12 @@ import { ACCESS_LEVELS, type AccessLevel, type MaskKind, type MemberRole } from 
 import { deleteHandover, offerCreatorTransfer, respondToCreatorTransfer, startRevision } from "@/lib/actions/handovers";
 import { inviteMember, removeMember, updateMemberClearance } from "@/lib/actions/members";
 import { removeSource } from "@/lib/actions/sources";
-import { isCurrentSourceVersion, isPendingSourceVersion, isSupersededSourceVersion } from "@/lib/contracts/source-versions";
+import {
+  isCurrentSourceVersion,
+  isPendingSourceVersion,
+  isSupersededSourceVersion,
+  sourceUpdateStateLabel,
+} from "@/lib/contracts/source-versions";
 import { routes } from "@/lib/routes";
 
 interface HandoverSettingsProps {
@@ -317,6 +322,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                     <p className="text-xs text-muted-foreground">
                       Version {s.version?.versionNumber}
                       {earlier > 0 && ` · ${earlier === 1 ? "1 earlier version" : `${earlier} earlier versions`} kept with their evidence`}
+                      {s.version?.updateState && ` · ${sourceUpdateStateLabel(s.version.updateState, s.version.updateError ?? null)}`}
                     </p>
                   )}
                   {pending && (

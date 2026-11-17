@@ -347,6 +347,9 @@ const sourceRow = z.object({
       supersedes_source_id: id.nullable(),
       superseded_at: nullableTimestamp,
       superseded_by_source_id: id.nullable(),
+      // R3 Task 05C (migration 20261117500200)
+      update_state: z.enum(["awaiting_processing", "processing", "awaiting_detection", "failed", "superseded"]).nullable().optional(),
+      update_error: nullableText.optional(),
     })
     .optional(),
 });
@@ -377,6 +380,7 @@ export function mapSourceSummary(raw: unknown): SourceSummary {
             supersedesSourceId: v.supersedes_source_id,
             supersededAt: v.superseded_at,
             supersededBySourceId: v.superseded_by_source_id,
+            ...(v.update_state !== undefined ? { updateState: v.update_state, updateError: v.update_error ?? null } : {}),
           },
         }
       : {}),

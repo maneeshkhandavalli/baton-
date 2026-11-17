@@ -374,4 +374,29 @@ select tests.eq(upgrade.strip(tests.read(format('select public.api_get_published
                 '500100: the incoming member reads the pre-upgrade publication unchanged after a new source version');
 select tests.as_owner();
 
+-- ── 500200: scoped update processing and the publication gate on PRE-UPGRADE rows ─
+select tests.ok(has_function_privilege('service_role', 'public.start_source_update_processing(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.start_source_update_processing(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.source_update_processing_scope(uuid,uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.source_update_processing_scope(uuid,uuid)', 'EXECUTE'),
+                '500200: scoped processing is server-only');
+select tests.eq((select state from public.source_version_changes where to_source_id = tests.id('spub_v2')), 'awaiting_processing',
+                '500200: the pre-upgrade source''s new version awaits processing');
+select tests.as_user('ann');
+select tests.eq(public.source_update_processing_scope(tests.actor(), tests.id('hpub')) ->> 'mode', 'full',
+                '500200: a handover never processed by a run is processed in full');
+select tests.throws(format('select public.publish_handover(%L, %L)', tests.actor(), tests.id('hpub')), 'BTPF0',
+                    '500200: the unprocessed update blocks republishing the pre-upgrade handover');
+select tests.as_owner();
+select tests.eq((select count(*)::int from public.handover_publications where handover_id = tests.id('hpub')), 1,
+                '500200: the pre-upgrade publication is the only one');
+select tests.as_user('inc');
+select tests.eq(upgrade.strip(tests.read(format('select public.api_get_published_handover(%L)', tests.id('hpub')))),
+                (select reads -> 'inc:hpub:published' from upgrade.snapshot where id = 1),
+                '500200: the incoming member still reads the pre-upgrade publication unchanged');
+select tests.as_owner();
+-- Task 04 scope on the pre-upgrade mixed run: identical to the latest-run view (a full run extracted every source)
+select tests.eq((select count(*)::int from public._extraction_publish_gaps(tests.id('hx'))), 1,
+                '500200: the pre-upgrade mixed run still has exactly its one failed source as a gap');
+
 select 'upgrade verified' as result;

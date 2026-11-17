@@ -17,7 +17,7 @@ import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
 import type { MaskKind } from "@/lib/contracts/enums";
 import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
-import { isCurrentSourceVersion } from "@/lib/contracts/source-versions";
+import { isCurrentSourceVersion, sourceUpdateStateLabel } from "@/lib/contracts/source-versions";
 import { routes } from "@/lib/routes";
 import { ExtractionCoverageSummary } from "@/components/review/extraction-coverage";
 import type { ExtractionReport } from "@/lib/contracts/extraction";
@@ -52,6 +52,9 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   const { run: r, handoverState } = status;
   // R3 Task 05B: the current version of each source (earlier versions and pending updates are not processed)
   const sources = status.sources.filter(isCurrentSourceVersion);
+  // R3 Task 05C: new versions of sources, and where each stands (a scoped run processes only these)
+  const updates = sources.filter((s) => (s.version?.versionNumber ?? 1) > 1 && s.version?.updateState);
+  const pendingUpdates = updates.filter((s) => s.version?.updateState === "awaiting_processing" || s.version?.updateState === "failed");
   const active = r?.status === "queued" || r?.status === "running";
 
   useEffect(() => {
@@ -249,7 +252,18 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
           </ol>
         )}
 
-        {!active && canStart && (handoverState === "draft" || handoverState === "in_review") && r?.status !== "succeeded" && (
+        {updates.length > 0 && (
+          <ul aria-label="Source updates" className="space-y-1 border-t border-border pt-4 text-sm">
+            {updates.map((s) => (
+              <li key={s.id}>
+                <span className="font-medium">{s.title}</span>, version {s.version?.versionNumber}:{" "}
+                <span className="text-muted-foreground">{sourceUpdateStateLabel(s.version?.updateState ?? null, s.version?.updateError ?? null)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!active && canStart && (handoverState === "draft" || handoverState === "in_review") && (r?.status !== "succeeded" || pendingUpdates.length > 0) && (
           <div className="space-y-4 border-t border-border pt-5">
             {needsConsent.length > 0 && (
               <div className="space-y-3">
@@ -276,6 +290,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                     <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
                     Starting…
                   </>
+                ) : pendingUpdates.length > 0 && handoverState === "in_review" ? (
+                  pendingUpdates.length === 1 ? "Process the new version" : "Process the new versions"
                 ) : r ? (
                   <>
                     <RotateCcw aria-hidden="true" data-icon="inline-start" />

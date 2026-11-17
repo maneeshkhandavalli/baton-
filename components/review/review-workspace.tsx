@@ -20,7 +20,14 @@ import { useHotkeys } from "@/hooks/use-hotkeys";
 import type { GapQuestionSummary, HandoverSummary, PointDetail, ReadinessReport, SourceSummary } from "@/lib/contracts/dto";
 import { EVIDENCE_STATUSES, type EvidenceStatus, type PointCategory, type ReviewState } from "@/lib/contracts/enums";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
-import { blockingExtractionGaps, type ExtractionReport, type PointReviewFlag, type UnreviewedSignalMessage } from "@/lib/contracts/extraction";
+import {
+  blockingExtractionGaps,
+  blockingSourceUpdates,
+  sourceUpdateBlockText,
+  type ExtractionReport,
+  type PointReviewFlag,
+  type UnreviewedSignalMessage,
+} from "@/lib/contracts/extraction";
 import { createGapQuestion } from "@/lib/actions/gaps";
 import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
@@ -79,6 +86,8 @@ export function ReviewWorkspace({
   preview = false,
 }: ReviewWorkspaceProps) {
   const extractionGaps = extraction ? blockingExtractionGaps(extraction) : [];
+  // R3 Task 05C: a source update not processed and checked yet; it cannot be acknowledged away
+  const updateBlocks = extraction ? blockingSourceUpdates(extraction) : [];
   const [acknowledgeGaps, setAcknowledgeGaps] = useState(false);
   const [section, setSection] = useState<SectionFilter>("all");
   const [status, setStatus] = useState<EvidenceStatus | "all">("all");
@@ -464,6 +473,15 @@ export function ReviewWorkspace({
               placeholder="A few sentences for the incoming member. Only include information everyone may see."
             />
           </div>
+          {updateBlocks.length > 0 && (
+            <div role="alert" className="space-y-1 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-fg">
+              <p className="font-medium">This handover can&rsquo;t be published yet.</p>
+              {updateBlocks.map((u) => (
+                <p key={u.sourceId}>{sourceUpdateBlockText(u)}</p>
+              ))}
+              <p>The published version stays available to the incoming member in the meantime.</p>
+            </div>
+          )}
           {extractionGaps.length > 0 && (
             <div className="space-y-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-fg">
               <p>
@@ -480,7 +498,7 @@ export function ReviewWorkspace({
               Cancel
             </Button>
             <Button
-              disabled={isPending || (extractionGaps.length > 0 && !acknowledgeGaps)}
+              disabled={isPending || updateBlocks.length > 0 || (extractionGaps.length > 0 && !acknowledgeGaps)}
               onClick={() =>
                 run(
                   () =>

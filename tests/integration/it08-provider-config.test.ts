@@ -109,12 +109,13 @@ describe("IT-08: with the allowed fake adapter the server, not the request, name
     const w = actionWorld();
     allowFakeAi();
     w.userDb.returns("api_list_sources", [sourceRow(w.ids.source, w.ids.handover)]);
-    w.adminDb.fails("start_processing", "BTPF0");
+    w.adminDb.returns("source_update_processing_scope", { mode: "full", sourceIds: [] }).fails("start_processing", "BTPF0");
     const result = await startProcessing({ handoverId: w.ids.handover });
     assert.ok(!result.ok);
     assert.equal(result.error.code, "precondition_failed");
     assert.equal(pendingAfter(), 0);
-    assert.deepEqual(w.events, ["db:api_list_sources", "db:start_processing"]);
-    assert.equal(allCalls(w).length, 2);
+    // R3 Task 05C: the read-only scope lookup precedes the start
+    assert.deepEqual(w.events, ["db:api_list_sources", "db:source_update_processing_scope", "db:start_processing"]);
+    assert.equal(allCalls(w).length, 3);
   });
 });

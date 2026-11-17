@@ -38,6 +38,13 @@ export interface PlanInput {
   handoverId: string;
   sources: ReadonlyArray<PlanSource>;
   aiConfig: AiRunConfig;
+  /**
+   * R3 Task 05C: a SCOPED run (a source update). Only these sources get source-specific jobs (parse, extract,
+   * verify_quotes); the handover-wide stages still run over every included source. The scope comes from the
+   * database (source_update_processing_scope), never from a request, and start_source_update_processing checks it
+   * again under the handover lock. Absent: a full run (unchanged).
+   */
+  scopeSourceIds?: ReadonlyArray<string>;
 }
 
 export interface ProcessingPlan {
@@ -80,7 +87,7 @@ export function canonicalJson(value: unknown): string {
 
 const sha256Hex = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 
-function stageHash(stage: PipelineStage, scope: { sourceId: string } | { sourceIds: string[] }, ai: AiRunConfig): string {
+function stageHash(stage: PipelineStage, scope: { sourceId: string } | { sourceIds: string[]; scope?: string[] }, ai: AiRunConfig): string {
   const material: Record<string, unknown> = { v: 1, stage, pipelineVersion: PIPELINE_VERSION, ...scope };
   if (stage === "extract") material.ai = { provider: ai.provider, adapterVersion: ai.adapterVersion, ...ai.extract };
   if (stage === "verify_support") material.ai = { provider: ai.provider, adapterVersion: ai.adapterVersion, ...ai.verify };
@@ -120,8 +127,22 @@ export function planProcessingRun(input: PlanInput): Result<ProcessingPlan> {
     };
   }
 
+  let perSource = included;
+  let scopeMaterial: { scope?: string[] } = {};
+  if (input.scopeSourceIds !== undefined) {
+    if (!Array.isArray(input.scopeSourceIds) || input.scopeSourceIds.length === 0) return invalid("scopeSourceIds");
+    const byId = new Map(included.map((s) => [s.id.toLowerCase(), s]));
+    const scope = new Set<string>();
+    for (const id of input.scopeSourceIds) {
+      if (typeof id !== "string" || !byId.has(id.toLowerCase()) || scope.has(id.toLowerCase())) return invalid("scopeSourceIds");
+      scope.add(id.toLowerCase());
+    }
+    perSource = included.filter((s) => scope.has(s.id.toLowerCase()));
+    scopeMaterial = { scope: [...scope].sort() };
+  }
+
   const jobs: PlannedJob[] = [];
-  for (const s of included) {
+  for (const s of perSource) {
     const scope = { sourceId: s.id.toLowerCase() };
     if (s.state !== "parsed") jobs.push({ stage: "parse", sourceId: s.id, inputHashHex: stageHash("parse", scope, ai) });
     jobs.push({ stage: "extract", sourceId: s.id, inputHashHex: stageHash("extract", scope, ai) });
@@ -129,7 +150,7 @@ export function planProcessingRun(input: PlanInput): Result<ProcessingPlan> {
   }
   const sourceIds = included.map((s) => s.id.toLowerCase()).sort();
   for (const stage of ["verify_support", "analyze", "prepare_review"] as const) {
-    jobs.push({ stage, sourceId: null, inputHashHex: stageHash(stage, { sourceIds }, ai) });
+    jobs.push({ stage, sourceId: null, inputHashHex: stageHash(stage, { sourceIds, ...scopeMaterial }, ai) });
   }
 
   const aiConfig: AiRunConfig = {

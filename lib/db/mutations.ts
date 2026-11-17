@@ -112,6 +112,45 @@ export async function startProcessing(
   return { runId };
 }
 
+/**
+ * R3 Task 05C: what to start, decided by the database: `scoped` (only these sources get source-specific jobs:
+ * pending source updates and never-extracted current sources) or `full`. Read-only; actor-checked.
+ */
+export async function sourceUpdateProcessingScope(
+  db: DbClient,
+  actor: VerifiedActor,
+  handoverId: string,
+): Promise<{ mode: "scoped" | "full"; sourceIds: string[] }> {
+  const r = (await call(db, actor, "source_update_processing_scope", { p_handover_id: handoverId })) as
+    | { mode?: unknown; sourceIds?: unknown }
+    | null;
+  if (r?.mode === "scoped" && Array.isArray(r.sourceIds) && r.sourceIds.length > 0) {
+    return { mode: "scoped", sourceIds: r.sourceIds.map(asUuid) };
+  }
+  if (r?.mode === "full") return { mode: "full", sourceIds: [] };
+  throw new DbError("internal");
+}
+
+/** R3 Task 05C: a scoped run for source updates; the database re-derives the scope and checks the job set. */
+export async function startSourceUpdateProcessing(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: {
+    handoverId: string;
+    pipelineVersion: string;
+    aiConfig: { provider: string } & Record<string, unknown>;
+    jobs: Array<{ stage: PipelineStage; sourceId: string | null; inputHashHex: string }>;
+  },
+): Promise<{ runId: string }> {
+  const runId = asUuid(await call(db, actor, "start_source_update_processing", {
+    p_handover_id: input.handoverId,
+    p_pipeline_version: input.pipelineVersion,
+    p_ai_config: input.aiConfig,
+    p_jobs: input.jobs.map((j) => ({ stage: j.stage, sourceId: j.sourceId, inputHash: j.inputHashHex })),
+  }));
+  return { runId };
+}
+
 export const cancelProcessing = async (db: DbClient, actor: VerifiedActor, handoverId: string) =>
   void (await call(db, actor, "cancel_processing", { p_handover_id: handoverId }));
 

@@ -143,6 +143,9 @@ export interface SourceVersionInfo {
   supersedesSourceId: string | null;
   supersededAt: string | null;
   supersededBySourceId: string | null;
+  /** R3 Task 05C: where this version's update stands (null for a first version or an older database). */
+  updateState?: "awaiting_processing" | "processing" | "awaiting_detection" | "failed" | "superseded" | null;
+  updateError?: string | null;
 }
 
 /** R3 Task 05B: what create_source_version decided. Only `upload` needs the signed ticket. */

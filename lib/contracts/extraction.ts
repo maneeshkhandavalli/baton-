@@ -107,6 +107,39 @@ export interface ExtractionReport {
   };
   flags: { possibleContradictions: number; unresolvedAttribution: number; inferredAttribution: number };
   blockers: ExtractionBlocker[];
+  /** R3 Task 05C: updates of current source versions (empty on an older database). */
+  sourceUpdates: SourceUpdateStatus[];
+}
+
+/**
+ * R3 Task 05C: where a new version of a source stands. `awaiting_detection` is processed but not yet compared with
+ * the handover (Task 05D), so it is not "ready". `blocksPublication` is the database's own rule
+ * (source_update_blocks_publication); it cannot be acknowledged away. A `failed` update with an extraction gap
+ * does not block here: it goes through the extraction acknowledgement instead and stays `failed`.
+ */
+export const SOURCE_UPDATE_STATES = ["awaiting_processing", "processing", "awaiting_detection", "failed", "superseded"] as const;
+export type SourceUpdateState = (typeof SOURCE_UPDATE_STATES)[number];
+
+export interface SourceUpdateStatus {
+  sourceId: string;
+  previousSourceId: string;
+  title: string | null;
+  fromVersion: number;
+  toVersion: number;
+  state: SourceUpdateState;
+  errorCode: string | null;
+  blocksPublication: boolean;
+}
+
+export interface RawSourceUpdate {
+  sourceId?: string;
+  previousSourceId?: string;
+  title?: string | null;
+  fromVersion?: number;
+  toVersion?: number;
+  state?: string;
+  errorCode?: string | null;
+  blocksPublication?: boolean;
 }
 
 // ── Raw shape returned by api_get_extraction_report ──────────────────────────
@@ -142,6 +175,7 @@ export interface RawExtractionReport {
   runStatus?: string | null;
   sources?: RawSourceCoverage[] | null;
   flags?: { possibleContradictions?: number; unresolvedAttribution?: number; inferredAttribution?: number } | null;
+  sourceUpdates?: RawSourceUpdate[] | null;
 }
 
 const GAP_STATES: ReadonlySet<string> = new Set(["complete", "partial", "failed", "in_progress", "not_processed"]);
@@ -274,7 +308,50 @@ export function buildExtractionReport(raw: RawExtractionReport | null | undefine
     },
     flags,
     blockers,
+    sourceUpdates: available ? sourceUpdatesOf(raw?.sourceUpdates) : [],
   };
+}
+
+const UPDATE_STATES: ReadonlySet<string> = new Set(SOURCE_UPDATE_STATES);
+
+function sourceUpdatesOf(raw: RawSourceUpdate[] | null | undefined): SourceUpdateStatus[] {
+  return (raw ?? []).flatMap((u) =>
+    typeof u.sourceId === "string" && typeof u.previousSourceId === "string" && UPDATE_STATES.has(u.state ?? "")
+      ? [
+          {
+            sourceId: u.sourceId,
+            previousSourceId: u.previousSourceId,
+            title: u.title ?? null,
+            fromVersion: n(u.fromVersion),
+            toVersion: n(u.toVersion),
+            state: u.state as SourceUpdateState,
+            errorCode: typeof u.errorCode === "string" ? u.errorCode : null,
+            // fail closed: anything but an explicit `false` from the database blocks
+            blocksPublication: u.blocksPublication !== false,
+          },
+        ]
+      : [],
+  );
+}
+
+/** R3 Task 05C: source updates that keep the handover from being published (no acknowledgement can lift them). */
+export function blockingSourceUpdates(report: ExtractionReport): SourceUpdateStatus[] {
+  return report.available ? report.sourceUpdates.filter((u) => u.blocksPublication) : [];
+}
+
+/** A plain explanation of what the reviewer needs to do about one blocking update. */
+export function sourceUpdateBlockText(u: SourceUpdateStatus): string {
+  const name = u.title ?? "a source";
+  switch (u.state) {
+    case "awaiting_processing":
+      return `Version ${u.toVersion} of ${name} hasn't been processed yet. Start processing to read it.`;
+    case "processing":
+      return `Version ${u.toVersion} of ${name} is being processed. Wait for it to finish.`;
+    case "awaiting_detection":
+      return `Version ${u.toVersion} of ${name} was processed, but Baton hasn't yet checked how it changes this handover.`;
+    default:
+      return `Processing version ${u.toVersion} of ${name} didn't finish. Process it again.`;
+  }
 }
 
 /**

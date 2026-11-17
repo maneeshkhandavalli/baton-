@@ -670,19 +670,20 @@ describe("startProcessing (I3)", () => {
   it("scheduleDrain runs only after a successful start", async () => {
     const f = startDeps();
     await handovers.startProcessing(f.deps, { handoverId: H });
-    assert.deepEqual(f.events, ["start_processing", "scheduleDrain"]);
+    // R3 Task 05C: the read-only scope lookup (scoped vs full run) precedes the start
+    assert.deepEqual(f.events, ["source_update_processing_scope", "start_processing", "scheduleDrain"]);
 
     const refused = startDeps({ rpc: { start_processing: { error: { code: "BTPF0", message: "x" } } } });
     const r = await handovers.startProcessing(refused.deps, { handoverId: H });
     assert.equal(!r.ok && r.error.code, "precondition_failed");
-    assert.deepEqual(refused.events, ["start_processing"], "no drain when the run was not created");
+    assert.deepEqual(refused.events, ["source_update_processing_scope", "start_processing"], "no drain when the run was not created");
 
     const badPlan = startDeps({
       planProcessingRun: () => ({ ok: false, error: { code: "validation_failed", message: "m", retryable: false } }),
     });
     const r2 = await handovers.startProcessing(badPlan.deps, { handoverId: H });
     assert.equal(!r2.ok && r2.error.code, "validation_failed");
-    assert.deepEqual(badPlan.events, []);
+    assert.deepEqual(badPlan.events, ["source_update_processing_scope"], "nothing is started from a refused plan");
   });
 
   it("start_processing's consent refusal (e.g. consent recorded for another provider) is consent_required with an actionable message", async () => {
@@ -694,7 +695,7 @@ describe("startProcessing (I3)", () => {
     assert.equal(handovers.CONSENT_REQUIRED_REASON, "consent_required", "components/shared/run-status.ts uses the same literal");
     assert.equal(r.error.message, handovers.CONSENT_REQUIRED_MESSAGE);
     assert.ok(!r.error.message.includes("configured AI provider"), "the database message never reaches the client");
-    assert.deepEqual(f.events, ["start_processing"], "no drain");
+    assert.deepEqual(f.events, ["source_update_processing_scope", "start_processing"], "no drain");
 
     const other = startDeps({ rpc: { start_processing: { error: { code: "BTCF0", message: "a run is already active" } } } });
     const r2 = await handovers.startProcessing(other.deps, { handoverId: H });
