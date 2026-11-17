@@ -480,3 +480,51 @@ export async function listFinishableRuns(adminDb: DbClient, limit = 20): Promise
 export async function setPointSortKeys(adminDb: DbClient, claim: JobClaim, keys: Array<{ pointId: string; sortKey: number }>): Promise<number> {
   return Number(await fencedRpc(adminDb, "pipeline_set_point_sort_keys", claim, { p_keys: keys }));
 }
+
+/**
+ * Task 01B: one global worker slot per concurrent sweep (migration 20261117100100). A sweep holds a slot
+ * for its whole drain; `null` means every slot is held (the caller returns a no-work result). The token
+ * fences renew/release: a worker whose slot expired and was taken can neither extend nor free it.
+ * A database without these functions throws `PipelineSchemaError` (the worker then refuses to drain).
+ */
+export interface WorkerSlot {
+  slot: number;
+  token: string;
+  generation: number;
+}
+
+const workerSlotSchema = z.object({ slot: z.number().int().min(1), token: z.string().uuid(), generation: z.coerce.number().int() });
+
+async function slotRpc(adminDb: DbClient, fn: string, args: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await callRpc(adminDb, fn, args);
+  } catch (e) {
+    if (e instanceof DbError && e.sqlState !== undefined && MISSING_FUNCTION_STATES.has(e.sqlState)) throw new PipelineSchemaError(fn);
+    throw e;
+  }
+}
+
+export async function acquireWorkerSlot(
+  adminDb: DbClient,
+  input: { maxSlots: number; leaseSeconds: number; trigger: string },
+): Promise<WorkerSlot | null> {
+  const data = await slotRpc(adminDb, "acquire_pipeline_worker_slot", {
+    p_max_slots: input.maxSlots,
+    p_lease_seconds: input.leaseSeconds,
+    p_trigger: input.trigger,
+  });
+  if (data === null || data === undefined) return null;
+  const parsed = workerSlotSchema.safeParse(data);
+  if (!parsed.success) throw new DbError("internal");
+  return parsed.data;
+}
+
+/** True while the slot is still this worker's (lease extended); false once it expired or was taken. */
+export async function renewWorkerSlot(adminDb: DbClient, slot: WorkerSlot, leaseSeconds: number): Promise<boolean> {
+  return (await slotRpc(adminDb, "renew_pipeline_worker_slot", { p_slot: slot.slot, p_token: slot.token, p_lease_seconds: leaseSeconds })) === true;
+}
+
+/** Frees the slot if this worker still holds it; false when a newer worker holds it (nothing changes). */
+export async function releaseWorkerSlot(adminDb: DbClient, slot: WorkerSlot): Promise<boolean> {
+  return (await slotRpc(adminDb, "release_pipeline_worker_slot", { p_slot: slot.slot, p_token: slot.token })) === true;
+}

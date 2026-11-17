@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import * as drainRoute from "../../app/api/pipeline/drain/route";
-import { createHandover, startProcessing } from "../../lib/actions/handovers";
+import { continueProcessing, createHandover, startProcessing } from "../../lib/actions/handovers";
 import { confirmSourceUploaded, createSourceUpload, previewSource, recordSourceConsent } from "../../lib/actions/sources";
 import { getQueries } from "../../lib/data";
 import { SOURCE_BUCKET } from "../../lib/db/storage";
@@ -32,6 +32,7 @@ import {
   allowFakeAi,
   currentUserId,
   discardAfter,
+  flushAfter,
   installCustomBackends,
   pendingAfter,
   resetPlatform,
@@ -61,7 +62,7 @@ function ok<T>(r: { ok: true; data: T } | { ok: false; error: unknown }, label: 
   return r.data;
 }
 
-type Report = { claimed: number; succeeded: number; retried: number; failed: number; deferred: number; skipped: number; lost: number };
+type Report = { claimed: number; succeeded: number; retried: number; failed: number; deferred: number; skipped: number; lost: number; busy: number };
 type JobRow = { id: string; stage: string; status: string; attempt: number; log: number; code: string | null; message: string | null; row: string };
 
 describe("JOB-1: the scheduled worker advances runs with no browser", { skip: !ENABLED && "set BATON_IT_PG=1 (needs Docker)" }, () => {
@@ -180,7 +181,12 @@ describe("JOB-1: the scheduled worker advances runs with no browser", { skip: !E
       reports.push(...result);
     }
     t.diagnostic(`overlapping sweeps: ${JSON.stringify(reports)}`);
-    t.diagnostic(`sweeps that claimed work: ${reports.filter((r) => r.claimed > 0).length} of ${reports.length}`);
+    t.diagnostic(`sweeps that claimed work: ${reports.filter((r) => r.claimed > 0).length} of ${reports.length}; busy: ${reports.filter((r) => r.busy === 1).length}`);
+    // Task 01B: with the default limit (one sweep) the concurrent calls were turned away, not run in parallel.
+    assert.ok(reports.some((r) => r.busy === 1), "overlapping calls found the single worker slot held");
+    assert.ok(reports.filter((r) => r.busy === 1).every((r) => r.claimed === 0), "a busy answer did nothing");
+    assert.deepEqual(await pg.json(`select jsonb_agg(jsonb_build_object('slot', slot, 'held', holder is not null)) from public.pipeline_worker_slots`),
+      [{ slot: 1, held: false }], "one slot row only (limit 1), released after every sweep");
     const rows: JobRow[] = [];
     for (const { handoverId, runId } of [a, b]) {
       assert.equal(await runStatus(runId), "succeeded");
@@ -254,5 +260,76 @@ describe("JOB-1: the scheduled worker advances runs with no browser", { skip: !E
     assert.equal(await runStatus(runId), "queued");
     await sweepUntilDone(runId);
     assert.equal(await runStatus(runId), "succeeded");
+  });
+
+  // ── Task 01B ────────────────────────────────────────────────────────────────────────────────────────
+
+  const holdSlot = async (lease = 300) =>
+    (await adminDb.rpc("acquire_pipeline_worker_slot", { p_max_slots: 1, p_lease_seconds: lease, p_trigger: "other" })).data as
+      { slot: number; token: string } | null;
+  const releaseSlot = async (s: { slot: number; token: string }) =>
+    (await adminDb.rpc("release_pipeline_worker_slot", { p_slot: s.slot, p_token: s.token })).data;
+
+  it("7. ten simultaneous acquisitions: exactly one slot is granted (limit 1)", async () => {
+    const results = await Promise.all(Array.from({ length: 10 }, () => holdSlot()));
+    const granted = results.filter((r) => r !== null);
+    assert.equal(granted.length, 1, JSON.stringify(results));
+    assert.equal(await releaseSlot(granted[0]!), true);
+  });
+
+  it("8. the after() drain (shared by startProcessing and the page nudge) and the scheduler wait on the same slot", async () => {
+    const holder = await holdSlot();
+    assert.ok(holder, "a sweep is running");
+
+    const { handoverId, runId } = await startRunThenCloseTab("Autonomous worker: shared slot");
+    // startRunThenCloseTab discards the start's after() drain; send a page nudge and run ITS after() drain.
+    as("ann");
+    ok(await continueProcessing({ handoverId }), "continueProcessing");
+    const nudge = await captureConsole(() => flushAfter());
+    assert.equal(nudge.result, 1, "the nudge scheduled one after() drain");
+    assert.match(JSON.stringify(nudge.lines), /worker_busy[^\]]*after_drain/, "the nudge's drain found the slot held");
+    signOut();
+
+    const scheduled = await sweep();
+    assert.equal(scheduled.busy, 1, "the scheduler's sweep found the slot held");
+    assert.equal(await runStatus(runId), "queued", "nothing ran while another sweep held the slot");
+
+    assert.equal(await releaseSlot(holder), true);
+    await sweepUntilDone(runId);
+    assert.equal(await runStatus(runId), "succeeded");
+  });
+
+  it("9. a crashed sweep's slot is recovered when its lease expires; its stale token cannot release the new holder", async () => {
+    const crashed = await holdSlot(30);
+    assert.ok(crashed);
+    const { runId } = await startRunThenCloseTab("Autonomous worker: crashed sweep");
+    assert.equal((await sweep()).busy, 1, "held while the crashed sweep's lease is live");
+    await pg.json(`update public.pipeline_worker_slots set lease_expires_at = now() - interval '1 second' where slot = 1`);
+    const fresh = await holdSlot();
+    assert.ok(fresh, "the expired slot is taken over");
+    assert.equal(await releaseSlot(crashed), false, "the crashed sweep cannot release the new holder's slot");
+    assert.equal((await sweep()).busy, 1, "still held by the new holder");
+    assert.equal(await releaseSlot(fresh), true);
+    await sweepUntilDone(runId);
+    assert.equal(await runStatus(runId), "succeeded");
+  });
+
+  it("10. HEAD never starts processing", async () => {
+    const { runId } = await startRunThenCloseTab("Autonomous worker: HEAD");
+    const calls = adminDb.calls.length;
+    const res = await drainRoute.HEAD();
+    assert.equal(res.status, 405);
+    assert.equal(adminDb.calls.length, calls, "no database call");
+    assert.equal(await runStatus(runId), "queued");
+    await sweepUntilDone(runId);
+  });
+
+  it("11. the scheduler's gate: due for a new run, not due once everything is finished", async () => {
+    const due = async () => (await adminDb.rpc("pipeline_work_due", {})).data;
+    assert.equal(await due(), false, "every earlier run is finished: nothing due");
+    const { runId } = await startRunThenCloseTab("Autonomous worker: gate");
+    assert.equal(await due(), true, "a new run's first job is due");
+    await sweepUntilDone(runId);
+    assert.equal(await due(), false, "finished again: the scheduler makes no call");
   });
 });

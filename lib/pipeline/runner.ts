@@ -64,6 +64,11 @@ export interface DrainReport {
 export interface DrainOptions {
   maxJobs?: number;
   deadlineMs?: number;
+  /**
+   * Task 01B: asked before every claim; false stops the drain (the worker slot was lost). Job-level
+   * fencing still protects a job already in progress.
+   */
+  shouldContinue?: () => Promise<boolean>;
 }
 
 export interface DrainerDeps {
@@ -266,6 +271,10 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
     }
 
     while (report.claimed < maxJobs && deadlineAt - now() >= minRemaining) {
+      if (opts.shouldContinue && !(await opts.shouldContinue())) {
+        logger.warn("drain_stopped", { reason: "worker_slot_lost" });
+        break;
+      }
       let jobs: ClaimedJob[];
       try {
         jobs = await claimReadyJobs(db, 1, lease); // one at a time: a lease never ticks while queued in memory

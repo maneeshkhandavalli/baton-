@@ -12,12 +12,13 @@ import { describe, it } from "node:test";
 
 import * as drainRoute from "../../app/api/pipeline/drain/route";
 import { createGapInterviewLink, submitGapAnswers } from "../../lib/actions/gaps";
+import { signDispatch } from "../../lib/pipeline/worker-auth";
 import { inviteMember } from "../../lib/actions/members";
 import { getQueries } from "../../lib/data";
 import { routes } from "../../lib/routes";
 import { acceptInvite, sendInviteMagicLink } from "../../lib/supabase/invites";
 import { authCallbackUrl } from "../../lib/supabase/site-url";
-import { actionWorld, allCalls, ACTOR, type ActionWorld } from "./support/actions";
+import { actionWorld, allCalls, ACTOR, workerSlot, type ActionWorld } from "./support/actions";
 import { captureConsole } from "./support/console-capture";
 import { authCalls, setRequestHeaders, signInAs, SITE_URL } from "./support/platform";
 
@@ -211,19 +212,33 @@ describe("IT-13 / QA-M9: POST /api/pipeline/drain", () => {
   const post = (headers: Record<string, string> = {}) =>
     drainRoute.POST(new Request("https://baton.example.test/api/pipeline/drain", { method: "POST", headers }));
 
-  function world(secret: string | null = SECRET) {
+  function world(secret: string | null = SECRET, opts: { busy?: boolean } = {}) {
     const w = actionWorld(false);
     if (secret === null) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = secret;
     w.adminDb.returns("claim_ready_processing_jobs", []).returns("list_finishable_runs", []); // DB-15 read
+    workerSlot(w.adminDb, opts); // Task 01B: every drain holds the global worker slot
     return w;
   }
 
-  it("only POST and GET are exported (JOB-1: Vercel cron jobs call with GET)", () => {
-    const exported = Object.keys(drainRoute).filter((k) => /^(PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(k));
+  const SLOT_SEQUENCE = ["acquire_pipeline_worker_slot", "list_finishable_runs", "renew_pipeline_worker_slot",
+    "claim_ready_processing_jobs", "release_pipeline_worker_slot"];
+
+  it("only POST, GET and an explicit HEAD are exported (JOB-1: Vercel cron jobs call with GET)", () => {
+    const exported = Object.keys(drainRoute).filter((k) => /^(PUT|PATCH|DELETE|OPTIONS)$/.test(k));
     assert.deepEqual(exported, []);
     assert.equal(typeof drainRoute.POST, "function");
     assert.equal(typeof drainRoute.GET, "function");
+    assert.equal(typeof drainRoute.HEAD, "function", "explicit, so Next.js never maps HEAD onto GET (a drain)");
+  });
+
+  it("HEAD never drains: 405, no authentication, no database call, no log, even with the right secret", async () => {
+    const w = world();
+    const { result: response, lines } = await captureConsole(() => drainRoute.HEAD());
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get("allow"), "GET, POST");
+    assert.deepEqual(allCalls(w), []);
+    assert.deepEqual(lines, []);
   });
 
   const get = (headers: Record<string, string> = {}) =>
@@ -239,25 +254,68 @@ describe("IT-13 / QA-M9: POST /api/pipeline/drain", () => {
     }
   });
 
-  it("GET with the right secret runs the same fixed budget and answers counts only", async () => {
+  it("GET with the right secret runs the same fixed budget, inside the worker slot, and answers counts only", async () => {
     const w = world();
     const response = await get({ authorization: `Bearer ${SECRET}`, "user-agent": "vercel-cron/1.0" });
     assert.equal(response.status, 200);
     const body = (await response.json()) as Record<string, unknown>;
     assert.ok(Object.values(body).every((v) => typeof v === "number"), JSON.stringify(body));
-    assert.deepEqual(w.adminDb.fns(), ["list_finishable_runs", "claim_ready_processing_jobs"]);
+    assert.equal(body.busy, 0);
+    assert.deepEqual(w.adminDb.fns(), SLOT_SEQUENCE);
     assert.equal(w.adminDb.last("claim_ready_processing_jobs")?.args.p_limit, 1);
+    assert.equal(w.adminDb.last("acquire_pipeline_worker_slot")?.args.p_trigger, "vercel_schedule");
+  });
+
+  it("every slot held: 200 busy with zero counts, and no job is claimed", async () => {
+    const w = world(SECRET, { busy: true });
+    const response = await post({ authorization: `Bearer ${SECRET}` });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0, skipped: 0, lost: 0, busy: 1 });
+    assert.deepEqual(w.adminDb.fns(), ["acquire_pipeline_worker_slot"]);
+  });
+
+  it("the database scheduler's signed dispatch is accepted; the secret itself is never sent", async () => {
+    const w = world();
+    const at = Math.floor(Date.now() / 1000);
+    const header = `v1.${at}.77.${signDispatch(SECRET, at, 77)}`;
+    assert.ok(!header.includes(SECRET));
+    const { result: response, lines } = await captureConsole(() => post({ "x-baton-dispatch": header }));
+    assert.equal(response.status, 200);
+    assert.equal(w.adminDb.last("acquire_pipeline_worker_slot")?.args.p_trigger, "pg_cron");
+    const text = JSON.stringify(lines);
+    assert.match(text, /dispatchId\W+77/, "the dispatch id correlates the log with baton_ops.worker_dispatches");
+    assert.doesNotMatch(text, new RegExp(SECRET.slice(0, 12)));
+  });
+
+  it("a stale or forged dispatch is 401 and touches nothing", async () => {
+    const at = Math.floor(Date.now() / 1000);
+    for (const header of [`v1.${at - 600}.1.${signDispatch(SECRET, at - 600, 1)}`, `v1.${at}.1.${signDispatch(`${SECRET}x`, at, 1)}`]) {
+      const w = world();
+      const response = await post({ "x-baton-dispatch": header });
+      assert.equal(response.status, 401);
+      assert.deepEqual(allCalls(w), []);
+    }
+  });
+
+  it("logging: anonymous probes are silent; a presented but wrong credential is one line, without details", async () => {
+    world();
+    const anonymous = await captureConsole(() => post({}));
+    assert.equal(anonymous.result.status, 401);
+    assert.deepEqual(anonymous.lines, [], "no log line per scanner hit");
+    const wrong = await captureConsole(() => post({ authorization: `Bearer ${SECRET.slice(0, -1)}x` }));
+    assert.equal(wrong.lines.length, 1);
+    assert.match(JSON.stringify(wrong.lines), /worker_unauthorized.*bad_bearer/);
+    assert.doesNotMatch(JSON.stringify(wrong.lines), new RegExp(SECRET.slice(0, 12)));
   });
 
   it("logs the trigger and counts, never the secret or the raw headers", async () => {
     world();
     const { result: response, lines } = await captureConsole(() =>
-      post({ authorization: `Bearer ${SECRET}`, "x-baton-trigger": "pg_cron", "user-agent": "pg_net/0.10" }));
+      post({ authorization: `Bearer ${SECRET}`, "user-agent": "pg_net/0.10" }));
     assert.equal(response.status, 200);
     const text = JSON.stringify(lines);
     assert.match(text, /worker_invoked/);
     assert.match(text, /worker_finished/);
-    assert.match(text, /pg_cron/);
     assert.doesNotMatch(text, new RegExp(SECRET.slice(0, 12)));
     assert.doesNotMatch(text, /pg_net\/0\.10/);
   });
@@ -291,8 +349,9 @@ describe("IT-13 / QA-M9: POST /api/pipeline/drain", () => {
     const body = (await response.json()) as Record<string, unknown>;
     assert.ok(Object.values(body).every((v) => typeof v === "number"), JSON.stringify(body));
     assert.equal(body.claimed, 0);
-    assert.deepEqual(w.adminDb.fns(), ["list_finishable_runs", "claim_ready_processing_jobs"]);
+    assert.deepEqual(w.adminDb.fns(), SLOT_SEQUENCE);
     assert.equal(w.adminDb.last("claim_ready_processing_jobs")?.args.p_limit, 1, "the caller cannot raise the budget");
+    assert.equal(w.adminDb.last("acquire_pipeline_worker_slot")?.args.p_max_slots, 1, "one sweep at a time by default");
   });
 
   it("an infrastructure failure answers 500 without details", async () => {

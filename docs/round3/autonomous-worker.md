@@ -1,286 +1,391 @@
-# Round 3 — Autonomous background processing (Task 01, fixes JOB-1)
+# Round 3: autonomous background processing (Task 01 + 01B, fixes JOB-1)
 
-Status: implemented on branch `round3/task01-autonomous-worker`, not deployed. The scheduler itself is an
-operator step that needs approval (see [Activation](#activation-requires-approval)).
+**Status:** implemented on branch `round3/task01-autonomous-worker`.
+- Not deployed.
+- The migration is not applied anywhere hosted.
+- The scheduler is **not** enabled on `baton-dev`.
+- Activation is an operator procedure that needs approval; see [Activation procedure](#activation-procedure-requires-approval).
 
 ## Problem (JOB-1)
 
-A hosted run advanced only while something inside a Vercel request drained jobs:
+A hosted run advanced only while a Vercel request drained jobs. That meant either the `after()` drain
+`startProcessing` schedules, or the processing page's `continueProcessing` nudge every 20 s. Closing the
+tab stalled the run, and a run started by a bot would never finish.
 
-- the `after()` drain that `startProcessing` schedules (5 jobs or 50 s), and
-- `continueProcessing`, which the open processing page calls every 20 s.
+## Final architecture
 
-Nothing in the repo invoked `app/api/pipeline/drain` on a schedule. There was no `vercel.json`, no cron, and the
-route accepted POST only, while Vercel cron jobs call with GET. Closing the tab stalled the run until the page
-was reopened. A run started by a bot would never have finished.
-
-## Selected architecture
-
-**The existing database queue stays the source of truth. One authenticated HTTP endpoint is the worker. An
-external scheduler calls it every minute.**
+The database queue stays the source of truth. One authenticated endpoint does the work, and a database
+scheduler calls it only when there is work. One global worker slot limits how many drains run at once,
+whatever starts them.
 
 ```
- browser / bot backend                       scheduler (every minute)
-        │ startProcessing (server)                 │ pg_cron → pg_net POST  (selected)
-        ▼                                          │   or Vercel schedule  (Pro, alternative)
-  start_processing RPC ──► processing_runs +       ▼
-                           processing_jobs ◄── /api/pipeline/drain  (Bearer CRON_SECRET)
-        │ after() drain (accelerator)               │ drainJobs(25 jobs, 240 s)
-        ▼                                           ▼
-  same drainJobs, 5 jobs / 50 s          claim_ready_processing_jobs (SKIP LOCKED, lease 300 s)
-                                          → stage handler → fenced complete_processing_job
-                                          → finish_processing_run when the last job is terminal
+ browser / bot backend                         Supabase pg_cron (every minute, as postgres)
+        │ startProcessing                         │ baton_ops.pipeline_worker_tick()
+        ▼                                         │   1. reconcile earlier dispatches ← net._http_response
+  start_processing ──► processing_runs/jobs       │   2. public.pipeline_work_due()?  no → 'idle'
+        │                       ▲                 │   3. a dispatch still pending?   yes → 'in_flight'
+        │ after() drain         │                 │   4. pg_net POST, signed x-baton-dispatch header
+        ▼ (accelerator)         │                 ▼
+  drainJobs ◄───────────────────┼──────── /api/pipeline/drain  (signed dispatch, or Bearer CRON_SECRET)
+  (route, after() on start,     │                 │
+   page nudge, dev loop)        │                 ▼
+        └──► acquire_pipeline_worker_slot (limit BATON_WORKER_MAX_SWEEPS, default 1) ── none free → 200 busy:1
+                 └──► drainer: claim (SKIP LOCKED, job lease) → stage → fenced complete → finish run
+                      renew slot before every claim; release (token-fenced) at the end
 ```
 
-### Options evaluated
+### Why this shape
 
-Vercel facts below come from the official docs, read on 2026-11-17. The Schedules product is in beta and its
-limits "may change before general availability".
+These Vercel facts come from the official docs, read 2026-11-17.
 
-| Option | Frequency | Plan constraint | Verdict |
-|---|---|---|---|
-| **A. Vercel Schedules (beta)**, path target → this route | Hobby: every 15 min with a fixed 15-min jitter window. Pro/Enterprise: every minute, 1-min jitter. | Beta. Function and path targets are not retried. | Good on **Pro**. Inadequate on Hobby: up to about 30 min between ticks, and each retry backoff (30 s, 2 min, 8 min) costs a full tick. |
-| A'. Vercel Schedules, private function target | Same as A. | Needs `@vercel/schedules` (a new dependency) and a separate function entry. | No advantage over a path target: this route already authenticates. |
-| A''. Vercel Schedules, queue target | Same as A. | Needs Vercel Queues (public beta, separately billed) and a new consumer. | Rejected: a second queue would duplicate the database queue. |
-| **B. Vercel Cron Jobs** (legacy, being migrated to Schedules) | Hobby: **once per day** (±59 min). Pro: every minute. | Production only. GET only. No retries. | Inadequate on Hobby. On Pro, use A instead. |
-| **C. Supabase `pg_cron` + `pg_net`** → this route | Every minute (pg_cron also supports second-level intervals). | Both extensions are available on every Supabase plan, including Free. No Vercel plan dependency. | **Selected.** |
-| D. A separate always-on worker (Fly, Render, Railway…) | Continuous | A new paid service, a second deployment and second copies of the secrets. | Rejected: not needed; C meets the requirements. |
+- **The Vercel plan is unknown from here.** The Vercel CLI isn't installed, and no account call was made.
+- On Hobby:
+  - Vercel Cron Jobs run **once a day** (±59 min).
+  - Vercel Schedules (beta) run at most **every 15 minutes, with a 15-minute jitter window**.
+- Supabase `pg_cron` and `pg_net` give one-minute ticks on any Vercel plan, add no paid service, and can
+  skip the call entirely when there is no work.
+- On Pro, Vercel Schedules would also work with the same endpoint and no code change (see
+  [Alternative](#alternative-vercel-schedules-pro-only)). They can't skip idle minutes, and they can't record
+  HTTP outcomes in the database.
 
-**Hosting plan.** The Vercel plan could not be determined from this machine. The Vercel CLI is not
-installed, the repo's `.vercel/project.json` names the project but not the plan, and reading the plan
-needs an authenticated account call that was not made. The project rule that no paid tier may be
-enabled for Gemini suggests Hobby, but that is not evidence. **Option C was chosen because it delivers
-one-minute ticks whatever the Vercel plan is.** If the team confirms Pro and prefers to keep scheduling
-inside Vercel, Option A needs no code change (see [Alternative](#alternative-vercel-schedules-pro-only)).
+## Concurrency design (Task 01B)
 
-**Why C over A on Pro too:**
+**Global worker slots** live in migration `supabase/migrations/20261117100100_pipeline_worker_slots.sql` and
+in `lib/pipeline/worker-slot.ts`.
 
-- C is GA, while Schedules is beta.
-- C skips the call entirely when no run is active, so an idle project makes no Vercel invocations. A Vercel
-  schedule invokes every minute, around 43,000 invocations a month.
-- C runs on whichever Supabase project production uses, so there is nothing to keep in sync per Vercel
-  environment.
+- **What it covers.** `drainJobs` (`lib/pipeline/worker.ts`) is the only function that drains, and it always
+  holds a slot. Every entry point calls it:
+  - the endpoint (scheduler, Vercel schedule, manual call);
+  - `scheduleDrain`, which serves both `startProcessing` and the page nudge `continueProcessing`;
+  - the local dev loop.
 
-The costs of C:
+  A unit test checks that `createDrainer` is bound nowhere else.
+- **Acquisition is atomic.** `acquire_pipeline_worker_slot(max, lease, trigger)` takes the first free or
+  expired slot among `1..max` with `FOR UPDATE SKIP LOCKED`. A slot another transaction is taking is skipped,
+  never waited on. Missing rows are created without touching existing ones. If no slot is free it returns
+  `null`, and the endpoint answers `200` with zero counts and `busy: 1`.
+- **Expiry.** The lease is the drain budget plus 60 s, bounded to 30–900 s:
 
-- The secret is held in two places: the Vercel environment and Supabase Vault.
-- The endpoint URL is fixed. Only production is ticked; previews are covered in [Limitations](#remaining-limitations).
+  | Drain | Lease |
+  |---|---|
+  | Endpoint | 300 s |
+  | `after()` drain | 110 s |
+  | Dev loop | 120 s |
 
-## Execution flow
+  An abandoned slot (crashed or frozen function) is free again when its lease ends.
+- **Fencing.**
+  - Each acquisition gets a new random token and increments `generation`.
+  - `renew` succeeds only for the current holder while its lease is live. `release` succeeds only for the
+    current holder. A worker whose slot expired, or was taken over, can neither extend nor free the newer
+    holder's slot.
+  - The drain renews **before every claim**. A worker that lost its slot stops claiming
+    (`drain_stopped: worker_slot_lost`). A job already in progress stays protected by the job-level lease
+    and fencing, which are unchanged.
+- **Fails closed.** If the slot functions are missing (the migration wasn't applied), `drainJobs` throws and
+  nothing drains. That is why the migration must be applied before the code is deployed.
+- **Job-level protections are untouched.** These are claim `SKIP LOCKED`, job leases and heartbeats, fenced
+  writers (DB-12), checkpoints and `yield` (DB-13), retries with backoff (30 s, 2 min, 8 min), reaping, and
+  `list_finishable_runs` (DB-15).
 
-1. **Start.** `startProcessing` (server action, `lib/actions/core/handovers.ts`) calls the `start_processing`
-   RPC through the service role, with the verified actor. SQL re-checks the role, lifecycle, consent and
-   sources, and inserts one `processing_runs` row plus its `processing_jobs` (`queued`). It then calls
-   `scheduleDrain()`, which may or may not get to run. **Nothing after this point needs the browser or the
-   starting request.**
-2. **Tick.** Every minute, pg_cron evaluates the job in `supabase/ops/schedule-pipeline-worker.sql`. If any
-   run is `queued` or `running`, `net.http_post` sends `POST <production>/api/pipeline/drain` with
-   `Authorization: Bearer <CRON_SECRET>` and `x-baton-trigger: pg_cron`. Both values are read from Vault at
-   run time.
-3. **Drain.** The route (`app/api/pipeline/drain/route.ts`) authenticates and calls
-   `drainJobs({ maxJobs: 25, deadlineMs: 240_000 })` (`lib/pipeline/worker.ts` → `lib/pipeline/runner.ts`):
-   - first it closes runs whose outcome is already decided (`list_finishable_runs`, DB-15);
-   - then, one job at a time while the budget lasts, it claims via `claim_ready_processing_jobs(1, 300)`;
-   - it runs the stage handler, heartbeating the lease;
-   - it records exactly one fenced `complete_processing_job` per claim;
-   - if the job is terminal, it calls `finish_processing_run`, which moves the handover to `in_review`
-     or records the failure.
-4. **Read back.** The processing page, the dashboard or a bot reads `processing_runs`/`processing_jobs` through
-   the existing RLS queries (`getProcessingStatus`). The final state is in the database whether or not anyone
-   watched.
+**Limits.**
+- `BATON_WORKER_MAX_SWEEPS` is an integer from 1 to 4. The default and initial value is **1**.
+- The database scheduler also keeps at most one HTTP request in flight.
 
-## Scheduler configuration
-
-`supabase/ops/schedule-pipeline-worker.sql` is an **operator script, not a migration**. It lives outside
-`supabase/migrations` so nothing applies it automatically. It:
-
-- enables `pg_cron` and `pg_net`;
-- documents (commented out, with placeholders) the two `vault.create_secret` calls: `baton_worker_url` and
-  `baton_worker_secret`;
-- schedules `baton-pipeline-worker` at `* * * * *` (a no-op while no run is active or the secrets are absent);
-- schedules a daily cleanup of `cron.job_run_details` older than 7 days.
-
-`timeout_milliseconds := 300000` keeps pg_net from hanging up before the route's `maxDuration` (300 s).
+**Raising concurrency later**, only after the AI provider's quotas are verified:
+1. Confirm the Gemini per-minute and per-day limits for the models in use (JOB-2). With the free tier
+   (about 20 requests per day per model, measured 2026-11-14) keep it at 1.
+2. Set `BATON_WORKER_MAX_SWEEPS=2` in the Vercel production environment and redeploy. Every entry point then
+   shares two slots. No migration is needed; slot rows are created on demand, up to 16.
+3. Watch `baton_ops.worker_health` and the job `retried` counts for 429s (`ai_transient`) for a day before
+   going higher. Lowering the limit takes effect at the next acquisition; a sweep already holding a higher
+   slot finishes its budget.
 
 ## Authentication
 
-- **Route.**
-  - `CRON_SECRET` must be set and at least 32 characters; otherwise every call gets a 401 (fails closed).
-  - The presented `Authorization: Bearer …` is compared with SHA-256 digests in constant time.
-  - GET and POST behave identically.
-  - The caller cannot change the budget. The response carries counts only.
-  - A refused call logs `worker_unauthorized` with the trigger token only.
-- **Scheduler.**
-  - The secret and URL live in Supabase Vault (encrypted at rest).
-  - `cron.job` stores only the command text, which reads Vault at run time.
-  - Only roles that can read `vault.decrypted_secrets` (postgres/service role) can see them.
-- **Rotation.** Update Vault (`vault.update_secret`) and Vercel's `CRON_SECRET`, then redeploy, because a
-  deployment keeps the secret it was built with. During the gap calls answer 401, nothing is processed, and
-  nothing is lost: jobs simply wait.
-- **Vercel Deployment Protection.** If production is protected, pg_net calls are blocked before reaching the
-  route. Production domains are normally unprotected under Standard Protection. Confirm this in the live test.
+Both mechanisms are implemented in `lib/pipeline/worker-auth.ts`, and both derive from `CRON_SECRET`. The
+secret must be at least 32 characters; if it is unset or shorter, every call gets `401` (fails closed).
 
-## Overlap, retry and recovery (unchanged engine)
-
-All of these were already in the database. This task relies on them and adds none:
-
-| Concern | Mechanism | Where |
+| Caller | Header | Notes |
 |---|---|---|
-| Two sweeps claim the same job | `for update … skip locked` in the claim. Each claim is an `(id, attempt)` pair. | `claim_ready_processing_jobs`, migrations `20261112000100`, `20261111000500` |
-| Stale worker writes after losing its claim | Fenced writers (`pipeline_*`) and `complete_processing_job` check `(job, attempt)` and raise `ClaimLostError` | `20261113300100_pipeline_fencing.sql`, `20261113300800_claim_generation.sql` |
-| Worker crashes mid-job | Lease of 300 s with heartbeats. An expired `running` job is re-claimed as the next attempt, or reaped on its final attempt. | DB-1, `20261112000100` |
-| Transient failure | `retry` with backoff 30 s, 2 min, 8 min (`lib/pipeline/backoff.ts`), up to `max_attempts` | runner `completeJob` |
-| Long stage | Checkpointed `yield` requeues without using an attempt. Extraction resumes from stored chunks. | DB-13, `lib/pipeline/stages/extract.ts` |
-| Ordering | Only jobs whose earlier stages are terminal are claimable | DB-1 |
-| Run never closes (last job reaped) | `list_finishable_runs` at the start of every drain | DB-15 |
-| Completed work re-run | Terminal jobs are never claimable. An `extract` whose input hash already succeeded is a no-op. | claim SQL, runner `precheck` |
+| Database scheduler (pg_cron + pg_net) | `x-baton-dispatch: v1.<unix s>.<dispatch id>.<hex HMAC-SHA256(secret, "v1.<unix s>.<dispatch id>")>` | The secret never travels. Valid from 30 s before to 120 s after signing; a wrong key, a changed time or id, or a malformed header is `401`. A replay within the window only triggers a slot-limited drain. |
+| Vercel cron/schedule, manual | `Authorization: Bearer <CRON_SECRET>` | Constant-time comparison over SHA-256 digests. |
 
-With one tick a minute and drains of up to 240 s, as many as about 4 drains can overlap. That is safe, and
-parallel claims increase throughput. It also means more concurrent AI calls (see JOB-2 in Limitations).
+- **HEAD** is handled explicitly: `405`, with `Allow: GET, POST`. It does no authentication, makes no
+  database call and writes no log. Without this, Next.js would answer HEAD by running GET, which is a full
+  drain.
+- **Logging.**
+  - Requests that present no credential at all (scanners) are not logged.
+  - A presented but wrong credential logs one `worker_unauthorized` line with a reason token
+    (`bad_bearer`, `bad_dispatch`, `stale_dispatch`, `secret_unset`).
+  - An accepted call logs `worker_invoked` and `worker_finished` (trigger, dispatch id, duration, counts,
+    busy) or `worker_failed`.
+  - No secret, header or body is ever logged.
+
+## pg_net privilege findings
+
+These were verified in `supabase/postgres:17.12.0.000` (pg_net 0.20.4) by `supabase/ops/tests/run.sh`. On
+hosted Supabase, `postgres` is not a superuser, just as in the image; confirm the grants on hosted in step 6
+of the activation procedure.
+
+| Object | Owner | Who can access it |
+|---|---|---|
+| `net.http_request_queue` (holds queued request headers) | `supabase_admin` | **ALL to PUBLIC** |
+| `net._http_response` | `supabase_admin` | **ALL to PUBLIC** |
+| schema `net` | `supabase_admin` | USAGE to PUBLIC, anon, authenticated, service_role, postgres |
+| `net.http_post` / `http_get` | `supabase_admin` | SECURITY INVOKER, default EXECUTE (PUBLIC) |
+| pg_net background worker | — | runs as `postgres` (`pg_net.username`); reaches the queue **only through the PUBLIC grant** |
+| `vault.decrypted_secrets` | — | `service_role` and `postgres`; **not** anon or authenticated |
+| schema `cron` | — | `postgres` (with grant option) and `supabase_admin` only |
+
+Consequences:
+
+- **Any role that can run SQL can read queued request headers.** `postgres`, the Supabase SQL-editor role,
+  **cannot revoke** these grants: `revoke … from public` reports "no privileges could be revoked", because
+  `supabase_admin` granted them. Supabase's event trigger `issue_pg_net_access` re-grants them whenever
+  pg_net is created or upgraded.
+- **Baton's fix is to queue no long-lived credential.** The scheduler sends only the signed, two-minute
+  header. The test inspects the queued row before commit and confirms there is no `Authorization` header and
+  no key, and the stand-in endpoint confirms that no request ever carried the key.
+- **Optional owner-only hardening:** `supabase/ops/harden-pg-net.sql`.
+  - It first grants explicitly what pg_net's worker (`postgres`), `service_role` and
+    `supabase_functions_admin` need, then revokes PUBLIC, anon and authenticated.
+  - Verified: run as `postgres` it changes nothing and says so. Run as the owner it removes anon's queue
+    access and authenticated's `http_post`, and **pg_net still delivers** for `postgres`.
+  - On hosted Supabase only the owner (Supabase support) can apply it. Re-run it after any pg_net upgrade.
+- **Data API exposure.**
+  - The schedule script aborts if `net` or `baton_ops` appears in `pgrst.db_schemas` on the `authenticator`
+    role, or if anon or authenticated can use `baton_ops`, `cron` or `vault.decrypted_secrets`.
+  - On hosted Supabase the exposed-schemas list also lives in the dashboard (Settings → API → Exposed
+    schemas). Confirm by hand that it is `public`, `graphql_public` only.
+
+## HTTP outcome monitoring
+
+All of this lives in the private schema `baton_ops`, created by `supabase/ops/schedule-pipeline-worker.sql`.
+It is owned by `postgres`, has no grants, and is not exposed.
+
+- **`baton_ops.worker_dispatches`.** One row per dispatch, recording:
+  - the pg_net `request_id`;
+  - `outcome`: `pending`, `ok`, `http_error`, `timeout`, `connection_error`, `missing` or `not_sent`;
+  - `status_code`;
+  - `error`: pg_net's error text, character-restricted, at most 200 characters. It may contain the endpoint
+    host; it never contains headers or bodies;
+  - the endpoint's counts (`claimed`, `succeeded`, `failed`, `retried`, `busy`).
+- **How outcomes are decided.** `reconcile_worker_dispatches()` runs first in every tick, so it runs every
+  minute even when idle, with no browser involved. It joins `net._http_response` on the request id:
+
+  | Response | Outcome |
+  |---|---|
+  | 2xx | `ok` (`busy = 1` when the slot was held) |
+  | Any other status | `http_error` |
+  | `timed_out` | `timeout` |
+  | No status, with an error | `connection_error` |
+
+  A dispatch with no response 7 minutes after it was sent becomes `missing` (the request timeout is 5 min).
+  `missing` is therefore never confused with `ok`, and a recent dispatch stays `pending`. Due work with
+  absent or short Vault secrets is recorded as `not_sent` (`secrets_missing`) and makes no HTTP call.
+- **Retention.**
+  - pg_net keeps responses for 6 h; reconciliation runs every minute, well inside that.
+  - `baton_ops.housekeeping()` (daily at 03:17 UTC) deletes dispatch rows older than 14 days.
+  - It also deletes **only Baton's own** `cron.job_run_details` older than 7 days, filtering by job name. The
+    Task 01 version deleted every job's history and is unscheduled by the script.
+- **Report.** `select * from baton_ops.worker_health;` returns one row:
+  - `last_ok_at`, `last_dispatch_at`, `pending_now`, `failures_since_last_ok`;
+  - 24-hour counts for each outcome, plus `busy_24h`;
+  - `work_due_now`.
+
+  **Alarm condition:** `failures_since_last_ok > 0 and work_due_now`.
+
+  Recent failures:
+  ```sql
+  select id, dispatched_at, outcome, status_code, error from baton_ops.worker_dispatches
+   where outcome not in ('ok', 'pending') order by id desc limit 20;
+  ```
+  The endpoint's own log lines carry the same `dispatchId`, which correlates them.
+- **Alerting** is not wired to any external service; that would be a new service.
+
+**pg_net head-of-line blocking (found in testing).** pg_net does not start queued requests while a request
+of its current batch is still open. A hung endpoint therefore delays every later pg_net request in the
+database by up to the timeout (5 min). Baton keeps one scheduler request in flight, so this only affects
+Baton's own next dispatch. Any other pg_net user in the same database would wait too. There is none today.
+
+## Scheduler gate (Task 01B)
+
+`public.pipeline_work_due()` is in the migration, service-role only. It is true only when a drain has
+something to do now:
+
+1. **A queued job is due.** Its backoff has passed or it has none, it has attempts left, and every
+   earlier-stage job it depends on is terminal. For `extract`, no other extract of the same run may hold a
+   live lease. This is the same predicate as `claim_ready_processing_jobs`.
+2. **A running job's lease has expired.** It will be reclaimed as the next attempt, or reaped on its last.
+3. **A run can be finalised now.** It has no open job, a run-fatal failure (`provider_not_configured`,
+   `ai_config_changed`, `db_schema_outdated`), or a failed handover-level stage (`verify_support`,
+   `analyze`, `prepare_review`).
+
+These mirror `decideRunOutcome`; a unit test keeps both lists in step with `lib/pipeline/types.ts` and
+`finish.ts`. A run that is merely `running`, with every job under a live lease or in backoff, is **not**
+due, so no call is made.
+
+`tests/integration/db/sql/it20_worker_slots.sql` checks every case against the full schema. It also checks
+that the gate agrees with what a real claim (in a rolled-back subtransaction) plus the finishable-run rule
+would do.
 
 ## Runtime and batch limits
 
-| Limit | Value | Source |
-|---|---|---|
-| Route `maxDuration` | 300 s (allowed on every plan with Fluid Compute: Hobby max 300 s, Pro max 800 s) | `route.ts` |
-| Drain budget per sweep | 25 jobs or 240 s, whichever comes first. No new job is claimed with less than 30 s left. | `route.ts`, `runner.ts` |
-| Lease | 300 s, renewed by heartbeats during a stage | `runner.ts` |
-| Tick | 1 min (pg_cron). Worst-case pickup latency is about 1 min plus any retry backoff. | ops SQL |
-| Accelerators | `after()` drain on start (5 jobs or 50 s). Page nudge every 20 s while open (same budget). | `worker.ts`, `processing-view.tsx` |
-
-## Hosting-plan requirements
-
-- **Vercel:** any plan. The route needs only `maxDuration = 300`, which Hobby allows. No Vercel scheduling
-  feature is used.
-- **Supabase:** any plan with `pg_cron`, `pg_net` and Vault, which hosted projects include.
-- **No new paid service.** Costs: about one function invocation per active minute; nothing while idle.
-
-## Monitoring
-
-| Question | Where to look |
+| Limit | Value |
 |---|---|
-| Is the scheduler firing? | `select jobname, status, start_time, return_message from cron.job_run_details d join cron.job j using (jobid) where j.jobname = 'baton-pipeline-worker' order by start_time desc limit 20;` |
-| Did the calls reach the route? | `select created, status_code, timed_out, error_msg from net._http_response order by created desc limit 20;` (pg_net keeps about 6 h). `401` means the secrets drifted. `5xx` or a timeout means an infrastructure problem. |
-| What did each sweep do? | Vercel function logs for `/api/pipeline/drain`: structured `worker_invoked`, `worker_finished` (trigger, durationMs, claimed, succeeded, retried, failed, deferred, skipped, lost), `drain_done`, `job_completed`, `run_finished`, `job_lost`, `worker_failed`, `worker_unauthorized`. IDs, counts and reason tokens only (`lib/pipeline/log.ts`). |
-| Is anything stuck? | `select r.id, r.status, min(j.next_attempt_at) as next_due, now() - r.created_at as age from processing_runs r join processing_jobs j on j.run_id = r.id where r.status in ('queued','running') and j.status in ('queued','running') group by r.id having min(coalesce(j.next_attempt_at, j.created_at)) < now() - interval '5 minutes';` Any row means work is due but not being claimed. |
+| Endpoint `maxDuration` | 300 s (allowed on every Vercel plan with Fluid Compute) |
+| Sweep budget | 25 jobs or 240 s; no claim with less than 30 s left; AI calls abort at the deadline |
+| Concurrent sweeps | `BATON_WORKER_MAX_SWEEPS`, default 1, max 4 (all entry points combined) |
+| Scheduler requests in flight | 1 |
+| Job lease | 300 s with heartbeats |
+| Tick | 1 min. Pickup latency is at most about 1 min after work becomes due, or after the current sweep ends. |
 
-Alerting is not configured. There is no alerting service in the stack, and adding one was out of scope.
+## Activation procedure (requires approval)
 
-## How future integrations trigger processing (contract for the bot workstream)
+None of this has been done. **Do not run anything against `baton-dev` without approval.** Production uses
+`baton-dev`.
 
-What the processing side guarantees, verified by `tests/integration/r3-autonomous-worker.test.ts`:
+### 1. Read-only inventory (approval needed; read-only)
 
-1. **A run needs only rows, not a session.** Once `start_processing` has committed, the run reaches a
-   terminal state through scheduled sweeps alone. No browser, no cookie, no `after()` callback and no
-   follow-up request is required.
-2. **Entry point.** Start a run the same way the web app does:
-   - core `startProcessing(deps, { handoverId })` (`lib/actions/core/handovers.ts`);
-   - this runs the same plan (`planProcessingRun`) and the same `start_processing` RPC;
-   - SQL re-checks the actor's membership, role, lifecycle and consent;
-   - do not insert jobs directly, and do not call the worker route to start work.
-3. **Optional acceleration.** Inside a request handler, such as a bot webhook, `scheduleDrain()` adds an
-   `after()` drain. Outside a request scope it logs `drain_not_scheduled` and returns, and the next tick
-   picks the run up.
-4. **Progress and result.** Read `processing_runs.status` (`queued | running | succeeded | failed | cancelled`)
-   and the per-stage progress through the RLS query `getProcessingStatus(handoverId)`. Notifying a channel
-   on completion would be a later addition, polled or added to `finish_processing_run`, and is not part of
-   this task.
-5. **Never** call `/api/pipeline/drain` from a bot with the shared `CRON_SECRET`. It is the scheduler's
-   credential, not an integration credential.
+Activation makes every due run in `baton-dev` process within about a minute: abandoned runs, runs started
+from previews, and runs started by local dev servers.
 
-**Open dependency (SEC-2, owned with the bot workstream).** The core action needs `ActionDeps` whose
-`getActor()` returns a `VerifiedActor` and whose `queries` are RLS-scoped to that user. Today both come
-from a Supabase browser session. A bot needs one of two things:
+```sql
+select r.id, r.status, r.ai_provider, r.pipeline_version, r.created_at, r.started_at, h.state as handover_state,
+       count(*) filter (where j.status = 'queued')                                   as queued,
+       count(*) filter (where j.status = 'running' and j.lease_expires_at >= now())  as running_live,
+       count(*) filter (where j.status = 'running' and j.lease_expires_at <  now())  as running_expired,
+       count(*) filter (where j.status = 'failed')                                   as failed,
+       min(j.next_attempt_at) filter (where j.status = 'queued')                     as next_due
+  from public.processing_runs r
+  join public.handovers h on h.id = r.handover_id
+  left join public.processing_jobs j on j.run_id = r.id
+ where r.status in ('queued', 'running')
+ group by r.id, h.state
+ order by r.created_at;
+```
 
-- (a) a bot-principal model that maps a linked platform account to a Baton profile and builds the
-  `VerifiedActor` server-side; or
-- (b) a service-role variant of `listSources` for planning.
+### 2. Decide what happens to existing active runs before the first tick
 
-Either way, `start_processing` remains the authorization gate. This choice belongs to the bot design and is
-deliberately not made here.
+| Run | What activation would do | Recommended |
+|---|---|---|
+| `ai_provider = 'fake'` (local QA) | Fails closed at the AI stage (`provider_not_configured`) | Cancel first, so no handover is left `failed` by surprise |
+| Real provider, old or abandoned | Processes fully and **spends Gemini free-tier quota** (about 14 requests per run against about 20 per day per model); the handover moves to `in_review` with nobody watching | Cancel unless the owner wants it finished |
+| Real provider, recent | Finishes; that is the purpose | Leave it |
 
-## Activation (requires approval)
+- **Cancel through the product**: a member opens the processing page and clicks **Cancel**
+  (`cancel_processing`, audited). Do not edit rows by hand.
+- A run whose owner can't be reached needs an explicit operator decision. That is out of scope here.
+- Plan the first activation for after the daily quota reset (08:00 UTC).
 
-Nothing below has been done. In order:
+### 3. Stop every local worker that points at `baton-dev`
 
-1. Merge this branch and deploy it to production. The route then accepts the scheduler's POST, and Vercel cron
-   GET if ever used.
-2. Confirm that `CRON_SECRET` is set in the Vercel production environment and is at least 32 characters. Do
-   not print it.
-3. In the Supabase SQL editor of the production project:
-   - run the two `vault.create_secret` statements with the real URL and secret;
-   - then run `supabase/ops/schedule-pipeline-worker.sql`.
+- `baton-dev` is shared: production, previews and any local `next dev` with `BATON_DEV_WORKER=1` all drain
+  the same queue.
+- Worker slots are database-wide, so a local dev loop competes for the **single** slot. With fake AI it also
+  fails real runs with `ai_config_changed`. Production's worker, in turn, fails local QA runs that were
+  snapshotted with the fake provider.
+- After activation, local servers against `baton-dev` must run with `BATON_DEV_WORKER=0`, which is already
+  the default for baton-dev. QA processing belongs on a local Supabase stack or a separate project.
 
-### Live-test procedure (needs approval: hosted DB and production deployment)
+### 4. Apply the migration (approval needed)
 
-1. With a test account, upload the synthetic fixture (`fixtures/parser/whatsapp/pii-chat.txt`) and start
-   processing.
-2. **Close the tab immediately.** Wait 3 minutes without opening any Baton page.
-3. In SQL:
-   - `select status from processing_runs where id = '<run>'` should be `succeeded`, or `failed` with a
-     reason;
-   - `cron.job_run_details` should show successful ticks;
-   - `net._http_response` should show `200`s.
-4. Reopen the processing page. It should show the finished state, and the handover should be `in_review`.
-5. Check the Vercel logs for `worker_invoked` with `trigger: pg_cron` and a matching `run_finished`.
-6. Negative check: temporarily change `baton_worker_secret` in Vault. Expect `401` in `net._http_response`, a
-   `worker_unauthorized` log line, and no job claimed. Restore it, and the next tick resumes.
-7. Gemini free tier: one run uses about 14 requests (extraction and verification), and the daily quota is about
-   20 per model. Run this once, not repeatedly.
+- Apply `supabase/migrations/20261117100100_pipeline_worker_slots.sql`. It is additive: one table and five
+  functions.
+- It must be applied **before** step 5. The new code fails closed without it, and processing would stop
+  everywhere, including the `after()` drains.
+
+### 5. Deploy the branch
+
+- Check that `CRON_SECRET` is set in Vercel production, at least 32 characters (don't print it), then
+  redeploy so the deployment picks it up.
+- Optional: set `BATON_WORKER_MAX_SWEEPS`. The default of 1 is recommended.
+
+### 6. Vercel and Supabase reachability checks
+
+- Use the **stable production domain** for the Vault URL, never a per-deployment URL; Standard Deployment
+  Protection covers those.
+- Check that Vercel Firewall, Attack Challenge Mode and bot rules don't challenge a non-browser `POST` to
+  `/api/pipeline/drain`. Send one manual unauthenticated `POST`: the expected answer is `401` JSON, not a
+  challenge page.
+- In the Supabase dashboard, confirm the exposed schemas are `public` and `graphql_public` only.
+- Enable `pg_cron` and `pg_net` in Database → Extensions if they aren't already. The script also runs
+  `create extension if not exists`.
+- Optional: ask Supabase support to apply `supabase/ops/harden-pg-net.sql`. It isn't required for Baton's
+  safety.
+
+### 7. Create the Vault secrets and the schedule
+
+- In the SQL editor (role `postgres`), run the two `vault.create_secret` statements with the real URL and
+  key; the placeholders are at the top of `supabase/ops/schedule-pipeline-worker.sql`.
+- Then run that file. It ends with privilege checks and aborts if any fail. A NOTICE that the pg_net queue
+  is readable by anon is expected (see the findings above).
+
+### 8. Supervised live test, once
+
+1. Start one run on the synthetic fixture.
+2. Close the tab and wait 3 minutes.
+3. Check `select * from baton_ops.worker_health`. Expect `ok_24h ≥ 1`, `failures_since_last_ok = 0`, and the
+   run `succeeded`, or `failed` with a reason token.
+4. In the Vercel logs, check `worker_invoked` with `trigger: pg_cron` and the matching `dispatchId`.
+
+**Rollback:** `select cron.unschedule('baton-pipeline-worker');`. Processing then advances only while a
+processing page is open, as before. The migration can stay.
+
+## Local verification (reproducible from the repository)
+
+| Command | What it proves |
+|---|---|
+| `npm test` | Unit and integration tests, including `lib/pipeline/__tests__/worker-slot.test.ts`, `worker-auth.test.ts` and IT-13 (route auth, HEAD, busy, logging) |
+| `BATON_IT_PG=1 node --import ./tests/integration/support/resolve.mjs --test tests/integration/r3-autonomous-worker.test.ts` | The real endpoint, drainer and slot on Postgres with every migration (11 scenarios) |
+| `bash tests/integration/db/run.sh it20` | Slot atomicity across two sessions, expiry, fencing, and the gate against the real claim |
+| `bash supabase/ops/tests/run.sh` | The ops SQL in `supabase/postgres` with pg_cron, pg_net and Vault (see below) |
+
+`supabase/ops/tests/run.sh` covers:
+- idempotence, run as `postgres`;
+- idle and gate behaviour, and `not_sent`;
+- that the queued headers hold no key;
+- that the pgcrypto HMAC matches the TypeScript golden vector;
+- `ok`, `busy`, 401, 500, timeout, connection refused, missing versus pending, and in-flight gating;
+- housekeeping scope and privileges;
+- the hardening script as `postgres` and as the owner;
+- one real cron tick.
 
 ## Alternative: Vercel Schedules (Pro only)
 
-If the plan is Pro and the team prefers Vercel-native scheduling, use this **instead of** the pg_cron job, not
-in addition to it. Both together would double the calls, which is safe but wasteful.
+Use this **instead of** the pg_cron job, never as well. The path target sends `Authorization: Bearer
+<CRON_SECRET>`, which the endpoint accepts, and every call is still slot-limited.
 
 ```json
-{
-  "schedules": {
-    "baton-pipeline-worker": { "schedule": "* * * * *", "path": "/api/pipeline/drain", "requestMethod": "POST", "jitter": 1 }
-  }
-}
+{ "schedules": { "baton-pipeline-worker": { "schedule": "* * * * *", "path": "/api/pipeline/drain", "requestMethod": "POST", "jitter": 1 } } }
 ```
 
-Vercel sends `Authorization: Bearer <CRON_SECRET>` to path targets, which this route already verifies. Do not
-add this on Hobby: Hobby schedules are limited to every 15 minutes with a 15-minute jitter. The schema above
-follows the beta docs and must be re-checked against them when adopted.
+You lose the work-due gate (it calls every minute) and the database-side HTTP outcome log. Vercel's logs
+remain. Re-check the beta schema when adopting it. Do not use it on Hobby, where it runs at most every
+15 minutes with a 15-minute jitter.
+
+## Contract for integrations (bots)
+
+- **Start runs** through core `startProcessing(deps, { handoverId })`, the same plan and the same
+  `start_processing` authorization in SQL. Once that commits, the scheduler finishes the run without any
+  browser or session.
+- `scheduleDrain()` inside a webhook handler is an optional accelerator. It is slot-limited like everything
+  else.
+- **Read progress and results** with `getProcessingStatus`.
+- **Never** call `/api/pipeline/drain` with `CRON_SECRET` from an integration.
+- **Open (SEC-2):** the core action needs a `VerifiedActor` and RLS-scoped queries for the linked user, which
+  today come from a browser session. The bot-principal design must supply them.
 
 ## Remaining limitations
 
-- **Production only.** The pg_cron job targets one URL. Preview deployments share the same Supabase project
-  (baton-dev), so production's worker also drains runs started from a preview, with production's code and
-  AI environment. This was already true of every hosted drain. A run whose snapshot names a provider that
-  production refuses fails closed with `provider_not_configured`.
-- **Not verified against hosted infrastructure.** That pg_cron, pg_net and Vault are enabled on the hosted
-  project, and that pg_net reaches the production domain, are covered only by the live test above. The
-  scheduler SQL was exercised locally against the `supabase/postgres` image
-  ([Verification](#verification-performed)).
-- **JOB-2 (quota).** The scheduler makes runs finish without a tab. It does not raise the Gemini free-tier
-  daily quota. Overlapping drains can also hit per-minute limits sooner; those errors are retryable and back
-  off.
-- **No alerting.** Monitoring is query and log based.
-- **Bot principal (SEC-2)** is still open, as described in the contract above.
-
-## Verification performed
-
-See the task report for exact commands and results. In summary:
-
-- `tests/integration/r3-autonomous-worker.test.ts` (Tier E, real Postgres with every migration, opt-in
-  `BATON_IT_PG=1`): six scenarios. A run completes with no session and no `after()`; completed work is not
-  re-run; overlapping sweeps never run a job twice; a crashed lease is protected and then recovered; a failure
-  is recorded and read back; an unauthenticated call touches nothing.
-- `tests/integration/it13-tokens-drain.test.ts`: GET/POST authentication parity, the fixed budget, and log
-  hygiene.
-- The scheduler SQL was applied in a local `supabase/postgres:17.12.0.000` container (pg_cron, pg_net,
-  supabase_vault 0.3.2) with a stub `processing_runs` table and a local listener standing in for the route.
-  Over 5 minute ticks, every tick succeeded. It made no call while the secrets were absent or no run was
-  active. While a run was active it sent one `POST /api/pipeline/drain` with the matching bearer,
-  `x-baton-trigger: pg_cron` and body `{}`, and pg_net recorded `200`. The secret does not appear in
-  `cron.job`. Re-applying the script leaves one job of each name.
-- Production-build smoke (`next start`, no database configured):
-  - GET and POST without the secret, or with a wrong one, return `401`;
-  - PUT returns `405`;
-  - the right secret reaches the worker, which refuses the unconfigured database target with
-    `500 drain_failed`;
-  - the logs show `worker_invoked` and `worker_failed` with the trigger token, and the secret never
-    appears in them.
+- **Hosted behaviour is unverified** until the supervised live test: grants, the exposed-schemas setting,
+  Deployment Protection and firewall, and that pg_net can reach the production domain.
+- **Production only.** Previews share `baton-dev`, so production's worker processes runs started from
+  previews, with production's code and AI environment.
+- **JOB-2:** the Gemini free-tier quota is unchanged. One sweep at a time reduces burst 429s but doesn't add
+  quota.
+- **Replays.** A captured signed header can be replayed for up to 2 minutes. It can only trigger a
+  slot-limited drain of work that is already due. Nonce tracking was not added.
+- **pg_net PUBLIC grants** remain on hosted Supabase unless Supabase applies `harden-pg-net.sql`. The queue
+  holds only short-lived signatures.
+- **No external alerting.** `baton_ops.worker_health` is query-based.
