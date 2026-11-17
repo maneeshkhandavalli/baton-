@@ -29,6 +29,7 @@ import type {
   reviewPointInput,
 } from "../contracts/schemas";
 import { ACCOUNT_DELETION_CONFIRMATION, deleteAccountInput } from "../contracts/schemas";
+import { SOURCE_VERSION_OUTCOMES, type SourceVersionOutcome } from "../contracts/source-versions";
 import type { ErasureReport } from "../contracts/dto";
 import type { VerifiedActor } from "./actor-rules";
 import { canRedeemInvitation } from "./actor-rules";
@@ -363,6 +364,35 @@ export const removeMember = async (db: DbClient, actor: VerifiedActor, memberId:
   void (await call(db, actor, "remove_member", { p_member_id: memberId }));
 
 // ── Sources (§6.5, §10.3) ────────────────────────────────────────────────────
+
+/**
+ * R3 Task 05B: starts a new version of an existing source (creator only; the database derives the handover from
+ * the previous source and locks its lineage). Refusals that need their own explanation come back as an outcome,
+ * not an error: nothing is written for them.
+ */
+export async function createSourceVersion(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { previousSourceId: string; kind: SourceKind; fileName: string; mimeType: string; sizeBytes: number; sha256: string },
+): Promise<{ outcome: SourceVersionOutcome; sourceId: string | null; handoverId: string }> {
+  const r = await call(db, actor, "create_source_version", {
+    p_previous_source_id: input.previousSourceId,
+    p_kind: input.kind,
+    p_file_name: input.fileName,
+    p_mime_type: input.mimeType,
+    p_size_bytes: input.sizeBytes,
+    p_sha256_hex: input.sha256,
+  });
+  const o = (r ?? {}) as { outcome?: unknown; source_id?: unknown; handover_id?: unknown };
+  if (typeof o.outcome !== "string" || !(SOURCE_VERSION_OUTCOMES as readonly string[]).includes(o.outcome)) {
+    throw new DbError("internal");
+  }
+  return {
+    outcome: o.outcome as SourceVersionOutcome,
+    sourceId: o.source_id === null || o.source_id === undefined ? null : asUuid(o.source_id),
+    handoverId: asUuid(o.handover_id),
+  };
+}
 
 export async function createSource(
   db: DbClient,

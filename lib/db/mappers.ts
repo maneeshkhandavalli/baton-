@@ -339,10 +339,21 @@ const sourceRow = z.object({
   message_count: z.number().int().nullable(),
   masking_counts: z.record(z.enum(MASK_KINDS), z.number()).nullable(),
   error_code: nullableText,
+  // R3 Task 05B (migration 20261117500100); absent on older databases
+  version: z
+    .object({
+      lineage_id: id,
+      version_number: z.number().int().min(1).nullable(),
+      supersedes_source_id: id.nullable(),
+      superseded_at: nullableTimestamp,
+      superseded_by_source_id: id.nullable(),
+    })
+    .optional(),
 });
 
 export function mapSourceSummary(raw: unknown): SourceSummary {
   const r = parse(sourceRow, raw);
+  const v = r.version;
   return {
     id: r.id,
     handoverId: r.handover_id,
@@ -358,6 +369,17 @@ export function mapSourceSummary(raw: unknown): SourceSummary {
     messageCount: r.message_count,
     maskingCounts: r.masking_counts,
     errorCode: r.error_code,
+    ...(v
+      ? {
+          version: {
+            lineageId: v.lineage_id,
+            versionNumber: v.version_number,
+            supersedesSourceId: v.supersedes_source_id,
+            supersededAt: v.superseded_at,
+            supersededBySourceId: v.superseded_by_source_id,
+          },
+        }
+      : {}),
   };
 }
 

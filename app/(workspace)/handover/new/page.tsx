@@ -8,6 +8,7 @@ import { FormSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { resumeStep } from "@/components/wizard/draft-state";
 import { NewHandoverWizard, type WizardInitial } from "@/components/wizard/new-handover-wizard";
+import { isCurrentSourceVersion } from "@/lib/contracts/source-versions";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
 
@@ -48,7 +49,8 @@ async function WizardLoader({ searchParams }: { searchParams: Promise<Record<str
   if (!handover.ok) notFound();
   const h = handover.data;
   const manages = h.viewerIsCreator || h.viewerRole === "outgoing";
-  const live = sources.ok ? sources.data.filter((s) => s.state !== "removed") : [];
+  // R3 Task 05B: one row per source (its current version)
+  const live = sources.ok ? sources.data.filter((s) => s.state !== "removed" && isCurrentSourceVersion(s)) : [];
   // Only a draft that has not been processed belongs in the wizard; anything else continues on its own page.
   if (h.state !== "draft" || !manages || live.some((s) => s.state === "parsed" || s.state === "parsing")) {
     redirect(routes.handover.processing(h.id));

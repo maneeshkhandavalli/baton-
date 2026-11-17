@@ -438,10 +438,13 @@ describe("sources", () => {
     await sources.recordSourceConsent(f.deps, {
       sourceId: S, consentStatementVersion: "v1", consentConfirmed: true, timezone: "Asia/Kolkata", aiProvider: "evil",
     } as never);
-    assert.equal(f.calls[0].fn, "record_source_consent");
-    assert.equal(f.calls[0].args?.p_ai_provider, "fake");
-    assert.equal(f.calls[0].args?.p_access_level, "everyone");
-    assert.deepEqual([f.calls[1].fn, f.calls[1].client], ["api_get_source", "user"]);
+    // R3 Task 05B: the source is read first (under RLS) to know whether this consent activates a new version
+    assert.deepEqual([f.calls[0].fn, f.calls[0].client], ["api_get_source", "user"]);
+    assert.equal(f.calls[1].fn, "record_source_consent");
+    assert.equal(f.calls[1].client, "admin");
+    assert.equal(f.calls[1].args?.p_ai_provider, "fake");
+    assert.equal(f.calls[1].args?.p_access_level, "everyone");
+    assert.deepEqual([f.calls[2].fn, f.calls[2].client], ["api_get_source", "user"]);
   });
 
   it("confirmSourceUploaded measures the object, then re-reads the source under RLS", async () => {

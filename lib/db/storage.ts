@@ -23,7 +23,8 @@ import type { DateOrder, SourceKind } from "../contracts/enums";
 import type { VerifiedActor } from "./actor-rules";
 import type { DbClient } from "./client";
 import { DbError } from "./errors";
-import { createSource, removeSource } from "./mutations";
+import type { SourceVersionOutcome } from "../contracts/source-versions";
+import { createSource, createSourceVersion, removeSource } from "./mutations";
 import { markSourceParseFailed, type JobClaim } from "./pipeline";
 import { callRpc } from "./rpc";
 
@@ -310,6 +311,52 @@ export async function createSourceUpload(
     signedUploadUrl: signed.signedUrl,
     token: signed.token,
     expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString(),
+  };
+}
+
+/**
+ * R3 Task 05B: step 1 for a NEW VERSION of an existing source. The same request checks and the same signing
+ * as a new source; the database decides whether a candidate row awaits an upload (`created` / `resumed`: a
+ * ticket is signed for raw/{handover}/{candidate}) or why not (every other outcome; nothing is signed).
+ * Steps 2 and 3 are unchanged: confirmSourceUpload, then record consent, which activates the version.
+ */
+export async function createSourceVersionUpload(
+  db: DbClient,
+  actor: VerifiedActor,
+  userStorage: StorageClient,
+  input: Omit<SourceUploadRequest, "handoverId"> & { previousSourceId: string },
+): Promise<{ outcome: SourceVersionOutcome; sourceId: string | null; ticket: SourceUploadTicket | null }> {
+  // the handover only matters for the path, which the database derives; the request checks do not use it
+  checkSourceUploadRequest({ ...input, handoverId: "" });
+  const r = await createSourceVersion(db, actor, input);
+  if ((r.outcome !== "created" && r.outcome !== "resumed") || r.sourceId === null) {
+    return { outcome: r.outcome, sourceId: r.sourceId, ticket: null };
+  }
+  const sourceId = r.sourceId;
+  const path = rawSourcePath(r.handoverId, sourceId);
+  let signed: { signedUrl: string; token: string; path: string } | null = null;
+  try {
+    const { data, error } = await userStorage.from(SOURCE_BUCKET).createSignedUploadUrl(path);
+    if (!error && data && (data.path === undefined || data.path === path)) signed = data;
+  } catch {
+    signed = null;
+  }
+  if (!signed) {
+    if (r.outcome === "created") {
+      // nobody could finish this pending update: discard it (the current version is untouched)
+      try {
+        await removeSource(db, actor, sourceId);
+        await callRpc(db, "mark_source_raw_deleted", { p_source_id: sourceId });
+      } catch {
+        // left for the retention sweep (pending_upload_expired)
+      }
+    }
+    throw new DbError("internal");
+  }
+  return {
+    outcome: r.outcome,
+    sourceId,
+    ticket: { sourceId, signedUploadUrl: signed.signedUrl, token: signed.token, expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString() },
   };
 }
 

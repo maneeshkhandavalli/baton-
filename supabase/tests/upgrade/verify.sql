@@ -338,4 +338,40 @@ select tests.eq(coalesce((select jsonb_object_agg(s ->> 'stage', s ->> 'status')
                 '300700: pre-upgrade mixed run: extract failed → partial, verify_quotes failed → queued (a job is still open)');
 select tests.as_owner();
 
+-- ── 500100: source versions on PRE-UPGRADE rows ─────────────────────────────
+select tests.eq((select count(*)::int from public.sources
+                  where lineage_id is distinct from id or version_number is distinct from 1 or supersedes_source_id is not null
+                     or superseded_at is not null or superseded_by_source_id is not null), 0,
+                '500100: every existing source is version 1 of its own lineage');
+select tests.eq((select count(*)::int from public.source_version_changes), 0, '500100: no transition is invented for existing rows');
+select tests.ok(has_function_privilege('service_role', 'public.create_source_version(uuid,uuid,text,text,text,bigint,text,text)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.create_source_version(uuid,uuid,text,text,text,bigint,text,text)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.create_source_version(uuid,uuid,text,text,text,bigint,text,text)', 'EXECUTE'),
+                '500100: create_source_version is server-only');
+select tests.as_user('ann');
+select tests.ok((select bool_and(s -> 'version' ->> 'lineage_id' = s ->> 'id' and (s -> 'version' ->> 'version_number')::int = 1)
+                   from jsonb_array_elements(tests.read(format('select public.api_list_sources(%L)', tests.id('hr')))) s),
+                '500100: api_list_sources reports version 1 for a pre-upgrade source');
+-- a new version of the source of the PRE-UPGRADE published handover: the published read does not move
+select public.start_revision(tests.actor(), tests.id('hpub'));
+select tests.put('spub_v2', (public.create_source_version(tests.actor(), tests.id('spub'), 'whatsapp_export', 'chat v2.txt', 'text/plain', 100,
+                                                          repeat('c', 64)) ->> 'source_id')::uuid);
+select tests.as_owner();
+insert into storage.objects (bucket_id, name, metadata)
+select 'source-uploads', raw_storage_path, '{"size": 100}' from public.sources where id = tests.id('spub_v2');
+select tests.as_user('ann');
+select public.confirm_source_uploaded(tests.actor(), tests.id('spub_v2'), 100, repeat('c', 64));
+select public.record_source_consent(tests.actor(), tests.id('spub_v2'), 'consent@1', 'fake', 'everyone', 'Asia/Kolkata');
+select tests.as_owner();
+select tests.ok((select superseded_by_source_id = tests.id('spub_v2') from public.sources where id = tests.id('spub'))
+                and (select version_number = 2 and lineage_id = tests.id('spub') from public.sources where id = tests.id('spub_v2')),
+                '500100: a pre-upgrade source receives version 2');
+select tests.ok((select bool_and(pe.excluded_at is null) from public.point_evidence pe where pe.point_id = tests.id('ppub1')),
+                '500100: the evidence of the pre-upgrade version stays active');
+select tests.as_user('inc');
+select tests.eq(upgrade.strip(tests.read(format('select public.api_get_published_handover(%L)', tests.id('hpub')))),
+                (select reads -> 'inc:hpub:published' from upgrade.snapshot where id = 1),
+                '500100: the incoming member reads the pre-upgrade publication unchanged after a new source version');
+select tests.as_owner();
+
 select 'upgrade verified' as result;

@@ -127,7 +127,30 @@ export interface SourceSummary {
   messageCount: number | null;
   maskingCounts: Partial<Record<MaskKind, number>> | null;
   errorCode: string | null;
+  /**
+   * R3 Task 05B: the source's place in its version chain. Absent on a database without migration
+   * 20261117500100 (every source is then its own, current, version 1).
+   */
+  version?: SourceVersionInfo;
 }
+
+/** R3 Task 05B: versions of one source are separate, immutable source rows linked by a lineage. */
+export interface SourceVersionInfo {
+  /** The version-1 source of the chain. */
+  lineageId: string;
+  /** 1, 2, 3 …; null for a pending update that is not active yet (it awaits its upload or consent). */
+  versionNumber: number | null;
+  supersedesSourceId: string | null;
+  supersededAt: string | null;
+  supersededBySourceId: string | null;
+}
+
+/** R3 Task 05B: what create_source_version decided. Only `upload` needs the signed ticket. */
+export type SourceVersionUploadResult =
+  | { status: "upload"; ticket: SourceUploadTicket }
+  | { status: "awaiting_confirmation"; sourceId: string }
+  | { status: "awaiting_consent"; sourceId: string }
+  | { status: "unchanged"; sourceId: string };
 
 /** A parsed chat participant (§6.6). Review roles only, within clearance. The identity hash is never returned. */
 export interface SourceParticipantSummary {

@@ -8,6 +8,7 @@ import { AccessBadge, HandoverStateBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDate, formatDateRange } from "@/components/handover/format";
 import { AccessLinks } from "@/components/settings/access-links";
 import { ParticipantsPanel } from "@/components/settings/participants-panel";
+import { SourceVersionUpload } from "@/components/settings/source-version-upload";
 import { accessLevelMeta, maskKindLabel, memberRoleLabel, sourceKindLabel, sourceStateLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { SectionHeading } from "@/components/shared/section-heading";
@@ -21,6 +22,7 @@ import { ACCESS_LEVELS, type AccessLevel, type MaskKind, type MemberRole } from 
 import { deleteHandover, offerCreatorTransfer, respondToCreatorTransfer, startRevision } from "@/lib/actions/handovers";
 import { inviteMember, removeMember, updateMemberClearance } from "@/lib/actions/members";
 import { removeSource } from "@/lib/actions/sources";
+import { isCurrentSourceVersion, isPendingSourceVersion, isSupersededSourceVersion } from "@/lib/contracts/source-versions";
 import { routes } from "@/lib/routes";
 
 interface HandoverSettingsProps {
@@ -75,6 +77,12 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
     return acc;
   }, {});
   const reviewRole = invite.role === "outgoing" || invite.role === "reviewer";
+  // R3 Task 05B: one row per source (its current version); earlier versions and a pending update are shown on it
+  const lineageOf = (s: SourceSummary) => s.version?.lineageId ?? s.id;
+  const currentSources = sources.filter(isCurrentSourceVersion);
+  const pendingFor = (s: SourceSummary) => sources.find((p) => isPendingSourceVersion(p) && lineageOf(p) === lineageOf(s));
+  const earlierCount = (s: SourceSummary) => sources.filter((p) => isSupersededSourceVersion(p) && lineageOf(p) === lineageOf(s)).length;
+  const canAddVersion = creator && (h.state === "draft" || h.state === "in_review");
 
   return (
     <div className="space-y-10">
@@ -284,12 +292,15 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
         </Panel>
       )}
 
-      {sources.length > 0 && (
+      {currentSources.length > 0 && (
         <Panel id="sources">
           <SectionHeading title="Sources" description="Access is set per source when consent is recorded. Points inherit the strictest level of their evidence." />
           <ul className="divide-y divide-border rounded-lg border border-border">
-            {sources.map((s) => (
-              <li key={s.id} className="flex items-start gap-3 px-3 py-3">
+            {currentSources.map((s) => {
+              const pending = pendingFor(s);
+              const earlier = earlierCount(s);
+              return (
+              <li key={s.id} className="flex flex-wrap items-start gap-3 px-3 py-3">
                 {s.kind === "whatsapp_export" ? <MessageCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : <FileText aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{s.title}</p>
@@ -302,8 +313,25 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                     {s.consentRecordedAt ? `Consent recorded ${formatDate(s.consentRecordedAt)}` : "No consent yet"}
                     {s.rawDeletedAt ? ` · raw upload deleted ${formatDate(s.rawDeletedAt)}` : ""}
                   </p>
+                  {(s.version?.versionNumber ?? 1) > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Version {s.version?.versionNumber}
+                      {earlier > 0 && ` · ${earlier === 1 ? "1 earlier version" : `${earlier} earlier versions`} kept with their evidence`}
+                    </p>
+                  )}
+                  {pending && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">A new version is being added and is not used yet.</span>
+                      {creator && h.state !== "processing" && (
+                        <Button size="sm" variant="ghost" onClick={() => run(() => removeSource({ sourceId: pending.id }), { success: "New version discarded" })}>
+                          Discard
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <AccessBadge level={s.accessLevel} />
+                {canAddVersion && !pending && (s.state === "uploaded" || s.state === "parsed" || s.state === "failed") && <SourceVersionUpload source={s} />}
                 {canManageSources && h.state !== "processing" && (
                   <ConfirmDialog
                     trigger={
@@ -312,7 +340,11 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                       </Button>
                     }
                     title={`Remove ${s.title}?`}
-                    description="It won't be used in future processing. Points already extracted from it keep their evidence until you reprocess."
+                    description={
+                      earlier > 0
+                        ? "Every version of this source is removed and won't be used in future processing. Points already extracted from it keep their evidence until you reprocess."
+                        : "It won't be used in future processing. Points already extracted from it keep their evidence until you reprocess."
+                    }
                     confirmLabel="Remove source"
                     destructive
                     onConfirm={async () => {
@@ -321,7 +353,8 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                   />
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Panel>
       )}

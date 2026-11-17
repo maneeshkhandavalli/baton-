@@ -6,6 +6,7 @@
 
 import type { BatonQueries } from "@/lib/contracts/queries";
 import type { HandoverSummary, ProcessingStatus, ReadinessReport } from "@/lib/contracts/dto";
+import { isCurrentSourceVersion } from "@/lib/contracts/source-versions";
 
 import type { HandoverCardData } from "./handover-card";
 import { classify, isReviewRole, type DashboardLinks, type HandoverInput } from "./model";
@@ -31,7 +32,7 @@ async function cardFor(queries: BatonQueries, h: HandoverSummary, routes: Dashbo
 
   if (h.state === "draft" && (h.viewerIsCreator || h.viewerRole === "outgoing")) {
     const sources = await queries.listSources(h.id);
-    const live = sources.ok ? sources.data.filter((s) => s.state !== "removed") : [];
+    const live = sources.ok ? sources.data.filter((s) => s.state !== "removed" && isCurrentSourceVersion(s)) : [];
     if (!live.some((s) => s.state === "parsed" || s.state === "parsing")) {
       const ready = live.filter((s) => s.state === "uploaded" && s.consentRecordedAt).length;
       const next = live.length === 0 ? "Consent and sources" : ready > 0 ? "Scope and start" : "Finish uploads";

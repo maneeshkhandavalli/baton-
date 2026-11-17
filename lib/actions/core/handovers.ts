@@ -1,6 +1,7 @@
 /** Handover lifecycle actions (§9, §11.3, §12.9). */
 
 import { blockingExtractionGaps, extractionAcknowledgements } from "../../contracts/extraction";
+import { isCurrentSourceVersion } from "../../contracts/source-versions";
 import type { Result } from "../../contracts/api";
 import type { HandoverSummary, PublicationSummary } from "../../contracts/dto";
 import {
@@ -100,7 +101,11 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
     if (!ai.ok) return ai;
     const plan = deps.planProcessingRun({
       handoverId: v.handoverId,
-      sources: sources.data.map((s) => ({ id: s.id, state: s.state, rawAvailable: s.rawDeletedAt === null })),
+      // R3 Task 05B: only the current version of each source is processed (mirrors start_processing); earlier
+      // versions keep their evidence, and a pending update is not active until its consent is recorded.
+      sources: sources.data
+        .filter(isCurrentSourceVersion)
+        .map((s) => ({ id: s.id, state: s.state, rawAvailable: s.rawDeletedAt === null })),
       aiConfig: ai.data,
     });
     if (!plan.ok) return plan;

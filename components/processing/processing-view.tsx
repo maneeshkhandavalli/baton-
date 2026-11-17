@@ -17,6 +17,7 @@ import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
 import type { MaskKind } from "@/lib/contracts/enums";
 import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
+import { isCurrentSourceVersion } from "@/lib/contracts/source-versions";
 import { routes } from "@/lib/routes";
 import { ExtractionCoverageSummary } from "@/components/review/extraction-coverage";
 import type { ExtractionReport } from "@/lib/contracts/extraction";
@@ -48,7 +49,9 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   const [reconsentAll, setReconsentAll] = useState(false);
   // Kept on the page (toasts disappear): why the last Start attempt didn't go through.
   const [startError, setStartError] = useState<string | null>(null);
-  const { run: r, handoverState, sources } = status;
+  const { run: r, handoverState } = status;
+  // R3 Task 05B: the current version of each source (earlier versions and pending updates are not processed)
+  const sources = status.sources.filter(isCurrentSourceVersion);
   const active = r?.status === "queued" || r?.status === "running";
 
   useEffect(() => {

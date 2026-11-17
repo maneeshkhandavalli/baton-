@@ -106,7 +106,8 @@ create schema upgrade;
 grant usage on schema upgrade to anon, authenticated, service_role;
 
 -- Removes keys that a Round 3 migration ADDS on purpose (HandoverSummary.description, 20261113100400, from
--- handover objects; EvidenceItem guarded/model_verdict, 20261113300900, from api_get_point evidence items), so the remaining read is compared byte for byte.
+-- handover objects; EvidenceItem guarded/model_verdict, 20261113300900, from api_get_point evidence items;
+-- SourceSummary.version, 20261117500100, from source objects), so the remaining read is compared byte for byte.
 create function upgrade.strip(j jsonb) returns jsonb language plpgsql immutable as $$
 declare
   k text;
@@ -120,6 +121,8 @@ begin
       if k = 'description' and j ? 'viewer_role' then continue; end if;
       -- PI-11 guard fields that 20261113300900 adds to each api_get_point evidence item (checked in verify.sql)
       if k in ('guarded', 'model_verdict') and j ? 'point_evidence_id' then continue; end if;
+      -- R3 Task 05B: the source version object that 20261117500100 adds to each source read (checked in verify.sql)
+      if k = 'version' and j ? 'masking_counts' then continue; end if;
       out := out || jsonb_build_object(k, upgrade.strip(j -> k));
     end loop;
     return out;

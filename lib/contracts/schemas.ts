@@ -282,6 +282,19 @@ export const createSourceUploadInput = z.object({
 
 export const sourceIdInput = z.object({ sourceId: uuidSchema });
 
+/**
+ * R3 Task 05B: a new version of an existing source. `previousSourceId` is the version the creator chose to
+ * replace (it must still be the current one when the upload starts and again when consent activates it).
+ */
+export const createSourceVersionUploadInput = z.object({
+  previousSourceId: uuidSchema,
+  kind: z.enum(SOURCE_KINDS),
+  fileName: z.string().min(1).max(255),
+  mimeType: z.string().max(127),
+  sizeBytes: z.number().int().positive().max(MAX_SOURCE_BYTES),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
 export const recordSourceConsentInput = z.object({
   sourceId: uuidSchema,
   consentStatementVersion: z.string().min(1),
@@ -636,6 +649,7 @@ export type EraseParticipantInput = z.input<typeof eraseParticipantInput>;
 export type DeleteAccountInput = z.input<typeof deleteAccountInput>;
 export type CreateSourceUploadInput = z.input<typeof createSourceUploadInput>;
 export type SourceIdInput = z.input<typeof sourceIdInput>;
+export type CreateSourceVersionUploadInput = z.input<typeof createSourceVersionUploadInput>;
 export type RecordSourceConsentInput = z.input<typeof recordSourceConsentInput>;
 export type RecordSourceConsentValues = z.output<typeof recordSourceConsentInput>;
 export type ParseContextInput = z.input<typeof parseContextSchema>;
