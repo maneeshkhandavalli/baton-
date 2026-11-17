@@ -98,7 +98,8 @@ begin
          tests.id('h')), reviewers, 'ok'),
       ('create_gap_interview_link', format('select public.create_gap_interview_link(tests.actor(), %L, %L, %L, %L, now() + interval ''1 day'', 5)',
          tests.id('h'), sha256('it15-tok2'::bytea), array[tests.id('q1')], 'everyone'), reviewers, 'ok'),
-      ('review_gap_answer', format('select public.review_gap_answer(tests.actor(), %L, %L, null)', tests.id('a1'), 'accept'), reviewers, 'ok'),
+      -- R3 Task 04: q1 is a custom owner question, so accepting needs the responsibility from the answer (20261117400100)
+      ('review_gap_answer', format('select public.review_gap_answer(tests.actor(), %L, %L, null, %L)', tests.id('a1'), 'accept', 'Keys'), reviewers, 'ok'),
       ('revoke_access_token(gap link)', format('select public.revoke_access_token(tests.actor(), %L)', tests.id('tok1')), reviewers, 'ok'),
       -- creator-only authority
       ('invite_member', format('select public.invite_member(tests.actor(), %L, %L, %L, %L, %L, now() + interval ''1 day'')',

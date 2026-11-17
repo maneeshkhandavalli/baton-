@@ -84,9 +84,11 @@ begin
   perform tests.ok((select point_id from public.gap_questions where id = v_qrej) is null, 'rejected: no point');
 
   -- 5. Leads-only question: its point is leads-only too.
+  -- R3 Task 04 (20261117400100): a contact point needs its nameLabel, which a question never names, so the reviewer
+  -- supplies it from the answer; accepting without it is refused (covered in 99_gap_answer_point_attributes.sql).
   perform tests.as_user('ann');
   select id into v_a from public.gap_answers where gap_question_id = v_qlead;
-  perform public.review_gap_answer(tests.actor(), v_a, 'accept');
+  perform public.review_gap_answer(tests.actor(), v_a, 'accept', null, 'Farah (Orbitstack)');
   perform tests.as_owner();
   select point_id into v_p from public.gap_questions where id = v_qlead;
   perform tests.put('pL', v_p);

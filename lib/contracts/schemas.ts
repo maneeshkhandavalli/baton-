@@ -515,6 +515,12 @@ export const reviewGapAnswerInput = z.object({
   answerId: uuidSchema,
   decision: z.enum(GAP_ANSWER_DECISIONS),
   note: z.string().optional(),
+  /**
+   * R3 Task 04: when accepting an answer creates an owner, contact or account point, the reviewer supplies its
+   * required attribute (responsibility, contact name, system) from the answer, unless the checklist question already
+   * names it. Masked on the server; never invented.
+   */
+  pointDetail: z.string().trim().min(1).max(200).optional(),
 });
 
 // ── Inputs: members (§11.3, §11.5) ───────────────────────────────────────────
