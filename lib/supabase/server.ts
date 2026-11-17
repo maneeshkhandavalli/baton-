@@ -11,6 +11,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+import { sessionCookieOptions } from "./cookie-options";
 import { getSupabasePublicEnv } from "./env";
 
 export async function createSupabaseServerClient() {
@@ -18,6 +19,7 @@ export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
 
   return createServerClient(url, anonKey, {
+    cookieOptions: sessionCookieOptions(), // R3 Task 02 (PRIV-4): httpOnly
     cookies: {
       getAll() {
         return cookieStore.getAll();

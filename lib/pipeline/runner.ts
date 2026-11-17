@@ -37,6 +37,7 @@ import type { StorageClient } from "../db/storage";
 import { nextAttemptAt } from "./backoff";
 import { decideRunOutcome } from "./finish";
 import type { PipelineLogger } from "./log";
+import type { IdentityMapKeyResult } from "../privacy/identity-vault";
 import type { VerifiedPepper } from "./pepper-core";
 import type { StageContext, StageHandler } from "./stage-context";
 import type { PipelineAi } from "./ai";
@@ -76,6 +77,8 @@ export interface DrainerDeps {
   storage: StorageClient;
   logger: PipelineLogger;
   getPepper(): Result<VerifiedPepper>;
+  /** R3 Task 02: identity-vault key reader; defaults to the server environment. */
+  getIdentityMapKey?(): IdentityMapKeyResult;
   ai: PipelineAi;
   now?: () => number;
   handlers?: Partial<Record<PipelineStage, StageHandler>>;
@@ -184,6 +187,7 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
           now,
           deadlineAt,
           getPepper: deps.getPepper,
+          ...(deps.getIdentityMapKey ? { getIdentityMapKey: deps.getIdentityMapKey } : {}),
           ai: deps.ai,
           heartbeat: async (progress) => {
             const status = await heartbeatJob(db, { jobId: claimed.id, attempt: claimed.attempt, leaseSeconds: lease, progress });

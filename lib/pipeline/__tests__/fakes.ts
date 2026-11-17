@@ -12,6 +12,11 @@ import type { ExtractOutcome, PipelineAi, SupportOutcome } from "../ai";
 
 export const RUN_CONFIG: AiRunConfig = fakeRunConfig();
 
+/** R3 Task 02: a synthetic identity-vault key for every pipeline test (never a real key). */
+export const TEST_IDENTITY_MAP_KEY = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0";
+process.env.IDENTITY_MAP_KEY ??= TEST_IDENTITY_MAP_KEY;
+process.env.IDENTITY_MAP_KEY_VERSION ??= "k1";
+
 export function attemptRecord(attempt = 1): AiAttemptRecord {
   return {
     attempt,
@@ -101,9 +106,33 @@ export function rpcError(code: string) {
 
 type Handler = (args: Record<string, unknown>, calls: RpcCall[]) => unknown;
 
+/**
+ * R3 Task 02: default identity-vault RPCs, faithful to the SQL. reserve hands out ordinals in input order and
+ * remembers people; list returns them (the job's source counts as pseudonymised); persist_pseudonymized
+ * delegates to a scripted pipeline_persist_parsed_source when the test has one.
+ */
+export function identityDefaults(handlers: Record<string, Handler | unknown>): Record<string, Handler> {
+  const people: Array<{ ordinal: number; personKey: string; sealed: string | null; keyVersion: string }> = [];
+  return {
+    pipeline_reserve_handover_people: (args) => {
+      for (const p of (args.p_people as Array<{ personKey: string; sealed: string | null; keyVersion: string }>) ?? []) {
+        if (!people.some((x) => x.personKey === p.personKey)) people.push({ ordinal: people.length + 1, ...p });
+      }
+      return people.map((p) => ({ ...p }));
+    },
+    parse_exclusion_rules: () => [],
+    pipeline_list_handover_people: () => ({ people: people.map((p) => ({ ...p })), sourceIdentityScheme: "person_v1" }),
+    pipeline_persist_pseudonymized_source: (args, calls) => {
+      const h = handlers.pipeline_persist_parsed_source;
+      return typeof h === "function" ? (h as Handler)(args, calls) : (h ?? null);
+    },
+  };
+}
+
 /** Unknown functions return null. `log` records every call in order (shared with fakeStorage). */
 export function fakeDb(handlers: Record<string, Handler | unknown>, log: string[] = []) {
   const calls: RpcCall[] = [];
+  handlers = { ...identityDefaults(handlers), ...handlers };
   const client: DbClient = {
     rpc: async (fn, args = {}) => {
       calls.push({ fn, args });

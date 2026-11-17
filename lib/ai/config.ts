@@ -13,6 +13,18 @@ import "server-only";
  * The API key is read only when the provider is built (`providerFor`) and is passed straight to the
  * adapter: it is never part of `AiConfiguration`, `AiRunConfig`, provenance or errors.
  * No AI variable has a `NEXT_PUBLIC_` prefix.
+ *
+ * R3 Task 02 (PRIV-1, JOB-2): data governance. Any build that is not exactly NODE_ENV "development" or "test"
+ * (every Vercel deployment, `next start`, a script started without NODE_ENV) runs a real provider ONLY with an explicit, approved data-governance profile in
+ * `AI_DATA_GOVERNANCE`. Without it the configuration is `provider_not_configured`, so production can never
+ * fall back silently to the Gemini free tier, whose terms allow Google to use content to improve its products
+ * with human review and say not to submit personal information. Profiles (APPROVED_AI_DATA_GOVERNANCE):
+ *   - "gemini-paid-dpa": the Gemini API through a Cloud project with an ACTIVE billing account ("Paid
+ *     Services": no use of prompts or responses to improve Google products; processing under Google's Data
+ *     Processing Addendum; prompts and responses still logged for a limited period for abuse monitoring).
+ *     Setting it is the operator's attestation that the key belongs to such a project. Owner approval is
+ *     still required (docs/round3/privacy-and-data-protection.md §Provider).
+ * Development and tests are unchanged (synthetic data only).
  */
 
 import type { Result } from "../contracts/api";
@@ -25,7 +37,23 @@ export type AiEnv = Record<string, string | undefined>;
 
 export type AiConfiguration =
   | { ok: true; mode: "production" | "fake"; provider: { id: string; displayName: string }; runConfig: AiRunConfig }
-  | { ok: false; reason: "provider_not_configured" };
+  | { ok: false; reason: "provider_not_configured"; detail?: "data_governance_unapproved" };
+
+/** Data-governance profiles a production deployment may declare (R3 Task 02). */
+export const APPROVED_AI_DATA_GOVERNANCE: Readonly<Record<string, { provider: string; description: string }>> = Object.freeze({
+  "gemini-paid-dpa": {
+    provider: GEMINI_PROVIDER_ID,
+    description: "Gemini API, Cloud project with active billing (Paid Services, Google Data Processing Addendum)",
+  },
+});
+
+/** True when this environment may call a real provider with organisational data. */
+export function dataGovernanceApproved(env: AiEnv, provider: string): boolean {
+  // Only exact "development" / "test" skip the gate (synthetic data only); unset or anything else is production.
+  if (env.NODE_ENV !== undefined && FAKE_NODE_ENVS.has(env.NODE_ENV)) return true;
+  const profile = APPROVED_AI_DATA_GOVERNANCE[(env.AI_DATA_GOVERNANCE ?? "").trim()];
+  return profile !== undefined && profile.provider === provider;
+}
 
 /** NODE_ENV values under which the test adapter may run. Exact match: no trimming, case-sensitive. */
 const FAKE_NODE_ENVS: ReadonlySet<string> = new Set(["development", "test"]);
@@ -54,6 +82,9 @@ export function getAiConfiguration(env: AiEnv = process.env): AiConfiguration {
     const extract = geminiModel(env.AI_MODEL_EXTRACT);
     const verify = geminiModel(env.AI_MODEL_VERIFY);
     if (!geminiApiKey(env) || !extract || !verify) return { ok: false, reason: "provider_not_configured" };
+    if (!dataGovernanceApproved(env, GEMINI_PROVIDER_ID)) {
+      return { ok: false, reason: "provider_not_configured", detail: "data_governance_unapproved" };
+    }
     return {
       ok: true,
       mode: "production",

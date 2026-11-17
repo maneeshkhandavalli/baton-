@@ -130,7 +130,11 @@ export function EvidenceQuote({
       <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
         <SourceIcon aria-hidden="true" className="size-3.5 shrink-0" />
         <span className="flex min-w-0 flex-wrap items-center gap-y-1">
-          {authorLabel && <span className={cn(sep, "font-medium text-foreground/85")}>{authorLabel}</span>}
+          {authorLabel && (
+            <span className={cn(sep, "font-medium text-foreground/85")}>
+              <MaskedText text={authorLabel} />
+            </span>
+          )}
           {kind === "testimony" && <span className={sep}>Gap Interview answer</span>}
           {sentAt && (
             <time className={cn(sep, "tabular-nums")} dateTime={sentAt}>
