@@ -121,6 +121,8 @@ describe("D35: identity, role and creator never come from the browser", () => {
     const w = actionWorld();
     w.adminDb.returns("reject_point", null).returns("delete_handover", null).returns("publish_handover", randomUUID());
     w.userDb.returns("api_get_point", pointDetailRow(w.ids.point));
+    // R3 Task 03: publishing first reads the extraction report (RLS) for unacknowledged partial extraction.
+    w.userDb.returns("api_get_extraction_report", { available: true, runId: null, runStatus: null, sources: [], flags: {} });
     await review.reviewPoint({ action: "reject", pointId: w.ids.point, reason: "No", ...SMUGGLED } as never);
     await handovers.deleteHandover({ handoverId: w.ids.handover, ...SMUGGLED } as never);
     await handovers.publishHandover({ handoverId: w.ids.handover, ...SMUGGLED } as never);

@@ -20,6 +20,7 @@ import { useHotkeys } from "@/hooks/use-hotkeys";
 import type { GapQuestionSummary, HandoverSummary, PointDetail, ReadinessReport, SourceSummary } from "@/lib/contracts/dto";
 import { EVIDENCE_STATUSES, type EvidenceStatus, type PointCategory, type ReviewState } from "@/lib/contracts/enums";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
+import { blockingExtractionGaps, type ExtractionReport, type PointReviewFlag, type UnreviewedSignalMessage } from "@/lib/contracts/extraction";
 import { createGapQuestion } from "@/lib/actions/gaps";
 import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
@@ -27,6 +28,7 @@ import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 import { cn } from "@/lib/utils";
 
 import { AddPointDialog } from "./add-point-dialog";
+import { ExtractionCoverageSummary, extractionBlockerLabel, UnreviewedSignals } from "./extraction-coverage";
 import type { ManualPointForm } from "./manual-point";
 import { PointCard, type PointAction } from "./point-card";
 import { PointDetailPanel } from "./point-detail-panel";
@@ -41,6 +43,10 @@ interface ReviewWorkspaceProps {
   readiness: ReadinessReport | null;
   gapQuestions: GapQuestionSummary[];
   sources: SourceSummary[];
+  /** R3 Task 03: extraction coverage, unreviewed signals and review flags (optional: previews omit them). */
+  extraction?: ExtractionReport | null;
+  unreviewedSignals?: UnreviewedSignalMessage[];
+  pointFlags?: PointReviewFlag[];
   /** Public demo or a state where review actions aren't allowed. */
   readOnly: boolean;
   readOnlyReason?: string;
@@ -57,7 +63,23 @@ type ReviewFilter = "all" | ReviewState;
 
 const REQUIRED_GAP_CATEGORIES: PointCategory[] = ["owner", "account_access", "open_task", "blocker"];
 
-export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sources, readOnly, readOnlyReason, gapsHref, publishedHref, preview = false }: ReviewWorkspaceProps) {
+export function ReviewWorkspace({
+  handover,
+  points,
+  readiness,
+  gapQuestions,
+  sources,
+  extraction = null,
+  unreviewedSignals = [],
+  pointFlags = [],
+  readOnly,
+  readOnlyReason,
+  gapsHref,
+  publishedHref,
+  preview = false,
+}: ReviewWorkspaceProps) {
+  const extractionGaps = extraction ? blockingExtractionGaps(extraction) : [];
+  const [acknowledgeGaps, setAcknowledgeGaps] = useState(false);
   const [section, setSection] = useState<SectionFilter>("all");
   const [status, setStatus] = useState<EvidenceStatus | "all">("all");
   const [review, setReview] = useState<ReviewFilter>("all");
@@ -244,6 +266,7 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       onExclude={(pointEvidenceId) => setDialog({ kind: "exclude", point: selected, pointEvidenceId })}
       onRestore={(pointEvidenceId) => void submit({ action: "restore_evidence", pointId: selected.id, pointEvidenceId })}
       onChangeAccess={(accessOverride) => void submit({ action: "change_access", pointId: selected.id, accessOverride })}
+      flags={pointFlags.filter((f) => f.pointId === selected.id)}
     />
   );
 
@@ -257,6 +280,12 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
       gapsHref={gapsHref}
       canPublish={!!readiness?.canPublish}
       onPublish={canPublishNow ? () => (preview ? toast.info("Preview only: publishing is turned off.") : setPublishOpen(true)) : null}
+      extra={
+        <>
+          <ExtractionCoverageSummary report={extraction} />
+          <UnreviewedSignals handoverId={handover.id} items={unreviewedSignals} readOnly={readOnly || preview} />
+        </>
+      }
     />
   );
 
@@ -435,14 +464,32 @@ export function ReviewWorkspace({ handover, points, readiness, gapQuestions, sou
               placeholder="A few sentences for the incoming member. Only include information everyone may see."
             />
           </div>
+          {extractionGaps.length > 0 && (
+            <div className="space-y-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-fg">
+              <p>
+                {extractionGaps.map((g) => extractionBlockerLabel[g.kind](g.count)).join(". ")}. Points from the parts Baton never read may be missing.
+              </p>
+              <label className="flex items-start gap-2 text-foreground">
+                <input type="checkbox" className="mt-1" checked={acknowledgeGaps} onChange={(e) => setAcknowledgeGaps(e.target.checked)} />
+                I understand and want to publish anyway.
+              </label>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPublishOpen(false)} disabled={isPending}>
               Cancel
             </Button>
             <Button
-              disabled={isPending}
+              disabled={isPending || (extractionGaps.length > 0 && !acknowledgeGaps)}
               onClick={() =>
-                run(() => publishHandover({ handoverId: handover.id, summary: summary || undefined }), {
+                run(
+                  () =>
+                    publishHandover({
+                      handoverId: handover.id,
+                      summary: summary || undefined,
+                      acknowledgeExtractionGaps: extractionGaps.length > 0 ? acknowledgeGaps : undefined,
+                    }),
+                  {
                   success: (d) => `Published version ${d.version} on ${formatDate(d.publishedAt)}`,
                   onSuccess: () => setPublishOpen(false),
                 })

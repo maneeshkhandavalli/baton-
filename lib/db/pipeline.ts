@@ -589,3 +589,65 @@ export const persistPseudonymizedSource = async (adminDb: DbClient, claim: JobCl
 export async function resolveHandoverPeopleSealed(adminDb: DbClient, actorProfileId: string, handoverId: string): Promise<SealedPerson[]> {
   return parsePeople(await callRpc(adminDb, "resolve_handover_people", { p_actor_profile_id: actorProfileId, p_handover_id: handoverId }));
 }
+
+// ── R3 Task 03 (EXT-1/2/3, VER-2/3): signals, coverage, chunk stats, review flags ──────────────────
+// Migration 20261117300100. Fenced like every other writer. A database without the migration raises
+// PipelineSchemaError; lib/pipeline/coverage.ts turns that into "coverage unavailable", never a failed run.
+
+export interface SourceSignalCoverage {
+  detectorVersion: string;
+  messagesInspected: number;
+  messagesWithSignals: number;
+  signals: number;
+  oversizeSkipped: number;
+  emptySkipped: number;
+  chunksTotal: number;
+}
+
+export interface StoredSignal {
+  messageId: string;
+  kind: string;
+  strength: "strong" | "weak";
+  start: number;
+  end: number;
+  value: string | null;
+}
+
+/** Fenced (extract): upserts the source's coverage row and inserts signals (existing ones are kept). */
+export async function storeSourceSignals(
+  adminDb: DbClient,
+  claim: JobClaim,
+  input: { coverage: SourceSignalCoverage; signals: StoredSignal[] },
+): Promise<number> {
+  const data = await fencedRpc(adminDb, "pipeline_store_source_signals", claim, { p_coverage: input.coverage, p_signals: input.signals });
+  return typeof data === "number" ? data : 0;
+}
+
+export interface ExtractChunkStats {
+  chunkTotal: number;
+  messages: number;
+  candidates: number;
+  inserted: number;
+  merged: number;
+  /** Counts by reason token. */
+  dropped: Record<string, number>;
+}
+
+/** Fenced (extract): one chunk's counts (upsert by chunk index). */
+export const recordExtractChunkStats = async (adminDb: DbClient, claim: JobClaim, chunkIndex: number, stats: ExtractChunkStats) =>
+  void (await fencedRpc(adminDb, "pipeline_record_extract_chunk_stats", claim, { p_chunk_index: chunkIndex, p_stats: stats }));
+
+export interface NewPointFlag {
+  pointId: string;
+  revisionId: string;
+  kind: "possible_contradiction" | "attribution_unresolved" | "attribution_inferred";
+  messageId: string | null;
+  detail: Record<string, unknown>;
+  dedupeKey: string;
+}
+
+/** Fenced (analyze): review flags for the current revision of points in the job's handover. */
+export async function storePointFlags(adminDb: DbClient, claim: JobClaim, flags: NewPointFlag[]): Promise<number> {
+  const data = await fencedRpc(adminDb, "pipeline_store_point_flags", claim, { p_flags: flags });
+  return typeof data === "number" ? data : 0;
+}

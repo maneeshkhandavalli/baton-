@@ -15,7 +15,10 @@ import type { EvidenceItem, PointDetail, SourceSummary } from "@/lib/contracts/d
 import { ACCESS_LEVELS, type AccessLevel, type MaskKind } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
+import type { PointReviewFlag } from "@/lib/contracts/extraction";
+
 import { EvidenceQuote } from "./evidence-quote";
+import { PointFlags } from "./extraction-coverage";
 
 interface PointDetailPanelProps {
   point: PointDetail;
@@ -25,6 +28,8 @@ interface PointDetailPanelProps {
   onExclude: (pointEvidenceId: string) => void;
   onRestore: (pointEvidenceId: string) => void;
   onChangeAccess: (level: AccessLevel | null) => void;
+  /** R3 Task 03 (VER-2/3): review flags on this point's current revision. */
+  flags?: PointReviewFlag[];
 }
 
 const reviewActionLabel: Record<string, string> = {
@@ -118,7 +123,7 @@ function Verification({ e }: { e: EvidenceItem }) {
   );
 }
 
-export function PointDetailPanel({ point, sources, readOnly, pending, onExclude, onRestore, onChangeAccess }: PointDetailPanelProps) {
+export function PointDetailPanel({ point, sources, readOnly, pending, onExclude, onRestore, onChangeAccess, flags = [] }: PointDetailPanelProps) {
   const rows = attributeRows(point.category, point.attributes);
   const sourceTitles = new Set(point.evidence.map((e) => e.sourceTitle).filter(Boolean));
   const relatedSources = sources.filter((s) => sourceTitles.has(s.title));
@@ -136,6 +141,12 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
         <p className="text-sm leading-relaxed text-muted-foreground"><MaskedText text={point.statement} /></p>
         <p className="text-xs text-muted-foreground">{statusConfig[point.evidenceStatus].description}</p>
       </div>
+
+      {flags.some((f) => f.state === "open") && (
+        <Section title="Check before approving">
+          <PointFlags flags={flags} readOnly={readOnly} />
+        </Section>
+      )}
 
       {rows.length > 0 && (
         <Section title="Details">

@@ -1,0 +1,48 @@
+{
+  "id": "ds02-fooddrive-hinglish",
+  "description": "Synthetic NGO volunteer group running a weekly food drive; the outgoing coordinator hands over. Mixed English and Hinglish. Pseudonymised and masked as stored by Baton.",
+  "team": { "name": "Saturday food drive volunteers", "roleTitle": "Coordinator" },
+  "messages": [
+    { "id": "m01", "author": "[PERSON_1]", "sentAt": "2026-09-01T08:00:00+05:30", "body": "Good morning sab log" },
+    { "id": "m02", "author": "[PERSON_1]", "sentAt": "2026-09-01T08:10:00+05:30", "body": "Final hai: distribution will happen every Saturday at the community hall from 11 am" },
+    { "id": "m03", "author": "[PERSON_2]", "sentAt": "2026-09-01T08:15:00+05:30", "body": "👍👍" },
+    { "id": "m04", "author": "[PERSON_3]", "sentAt": "2026-09-01T09:00:00+05:30", "body": "Ration supplier ko ₹12,000 pay karna hai by Thursday, warna delivery nahi aayegi" },
+    { "id": "m05", "author": "[PERSON_1]", "sentAt": "2026-09-01T09:05:00+05:30", "body": "[PERSON_3] can you pay the supplier from the NGO account and send the receipt?" },
+    { "id": "m06", "author": "[PERSON_3]", "sentAt": "2026-09-01T09:06:00+05:30", "body": "haan main kar dungi kal tak" },
+    { "id": "m07", "author": "[PERSON_2]", "sentAt": "2026-09-02T17:30:00+05:30", "body": "Bhai traffic bahut hai aaj" },
+    { "id": "m08", "author": "[PERSON_1]", "sentAt": "2026-09-03T10:00:00+05:30", "body": "[PERSON_4] is the point of contact for the municipal permission for the hall" },
+    { "id": "m09", "author": "[PERSON_4]", "sentAt": "2026-09-03T10:30:00+05:30", "body": "We are waiting for the ward office to sign the permission letter, until then we can't use the hall" },
+    { "id": "m10", "author": "[PERSON_2]", "sentAt": "2026-09-04T12:00:00+05:30", "body": "Volunteer attendance sheet is on the shared drive, link: https://docs.google.com/spreadsheets/d/synthetic-sheet-01" },
+    { "id": "m11", "author": "[PERSON_1]", "sentAt": "2026-09-05T19:00:00+05:30", "body": "Change of plan, distribution is moved to Sunday 10 am because the hall is booked on Saturdays now" },
+    { "id": "m12", "author": "[PERSON_3]", "sentAt": "2026-09-05T19:10:00+05:30", "body": "ok cool" },
+    { "id": "m13", "author": "[PERSON_2]", "sentAt": "2026-09-06T09:00:00+05:30", "body": "Kis ke paas hai the key of the storage room?" },
+    { "id": "m14", "author": "[PERSON_1]", "sentAt": "2026-09-06T09:20:00+05:30", "body": "UPI for donations is [UPI_1], [PERSON_2] checks the donation ledger every Monday" },
+    { "id": "m15", "author": "[PERSON_4]", "sentAt": "2026-09-07T11:00:00+05:30", "body": "Ward office said the permission is valid only till 31 December, renewal application has to go in by 15 December" },
+    { "id": "m16", "author": "[PERSON_3]", "sentAt": "2026-09-07T11:30:00+05:30", "body": "😂😂 that meme" },
+    { "id": "m17", "author": "[PERSON_2]", "sentAt": "2026-09-08T15:00:00+05:30", "body": "The supplier says we still owe ₹3,000 from last month" },
+    { "id": "m18", "author": "[PERSON_3]", "sentAt": "2026-09-08T15:20:00+05:30", "body": "But I paid the full amount last month, the receipt shows nothing pending" },
+    { "id": "m19", "author": "[PERSON_1]", "sentAt": "2026-09-09T10:00:00+05:30", "body": "chalo theek hai" },
+    { "id": "m20", "author": "[PERSON_1]", "sentAt": "2026-09-09T10:05:00+05:30", "body": "Should we start a second centre in the east side or not? nobody replied last time" }
+  ],
+  "labels": [
+    { "id": "L01", "kind": "decision", "messageIds": ["m02"], "keywords": ["distribution", "saturday"], "owner": null },
+    { "id": "L02", "kind": "reversed_decision", "messageIds": ["m02"], "reversedBy": ["m11"], "keywords": ["distribution", "sunday"], "owner": null },
+    { "id": "L03", "kind": "deadline", "messageIds": ["m04"], "keywords": ["supplier", "thursday"], "owner": null },
+    { "id": "L04", "kind": "financial_commitment", "messageIds": ["m04", "m05", "m06"], "keywords": ["supplier", "pay"], "owner": "[PERSON_3]" },
+    { "id": "L05", "kind": "responsibility", "messageIds": ["m08"], "keywords": ["municipal", "permission", "contact"], "owner": "[PERSON_4]" },
+    { "id": "L06", "kind": "dependency", "messageIds": ["m09"], "keywords": ["ward", "permission"], "owner": null },
+    { "id": "L07", "kind": "unresolved_question", "messageIds": ["m13"], "keywords": ["key", "storage"], "owner": null },
+    { "id": "L08", "kind": "responsibility", "messageIds": ["m14"], "keywords": ["donation", "ledger"], "owner": "[PERSON_2]" },
+    { "id": "L09", "kind": "deadline", "messageIds": ["m15"], "keywords": ["renewal", "permission"], "owner": null },
+    { "id": "L10", "kind": "contradiction", "messageIds": ["m17", "m18"], "keywords": ["supplier", "owe", "paid"], "owner": null },
+    { "id": "L11", "kind": "unresolved_question", "messageIds": ["m20"], "keywords": ["second", "centre"], "owner": null },
+    { "id": "L12", "kind": "responsibility", "messageIds": ["m10"], "keywords": ["attendance", "sheet"], "owner": null }
+  ],
+  "supportPairs": [
+    { "id": "S01", "claim": { "category": "decision", "title": "Distribution day", "statement": "Distribution happens every Saturday at the community hall.", "attributes": {} }, "messageId": "m02", "quote": "distribution will happen every Saturday at the community hall", "expected": "supports" },
+    { "id": "S02", "claim": { "category": "decision", "title": "Distribution day", "statement": "Distribution happens every Saturday at the community hall.", "attributes": {} }, "messageId": "m11", "quote": "distribution is moved to Sunday 10 am because the hall is booked on Saturdays", "expected": "contradicts" },
+    { "id": "S03", "claim": { "category": "contact", "title": "Municipal permission contact", "statement": "[PERSON_4] is the contact for the municipal permission.", "attributes": { "nameLabel": "[PERSON_4]", "organisation": null, "roleDescription": null, "preferredChannel": null, "directContact": null } }, "messageId": "m08", "quote": "[PERSON_4] is the point of contact for the municipal permission", "expected": "supports" },
+    { "id": "S04", "claim": { "category": "open_task", "title": "Permission renewal", "statement": "The permission renewal application is due by 15 December.", "attributes": { "assigneeLabel": null, "dueDate": null, "progressNote": null } }, "messageId": "m15", "quote": "renewal application has to go in by 15 December", "expected": "supports" },
+    { "id": "S05", "claim": { "category": "owner", "title": "Donation ledger", "statement": "[PERSON_2] checks the donation ledger.", "attributes": { "responsibility": "Donation ledger", "ownerLabel": "[PERSON_2]", "since": null } }, "messageId": "m10", "quote": "Volunteer attendance sheet is on the shared drive", "expected": "irrelevant" }
+  ]
+}

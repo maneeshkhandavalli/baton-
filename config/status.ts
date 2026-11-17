@@ -13,7 +13,8 @@ interface StatusMeta {
 export const statusConfig: Record<EvidenceStatus, StatusMeta> = {
   sourced: {
     label: "Sourced",
-    description: "Directly supported by a cited source.",
+    // R3 Task 03 (VER-1): "sourced" = quote found (checked) + AI judged supportive. It is not a human confirmation.
+    description: "A quote was found in the source and the AI judged that it supports this point. A person still decides.",
     className: {
       dot: "bg-status-sourced",
       badge: "bg-status-sourced-soft text-status-sourced-fg border-status-sourced/20",

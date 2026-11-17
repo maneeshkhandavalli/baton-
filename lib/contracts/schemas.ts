@@ -217,6 +217,24 @@ export const handoverIdInput = z.object({ handoverId: uuidSchema });
 export const publishHandoverInput = z.object({
   handoverId: uuidSchema,
   summary: z.string().optional(),
+  /**
+   * R3 Task 03 (EXT-3): the reviewer accepts that part of a source was never analysed (a partial or failed
+   * extraction). Required only while the extraction report has a blocking gap.
+   */
+  acknowledgeExtractionGaps: z.boolean().optional(),
+});
+
+/** R3 Task 03 (EXT-1): mark every signal of one message as not relevant, or back to unreviewed. */
+export const reviewSignalMessageInput = z.object({
+  handoverId: uuidSchema,
+  messageId: uuidSchema,
+  state: z.enum(["dismissed", "unreviewed"]),
+});
+
+/** R3 Task 03 (VER-2/3): a reviewer looked at a review flag. */
+export const reviewPointFlagInput = z.object({
+  flagId: uuidSchema,
+  state: z.enum(["open", "dismissed", "confirmed"]),
 });
 
 export const offerCreatorTransferInput = z.object({
@@ -604,6 +622,8 @@ export type CreateHandoverInput = z.input<typeof createHandoverInput>;
 export type UpdateHandoverDetailsInput = z.input<typeof updateHandoverDetailsInput>;
 export type HandoverIdInput = z.input<typeof handoverIdInput>;
 export type PublishHandoverInput = z.input<typeof publishHandoverInput>;
+export type ReviewSignalMessageInput = z.input<typeof reviewSignalMessageInput>;
+export type ReviewPointFlagInput = z.input<typeof reviewPointFlagInput>;
 export type OfferCreatorTransferInput = z.input<typeof offerCreatorTransferInput>;
 export type RespondToCreatorTransferInput = z.input<typeof respondToCreatorTransferInput>;
 export type EraseParticipantInput = z.input<typeof eraseParticipantInput>;
