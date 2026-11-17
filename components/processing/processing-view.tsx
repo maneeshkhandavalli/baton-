@@ -23,7 +23,10 @@ import { cn } from "@/lib/utils";
 import { sourceErrorText } from "./source-error";
 
 const POLL_MS = 3_000; // D10
-/** Hosted (Vercel) has no background drain loop: while the run is active this page keeps it moving. */
+/**
+ * Accelerator only (JOB-1): the scheduled worker (docs/round3/autonomous-worker.md) advances runs without this
+ * page; while the page is open it also asks for an extra drain so the run moves between scheduler ticks.
+ */
 const NUDGE_MS = 20_000;
 
 interface ProcessingViewProps {

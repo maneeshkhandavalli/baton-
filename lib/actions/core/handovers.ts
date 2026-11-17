@@ -130,7 +130,8 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
 }
 
 /**
- * Round 2 hosted preview: keeps an active run moving where no background loop exists (Vercel). The
+ * Accelerator (JOB-1): the scheduled worker (app/api/pipeline/drain, docs/round3/autonomous-worker.md) advances
+ * runs with no page open; this only adds drains between its ticks. The
  * processing page calls this every ~20 s while its run is queued/running; it schedules ONE more fenced
  * drain (`scheduleDrain`, the same `after()` drain startProcessing uses, with the same budget). Claim
  * fencing, stage order, retries and backoff all still come from the database, so overlapping drains are

@@ -45,3 +45,12 @@ export const WRITE_RPCS = [
   "check_account_deletion", "delete_account_data", "delete_own_account", "submit_gap_answers_with_token", "redeem_member_invite",
   "transition_handover", "finish_processing_run",
 ] as const;
+
+/** Task 01B: the worker-slot RPCs every drain now calls, answering as a free slot (or `busy`). */
+export const SLOT_TOKEN = "0b7c5d1e-2f3a-4b5c-8d6e-7f8091a2b3c4";
+export function workerSlot(db: Backends["adminDb"], opts: { busy?: boolean } = {}): Backends["adminDb"] {
+  return db
+    .returns("acquire_pipeline_worker_slot", opts.busy ? null : { slot: 1, token: SLOT_TOKEN, generation: 1 })
+    .returns("renew_pipeline_worker_slot", true)
+    .returns("release_pipeline_worker_slot", true);
+}

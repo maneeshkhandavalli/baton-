@@ -31,7 +31,7 @@ export function startDevDrainLoop(env: Record<string, string | undefined> = proc
   state.started = true;
 
   // Overlap, error and hang handling live in createDevDrainTick (unit-tested in dev-drain-guard.test.ts).
-  const { tick } = createDevDrainTick(() => drainJobs(DEV_DRAIN_BUDGET), {
+  const { tick } = createDevDrainTick(() => drainJobs({ ...DEV_DRAIN_BUDGET, trigger: "dev_loop" }), {
     info: (m) => console.info(m),
     warn: (m) => console.warn(m),
   });
