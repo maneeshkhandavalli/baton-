@@ -109,7 +109,7 @@ describe("createSourceVersionUpload", () => {
 });
 
 describe("recordSourceConsent on a pending update (activation)", () => {
-  const consent = { sourceId: NEW_ID, consentStatementVersion: "v1", consentConfirmed: true as const, timezone: "Asia/Kolkata" };
+  const consent = { sourceId: NEW_ID, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true as const, timezone: "Asia/Kolkata" };
 
   it("defaults to the previous version's access level (copied to the pending update)", async () => {
     const f = fakeDeps({ aiRunConfig: () => ({ ok: true, data: FAKE_RUN_CONFIG }), rpc: { api_get_source: { data: pending("leads_only") } } });

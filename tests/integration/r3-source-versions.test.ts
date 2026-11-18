@@ -29,6 +29,7 @@ import { getVerifiedPepper } from "../../lib/pipeline/pepper";
 import { createDrainer } from "../../lib/pipeline/runner";
 import { computeIdentityHash, computeIdentityPepperCanary, identityKindOf } from "../../lib/privacy/identity";
 import { TEST_PEPPER } from "../../fixtures/parser/load";
+import { releaseBackedOffJobs } from "./support/backoff";
 import { captureConsole } from "./support/console-capture";
 import { PgBackedStorage, PgContainer, PsqlDbClient, lit } from "./support/pg";
 import { allowFakeAi, currentUserId, flushAfter, installCustomBackends, resetPlatform, signInAs } from "./support/platform";
@@ -59,6 +60,8 @@ describe("Tier E (R3 Task 05B): a new version of a source", { skip: !ENABLED && 
   let v1 = "";
   let v2 = "";
 
+  /** How often the drain fallback ran, and how many backed-off jobs it released (asserted where it is forced). */
+  const fallbacks = { used: 0, released: 0 };
   const drainRun = async (runId: string) => {
     const drain = createDrainer({
       db: adminDb, storage, logger: createConsoleLogger(), getPepper: getVerifiedPepper,
@@ -69,8 +72,8 @@ describe("Tier E (R3 Task 05B): a new version of a source", { skip: !ENABLED && 
       const { result: report } = await captureConsole(() => drain({ maxJobs: 25, deadlineMs: 120_000 }));
       status = (await pg.json<string>(`select to_jsonb(status) from public.processing_runs where id = ${lit(runId)}`))!;
       if (report.claimed === 0 && (status === "queued" || status === "running")) {
-        await pg.json(`select to_jsonb(count(*)) from (update public.processing_jobs set next_attempt_at = now() - interval '1 second'
-                        where run_id = ${lit(runId)} and status = 'queued' and next_attempt_at > now() returning 1) x`);
+        fallbacks.released += await releaseBackedOffJobs(pg, runId);
+        fallbacks.used += 1;
       }
     }
     await captureConsole(() => flushAfter());
@@ -105,7 +108,7 @@ describe("Tier E (R3 Task 05B): a new version of a source", { skip: !ENABLED && 
     v1 = t.sourceId;
     await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${v1}`, v1Bytes);
     ok(await confirmSourceUploaded({ sourceId: v1 }), "confirm v1");
-    ok(await recordSourceConsent({ sourceId: v1, consentStatementVersion: "consent@1", consentConfirmed: true, accessLevel: "everyone", timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent v1");
+    ok(await recordSourceConsent({ sourceId: v1, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, accessLevel: "everyone", timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent v1");
     ok(await addExclusion({ kind: "participant", sourceId: v1, scope: "source", identityKind: identityKindOf("Ravi Kumar"), participantIdentityHash: excludedHash, identityPepperVersion: "p1" }), "exclude Ravi in v1");
     const runId = ok(await startProcessing({ handoverId }), "process v1").runId;
     assert.equal(await drainRun(runId), "succeeded");
@@ -127,7 +130,7 @@ describe("Tier E (R3 Task 05B): a new version of a source", { skip: !ENABLED && 
     assert.deepEqual(before, { cur: v1, pend: null }, "before consent version 1 is still current");
 
     // fresh consent activates it; the access level defaults to version 1's
-    const s = ok(await recordSourceConsent({ sourceId: v2, consentStatementVersion: "consent@1", consentConfirmed: true, timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent v2");
+    const s = ok(await recordSourceConsent({ sourceId: v2, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent v2");
     assert.equal(s.accessLevel, "everyone");
     assert.deepEqual(s.version, { lineageId: v1, versionNumber: 2, supersedesSourceId: v1, supersededAt: null, supersededBySourceId: null,
       updateState: "awaiting_processing", updateError: null, openReviews: 0 }); // R3 Task 05C/05D: the update's state and open reviews

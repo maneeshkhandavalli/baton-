@@ -423,7 +423,7 @@ describe("sources", () => {
   it("recordSourceConsent without a configured provider writes nothing (provider_not_configured)", async () => {
     const f = fakeDeps();
     const r = await sources.recordSourceConsent(f.deps, {
-      sourceId: S, consentStatementVersion: "v1", consentConfirmed: true, timezone: "Asia/Kolkata",
+      sourceId: S, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, timezone: "Asia/Kolkata",
     });
     assert.equal(!r.ok && r.error.code, "precondition_failed");
     assert.equal(!r.ok && r.error.details?.reason, "provider_not_configured");
@@ -436,7 +436,7 @@ describe("sources", () => {
       rpc: { api_get_source: { data: { id: S } } },
     });
     await sources.recordSourceConsent(f.deps, {
-      sourceId: S, consentStatementVersion: "v1", consentConfirmed: true, timezone: "Asia/Kolkata", aiProvider: "evil",
+      sourceId: S, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, timezone: "Asia/Kolkata", aiProvider: "evil",
     } as never);
     // R3 Task 05B: the source is read first (under RLS) to know whether this consent activates a new version
     assert.deepEqual([f.calls[0].fn, f.calls[0].client], ["api_get_source", "user"]);

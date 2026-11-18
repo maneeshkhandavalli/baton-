@@ -3,6 +3,7 @@
  * lib/actions/deps.ts and has no override; tests pass their own fakes straight to the core functions.
  */
 
+import type { ConsentDisclosure } from "../../contracts/consent";
 import type { Result } from "../../contracts/api";
 import type { PreviewSourceFn } from "../../contracts/parser";
 import type { BatonQueries } from "../../contracts/queries";
@@ -31,6 +32,11 @@ export interface ActionDeps {
    * `details.reason = "provider_not_configured"`. Its `provider` is what consent records (I3 amendment 1).
    */
   aiRunConfig(): Result<AiRunConfig>;
+  /**
+   * R3 Task 05E: the consent wording for the SAME server configuration (lib/ai getConsentDisclosure). Consent is
+   * accepted only for exactly this statement version; the client's version or provider is never trusted.
+   */
+  consentDisclosure(): ConsentDisclosure;
   /** The verified identity pepper (lib/pipeline `getVerifiedPepper`); fails closed (D27, D30). */
   verifiedPepper(): Result<{ pepper: string; version: "p1" }>;
   /** The parser's read-only preview (lib/parsers `previewSource`). */

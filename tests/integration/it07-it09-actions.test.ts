@@ -40,7 +40,7 @@ const ACTIONS: Record<string, Call> = {
     mimeType: "text/plain", sizeBytes: 10, sha256: "ab".repeat(32) }),
   confirmSourceUploaded: (w) => sources.confirmSourceUploaded({ sourceId: w.ids.source }),
   previewSource: (w) => sources.previewSource({ sourceId: w.ids.source }),
-  recordSourceConsent: (w) => sources.recordSourceConsent({ sourceId: w.ids.source, consentStatementVersion: "c@1", consentConfirmed: true,
+  recordSourceConsent: (w) => sources.recordSourceConsent({ sourceId: w.ids.source, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true,
     accessLevel: "everyone", timezone: "Asia/Kolkata" }),
   addExclusion: (w) => sources.addExclusion({ kind: "date_range", sourceId: w.ids.source, scope: "source",
     rangeStart: "2026-01-01T00:00:00Z", rangeEnd: "2026-01-02T00:00:00Z" }),

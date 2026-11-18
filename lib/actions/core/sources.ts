@@ -1,6 +1,7 @@
 /** Source actions (§6.5, §6.8, §10.3, §11.3). */
 
 import type { Result } from "../../contracts/api";
+import { CONSENT_STATEMENT_OUTDATED_MESSAGE, CONSENT_STATEMENT_OUTDATED_REASON, disclosureProviderId } from "../../contracts/consent";
 import type { SourceSummary, SourceUploadTicket, SourceVersionUploadResult } from "../../contracts/dto";
 import { ACCESS_LEVELS } from "../../contracts/enums";
 import type { ParserFailure, SourcePreview } from "../../contracts/parser";
@@ -185,6 +186,19 @@ export async function recordSourceConsent(deps: ActionDeps, input: RecordSourceC
   return action(deps, recordSourceConsentInput, input, async (actor, v) => {
     const ai = deps.aiRunConfig();
     if (!ai.ok) return ai;
+    // R3 Task 05E: the statement must be exactly the wording this server shows for its ACTUAL configuration. The
+    // expected version is derived on the server; a stale or forged version (or one for another provider) is refused
+    // before anything is written. The recorded provider is always the server's (never the request's).
+    const expected = deps.consentDisclosure();
+    if (disclosureProviderId(expected.kind) !== ai.data.provider) {
+      return failWith("precondition_failed", {
+        message: "AI processing isn't set up on this server yet. Ask the workspace admin.",
+        details: { reason: "provider_not_configured" },
+      });
+    }
+    if (v.consentStatementVersion !== expected.statementVersion) {
+      return failWith("conflict", { message: CONSENT_STATEMENT_OUTDATED_MESSAGE, details: { reason: CONSENT_STATEMENT_OUTDATED_REASON } });
+    }
     // R3 Task 05B: recording consent on a pending update ACTIVATES it. Its access level starts as the previous
     // version's (copied when the update was created): that is the default when the caller names none, and it
     // may not become broader (the database enforces this too).

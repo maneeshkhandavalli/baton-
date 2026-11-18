@@ -26,7 +26,7 @@ const NOT_CONFIGURED: Array<[string, Record<string, string | undefined>]> = [
 ];
 
 const consentInput = (sourceId: string) => ({
-  sourceId, consentStatementVersion: "consent@1", consentConfirmed: true as const, accessLevel: "everyone" as const, timezone: "Asia/Kolkata",
+  sourceId, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true as const, accessLevel: "everyone" as const, timezone: "Asia/Kolkata",
 });
 
 describe("IT-08: AI configuration matrix", () => {

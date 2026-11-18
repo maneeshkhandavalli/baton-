@@ -1,4 +1,5 @@
 // Test doubles for lib/actions/core (no database, no Next.js). Synthetic data only.
+import { consentDisclosure, type ConsentDisclosure } from "../../contracts/consent";
 import type { Result } from "../../contracts/api";
 import type { PreviewSourceFn, PreviewSourceInput } from "../../contracts/parser";
 import type { BatonQueries } from "../../contracts/queries";
@@ -79,6 +80,8 @@ export interface FakeOptions {
   queries?: Partial<Record<keyof BatonQueries, (...args: unknown[]) => Promise<Result<unknown>>>>;
   siteOrigin?: () => string;
   aiRunConfig?: () => Result<AiRunConfig>;
+  /** R3 Task 05E: the expected consent wording (default: the one for the injected run config's provider). */
+  consentDisclosure?: () => ConsentDisclosure;
   verifiedPepper?: () => Result<{ pepper: string; version: "p1" }>;
   previewParser?: PreviewSourceFn;
   planProcessingRun?: (input: PlanInput) => Result<ProcessingPlan>;
@@ -176,6 +179,12 @@ export function fakeDeps(options: FakeOptions = {}) {
     clientIp: async () => (options.clientIp === undefined ? "203.0.113.7" : options.clientIp),
     siteOrigin: options.siteOrigin ?? (() => ORIGIN),
     aiRunConfig: options.aiRunConfig ?? (() => PROVIDER_NOT_CONFIGURED),
+    consentDisclosure:
+      options.consentDisclosure ??
+      (() => {
+        const r = (options.aiRunConfig ?? (() => PROVIDER_NOT_CONFIGURED))();
+        return consentDisclosure(!r.ok ? "not_configured" : r.data.provider === "fake" ? "local_test" : r.data.provider === "gemini" ? "gemini_free" : "evaluation");
+      }),
     verifiedPepper: options.verifiedPepper ?? (() => ({ ok: true, data: { pepper: TEST_PEPPER, version: "p1" } })),
     previewParser: async (input) => {
       parserInputs.push(input);

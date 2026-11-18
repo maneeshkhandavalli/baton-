@@ -38,6 +38,7 @@ import { getVerifiedPepper } from "../../lib/pipeline/pepper";
 import { createDrainer } from "../../lib/pipeline/runner";
 import { computeIdentityPepperCanary } from "../../lib/privacy/identity";
 import { TEST_PEPPER } from "../../fixtures/parser/load";
+import { releaseBackedOffJobs } from "./support/backoff";
 import { captureConsole } from "./support/console-capture";
 import { PgBackedStorage, PgContainer, PsqlDbClient, lit } from "./support/pg";
 import { allowFakeAi, currentUserId, flushAfter, installCustomBackends, resetPlatform, signInAs } from "./support/platform";
@@ -105,6 +106,8 @@ describe("Tier E (R3 Task 05D): deterministic change detection of a source updat
     },
   };
 
+  /** How often the drain fallback ran, and how many backed-off jobs it released (asserted where it is forced). */
+  const fallbacks = { used: 0, released: 0 };
   const drainRun = async (runId: string) => {
     const drain = createDrainer({
       db: workerDb, storage, logger: createConsoleLogger(), getPepper: getVerifiedPepper,
@@ -115,8 +118,8 @@ describe("Tier E (R3 Task 05D): deterministic change detection of a source updat
       const { result: report } = await captureConsole(() => drain({ maxJobs: 25, deadlineMs: 120_000 }));
       status = (await pg.json<string>(`select to_jsonb(status) from public.processing_runs where id = ${lit(runId)}`))!;
       if (report.claimed === 0 && (status === "queued" || status === "running")) {
-        await pg.json(`with x as (update public.processing_jobs set next_attempt_at = now() - interval '1 second'
-                        where run_id = ${lit(runId)} and status = 'queued' and next_attempt_at > now() returning 1) select to_jsonb(count(*)) from x`);
+        fallbacks.released += await releaseBackedOffJobs(pg, runId);
+        fallbacks.used += 1;
       }
     }
     await captureConsole(() => flushAfter());

@@ -36,6 +36,7 @@ import { getVerifiedPepper } from "../../lib/pipeline/pepper";
 import { createDrainer } from "../../lib/pipeline/runner";
 import { computeIdentityPepperCanary } from "../../lib/privacy/identity";
 import { TEST_PEPPER } from "../../fixtures/parser/load";
+import { releaseBackedOffJobs } from "./support/backoff";
 import { captureConsole } from "./support/console-capture";
 import { PgBackedStorage, PgContainer, PsqlDbClient, lit } from "./support/pg";
 import { allowFakeAi, currentUserId, flushAfter, installCustomBackends, resetPlatform, signInAs } from "./support/platform";
@@ -65,6 +66,8 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
   const ids: Record<string, string> = {};
   const snapshots: Record<string, unknown> = {};
 
+  /** How often the drain fallback ran, and how many backed-off jobs it released (asserted where it is forced). */
+  const fallbacks = { used: 0, released: 0 };
   const drainRun = async (runId: string) => {
     const drain = createDrainer({
       db: adminDb, storage, logger: createConsoleLogger(), getPepper: getVerifiedPepper,
@@ -75,8 +78,8 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
       const { result: report } = await captureConsole(() => drain({ maxJobs: 25, deadlineMs: 120_000 }));
       status = (await pg.json<string>(`select to_jsonb(status) from public.processing_runs where id = ${lit(runId)}`))!;
       if (report.claimed === 0 && (status === "queued" || status === "running")) {
-        await pg.json(`select to_jsonb(count(*)) from (update public.processing_jobs set next_attempt_at = now() - interval '1 second'
-                        where run_id = ${lit(runId)} and status = 'queued' and next_attempt_at > now() returning 1) x`);
+        fallbacks.released += await releaseBackedOffJobs(pg, runId);
+        fallbacks.used += 1;
       }
     }
     await captureConsole(() => flushAfter());
@@ -97,7 +100,7 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
     const t = ok(await createSourceUpload({ handoverId, kind, fileName: name, mimeType: mime, sizeBytes: bytes.byteLength, sha256: sha(bytes) }), `upload ${name}`);
     await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${t.sourceId}`, bytes);
     ok(await confirmSourceUploaded({ sourceId: t.sourceId }), `confirm ${name}`);
-    ok(await recordSourceConsent({ sourceId: t.sourceId, consentStatementVersion: "consent@1", consentConfirmed: true, accessLevel: "everyone",
+    ok(await recordSourceConsent({ sourceId: t.sourceId, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, accessLevel: "everyone",
       timezone: "Asia/Kolkata", ...(kind === "whatsapp_export" ? { dateOrder: "dmy" as const } : {}) }), `consent ${name}`);
     return t.sourceId;
   }
@@ -108,7 +111,7 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
     const id = r.status === "upload" ? r.ticket.sourceId : "";
     await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${id}`, bytes);
     ok(await confirmSourceUploaded({ sourceId: id }), "confirm version");
-    ok(await recordSourceConsent({ sourceId: id, consentStatementVersion: "consent@1", consentConfirmed: true, timezone: "Asia/Kolkata" }), "consent version");
+    ok(await recordSourceConsent({ sourceId: id, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, timezone: "Asia/Kolkata" }), "consent version");
     return id;
   }
   /** Approve every pending point and accept required gap answers (as in the other Tier E suites). */
@@ -202,7 +205,16 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
     // retry: the same record goes back to processing, then fails again
     ids.run3 = ok(await startProcessing({ handoverId }), "retry").runId;
     assert.deepEqual(await change(ids.v2), { state: "processing", err: null, n: 1 });
+    // R3 Task 05E hardening: force the drain helper's fallback path. Every job of this run starts in a backoff, so
+    // the first drain claims nothing and the fallback (releaseBackedOffJobs) must make them due; before the fix the
+    // fallback was invalid SQL and only the normal claimable path was ever exercised.
+    const delayed = (await pg.json<number>(`with d as (update public.processing_jobs set next_attempt_at = now() + interval '1 hour'
+                                              where run_id = ${lit(ids.run3)} and status = 'queued' returning 1) select to_jsonb(count(*)) from d`))!;
+    assert.ok(delayed > 0, "the run's jobs are backed off");
+    const before = { ...fallbacks };
     assert.equal(await drainRun(ids.run3), "failed");
+    assert.ok(fallbacks.used > before.used, "the fallback ran");
+    assert.ok(fallbacks.released - before.released >= 1, "and released the backed-off jobs");
     assert.deepEqual(await change(ids.v2), { state: "failed", err: "extraction_failed", n: 1 }, "a retry never duplicates the record");
     assert.equal(await sourceJobCount(ids.handbook), handbookJobs, "the handbook was never parsed or extracted again");
     assert.equal(await pg.json<number>(`select to_jsonb(count(*)) from public.processing_jobs where source_id = ${lit(ids.chat)} and run_id <> ${lit(ids.run1)}`), 0,

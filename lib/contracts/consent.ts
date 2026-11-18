@@ -82,3 +82,23 @@ export function consentDisclosure(kind: ConsentDisclosureKind, providerName?: st
       };
   }
 }
+
+/** The provider id (AiRunConfig.provider) each wording describes; null when there is none. */
+export function disclosureProviderId(kind: ConsentDisclosureKind): string | null {
+  switch (kind) {
+    case "local_test":
+      return "fake";
+    case "gemini_free":
+    case "gemini_paid":
+      return "gemini";
+    case "evaluation":
+      return "omega";
+    case "not_configured":
+      return null;
+  }
+}
+
+/** Refusal when the submitted consent statement is not the wording this server currently shows (R3 Task 05E). */
+export const CONSENT_STATEMENT_OUTDATED_REASON = "consent_statement_outdated";
+export const CONSENT_STATEMENT_OUTDATED_MESSAGE =
+  "The statement about AI processing has changed. Reload the page, read the updated wording and confirm it again.";
