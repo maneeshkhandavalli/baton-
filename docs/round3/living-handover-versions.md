@@ -231,6 +231,39 @@ the gate.
 adapter is "no AI provider", Gemini is named only when configured (free tier vs. the approved paid profile), an
 evaluation provider by its public name. Each wording has its own statement version.
 
+## Task 05E: reviewer decisions
+
+Migration `20261118600100_change_review_decisions.sql` (additive). Page `/handover/[id]/changes`
+(`components/review/change-reviews.tsx`), action `decideChangeReview` (`lib/actions/core/change-reviews.ts`).
+
+`decide_change_review_item` is the only way to decide an item (service role, the server's verified actor). Under the
+handover lock and an item row lock it checks: a review role who can see the point(s), both versions and the evidence
+(otherwise "not found"); the handover is in review; the item is not stale and its update and source version are still
+current; the expected state; the handover's current publication is still the item's baseline; the point is still at
+the revision the reviewer saw. Then, in one transaction: the kind-specific effect, the item state (`decided_by`,
+`decided_at`), one row in the append-only `source_change_review_decisions` (with the note), a `change_review` review
+action on the point and an audit event (never the note).
+
+| kind | accept | reject |
+|---|---|---|
+| evidence_moved | links the quotation at the detected span of the current version (existing quote reused, else an exact slice); refused when ambiguous or the message is gone | nothing changes |
+| evidence_missing | re-attestation: a note of at least 20 characters; no evidence is created or removed | nothing changes |
+| possible_contradiction | the reviewer's wording through `edit_point` (new revision, back to pending) plus a supporting quotation chosen inside the new message (≥ 12 characters, 3 words) | nothing changes |
+| support_changed | confirmation of the new assessment with a note; evidence and wording unchanged | nothing changes |
+| new_information | `approve_point` on the candidate (its evidence-status rules apply) | `reject_point` on the candidate |
+
+Investigate (all kinds) needs a note and keeps the item unresolved (`investigating` still blocks publication). Reject
+needs a reason. Accepted and rejected are final; repeating a decision that already took effect returns `unchanged`
+and writes nothing; any other state mismatch (another reviewer, a concurrent request) is a conflict. Stale items
+cannot be decided; their history and notes are kept.
+
+Accepting a moved quotation does not create a point revision: the wording did not change, and a new revision would
+invalidate every support verdict (they are recorded per revision) and reopen the approved point. The relocated
+quotation is carried into the next publication with the point.
+
+Consent (05D hardening): `recordSourceConsent` accepts only the statement version the server shows for its actual AI
+configuration; stale, forged or other-provider versions are refused before any write.
+
 ## Not in this stage
 
 The following are deferred to later stages:
@@ -238,7 +271,7 @@ The following are deferred to later stages:
 | stage | work |
 |---|---|
 | 05D | done (above): deterministic change detection, review items, gate |
-| 05E | the reviewer decisions (accept / reject / investigate) and their actions |
+| 05E | done (above): reviewer decisions |
 | 05F | the before-and-after review interface |
 | later | freshness UI and provider events |
 

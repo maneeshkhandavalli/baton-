@@ -24,6 +24,7 @@ const DASHBOARD_ROUTES: DashboardRoutes = {
   gaps: routes.handover.gaps,
   settings: routes.handover.settings,
   offers: routes.handover.settings,
+  changes: routes.handover.changes,
 };
 
 export default function DashboardPage() {

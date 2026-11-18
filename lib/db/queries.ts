@@ -6,6 +6,7 @@
  * become the same `not_found`. Only `getGapInterview` uses the service role, through token redemption.
  */
 
+import { mapChangeReviewItems } from "../contracts/change-review";
 import type { ErrorCode, Result } from "../contracts/api";
 import type { SourceSummary } from "../contracts/dto";
 import type { AccessTokenFilter, BatonQueries, MessageContextWindow, PointListFilter } from "../contracts/queries";
@@ -174,6 +175,11 @@ export function createDbQueries(clients: DbClientFactories): BatonQueries {
           async () => buildExtractionReport(requireFound(await callRpc(await user(), "api_get_extraction_report", { p_handover_id: id })) as RawExtractionReport),
           buildExtractionReport({ available: false }),
         )),
+
+    // R3 Task 05E: optional on a database without migration 20261118600100 (no change reviews).
+    getChangeReviews: (handoverId) =>
+      byId(handoverId, async (id) =>
+        optional(async () => mapChangeReviewItems(await callRpc(await user(), "api_get_change_reviews", { p_handover_id: id })), [])),
 
     listUnreviewedSignals: (handoverId, limit?: number) =>
       byId(handoverId, async (id) =>

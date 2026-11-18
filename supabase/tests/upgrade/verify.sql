@@ -424,4 +424,18 @@ select tests.eq(tests.read(format('select public.api_list_change_review_items(%L
                 '18500100: the review-item read API works on the pre-upgrade handover');
 select tests.as_owner();
 
+-- ── 18600100 (R3 Task 05E): change-review decisions on PRE-UPGRADE rows ──────
+select tests.eq((select count(*)::int from public.source_change_review_decisions), 0, '18600100: no decision is invented');
+select tests.ok(has_function_privilege('service_role', 'public.decide_change_review_item(uuid,uuid,text,text,uuid,text,jsonb)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.decide_change_review_item(uuid,uuid,text,text,uuid,text,jsonb)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.decide_change_review_item(uuid,uuid,text,text,uuid,text,jsonb)', 'EXECUTE')
+                and not has_table_privilege('authenticated', 'public.source_change_review_decisions', 'INSERT')
+                and has_table_privilege('authenticated', 'public.source_change_review_decisions', 'SELECT'),
+                '18600100: deciding is server-only; decisions are read-only for API roles');
+select tests.eq((select count(*)::int from public.review_actions where action = 'change_review'), 0, '18600100: existing review history is unchanged');
+select tests.as_user('ann');
+select tests.eq(tests.read(format('select public.api_get_change_reviews(%L)', tests.id('hpub'))), '[]'::jsonb,
+                '18600100: the reviewer read API works on the pre-upgrade handover');
+select tests.as_owner();
+
 select 'upgrade verified' as result;

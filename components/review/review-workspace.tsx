@@ -235,7 +235,8 @@ export function ReviewWorkspace({
   function onBlocker(kind: ReadinessReport["blockers"][number]["kind"]) {
     // R3 Task 05D: source updates and their change reviews are listed on the processing page
     if (kind === "source_updates_pending" || kind === "change_reviews_open") {
-      if (!preview) router.push(routes.handover.processing(handover.id));
+      // R3 Task 05E: open change reviews are decided on their own page
+      if (!preview) router.push(kind === "change_reviews_open" ? routes.handover.changes(handover.id) : routes.handover.processing(handover.id));
       return;
     }
     setStatus("all");

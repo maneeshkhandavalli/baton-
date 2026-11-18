@@ -734,3 +734,38 @@ export async function reviewExtractionSignals(
 /** Review roles who can see the point: a flag dismissed, confirmed or reopened. */
 export const reviewPointFlag = async (db: DbClient, actor: VerifiedActor, input: { flagId: string; state: "open" | "dismissed" | "confirmed" }) =>
   void (await call(db, actor, "review_point_flag", { p_flag_id: input.flagId, p_state: input.state }));
+
+// ── R3 Task 05E: change-review decisions ──────────────────────────────────────
+
+export interface ChangeReviewDecisionResult {
+  outcome: "decided" | "unchanged";
+  itemId: string;
+  state: string;
+  pointRevisionId?: string;
+  pointEvidenceId?: string;
+}
+
+/** decide_change_review_item: the only way to decide an item (verified actor; every rule is enforced in SQL). */
+export async function decideChangeReviewItem(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: {
+    itemId: string;
+    decision: "investigate" | "accept" | "reject";
+    expectedState: "open" | "investigating";
+    expectedPointRevisionId: string;
+    note: string | null;
+    payload: Record<string, unknown> | null;
+  },
+): Promise<ChangeReviewDecisionResult> {
+  const data = (await call(db, actor, "decide_change_review_item", {
+    p_item_id: input.itemId,
+    p_decision: input.decision,
+    p_expected_state: input.expectedState,
+    p_expected_point_revision_id: input.expectedPointRevisionId,
+    p_note: input.note,
+    p_payload: input.payload,
+  })) as ChangeReviewDecisionResult | null;
+  if (!data || (data.outcome !== "decided" && data.outcome !== "unchanged")) throw new DbError("internal");
+  return data;
+}

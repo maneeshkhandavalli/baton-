@@ -17,6 +17,8 @@ export interface DashboardLinks {
   settings: (id: string) => string;
   draft: (id: string, step: number) => string;
   offers: (id: string) => string;
+  /** R3 Task 05E: change reviews of source updates (optional: previews fall back to the review page). */
+  changes?: (id: string) => string;
 }
 
 /** A draft the viewer manages: which wizard step is next (1-based) of how many. */
@@ -222,7 +224,11 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
         const parts = [updates && `${plural(updates, "source update")} still ${updates === 1 ? "needs" : "need"} processing and checking`, changes && `${plural(changes, "change")} found in a source update ${changes === 1 ? "needs" : "need"} a decision`]
           .filter(Boolean)
           .join("; ");
-        attention.push({ kind: "review", label: "Source update", reason: `${parts}. Publishing waits for this.`, cta: "See source updates", href: links.processing(h.id), rank: 2 });
+        attention.push({
+          kind: "review", label: "Source update", reason: `${parts}. Publishing waits for this.`,
+          cta: changes ? "Decide changes" : "See source updates",
+          href: changes ? (links.changes ?? links.review)(h.id) : links.processing(h.id), rank: 2,
+        });
       }
       if (r?.canPublish && h.viewerIsCreator) {
         attention.push({ kind: "publish", label: "Ready", reason: "Every point is decided and every source update is checked. Publish when you're ready.", cta: "Publish", href: links.review(h.id), rank: 3 });

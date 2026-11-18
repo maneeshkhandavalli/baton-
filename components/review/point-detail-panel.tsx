@@ -45,6 +45,7 @@ const reviewActionLabel: Record<string, string> = {
   auto_reopen: "Reopened automatically",
   privacy_hold: "Privacy hold",
   resolve_privacy_review: "Resolved privacy review",
+  change_review: "Decided a source change",
 };
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {

@@ -66,6 +66,7 @@ const QUERY_NAMES = [
   "listGapQuestions",
   "getReadiness",
   "getExtractionReport",
+  "getChangeReviews",
   "listUnreviewedSignals",
   "listPointFlags",
   "getPublishedHandover",

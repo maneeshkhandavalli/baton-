@@ -66,7 +66,11 @@ $$;
 create function tests.decide(p_item uuid, p_state text) returns void language plpgsql as $$
 begin
   perform set_config('baton.change_review', 'on', true); -- what Task 05E's checked function will do
-  update public.source_change_review_items set state = p_state, state_changed_at = now() where id = p_item;
+  update public.source_change_review_items
+     set state = p_state, state_changed_at = now(),
+         decided_by = case when p_state in ('accepted', 'rejected') then tests.id('rev') end, -- 05E: who and when
+         decided_at = case when p_state in ('accepted', 'rejected') then now() end
+   where id = p_item;
   perform set_config('baton.change_review', 'off', true);
 end $$;
 -- runs p_sql as the CURRENT role (the worker's service role), unlike tests.read (browser path)

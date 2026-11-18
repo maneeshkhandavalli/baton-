@@ -277,6 +277,14 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
               <li key={s.id}>
                 <span className="font-medium">{s.title}</span>, version {s.version?.versionNumber}:{" "}
                 <span className="text-muted-foreground">{sourceUpdateStateLabel(s.version?.updateState ?? null, s.version?.updateError ?? null, s.version?.openReviews ?? 0)}</span>
+                {(s.version?.openReviews ?? 0) > 0 && (
+                  <>
+                    {" "}
+                    <Link href={routes.handover.changes(handoverId)} className="font-medium text-primary-fg underline-offset-4 hover:underline">
+                      Decide the changes
+                    </Link>
+                  </>
+                )}
               </li>
             ))}
           </ul>

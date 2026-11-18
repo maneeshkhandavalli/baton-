@@ -100,6 +100,7 @@ export const REVIEW_ACTION_TYPES = [
   "auto_reopen", // system only: evidence changed after approval
   "privacy_hold", // system only: participant erasure flagged the point (§5.5)
   "resolve_privacy_review", // keep | redact | withdraw (§5.5)
+  "change_review", // R3 Task 05E: a decision on a change found in a source update
 ] as const;
 export type ReviewActionType = (typeof REVIEW_ACTION_TYPES)[number];
 

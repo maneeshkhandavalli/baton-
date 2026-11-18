@@ -1,11 +1,26 @@
 // The SQL CHECK lists must match the canonical TypeScript enums (D20). Fails if either side drifts.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import * as E from "../../contracts/enums";
 
 const sql = readFileSync(new URL("../../../supabase/migrations/20261111000100_schema.sql", import.meta.url), "utf8");
+
+// Later migrations may redefine a CHECK additively (`add constraint <table>_<column>_check check (<column> in (…))`); the
+// LAST such definition in migration order is the one in force (e.g. R3 Task 05E adds review_actions.action 'change_review').
+const MIGRATIONS_DIR = new URL("../../../supabase/migrations/", import.meta.url);
+const later = readdirSync(MIGRATIONS_DIR)
+  .filter((n) => n.endsWith(".sql") && n > "20261111000100_schema.sql")
+  .sort()
+  .map((n) => readFileSync(new URL(n, MIGRATIONS_DIR), "utf8"));
+
+function redefined(table: string, column: string): string[] | null {
+  let last: string[] | null = null;
+  const re = new RegExp(`add constraint ${table}_${column}_check\\s+check \\(${column} in \\(([^)]*)\\)\\)`, "g");
+  for (const text of later) for (const m of text.matchAll(re)) last = [...(m[1] as string).matchAll(/'([^']+)'/g)].map((x) => x[1] as string);
+  return last;
+}
 
 function tableBody(table: string): string {
   const m = sql.match(new RegExp(`create table public\\.${table} \\(([\\s\\S]*?)\\n\\);`));
@@ -61,7 +76,7 @@ const EXPECTED: Array<[string, string, readonly string[]]> = [
 describe("enum CHECK lists match lib/contracts/enums.ts", () => {
   for (const [table, column, values] of EXPECTED) {
     it(`${table}.${column}`, () => {
-      assert.deepEqual(checkList(table, column), [...values]);
+      assert.deepEqual(redefined(table, column) ?? checkList(table, column), [...values]);
     });
   }
 

@@ -330,6 +330,14 @@ export function createMockQueries(profileId: string): BatonQueries {
       return ok(buildExtractionReport({ available: false }));
     },
 
+    // R3 Task 05E: the mock store has no source versions, so no change reviews.
+    async getChangeReviews(handoverId) {
+      await requestTime();
+      const v = visibleHandover(getStore(), handoverId, profileId);
+      if (!v || !isReviewRole(v.member.role)) return NOT_FOUND();
+      return ok([]);
+    },
+
     async listUnreviewedSignals(handoverId) {
       await requestTime();
       const v = visibleHandover(getStore(), handoverId, profileId);
