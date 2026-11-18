@@ -76,7 +76,7 @@ export function invitationViewFromError(error: Pick<AppError, "code" | "details"
       // Accept without a session; the page re-reads the invitation to show what it is for.
       return view("sign_in_required");
     case "conflict":
-      return reason === "already_member" ? view("already_member") : view("error");
+      return reason === "already_member" ? view("already_member", { memberHref: safeInternalPath(error.details?.memberHref) }) : view("error");
     case "rate_limited":
       return view("too_many_attempts");
     default:
@@ -100,7 +100,7 @@ export function invitationViewFromDetails(result: Result<InvitationDetails>): In
   const v = d.viewer;
   if (!v) return view("sign_in_required", { summary });
   // Order matters: an existing member is told so first; a mismatched address before an unconfirmed one.
-  if (v.alreadyMember) return view("already_member", { summary });
+  if (v.alreadyMember) return view("already_member", { summary, memberHref: safeInternalPath(d.memberHref) });
   if (!v.emailMatches) return view("wrong_account", { summary });
   if (!v.emailConfirmed) return view("email_unconfirmed", { summary });
   return view("ready_to_accept", { summary });
@@ -110,11 +110,16 @@ export function invitationViewFromDetails(result: Result<InvitationDetails>): In
 
 const CODE_PARAM = /^[a-z_]{1,40}$/;
 
-/** Encodes a failed accept as `?error=<code>&reason=<reason>` (tokens only: never a message or an address). */
+/**
+ * Encodes a failed accept as `?error=<code>&reason=<reason>` (tokens only: never a message or an address), plus
+ * `member=<path>` for already_member when the server gave a same-origin member page.
+ */
 export function acceptFailureQuery(error: Pick<AppError, "code" | "details">): string {
   const params = new URLSearchParams({ error: CODE_PARAM.test(error.code) ? error.code : "internal" });
   const reason = error.details?.reason;
   if (typeof reason === "string" && CODE_PARAM.test(reason)) params.set("reason", reason);
+  const member = safeInternalPath(error.details?.memberHref);
+  if (reason === "already_member" && member) params.set("member", member);
   return params.toString();
 }
 
@@ -124,7 +129,8 @@ export function invitationViewFromQuery(query: Record<string, string | string[] 
   if (code === undefined) return null;
   if (typeof code !== "string" || !CODE_PARAM.test(code)) return view("error");
   const reason = typeof query.reason === "string" && CODE_PARAM.test(query.reason) ? query.reason : undefined;
-  return invitationViewFromError({ code: code as AppError["code"], details: reason ? { reason } : undefined });
+  const member = reason === "already_member" ? safeInternalPath(query.member) : null;
+  return invitationViewFromError({ code: code as AppError["code"], details: reason ? { reason, ...(member ? { memberHref: member } : {}) } : undefined });
 }
 
 /* ── Copy ─────────────────────────────────────────────────────────────────────────────────────────────────── */

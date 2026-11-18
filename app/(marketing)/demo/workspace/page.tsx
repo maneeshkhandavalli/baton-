@@ -18,7 +18,7 @@ export const metadata: Metadata = {
  * The whole demo runs in the visitor's tab (components/demo/demo-workspace.tsx on lib/demo/engine). `?step=` opens
  * a step directly; anything else starts at the beginning.
  */
-export default function DemoWorkspacePage({ searchParams }: PageProps<"/demo/workspace">) {
+export default function DemoWorkspacePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   return (
     <div className="mx-auto w-full max-w-[90rem] space-y-6 px-4 py-8 sm:px-6 lg:px-10 lg:py-10 xl:px-12">
       <header className="space-y-2">

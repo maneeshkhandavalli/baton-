@@ -7,11 +7,15 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { Result } from "@/lib/contracts/api";
-import type { DemoQueries, DemoSession } from "@/lib/demo/engine";
+import type { DemoQueries, DemoSession } from "@/lib/demo/engine/index";
 import { DEMO_STEPS } from "@/lib/demo/scenario/journey";
+
+import type { ChangeReviewItem } from "@/lib/contracts/change-review";
+import { DEMO_STORAGE_KEY as ENGINE_STORAGE_KEY } from "@/lib/demo/engine/index";
 
 import {
   acknowledgePublication,
+  changeDecisionInput,
   decideChangeReview,
   demoErrorText,
   demoResultText,
@@ -41,6 +45,7 @@ describe("demo guide", () => {
   it("framing and storage key are fixed by the contract", () => {
     assert.equal(DEMO_FRAMING, "Demo · nothing is saved or sent");
     assert.equal(DEMO_STORAGE_KEY, "baton.demo.v1");
+    assert.equal(DEMO_STORAGE_KEY, ENGINE_STORAGE_KEY);
   });
   it("step parsing and navigation", () => {
     assert.equal(parseStepParam("review"), "review");
@@ -97,6 +102,33 @@ describe("demo dispatch (A7 action union)", () => {
   });
 });
 
+describe("changeDecisionInput (Task 05E inputs per kind)", () => {
+  const item = (over: Partial<ChangeReviewItem> = {}): ChangeReviewItem =>
+    ({
+      id: "i1", kind: "evidence_missing", state: "open",
+      point: { id: "p1", category: "risk", reviewState: "approved", evidenceStatus: "sourced", currentRevisionId: "r1", title: "T", statement: "S", attributes: { a: 1 } },
+      newMessage: { id: "m", body: "new words here", sentAt: null, authorLabel: null, quoteStart: null, quoteEnd: null },
+      ...over,
+    }) as ChangeReviewItem;
+  it("carries the state and point revision the reviewer saw", () => {
+    assert.deepEqual(changeDecisionInput(item(), "h", "reject", { note: " no " }), { handoverId: "h", itemId: "i1", decision: "reject", expectedState: "open", expectedPointRevisionId: "r1", note: "no" });
+    assert.equal(changeDecisionInput(item({ state: "investigating" }), "h", "accept")?.expectedState, "investigating");
+  });
+  it("a contradiction accepted is a correction backed by the new message", () => {
+    const c = changeDecisionInput(item({ kind: "possible_contradiction" }), "h", "accept", { note: "n", correction: { title: " T2 ", statement: " S2 " } });
+    assert.deepEqual(c?.correction, { title: "T2", statement: "S2", attributes: { a: 1 }, evidenceStart: 0, evidenceEnd: 14 });
+  });
+  it("new information carries the approval its status needs", () => {
+    const point = item().point!;
+    assert.deepEqual(changeDecisionInput(item({ kind: "new_information", point: { ...point, evidenceStatus: "inferred" } }), "h", "accept")?.approval, { confirmInferred: true });
+    assert.deepEqual(changeDecisionInput(item({ kind: "new_information", point: { ...point, evidenceStatus: "missing" } }), "h", "accept")?.approval, { asKnownGap: true });
+  });
+  it("nothing to decide: no point, or already resolved", () => {
+    assert.equal(changeDecisionInput(item({ point: null }), "h", "accept"), null);
+    assert.equal(changeDecisionInput(item({ state: "accepted" }), "h", "accept"), null);
+  });
+});
+
 describe("demo view model", () => {
   const ok = <T>(data: T): Promise<Result<T>> => Promise.resolve({ ok: true, data });
   const calls: string[] = [];
@@ -111,13 +143,14 @@ describe("demo view model", () => {
       getExtractionReport: () => (calls.push(`${name}:extraction`), ok({ available: true })),
       listGapQuestions: () => (calls.push(`${name}:gaps`), ok([])),
       getPublishedHandover: () => (calls.push(`${name}:published`), Promise.resolve({ ok: false, error: { code: "not_found", message: "", retryable: false } })),
+      getChangeReviews: () => (calls.push(`${name}:changes`), ok([])),
     }) as unknown as DemoQueries;
 
   it("reads only what the screen needs; gap questions through the reviewer; missing points are skipped", async () => {
     calls.length = 0;
     const r = await loadDemoView("receive", fake("neha"), fake("priya"));
     assert.equal(r.ok, true);
-    assert.ok(calls.includes("priya:gaps") && calls.includes("neha:published"));
+    assert.ok(calls.includes("priya:gaps") && calls.includes("neha:published") && calls.includes("priya:changes"));
     assert.ok(!calls.some((c) => c.endsWith(":points") || c.endsWith(":sources")));
     if (r.ok) assert.equal(r.view.published, null);
 
@@ -166,5 +199,64 @@ describe("demo safety boundaries (contract §2.6, A3)", () => {
     assert.match(ws, /from "@\/lib\/demo\/engine"/);
     assert.doesNotMatch(ws, /lib\/mocks/);
     assert.match(ws, /sessionStorage/);
+  });
+});
+
+// With the real engine (Worker 01's lib/demo/engine): every step's screen loads, and the UI's actions are accepted.
+import { applyDemoAction, demoQueries, startDemoSession } from "@/lib/demo/engine/index";
+import { directApproveInput } from "@/components/review/evidence-state";
+
+// the acknowledgement statement version the published view sends (a .tsx module, so read from its source)
+const ACK_STATEMENT_VERSION = /export const ACK_STATEMENT_VERSION = "([^"]+)"/.exec(readFileSync(path.join(ROOT, "components/published/published-handover-view.tsx"), "utf8"))![1];
+
+describe("demo UI on the real engine", () => {
+  it("every step's screen loads through the engine queries", async () => {
+    for (const s of DEMO_STEPS) {
+      const session = startDemoSession({ step: s.id });
+      const g = DEMO_STEP_GUIDE[s.id];
+      const r = await loadDemoView(g.screen, demoQueries(session, g.viewer), demoQueries(session, "priya"));
+      assert.equal(r.ok, true, s.id);
+      if (!r.ok) continue;
+      if (g.screen === "sources") assert.ok(r.view.sources.length > 0, s.id);
+      if (["draft", "review", "decisions", "publish"].includes(g.screen)) assert.ok(r.view.points.length > 0, s.id);
+      if (g.screen === "receive") assert.ok(r.view.published, s.id);
+    }
+  });
+
+  it("review: approving a sourced point through the adapter is accepted and changes only this session", async () => {
+    const session = startDemoSession({ step: "review" });
+    const r = await loadDemoView("review", demoQueries(session, "priya"));
+    assert.ok(r.ok);
+    if (!r.ok) return;
+    const point = r.view.points.find((p) => p.reviewState === "pending" && directApproveInput(p));
+    assert.ok(point, "a pending point that can be approved directly");
+    const out = applyDemoAction(session, reviewPoint(directApproveInput(point!)!));
+    assert.equal(out.result.ok, true, JSON.stringify(out.result));
+    assert.equal(out.session.log.length, 1);
+    assert.equal(session.log.length, 0);
+  });
+
+  it("receive: acknowledge as Neha and decide a source change as Priya", async () => {
+    let session = startDemoSession({ step: "receive" });
+    const neha = await loadDemoView("receive", demoQueries(session, "neha"), demoQueries(session, "priya"));
+    assert.ok(neha.ok && neha.view.published);
+    if (!neha.ok || !neha.view.published) return;
+    if (!neha.view.published.viewerAcknowledgedAt) {
+      const ack = applyDemoAction(session, acknowledgePublication(neha.view.published.publicationId, ACK_STATEMENT_VERSION));
+      assert.equal(ack.result.ok, true, JSON.stringify(ack.result));
+      session = ack.session;
+    }
+    const changes = neha.view.changes.filter((c) => c.state === "open");
+    assert.ok(changes.length > 0, "the demo seeds change reviews after publishing");
+    const input = changeDecisionInput(changes[0], neha.view.handover.id, "investigate", { note: "Checking with IT." });
+    const out = applyDemoAction(session, decideChangeReview(input!));
+    assert.equal(out.result.ok, true, JSON.stringify(out.result));
+  });
+
+  it("anything outside the demo is refused with demo_read_only, and the UI says so", () => {
+    const session = startDemoSession({ step: "review" });
+    const out = applyDemoAction(session, reviewPoint({ action: "reopen", pointId: UUID }));
+    assert.equal(out.result.ok, false);
+    assert.match(demoResultText(out.result, "x").text, /isn't part of the demo/);
   });
 });

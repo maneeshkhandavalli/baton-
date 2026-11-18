@@ -23,9 +23,20 @@ import type { PointDetail, ReadinessReport } from "@/lib/contracts/dto";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
 import type { DemoAction } from "@/lib/demo/engine";
 
-import { acknowledgePublication, isDemoReviewAction, publishHandover, reviewGapAnswer, reviewPoint, submitGapAnswer } from "./demo-dispatch";
+import { changeReviewKindText, type ChangeReviewDecision, type ChangeReviewItem } from "@/lib/contracts/change-review";
+
+import {
+  acknowledgePublication,
+  changeDecisionInput,
+  decideChangeReview,
+  isDemoReviewAction,
+  publishHandover,
+  reviewGapAnswer,
+  reviewPoint,
+  submitGapAnswer,
+} from "./demo-dispatch";
 import { DECISION_CATEGORIES, type DemoScreen } from "./demo-guide";
-import { answersToReview, gapForPoint, type DemoView } from "./demo-view-model";
+import { answersToReview, gapForPoint, openChanges, type DemoView } from "./demo-view-model";
 
 type Dispatch = (action: DemoAction, success: string) => Promise<Result<unknown>>;
 
@@ -308,6 +319,8 @@ function ReceiveScreen({ view, pending, dispatch }: { view: DemoView; pending: b
         <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Nothing is published yet. Go back to Publish first.</p>
       )}
 
+      {view.changes.length > 0 && <ChangesSection view={view} pending={pending} dispatch={dispatch} />}
+
       <section aria-labelledby="demo-gaps" className="space-y-4">
         <div>
           <h3 id="demo-gaps" className="type-section-title">
@@ -367,5 +380,121 @@ function GapAnswerForm({ questionId, question, context, pending, dispatch }: { q
         Send answer as Ananya
       </Button>
     </form>
+  );
+}
+
+/* ── Step 6 (continued): a source update after publishing (Task 05E change reviews) ──────────────────────── */
+
+const DECISION_LABEL: Record<ChangeReviewDecision, string> = { accept: "Accept", reject: "Reject", investigate: "Investigate" };
+
+function ChangesSection({ view, pending, dispatch }: { view: DemoView; pending: boolean; dispatch: Dispatch }) {
+  const open = openChanges(view.changes);
+  const decided = view.changes.length - open.length;
+  return (
+    <section aria-labelledby="demo-changes" className="space-y-4">
+      <div>
+        <h3 id="demo-changes" className="type-section-title">
+          A source changed after publishing
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Priya uploaded a newer version of the infrastructure notes. Baton compared it with the published version and found what changed. Nothing changes
+          by itself: each change needs Priya&rsquo;s decision before the next version can be published.
+          {decided > 0 && ` ${decided} of ${view.changes.length} decided.`}
+        </p>
+      </div>
+      {open.length === 0 ? (
+        <p className="flex items-center gap-2 text-sm text-success-fg">
+          <CheckCircle2 aria-hidden="true" className="size-4" />
+          Every change is decided.
+        </p>
+      ) : (
+        <ul className="space-y-4">
+          {open.map((item) => (
+            <li key={item.id}>
+              <ChangeDecisionCard item={item} handoverId={view.handover.id} pending={pending} dispatch={dispatch} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ChangeDecisionCard({ item, handoverId, pending, dispatch }: { item: ChangeReviewItem; handoverId: string; pending: boolean; dispatch: Dispatch }) {
+  const t = changeReviewKindText[item.kind];
+  const [decision, setDecision] = useState<ChangeReviewDecision | null>(null);
+  const [note, setNote] = useState("");
+  const [statement, setStatement] = useState(item.point?.statement ?? "");
+  const noteId = `change-note-${item.id}`;
+  const statementId = `change-statement-${item.id}`;
+  const label = (d: ChangeReviewDecision) => (d === "accept" ? t.accept : d === "reject" ? t.reject : DECISION_LABEL[d]);
+  const help = decision === "accept" ? t.acceptHelp : decision === "reject" ? t.rejectHelp : decision === "investigate" ? "Keep it open with a note while you check. It still blocks publishing." : null;
+
+  function submit() {
+    if (!decision) return;
+    const input = changeDecisionInput(item, handoverId, decision, {
+      note,
+      correction: item.kind === "possible_contradiction" ? { title: item.point?.title ?? "", statement } : undefined,
+    });
+    if (!input) return;
+    void dispatch(decideChangeReview(input), `${label(decision)}: recorded as Priya`).then((r) => {
+      if (r.ok) {
+        setDecision(null);
+        setNote("");
+      }
+    });
+  }
+
+  return (
+    <article className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-soft">
+      <p className="type-eyebrow text-muted-foreground">
+        {t.label}
+        {item.state === "investigating" && " · investigating"}
+      </p>
+      {item.point?.title && <h4 className="text-sm font-semibold"><MaskedText text={item.point.title} /></h4>}
+      <p className="text-sm text-muted-foreground">{t.explain}</p>
+      {item.newMessage && (
+        <blockquote className="rounded-r-lg border-l-2 border-l-primary/40 bg-muted/45 px-3 py-2 text-sm">
+          <MaskedText text={item.newMessage.body} />
+          <footer className="mt-1 text-caption text-muted-foreground">
+            {item.sourceTitle ?? "Updated source"} · version {item.toVersion}
+          </footer>
+        </blockquote>
+      )}
+      <fieldset>
+        <legend className="text-sm font-medium">Your decision, as Priya</legend>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["accept", "reject", "investigate"] as const).map((d) => (
+            <Button key={d} type="button" size="sm" variant={decision === d ? "default" : "outline"} aria-pressed={decision === d} disabled={pending} onClick={() => setDecision(d)}>
+              {label(d)}
+            </Button>
+          ))}
+        </div>
+      </fieldset>
+      {decision && (
+        <div className="space-y-3 rounded-lg bg-muted/40 p-3">
+          {help && <p className="text-sm">{help}</p>}
+          {decision === "accept" && item.kind === "possible_contradiction" && (
+            <div className="space-y-1">
+              <Label htmlFor={statementId}>Corrected point, in your words</Label>
+              <Textarea id={statementId} rows={3} value={statement} onChange={(e) => setStatement(e.target.value)} maxLength={2000} />
+              <p className="text-caption text-muted-foreground">The new message above becomes its supporting quotation.</p>
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label htmlFor={noteId}>{decision === "investigate" ? "What are you checking?" : decision === "reject" ? "Why?" : "Note (kept with the decision)"}</Label>
+            <Textarea id={noteId} rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={pending} onClick={submit}>
+              Save: {label(decision)}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setDecision(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </article>
   );
 }

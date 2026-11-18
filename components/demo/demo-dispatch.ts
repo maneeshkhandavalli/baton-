@@ -8,7 +8,7 @@
  */
 
 import type { AppError, Result } from "@/lib/contracts/api";
-import type { DecideChangeReviewInput } from "@/lib/contracts/change-review";
+import type { ChangeReviewDecision, ChangeReviewItem, DecideChangeReviewInput } from "@/lib/contracts/change-review";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
 import type { DemoAction, DemoSession } from "@/lib/demo/engine";
 
@@ -43,6 +43,52 @@ export const reviewGapAnswer = (answerId: string, decision: "accept" | "reject",
 });
 
 export const decideChangeReview = (input: DecideChangeReviewInput): DemoAction => ({ type: "decideChangeReview", input });
+
+/**
+ * The Task 05E decision input for one change-review item, as the reviewer saw it (expected state and point revision,
+ * so a stale view is refused). Per-kind extras: a contradiction accepted is a correction backed by the new message
+ * (the whole message unless the item marks a quotation); new information accepted carries what a normal approval of
+ * that point would need. Null when the item has no point (nothing to decide here) or is already resolved.
+ */
+export function changeDecisionInput(
+  item: ChangeReviewItem,
+  handoverId: string,
+  decision: ChangeReviewDecision,
+  opts: { note?: string; correction?: { title: string; statement: string } } = {},
+): DecideChangeReviewInput | null {
+  if (!item.point || (item.state !== "open" && item.state !== "investigating")) return null;
+  const note = opts.note?.trim() || undefined;
+  const input: DecideChangeReviewInput = {
+    handoverId,
+    itemId: item.id,
+    decision,
+    expectedState: item.state,
+    expectedPointRevisionId: item.point.currentRevisionId,
+    ...(note ? { note } : {}),
+  };
+  if (decision !== "accept") return input;
+  if (item.kind === "possible_contradiction") {
+    const body = item.newMessage?.body ?? "";
+    const start = item.newMessage?.quoteStart ?? 0;
+    const end = item.newMessage?.quoteEnd ?? body.length;
+    return {
+      ...input,
+      correction: {
+        title: (opts.correction?.title ?? item.point.title ?? "").trim(),
+        statement: (opts.correction?.statement ?? item.point.statement ?? "").trim(),
+        attributes: item.point.attributes ?? {},
+        evidenceStart: start,
+        evidenceEnd: end > start ? end : body.length,
+      },
+    };
+  }
+  if (item.kind === "new_information") {
+    const s = item.point.evidenceStatus;
+    const approval = s === "inferred" ? { confirmInferred: true } : s === "missing" ? { asKnownGap: true } : s === "conflicting" ? { resolutionNote: note ?? "" } : undefined;
+    return approval ? { ...input, approval } : input;
+  }
+  return input;
+}
 
 /** What the visitor is told after an action. Never a raw server code; demo refusals say why. */
 export function demoResultText(result: Result<unknown>, success: string): { ok: boolean; text: string } {

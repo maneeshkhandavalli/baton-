@@ -83,9 +83,9 @@ export const DEMO_STEP_GUIDE: Readonly<Record<DemoStepId, DemoStepGuide>> = {
     viewer: "neha",
     as: "Neha, the incoming lead",
     title: "Neha receives it",
-    what: "Neha reads the published handover and acknowledges it. Questions nobody could answer go to the Gap Interview, where someone who knows answers them and Priya accepts the answer.",
-    tryThis: "Acknowledge the handover as Neha, then answer and accept a Gap Interview question.",
-    why: "Gaps are named, not hidden, and each answer is reviewed before it becomes part of the handover.",
+    what: "Neha reads the published handover and acknowledges it. Questions nobody could answer go to the Gap Interview, where someone who knows answers them and Priya accepts the answer. When a source is updated later, Baton lists what changed for Priya to decide.",
+    tryThis: "Acknowledge as Neha, answer and accept a Gap Interview question, then decide one source change.",
+    why: "Gaps are named, not hidden, and nothing changes in a published handover without a person's decision.",
   },
 };
 

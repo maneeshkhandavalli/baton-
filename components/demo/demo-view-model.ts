@@ -5,6 +5,7 @@
  */
 
 import type { Result } from "@/lib/contracts/api";
+import { isUnresolvedChangeReview, type ChangeReviewItem } from "@/lib/contracts/change-review";
 import type {
   GapQuestionSummary,
   HandoverSummary,
@@ -29,6 +30,8 @@ export interface DemoView {
   gaps: GapQuestionSummary[];
   /** Null before the first publish (not_found). */
   published: PublishedHandover | null;
+  /** Changes found in a source update after the first publication (read as Priya, a review role). */
+  changes: ChangeReviewItem[];
 }
 
 export type DemoViewResult = { ok: true; view: DemoView } | { ok: false; message: string };
@@ -36,13 +39,13 @@ export type DemoViewResult = { ok: true; view: DemoView } | { ok: false; message
 const data = <T>(r: Result<T>): T | null => (r.ok ? r.data : null);
 
 /** Which reads each screen needs (the others stay empty), so a step never waits on data it doesn't show. */
-export const SCREEN_NEEDS: Readonly<Record<DemoScreen, ReadonlyArray<"sources" | "points" | "readiness" | "extraction" | "gaps" | "published">>> = {
+export const SCREEN_NEEDS: Readonly<Record<DemoScreen, ReadonlyArray<"sources" | "points" | "readiness" | "extraction" | "gaps" | "published" | "changes">>> = {
   sources: ["sources"],
   draft: ["points", "extraction"],
   review: ["points", "readiness", "gaps"],
   decisions: ["points"],
   publish: ["points", "readiness", "gaps", "published"],
-  receive: ["published", "gaps"],
+  receive: ["published", "gaps", "changes"],
 };
 
 /**
@@ -56,7 +59,7 @@ export async function loadDemoView(screen: DemoScreen, reader: DemoQueries, revi
   const id = handover.id;
   const needs = new Set(SCREEN_NEEDS[screen]);
 
-  const [sources, processing, pointList, readiness, extraction, gaps, published] = await Promise.all([
+  const [sources, processing, pointList, readiness, extraction, gaps, published, changes] = await Promise.all([
     needs.has("sources") ? reader.listSources(id) : null,
     needs.has("sources") ? reader.getProcessingStatus(id) : null,
     needs.has("points") ? reader.listPoints(id) : null,
@@ -64,6 +67,7 @@ export async function loadDemoView(screen: DemoScreen, reader: DemoQueries, revi
     needs.has("extraction") ? reader.getExtractionReport(id) : null,
     needs.has("gaps") ? reviewer.listGapQuestions(id) : null,
     needs.has("published") ? reader.getPublishedHandover(id) : null,
+    needs.has("changes") ? reviewer.getChangeReviews(id) : null,
   ]);
 
   const summaries = pointList ? (data(pointList) ?? []) : [];
@@ -80,6 +84,7 @@ export async function loadDemoView(screen: DemoScreen, reader: DemoQueries, revi
       extraction: extraction ? data(extraction) : null,
       gaps: gaps ? (data(gaps) ?? []) : [],
       published: published ? data(published) : null,
+      changes: changes ? (data(changes) ?? []) : [],
     },
   };
 }
@@ -94,4 +99,9 @@ export function answersToReview(gaps: readonly GapQuestionSummary[]): { question
   return gaps
     .flatMap((question) => question.answers.filter((a) => a.status === "submitted" && !a.privacyHeld).map((answer) => ({ question, answer })))
     .sort((a, b) => (a.answer.createdAt < b.answer.createdAt ? -1 : 1));
+}
+
+/** Change-review items still waiting for a decision (open or investigating), in the server's order. */
+export function openChanges(items: readonly ChangeReviewItem[]): ChangeReviewItem[] {
+  return items.filter((i) => isUnresolvedChangeReview(i.state));
 }

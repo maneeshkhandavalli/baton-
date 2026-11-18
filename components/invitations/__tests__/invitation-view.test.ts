@@ -105,6 +105,18 @@ describe("acceptInvitation failure → screen (§4.2)", () => {
     assert.equal(acceptFailureQuery({ code: "token_invalid", details: { reason: "<script>" } }), "error=token_invalid");
   });
 
+  it("already_member keeps the server's member page (same origin only), on both paths", () => {
+    const d = pending(viewer({ alreadyMember: true }));
+    if (d.ok && d.data.state === "pending") d.data.memberHref = "/handover/h/published";
+    assert.equal(invitationViewFromDetails(d).memberHref, "/handover/h/published");
+    const err = { code: "conflict" as const, details: { reason: "already_member", handoverId: "h", memberHref: "/handover/h/review" } };
+    assert.equal(invitationViewFromError(err).memberHref, "/handover/h/review");
+    const q = acceptFailureQuery(err);
+    assert.equal(invitationViewFromQuery(Object.fromEntries(new URLSearchParams(q)))?.memberHref, "/handover/h/review");
+    assert.equal(invitationViewFromQuery({ error: "conflict", reason: "already_member", member: "//evil.example" })?.memberHref, null);
+    assert.doesNotMatch(acceptFailureQuery({ code: "conflict", details: { reason: "already_member", memberHref: "https://evil.example" } }), /member=/);
+  });
+
   it("malformed query parameters become the generic error; no error parameter means no override", () => {
     assert.equal(invitationViewFromQuery({}), null);
     assert.equal(invitationViewFromQuery({ error: "<b>" })?.screen, "error");
