@@ -180,14 +180,16 @@ select tests.throws(format('select public.start_processing(%L, %L, %L, %L, %L)',
                            tests.scoped_jobs(array[tests.id('v2')])), 'BTIT0', 'nor can a full one');
 select tests.as_owner();
 
--- ── the run closes: extraction complete, run succeeded → awaiting detection (still blocks) ─
+-- ── the run closes: extraction complete, run succeeded, but this simulated worker recorded no change detection:
+--    Task 05D never marks it ready → failed (detection_incomplete), still blocks, and is processed again ─
 select tests.finish(tests.id('run2'), tests.id('v2'), 'succeeded', 3, 3, 'succeeded');
-select tests.eq((tests.change(tests.id('v2'))).state, 'awaiting_detection', 'processed, not yet compared: awaiting detection (not ready)');
+select tests.eq(((tests.change(tests.id('v2'))).state, (tests.change(tests.id('v2'))).error_code)::text, '(failed,detection_incomplete)',
+                'processed, not compared: failed (detection_incomplete), never ready');
 select tests.eq((select state from public.handovers where id = tests.id('h')), 'in_review', 'back in review');
 select tests.as_user('ann');
-select tests.throws(tests.pub_sql('h'), 'BTPF0', 'gate: an update awaiting detection blocks publication');
+select tests.throws(tests.pub_sql('h'), 'BTPF0', 'gate: an update without its change detection blocks publication');
 select tests.as_owner();
-select tests.eq(public.source_update_processing_scope(tests.id('ann'), tests.id('h')) ->> 'mode', 'full', 'nothing pending: no scoped run');
+select tests.eq(public.source_update_processing_scope(tests.id('ann'), tests.id('h')) ->> 'mode', 'scoped', 'the undetected update is processed again (scoped)');
 
 -- ── a newer version: the earlier update is superseded; failure, retry, acknowledgement ─
 select tests.put('v3', tests.new_version(tests.id('v2'), tests.hx('c')));
@@ -289,7 +291,7 @@ begin
   perform tests.eq((select count(*)::int from jsonb_array_elements(rep -> 'sources') s where s ->> 'sourceId' = tests.id('a2')::text), 0,
                    'the superseded version is not listed');
   perform tests.eq((select u ->> 'state' || ':' || (u ->> 'blocksPublication') from jsonb_array_elements(rep -> 'sourceUpdates') u),
-                   'awaiting_detection:true', 'the report lists the update and that it blocks');
+                   'failed:true', 'the report lists the update and that it blocks');
 end $$;
 select tests.as_owner();
 

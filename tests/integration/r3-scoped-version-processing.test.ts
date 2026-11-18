@@ -112,7 +112,7 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
     return id;
   }
   /** Approve every pending point and accept required gap answers (as in the other Tier E suites). */
-  async function makeReady() {
+  async function makeReady(requireReady = true) {
     const queries = getQueries();
     const open = ok(await queries.listGapQuestions(handoverId), "gaps").filter((q) => q.status === "open" && q.priority === "required");
     if (open.length > 0) {
@@ -130,7 +130,7 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
         ...(p.evidenceStatus === "missing" ? { asKnownGap: true } : {}),
       }), `approve ${p.evidenceStatus}`);
     }
-    assert.ok(ok(await queries.getReadiness(handoverId), "readiness").canPublish, "readiness itself is satisfied");
+    if (requireReady) assert.ok(ok(await queries.getReadiness(handoverId), "readiness").canPublish, "readiness itself is satisfied");
   }
 
   before(async () => {
@@ -223,7 +223,7 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
     snapshots.pub2 = await snapshot(ids.pub2);
   });
 
-  it("5. a good next version is processed (scoped) and then waits for change detection: publication stays blocked", async () => {
+  it("5. a good next version is processed (scoped) and checked (Task 05D); its open change review keeps publication blocked", async () => {
     signInAs(ann, "ann@example.test");
     ok(await startRevision({ handoverId }), "start revision");
     ids.v3 = await uploadVersion(ids.v2, chatV3);
@@ -236,14 +236,20 @@ describe("Tier E (R3 Task 05C): scoped processing of a source update and the pub
     assert.deepEqual(jobs.filter((j) => j.src === null).map((j) => `${j.stage}:${j.status}`).sort(),
       ["analyze:succeeded", "prepare_review:succeeded", "verify_support:succeeded"], "every handover-wide stage ran");
     assert.equal(await sourceJobCount(ids.handbook), handbookJobs, "the handbook is untouched");
-    assert.deepEqual(await change(ids.v3), { state: "awaiting_detection", err: null, n: 1 }, "processed, not yet compared (Task 05D)");
+    // Task 05D: the analyze job compared version 3 with the lineage's retained evidence (version 1's, since version 2
+    // never parsed) and recorded detection, so the update is fully evaluated: ready. The added line reverses the bank
+    // mandate, so a change review is open and still blocks publication.
+    assert.deepEqual(await change(ids.v3), { state: "ready", err: null, n: 1 }, "processed and checked (Task 05D)");
     assert.ok((await pg.json<number>(`select to_jsonb(count(*)) from public.source_messages where source_id = ${lit(ids.v3)}`))! > 0, "version 3 was parsed");
+    const open = (await pg.json<number>(`select to_jsonb(count(*)) from public.source_change_review_items i join public.source_version_changes c
+                                           on c.id = i.change_id where c.to_source_id = ${lit(ids.v3)} and i.state = 'open'`))!;
+    assert.ok(open > 0, "the reversal is an open change review");
 
-    await makeReady();
+    await makeReady(false);
     const refused = await publishHandover({ handoverId, acknowledgeExtractionGaps: true });
-    assert.equal(!refused.ok && refused.error.details?.reason, "source_update_pending", "no acknowledgement lifts it");
-    await assert.rejects(pg.json(`select to_jsonb(public.publish_handover(${lit(ann)}, ${lit(handoverId)}, null))`), /source_update_pending/,
-      "the database refuses the direct path (readiness itself is satisfied)");
+    assert.equal(!refused.ok && refused.error.details?.reason, "change_review_open", "no acknowledgement lifts it");
+    await assert.rejects(pg.json(`select to_jsonb(public.publish_handover(${lit(ann)}, ${lit(handoverId)}, null))`), /change_review_open|not ready/,
+      "the database refuses the direct path");
     assert.equal(await pg.json<string>(`select to_jsonb(state) from public.handovers where id = ${lit(handoverId)}`), "in_review");
     assert.deepEqual(await snapshot(ids.pub1), snapshots.pub1, "publication 1 is unchanged");
     assert.deepEqual(await snapshot(ids.pub2), snapshots.pub2, "publication 2 is unchanged");

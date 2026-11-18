@@ -21,20 +21,26 @@ export function isSupersededSourceVersion(s: Pick<SourceSummary, "version">): bo
 }
 
 /** R3 Task 05C: a plain description of where a source update stands. */
-export function sourceUpdateStateLabel(state: string | null, errorCode: string | null): string {
+export function sourceUpdateStateLabel(state: string | null, errorCode: string | null, openReviews = 0): string {
+  const decide = openReviews > 0 ? `; ${openReviews} ${openReviews === 1 ? "change needs" : "changes need"} a decision` : "";
   switch (state) {
     case "awaiting_processing":
       return "waiting to be processed";
     case "processing":
       return "being processed";
     case "awaiting_detection":
-      return "processed; Baton hasn't yet checked how it changes the handover";
+      return "processed; Baton hasn't yet checked how it changes the handover: process it again to run the check";
+    case "ready":
+      // R3 Task 05D: fully evaluated (extraction complete and change detection recorded)
+      return openReviews > 0 ? `processed and checked${decide}` : "processed and checked; nothing left to decide";
     case "failed":
       return errorCode === "extraction_partial"
-        ? "only partly read: process it again, or acknowledge it when publishing"
+        ? `only partly read: process it again, or acknowledge it when publishing${decide}`
         : errorCode === "extraction_failed"
-          ? "couldn't be read: process it again, or acknowledge it when publishing"
-          : "processing didn't finish: process it again";
+          ? `couldn't be read: process it again, or acknowledge it when publishing${decide}`
+          : errorCode === "detection_incomplete"
+            ? "read, but the check of how it changes the handover didn't finish: process it again"
+            : "processing didn't finish: process it again";
     case "superseded":
       return "replaced by a newer version";
     default:

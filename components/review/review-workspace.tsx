@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FlaskConical, Keyboard, ListFilter, Lock, Plus, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ import { createGapQuestion } from "@/lib/actions/gaps";
 import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
 import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
+import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 import { AddPointDialog } from "./add-point-dialog";
@@ -88,6 +90,7 @@ export function ReviewWorkspace({
   const extractionGaps = extraction ? blockingExtractionGaps(extraction) : [];
   // R3 Task 05C: a source update not processed and checked yet; it cannot be acknowledged away
   const updateBlocks = extraction ? blockingSourceUpdates(extraction) : [];
+  const router = useRouter();
   const [acknowledgeGaps, setAcknowledgeGaps] = useState(false);
   const [section, setSection] = useState<SectionFilter>("all");
   const [status, setStatus] = useState<EvidenceStatus | "all">("all");
@@ -230,6 +233,11 @@ export function ReviewWorkspace({
   );
 
   function onBlocker(kind: ReadinessReport["blockers"][number]["kind"]) {
+    // R3 Task 05D: source updates and their change reviews are listed on the processing page
+    if (kind === "source_updates_pending" || kind === "change_reviews_open") {
+      if (!preview) router.push(routes.handover.processing(handover.id));
+      return;
+    }
     setStatus("all");
     setReview("all");
     if (kind === "unresolved_conflicts") setSection("conflicts");

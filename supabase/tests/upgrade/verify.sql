@@ -399,4 +399,29 @@ select tests.as_owner();
 select tests.eq((select count(*)::int from public._extraction_publish_gaps(tests.id('hx'))), 1,
                 '500200: the pre-upgrade mixed run still has exactly its one failed source as a gap');
 
+-- ── 18500100 (R3 Task 05D): change detection on PRE-UPGRADE rows ────────────
+select tests.eq((select base_publication_id from public.source_version_changes where to_source_id = tests.id('spub_v2')),
+                (select current_publication_id from public.handovers where id = tests.id('hpub')),
+                '18500100: the pre-upgrade handover''s update records its current publication as the baseline');
+select tests.eq((select count(*)::int from public.source_change_review_items), 0, '18500100: no review item is invented for existing rows');
+select tests.ok(has_table_privilege('authenticated', 'public.source_change_review_items', 'SELECT')
+                and not has_table_privilege('authenticated', 'public.source_change_review_items', 'INSERT')
+                and not has_table_privilege('authenticated', 'public.source_change_review_items', 'UPDATE')
+                and not has_table_privilege('service_role', 'public.source_change_review_items', 'INSERT')
+                and not has_table_privilege('anon', 'public.source_change_review_items', 'SELECT'),
+                '18500100: review items are read-only for API roles');
+select tests.ok(has_function_privilege('service_role', 'public.pipeline_record_change_detection(uuid,integer,uuid,text,jsonb,jsonb,bigint)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.pipeline_record_change_detection(uuid,integer,uuid,text,jsonb,jsonb,bigint)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.list_change_detection_input(uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.list_change_detection_input(uuid)', 'EXECUTE')
+                and not has_function_privilege('service_role', 'public._blocking_change_reviews(uuid)', 'EXECUTE'),
+                '18500100: the detector functions are server-only; internals are not executable');
+select tests.as_user('ann');
+select tests.ok((select bool_or(b ->> 'kind' = 'source_updates_pending')
+                   from jsonb_array_elements(tests.read(format('select public.api_get_readiness(%L)', tests.id('hpub'))) -> 'blockers') b),
+                '18500100: readiness of the pre-upgrade handover reports its pending source update (never "ready")');
+select tests.eq(tests.read(format('select public.api_list_change_review_items(%L)', tests.id('hpub'))), '[]'::jsonb,
+                '18500100: the review-item read API works on the pre-upgrade handover');
+select tests.as_owner();
+
 select 'upgrade verified' as result;

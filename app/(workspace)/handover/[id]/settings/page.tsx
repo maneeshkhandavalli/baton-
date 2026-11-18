@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { HandoverSettings } from "@/components/settings/handover-settings";
 import { FormSkeleton } from "@/components/shared/skeletons";
+import { getConsentDisclosure } from "@/lib/ai/consent-disclosure";
 import { getQueries } from "@/lib/data";
 import { connection } from "next/server";
 
@@ -43,6 +44,7 @@ async function SettingsContent({ params }: { params: Promise<{ id: string }> }) 
       tokens={tokens?.ok ? tokens.data : []}
       participants={participants?.ok ? participants.data : []}
       exclusions={exclusions?.ok ? exclusions.data : []}
+      consentDisclosure={getConsentDisclosure()}
     />
   );
 }

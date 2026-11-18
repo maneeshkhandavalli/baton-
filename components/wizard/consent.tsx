@@ -6,34 +6,47 @@ import { useState } from "react";
 import { maskKindLabel } from "@/components/handover/labels";
 import { Button } from "@/components/ui/button";
 import { MASK_KINDS, type MaskKind } from "@/lib/contracts/enums";
+import { consentDisclosure, type ConsentDisclosure } from "@/lib/contracts/consent";
 import { cn } from "@/lib/utils";
 
-/** Version of the consent statement below. Bump it whenever the wording changes (§12.2). */
-export const CONSENT_STATEMENT_VERSION = "gemini-free-2026-11-14-v1";
-
 /**
- * D11 (2026-11-14): the configured provider is the Google Gemini Developer API on the FREE tier
- * (lib/ai/providers/gemini.ts, GEMINI_DISPLAY_NAME). The server records the configured provider id with
- * each consent, and processing refuses a source whose consent names a different provider.
+ * R3 Task 05D: the AI-processing statement is decided by the SERVER from the actual configuration
+ * (lib/ai/consent-disclosure.ts → ConsentDisclosure) and passed down: a local fake adapter is never presented as
+ * Gemini, and a real provider is named exactly. The server records the configured provider id with each consent,
+ * and processing refuses a source whose consent names a different provider. Each wording has its own version.
  */
-export const AI_PROVIDER_LABEL = "Google Gemini (Gemini Developer API, free tier)";
+export const DEFAULT_CONSENT_DISCLOSURE: ConsentDisclosure = consentDisclosure("not_configured");
 
-export const CONSENT_ITEMS = [
-  { id: "informed", label: "I told the group (or document owners) that I'm using this content for a Baton handover." },
-  {
-    id: "provider",
-    label: `I understand masked content will be sent to ${AI_PROVIDER_LABEL} for processing. Phone numbers, emails, payment details and secrets are masked before anything is sent. On the free tier, Google may use this content to improve its products, which can include review by people, so do not upload anything you would not share with Google. The raw file is deleted after processing.`,
-  },
-  { id: "optout", label: "I told members they can ask to be left out, and I've excluded anyone who did." },
-] as const;
+/** @deprecated the statement version depends on the configuration: use `disclosure.statementVersion`. */
+export const CONSENT_STATEMENT_VERSION = consentDisclosure("gemini_free").statementVersion;
 
-export type ConsentItemId = (typeof CONSENT_ITEMS)[number]["id"];
+export const CONSENT_ITEM_IDS = ["informed", "provider", "optout"] as const;
+export type ConsentItemId = (typeof CONSENT_ITEM_IDS)[number];
 
-export function ConsentChecklist({ value, onChange, className }: { value: Record<ConsentItemId, boolean>; onChange: (v: Record<ConsentItemId, boolean>) => void; className?: string }) {
+export function consentItems(disclosure: ConsentDisclosure): ReadonlyArray<{ id: ConsentItemId; label: string }> {
+  return [
+    { id: "informed", label: "I told the group (or document owners) that I'm using this content for a Baton handover." },
+    { id: "provider", label: disclosure.providerStatement },
+    { id: "optout", label: "I told members they can ask to be left out, and I've excluded anyone who did." },
+  ];
+}
+
+export function ConsentChecklist({
+  value,
+  onChange,
+  disclosure = DEFAULT_CONSENT_DISCLOSURE,
+  className,
+}: {
+  value: Record<ConsentItemId, boolean>;
+  onChange: (v: Record<ConsentItemId, boolean>) => void;
+  disclosure?: ConsentDisclosure;
+  className?: string;
+}) {
+  const items = consentItems(disclosure);
   return (
     <fieldset className={cn("space-y-3", className)}>
       <legend className="sr-only">Consent</legend>
-      {CONSENT_ITEMS.map((item) => (
+      {items.map((item) => (
         <label
           key={item.id}
           className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm leading-relaxed shadow-xs transition-colors hover:border-border-strong has-checked:border-success/40 has-checked:bg-success-soft/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35"
@@ -48,7 +61,7 @@ export function ConsentChecklist({ value, onChange, className }: { value: Record
             {item.id === "provider" && (
               <span aria-hidden="true" className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold tracking-wide text-warning-fg uppercase">
                 <Sparkles className="size-3" />
-                AI provider · free tier
+                {disclosure.badge}
               </span>
             )}
             <span className="block text-pretty">{item.label}</span>
@@ -56,14 +69,14 @@ export function ConsentChecklist({ value, onChange, className }: { value: Record
         </label>
       ))}
       <p className="text-caption text-muted-foreground">
-        {CONSENT_ITEMS.filter((i) => value[i.id]).length} of {CONSENT_ITEMS.length} confirmed · statement version {CONSENT_STATEMENT_VERSION}, recorded with each source.
+        {items.filter((i) => value[i.id]).length} of {items.length} confirmed · statement version {disclosure.statementVersion}, recorded with each source.
       </p>
     </fieldset>
   );
 }
 
 export const emptyConsent = (): Record<ConsentItemId, boolean> => ({ informed: false, provider: false, optout: false });
-export const consentComplete = (v: Record<ConsentItemId, boolean>) => CONSENT_ITEMS.every((i) => v[i.id]);
+export const consentComplete = (v: Record<ConsentItemId, boolean>) => CONSENT_ITEM_IDS.every((id) => v[id]);
 
 export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, number>> }) {
   return (

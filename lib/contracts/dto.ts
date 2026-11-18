@@ -144,8 +144,10 @@ export interface SourceVersionInfo {
   supersededAt: string | null;
   supersededBySourceId: string | null;
   /** R3 Task 05C: where this version's update stands (null for a first version or an older database). */
-  updateState?: "awaiting_processing" | "processing" | "awaiting_detection" | "failed" | "superseded" | null;
+  updateState?: "awaiting_processing" | "processing" | "awaiting_detection" | "ready" | "failed" | "superseded" | null;
   updateError?: string | null;
+  /** R3 Task 05D: open (or investigating) change-review items of this version's update. */
+  openReviews?: number;
 }
 
 /** R3 Task 05B: what create_source_version decided. Only `upload` needs the signed ticket. */
@@ -351,6 +353,8 @@ export const READINESS_BLOCKERS = [
   "no_incoming_recipient", // no incoming member AND no pending incoming member_invite token
   "no_approved_points",
   "privacy_review_required", // any visible point with privacyReview = "required" (§5.5)
+  "source_updates_pending", // R3 Task 05D: a new source version not yet processed and checked (the 05C gate)
+  "change_reviews_open", // R3 Task 05D: open change-review items from a source update
 ] as const;
 export type ReadinessBlocker = (typeof READINESS_BLOCKERS)[number];
 

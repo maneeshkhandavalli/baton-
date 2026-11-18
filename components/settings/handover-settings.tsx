@@ -1,5 +1,6 @@
 "use client";
 
+import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import { useRouter } from "next/navigation";
 import { Check, Clock, Copy, Crown, FileText, MessageCircle, RotateCcw, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
@@ -38,6 +39,8 @@ interface HandoverSettingsProps {
   tokens: AccessTokenSummary[];
   participants: SourceParticipantSummary[];
   exclusions: ExclusionSummary[];
+  /** R3 Task 05D: the consent wording for this server's actual AI configuration (a new version needs consent). */
+  consentDisclosure?: ConsentDisclosure;
 }
 
 /**
@@ -60,7 +63,7 @@ function Panel({ children, id }: { children: React.ReactNode; id?: string }) {
 }
 
 
-export function HandoverSettings({ handover: h, members, sources, tokens, participants, exclusions }: HandoverSettingsProps) {
+export function HandoverSettings({ handover: h, members, sources, tokens, participants, exclusions, consentDisclosure }: HandoverSettingsProps) {
   const router = useRouter();
   const { run, isPending } = useAction();
   const creator = h.viewerIsCreator;
@@ -337,7 +340,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                   )}
                 </div>
                 <AccessBadge level={s.accessLevel} />
-                {canAddVersion && !pending && (s.state === "uploaded" || s.state === "parsed" || s.state === "failed") && <SourceVersionUpload source={s} />}
+                {canAddVersion && !pending && (s.state === "uploaded" || s.state === "parsed" || s.state === "failed") && <SourceVersionUpload source={s} consentDisclosure={consentDisclosure} />}
                 {canManageSources && h.state !== "processing" && (
                   <ConfirmDialog
                     trigger={

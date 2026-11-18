@@ -147,6 +147,8 @@ export const blockerLabel: Record<ReadinessBlocker, (n: number) => string> = {
   no_incoming_recipient: () => "No incoming member has been invited",
   no_approved_points: () => "No points have been approved yet",
   privacy_review_required: (n) => `${n} ${n === 1 ? "point needs" : "points need"} a privacy review`,
+  source_updates_pending: (n) => `${n} source ${n === 1 ? "update hasn't" : "updates haven't"} been processed and checked yet`,
+  change_reviews_open: (n) => `${n} ${n === 1 ? "change" : "changes"} from a source update ${n === 1 ? "needs" : "need"} a decision`,
 };
 
 export const identityKindLabel: Record<IdentityKind, { label: string; description: string }> = {

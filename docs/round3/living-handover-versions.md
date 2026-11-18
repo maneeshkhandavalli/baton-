@@ -169,9 +169,67 @@ extraction:
 - The processing page lists source updates and offers "Process the new version" after an earlier successful run.
 - Settings → Sources shows each update's state.
 
-**Consequence until 05D.** A successfully processed update waits in `awaiting_detection`, which blocks publication by
-design. A new revision with a processed source update therefore cannot be published until change detection exists.
-The previous publication stays available.
+**Superseded by 05D.** A successfully processed update now becomes `ready` once change detection is recorded (see
+below); an update left in `awaiting_detection` by 05C is processed again by the next scoped run.
+
+## Task 05D: deterministic change detection
+
+Migration `20261118500100_change_detection.sql` (additive). Detector `lib/signals/change-detection.ts` (pure),
+orchestrated by `lib/pipeline/change-detection.ts` inside the `analyze` job of the run that processes the update.
+
+**Baseline.** `source_version_changes.base_publication_id` is the handover's current publication when the version
+became current (BEFORE INSERT trigger; existing rows backfilled with the latest publication not newer than the change).
+NULL means the handover was never published: newly extracted points stay in the ordinary initial review.
+
+**What is compared.** The retained evidence of every EARLIER version of the lineage (not only the immediate
+predecessor: a version that failed to parse has no evidence, and the points still cite the one before it), linked to
+live, non-rejected points with a verified quote (`exact` / `normalized`), against the new version's stored (masked,
+pseudonymised) messages.
+
+**Matching.** `checkQuote` (the app's quote verifier: format characters, NFC, curly quotes, dashes, whitespace and line
+breaks normalised; case preserved), at every occurrence, accepted only when bounded by non-word characters and meeting
+the 12-character / 3-word minimum. Placeholders compare by type only in a separate relaxed tier, which is never a
+match: `[PERSON_1]` → `[PERSON_2]` is reported as `placeholder_changed`, never mapped. Same place: chat = same author
+placeholder and timestamp; document = same section heading (line shifts are ignored).
+
+| outcome | item |
+|---|---|
+| strict match at the same place | none (a new message id is not a change) |
+| no match at the same place, exactly one elsewhere | `evidence_moved` with the new message and offsets |
+| several matches elsewhere (or twice in one message) | `evidence_moved`, `detail.match = ambiguous`, no message chosen |
+| relaxed (placeholder) match only | `evidence_missing`, `detail.match = placeholder_changed` |
+| nothing | `evidence_missing`, `detail.match = not_found` |
+
+Missing evidence is never deleted, unlinked or used to change a point; the old evidence stays attached to its version.
+
+**New content.** Chats: messages after the previous versions' latest `last_message_at` (kept through pruning) are new;
+messages exactly at it are treated as possibly new (exports are minute-precise) unless retained evidence is found
+there; earlier ones are re-exported old content. Documents: every block without retained evidence is only "previously
+uncited". Edits or deletions of old, uncited content cannot be detected, because that content was deliberately pruned;
+nothing claims otherwise.
+
+**Other items.** `possible_contradiction`: Task 03 retrieval with new content as the only candidates (top 3 per point),
+linked to the Task 03 review flag for the same point and message when one exists. `support_changed`: only when the
+independent support check judged the SAME matched passage with the opposite polarity (supports/partial ↔ contradicts /
+irrelevant). `new_information`: a pending extracted point whose only evidence is the new version (dedup already merged
+equivalents into existing points); only when there is a baseline publication.
+
+**Lifecycle.** One fenced, atomic `pipeline_record_change_detection` per update (analyze claim with exact generation;
+the update must still be `processing` in this run and its version current; all items validated; `ON CONFLICT DO
+NOTHING` on `(change_id, dedupe_key)`; audited `source_update.changes_detected`). When the run closes: `ready` only if
+extraction was complete, the run succeeded and this run recorded detection; otherwise `failed` with
+`extraction_partial`, `extraction_failed`, `run_failed`, `run_cancelled` or `detection_incomplete`. A pre-05D
+`awaiting_detection` update is retried by the next scoped run. A newer version → `superseded`, and its open /
+investigating items → `stale` (`superseded`); removing the source → `stale` (`source_removed`); both audited.
+
+**Gate.** Open or investigating items of a current version's update block publication on every path (BTPF0
+`change_review_open`); accepted, rejected and stale items do not. Task 04's acknowledgement never lifts them. Readiness
+gains `source_updates_pending` and `change_reviews_open`, so the dashboard and review panel never say "ready" around
+the gate.
+
+**Consent wording.** `getConsentDisclosure()` (lib/ai/config.ts) describes the actual configuration: the local fake
+adapter is "no AI provider", Gemini is named only when configured (free tier vs. the approved paid profile), an
+evaluation provider by its public name. Each wording has its own statement version.
 
 ## Not in this stage
 
@@ -179,8 +237,9 @@ The following are deferred to later stages:
 
 | stage | work |
 |---|---|
-| 05D | change detection: `source_version_changes` states `detecting`, `ready`, `failed`, `detector_version`, `error_code` |
-| 05E | the reviewer queue and decisions |
+| 05D | done (above): deterministic change detection, review items, gate |
+| 05E | the reviewer decisions (accept / reject / investigate) and their actions |
+| 05F | the before-and-after review interface |
 | later | freshness UI and provider events |
 
 05B does not mark anything as checked against a new version: the transition stays `awaiting_processing`.

@@ -7,6 +7,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { ProcessingView } from "@/components/processing/processing-view";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ProcessingSkeleton } from "@/components/shared/skeletons";
+import { getConsentDisclosure } from "@/lib/ai/consent-disclosure";
 import { getQueries } from "@/lib/data";
 import { connection } from "next/server";
 
@@ -40,6 +41,7 @@ async function ProcessingContent({ params }: { params: Promise<{ id: string }> }
       canStart={h.viewerIsCreator || h.viewerRole === "outgoing"}
       canCancel={h.viewerIsCreator}
       extraction={extraction.ok ? extraction.data : null}
+      consentDisclosure={getConsentDisclosure()}
     />
   );
 }

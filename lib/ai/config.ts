@@ -41,6 +41,7 @@ import "server-only";
  */
 
 import type { Result } from "../contracts/api";
+import { consentDisclosure, type ConsentDisclosure } from "../contracts/consent";
 import { aiConfigChangedError, providerNotConfiguredError } from "./errors";
 import type { AiProvider, AiRunConfig } from "./provider";
 import { createFakeProvider, FAKE_DISPLAY_NAME, FAKE_PROVIDER_ID, fakeRunConfig } from "./providers/fake";
@@ -228,4 +229,25 @@ function sameRunConfig(a: AiRunConfig, b: AiRunConfig): boolean {
     a.verify.promptVersion === b.verify?.promptVersion &&
     a.verify.schemaVersion === b.verify?.schemaVersion
   );
+}
+
+/**
+ * R3 Task 05D: the consent wording for THIS server's actual AI configuration (lib/contracts/consent.ts). Uses only
+ * what getAiConfiguration decides (mode and provider id) plus the data-governance profile NAME; never an API key,
+ * URL or other secret. The local fake adapter is never presented as Gemini, and Gemini is never claimed merely
+ * because it is the historical default.
+ */
+export function getConsentDisclosure(env: AiEnv = process.env): ConsentDisclosure {
+  const config = getAiConfiguration(env);
+  if (!config.ok) return consentDisclosure("not_configured");
+  switch (config.mode) {
+    case "fake":
+      return consentDisclosure("local_test");
+    case "evaluation":
+      return consentDisclosure("evaluation", config.provider.displayName);
+    case "production":
+      if (config.provider.id !== GEMINI_PROVIDER_ID) return consentDisclosure("not_configured");
+      // the paid tier only under the approved profile; otherwise (development with a key) it is the free tier
+      return (env.AI_DATA_GOVERNANCE ?? "").trim() === "gemini-paid-dpa" ? consentDisclosure("gemini_paid") : consentDisclosure("gemini_free");
+  }
 }

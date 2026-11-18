@@ -184,6 +184,9 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
     const inferred = blocker(r, "unconfirmed_inferred");
     const gaps = blocker(r, "open_required_gaps");
     const privacy = blocker(r, "privacy_review_required");
+    // R3 Task 05D: the database publication gate (source updates and their change reviews), never "ready" around it
+    const updates = blocker(r, "source_updates_pending");
+    const changes = blocker(r, "change_reviews_open");
     const openGaps = (input.gaps ?? []).filter((g) => g.status === "open").length;
     if (r) {
       const decided = r.counts.byReviewState.approved + r.counts.byReviewState.rejected;
@@ -191,7 +194,13 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
       progress = total ? decided / total : null;
       progressLabel = total ? `${decided} of ${total} points decided` : null;
     }
-    const bits = [pending && `${pending} to review`, conflicts && plural(conflicts, "conflict"), gaps && `${gaps} required gap${gaps === 1 ? "" : "s"} open`]
+    const bits = [
+      pending && `${pending} to review`,
+      conflicts && plural(conflicts, "conflict"),
+      gaps && `${gaps} required gap${gaps === 1 ? "" : "s"} open`,
+      updates && `${plural(updates, "source update")} not checked yet`,
+      changes && `${plural(changes, "source change")} to decide`,
+    ]
       .filter(Boolean)
       .join(" · ");
     status = bits || (r?.canPublish ? "Ready to publish" : "In review");
@@ -209,8 +218,14 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
         const n = gaps || openGaps;
         attention.push({ kind: "gaps", label: "Gap questions", reason: `${plural(n, "question")} nobody has answered yet${gaps ? " (required to publish)" : ""}.`, cta: "Open gaps", href: links.gaps(h.id), rank: 4 });
       }
+      if (updates || changes) {
+        const parts = [updates && `${plural(updates, "source update")} still ${updates === 1 ? "needs" : "need"} processing and checking`, changes && `${plural(changes, "change")} found in a source update ${changes === 1 ? "needs" : "need"} a decision`]
+          .filter(Boolean)
+          .join("; ");
+        attention.push({ kind: "review", label: "Source update", reason: `${parts}. Publishing waits for this.`, cta: "See source updates", href: links.processing(h.id), rank: 2 });
+      }
       if (r?.canPublish && h.viewerIsCreator) {
-        attention.push({ kind: "publish", label: "Ready", reason: "Every point is decided. Publish when you're ready.", cta: "Publish", href: links.review(h.id), rank: 3 });
+        attention.push({ kind: "publish", label: "Ready", reason: "Every point is decided and every source update is checked. Publish when you're ready.", cta: "Publish", href: links.review(h.id), rank: 3 });
       }
     }
   } else if (stage === "published") {

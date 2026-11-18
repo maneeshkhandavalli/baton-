@@ -21,6 +21,7 @@ import type {
   SourceExtractionState,
   UnreviewedSignalMessage,
 } from "@/lib/contracts/extraction";
+import { unsettledSourceUpdates } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -69,14 +70,18 @@ function SourceLine({ s }: { s: SourceExtractionCoverage }) {
 /** Coverage summary: per-source completeness, totals and extraction blockers. Renders nothing when unavailable. */
 export function ExtractionCoverageSummary({ report, className }: { report: ExtractionReport | null; className?: string }) {
   if (!report?.available || report.completion === "none") return null;
-  const incomplete = report.completion === "partial" || report.completion === "failed";
+  // R3 Task 05D: a newer version not yet processed or checked, or with changes to decide, is never "fully analysed"
+  const unsettled = unsettledSourceUpdates(report);
+  const incomplete = report.completion === "partial" || report.completion === "failed" || unsettled.length > 0;
   return (
     <section aria-labelledby="coverage-heading" className={cn("rounded-xl border border-border bg-card p-4 shadow-soft", className)}>
       <h2 id="coverage-heading" className="type-subheading">
         Source coverage
       </h2>
       <p className={cn("mt-1 text-xs", incomplete ? "font-medium text-warning-fg" : "text-muted-foreground")}>
-        {report.completion === "complete" && "Every source was fully analysed."}
+        {report.completion === "complete" && unsettled.length === 0 && "Every source was fully analysed."}
+        {report.completion === "complete" && unsettled.length > 0 &&
+          `Every source processed so far was fully analysed, but ${unsettled.length === 1 ? "a source update still needs" : `${unsettled.length} source updates still need`} processing, checking or a decision.`}
         {report.completion === "in_progress" && "Analysis is still running."}
         {report.completion === "partial" && "Not everything was analysed. Points may be missing."}
         {report.completion === "failed" && "No source could be analysed."}

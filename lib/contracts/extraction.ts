@@ -117,7 +117,7 @@ export interface ExtractionReport {
  * (source_update_blocks_publication); it cannot be acknowledged away. A `failed` update with an extraction gap
  * does not block here: it goes through the extraction acknowledgement instead and stays `failed`.
  */
-export const SOURCE_UPDATE_STATES = ["awaiting_processing", "processing", "awaiting_detection", "failed", "superseded"] as const;
+export const SOURCE_UPDATE_STATES = ["awaiting_processing", "processing", "awaiting_detection", "ready", "failed", "superseded"] as const;
 export type SourceUpdateState = (typeof SOURCE_UPDATE_STATES)[number];
 
 export interface SourceUpdateStatus {
@@ -129,6 +129,8 @@ export interface SourceUpdateStatus {
   state: SourceUpdateState;
   errorCode: string | null;
   blocksPublication: boolean;
+  /** R3 Task 05D: open (or investigating) change-review items found in this update (0 on an older database). */
+  openReviewItems: number;
 }
 
 export interface RawSourceUpdate {
@@ -140,6 +142,7 @@ export interface RawSourceUpdate {
   state?: string;
   errorCode?: string | null;
   blocksPublication?: boolean;
+  openReviewItems?: number;
 }
 
 // ── Raw shape returned by api_get_extraction_report ──────────────────────────
@@ -328,6 +331,7 @@ function sourceUpdatesOf(raw: RawSourceUpdate[] | null | undefined): SourceUpdat
             errorCode: typeof u.errorCode === "string" ? u.errorCode : null,
             // fail closed: anything but an explicit `false` from the database blocks
             blocksPublication: u.blocksPublication !== false,
+            openReviewItems: n(u.openReviewItems),
           },
         ]
       : [],
@@ -348,10 +352,29 @@ export function sourceUpdateBlockText(u: SourceUpdateStatus): string {
     case "processing":
       return `Version ${u.toVersion} of ${name} is being processed. Wait for it to finish.`;
     case "awaiting_detection":
-      return `Version ${u.toVersion} of ${name} was processed, but Baton hasn't yet checked how it changes this handover.`;
+      return `Version ${u.toVersion} of ${name} was processed, but Baton hasn't yet checked how it changes this handover. Process it again to run the check.`;
+    case "ready":
+      return u.openReviewItems > 0
+        ? `Version ${u.toVersion} of ${name} changes this handover in ${u.openReviewItems} ${u.openReviewItems === 1 ? "place" : "places"} that ${u.openReviewItems === 1 ? "needs" : "need"} a decision.`
+        : `Version ${u.toVersion} of ${name} was processed and checked.`;
     default:
+      if (u.errorCode === "detection_incomplete") {
+        return `Version ${u.toVersion} of ${name} was read, but the check of how it changes this handover didn't finish. Process it again.`;
+      }
+      if (u.openReviewItems > 0 && (u.errorCode === "extraction_partial" || u.errorCode === "extraction_failed")) {
+        return `Version ${u.toVersion} of ${name} wasn't fully read, and ${u.openReviewItems} ${u.openReviewItems === 1 ? "change" : "changes"} found in it ${u.openReviewItems === 1 ? "needs" : "need"} a decision. Acknowledging the gap doesn't settle them.`;
+      }
       return `Processing version ${u.toVersion} of ${name} didn't finish. Process it again.`;
   }
+}
+
+/**
+ * R3 Task 05D: source updates that are not fully evaluated and settled: anything but `ready` with no open review
+ * item. While any exists, nothing may claim that every source was fully analysed.
+ */
+export function unsettledSourceUpdates(report: ExtractionReport | null): SourceUpdateStatus[] {
+  if (!report?.available) return [];
+  return report.sourceUpdates.filter((u) => u.state !== "superseded" && !(u.state === "ready" && u.openReviewItems === 0));
 }
 
 /**

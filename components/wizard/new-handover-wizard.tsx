@@ -32,7 +32,8 @@ import { routes } from "@/lib/routes";
 import { createSupabaseUploadClient } from "@/lib/supabase/client";
 
 import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTarget, TOO_LARGE_MESSAGE, type DraftSource } from "./draft-state";
-import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import type { DetailsValues } from "./details-save";
 import { ScopeStep } from "./scope-step";
 import { SourcesStep } from "./sources-step";
@@ -166,7 +167,7 @@ const valuesOf = (d: Pick<Details, "title" | "teamName" | "roleTitle" | "descrip
   ...(d.description !== undefined ? { description: d.description } : {}),
 });
 
-export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
+export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT_DISCLOSURE }: { initial?: WizardInitial; consentDisclosure?: ConsentDisclosure }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { run, isPending } = useAction();
@@ -290,13 +291,13 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     async (localId: string, sourceId: string, accessLevel: AccessLevel, dateOrder?: DateOrder) => {
       update(localId, { status: "consent", error: undefined, errorPhase: undefined, needsDateOrder: false });
       const c = await saving(() =>
-        recordSourceConsent({ sourceId, consentStatementVersion: CONSENT_STATEMENT_VERSION, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
+        recordSourceConsent({ sourceId, consentStatementVersion: consentDisclosure.statementVersion, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
       );
       if (!c.ok) return update(localId, { status: "error", errorPhase: "failed", error: c.error.message });
       update(localId, { status: "previewing", dateOrder });
       applyPreview(localId, await previewSource({ sourceId }));
     },
-    [applyPreview, saving, timeZone, update],
+    [applyPreview, saving, timeZone, update, consentDisclosure.statementVersion],
   );
 
   // Reopened draft: preview sources that are uploaded (recording consent first where it is missing).
@@ -673,7 +674,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
           run(() =>
             recordSourceConsent({
               sourceId: s.sourceId!,
-              consentStatementVersion: CONSENT_STATEMENT_VERSION,
+              consentStatementVersion: consentDisclosure.statementVersion,
               consentConfirmed: true,
               accessLevel: s.accessLevel,
               timezone: tz,
@@ -780,7 +781,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
                 description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
               />
               <GroupNotice teamName={details.teamName} />
-              <ConsentChecklist value={consent} onChange={setConsent} />
+              <ConsentChecklist value={consent} onChange={setConsent} disclosure={consentDisclosure} />
             </div>
           )}
           {shownStep === 2 && (

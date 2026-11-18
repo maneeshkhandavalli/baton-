@@ -11,7 +11,8 @@ import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/
 import { CONSENT_REQUIRED_REASON, runReasonText, sourcesNeedingConsent, stageStatusMeta } from "@/components/shared/run-status";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyConsent } from "@/components/wizard/consent";
+import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, consentComplete, emptyConsent } from "@/components/wizard/consent";
+import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import { useAction } from "@/hooks/use-action";
 import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
 import type { MaskKind } from "@/lib/contracts/enums";
@@ -39,9 +40,11 @@ interface ProcessingViewProps {
   canCancel: boolean;
   /** R3 Task 03 (EXT-3): per-source extraction coverage; null when unavailable. */
   extraction?: ExtractionReport | null;
+  /** R3 Task 05D: the consent wording for this server's actual AI configuration. */
+  consentDisclosure?: ConsentDisclosure;
 }
 
-export function ProcessingView({ handoverId, status, canStart, canCancel, extraction = null }: ProcessingViewProps) {
+export function ProcessingView({ handoverId, status, canStart, canCancel, extraction = null, consentDisclosure = DEFAULT_CONSENT_DISCLOSURE }: ProcessingViewProps) {
   const router = useRouter();
   const { run, isPending } = useAction();
   const [consent, setConsent] = useState(emptyConsent());
@@ -54,7 +57,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   const sources = status.sources.filter(isCurrentSourceVersion);
   // R3 Task 05C: new versions of sources, and where each stands (a scoped run processes only these)
   const updates = sources.filter((s) => (s.version?.versionNumber ?? 1) > 1 && s.version?.updateState);
-  const pendingUpdates = updates.filter((s) => s.version?.updateState === "awaiting_processing" || s.version?.updateState === "failed");
+  // R3 Task 05D: awaiting_detection (processed before change detection existed) is processed again to run the check
+  const pendingUpdates = updates.filter(
+    (s) => s.version?.updateState === "awaiting_processing" || s.version?.updateState === "failed" || s.version?.updateState === "awaiting_detection",
+  );
+  // updates whose change detection found something that still needs a decision
+  const openReviews = updates.reduce((n, s) => n + (s.version?.updateState === "superseded" ? 0 : (s.version?.openReviews ?? 0)), 0);
   const active = r?.status === "queued" || r?.status === "running";
 
   useEffect(() => {
@@ -82,9 +90,16 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   const failedSources = sources.filter((s) => s.state === "failed");
   const reason = r?.status === "failed" ? runReasonText(r.error?.message) : null;
   const currentStage = stages.find((s) => s.status === "running");
+  // Never "complete" while a current version is unprocessed, unchecked or has changes waiting for a decision.
   const title = active
     ? "Processing your sources"
-    : r?.status === "succeeded"
+    : r?.status === "succeeded" && pendingUpdates.length > 0
+      ? pendingUpdates.length === 1
+        ? "A source update needs processing"
+        : "Source updates need processing"
+      : r?.status === "succeeded" && openReviews > 0
+        ? "Processed · changes to review"
+        : r?.status === "succeeded"
       ? "Processing complete"
       : r?.status === "failed"
         ? "Processing failed"
@@ -104,7 +119,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
       const res = await run(() =>
         recordSourceConsent({
           sourceId: s.id,
-          consentStatementVersion: CONSENT_STATEMENT_VERSION,
+          consentStatementVersion: consentDisclosure.statementVersion,
           consentConfirmed: true,
           accessLevel: s.accessLevel,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
@@ -153,7 +168,11 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {active
                 ? `You can leave this page. Baton keeps working and the review opens when it's done.${r?.startedAt ? ` Started ${formatDateTime(r.startedAt)}.` : ""}`
-                : r?.status === "succeeded"
+                : r?.status === "succeeded" && pendingUpdates.length > 0
+                  ? `The last run finished ${formatDateTime(r.finishedAt)}, but ${pendingUpdates.length === 1 ? "a newer version of a source hasn't" : `${pendingUpdates.length} newer source versions haven't`} been processed and checked yet. Publishing waits until ${pendingUpdates.length === 1 ? "it is" : "they are"}.`
+                  : r?.status === "succeeded" && openReviews > 0
+                    ? `Finished ${formatDateTime(r.finishedAt)}. Baton compared the new source version with the previous one and found ${openReviews} ${openReviews === 1 ? "change that needs" : "changes that need"} a decision before publishing.`
+                    : r?.status === "succeeded"
                   ? `Finished ${formatDateTime(r.finishedAt)}. Every point is ready for your review.`
                   : r?.status === "failed"
                     ? "Your sources are safe. Nothing was published."
@@ -257,7 +276,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
             {updates.map((s) => (
               <li key={s.id}>
                 <span className="font-medium">{s.title}</span>, version {s.version?.versionNumber}:{" "}
-                <span className="text-muted-foreground">{sourceUpdateStateLabel(s.version?.updateState ?? null, s.version?.updateError ?? null)}</span>
+                <span className="text-muted-foreground">{sourceUpdateStateLabel(s.version?.updateState ?? null, s.version?.updateError ?? null, s.version?.openReviews ?? 0)}</span>
               </li>
             ))}
           </ul>
@@ -275,7 +294,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                       : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
                   </p>
                 </div>
-                <ConsentChecklist value={consent} onChange={setConsent} />
+                <ConsentChecklist value={consent} onChange={setConsent} disclosure={consentDisclosure} />
               </div>
             )}
             {startError && (

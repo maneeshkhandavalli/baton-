@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import { History } from "lucide-react";
 import { useId, useState } from "react";
 
-import { ConsentChecklist, CONSENT_STATEMENT_VERSION, consentComplete, emptyConsent } from "@/components/wizard/consent";
+import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, consentComplete, emptyConsent } from "@/components/wizard/consent";
+import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import { signedTarget } from "@/components/wizard/draft-state";
 import { accessLevelMeta } from "@/components/handover/labels";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ async function sha256Hex(data: ArrayBuffer) {
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function SourceVersionUpload({ source }: { source: SourceSummary }) {
+export function SourceVersionUpload({ source, consentDisclosure = DEFAULT_CONSENT_DISCLOSURE }: { source: SourceSummary; consentDisclosure?: ConsentDisclosure }) {
   const router = useRouter();
   const fileId = useId();
   const accessId = useId();
@@ -115,7 +116,7 @@ export function SourceVersionUpload({ source }: { source: SourceSummary }) {
 
       const activated = await recordSourceConsent({
         sourceId,
-        consentStatementVersion: CONSENT_STATEMENT_VERSION,
+        consentStatementVersion: consentDisclosure.statementVersion,
         consentConfirmed: true,
         accessLevel: access,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -167,7 +168,7 @@ export function SourceVersionUpload({ source }: { source: SourceSummary }) {
               </NativeSelect>
               <p className="text-xs text-muted-foreground">The same as the current version, or stricter.</p>
             </div>
-            <ConsentChecklist value={consent} onChange={setConsent} />
+            <ConsentChecklist value={consent} onChange={setConsent} disclosure={consentDisclosure} />
             {message && (
               <p role="alert" className="text-sm text-destructive">
                 {message}

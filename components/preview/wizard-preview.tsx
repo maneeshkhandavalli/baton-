@@ -8,7 +8,11 @@ import { SaveIndicator } from "@/components/shared/save-indicator";
 import { Stepper } from "@/components/shared/stepper";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, emptyConsent } from "@/components/wizard/consent";
+import { ConsentChecklist, GroupNotice, MaskingTable, emptyConsent } from "@/components/wizard/consent";
+import { consentDisclosure } from "@/lib/contracts/consent";
+
+// a design preview sends nothing anywhere: it shows the local-test wording
+const PREVIEW_DISCLOSURE = consentDisclosure("local_test");
 import type { DraftSource } from "@/components/wizard/draft-state";
 import { DetailsStep, MatchesSection, STEPS, StepHeading, type Details, type PendingMatch } from "@/components/wizard/new-handover-wizard";
 import { ScopeStep } from "@/components/wizard/scope-step";
@@ -80,8 +84,8 @@ export function WizardPreview({
             description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
           />
           <GroupNotice teamName={details.teamName} />
-          <ConsentChecklist value={consent} onChange={setConsent} />
-          <p className="sr-only">Statement {CONSENT_STATEMENT_VERSION}</p>
+          <ConsentChecklist value={consent} onChange={setConsent} disclosure={PREVIEW_DISCLOSURE} />
+          <p className="sr-only">Statement {PREVIEW_DISCLOSURE.statementVersion}</p>
         </div>
       )}
       {step === 2 && (

@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { resumeStep } from "@/components/wizard/draft-state";
 import { NewHandoverWizard, type WizardInitial } from "@/components/wizard/new-handover-wizard";
 import { isCurrentSourceVersion } from "@/lib/contracts/source-versions";
+import { getConsentDisclosure } from "@/lib/ai/consent-disclosure";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
 
@@ -40,7 +41,7 @@ export default function NewHandoverPage({ searchParams }: PageProps<"/handover/n
 async function WizardLoader({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams;
   const draft = typeof query.draft === "string" ? query.draft : null;
-  if (!draft) return <NewHandoverWizard />;
+  if (!draft) return <NewHandoverWizard consentDisclosure={getConsentDisclosure()} />;
   if (!UUID.test(draft)) notFound();
 
   await connection(); // session reads check token expiry against the current time (auth-js)
@@ -70,5 +71,5 @@ async function WizardLoader({ searchParams }: { searchParams: Promise<Record<str
     sources: live,
     step: resumeStep(typeof query.step === "string" ? query.step : undefined, live.length),
   };
-  return <NewHandoverWizard initial={initial} />;
+  return <NewHandoverWizard initial={initial} consentDisclosure={getConsentDisclosure()} />;
 }

@@ -190,6 +190,8 @@ export async function cancelProcessing(deps: ActionDeps, input: { handoverId: st
 
 /** R3 Task 05C: details.reason when a source update keeps the handover from being published. */
 export const SOURCE_UPDATE_PENDING_REASON = "source_update_pending";
+/** R3 Task 05D: details.reason when only open change reviews (from a processed and checked update) remain. */
+export const CHANGE_REVIEW_OPEN_REASON = "change_review_open";
 
 export async function publishHandover(deps: ActionDeps, input: PublishHandoverInput): Promise<Result<PublicationSummary>> {
   return action(deps, publishHandoverInput, input, async (actor, v) => {
@@ -202,7 +204,10 @@ export async function publishHandover(deps: ActionDeps, input: PublishHandoverIn
     const updates = report.ok ? blockingSourceUpdates(report.data) : [];
     if (updates.length > 0) {
       return failWith("precondition_failed", {
-        details: { reason: SOURCE_UPDATE_PENDING_REASON, sources: updates.length },
+        details: {
+          reason: updates.every((u) => u.state === "ready" && u.openReviewItems > 0) ? CHANGE_REVIEW_OPEN_REASON : SOURCE_UPDATE_PENDING_REASON,
+          sources: updates.length,
+        },
         message: updates.map(sourceUpdateBlockText).join(" "),
       });
     }

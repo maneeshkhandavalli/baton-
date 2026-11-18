@@ -348,8 +348,10 @@ const sourceRow = z.object({
       superseded_at: nullableTimestamp,
       superseded_by_source_id: id.nullable(),
       // R3 Task 05C (migration 20261117500200)
-      update_state: z.enum(["awaiting_processing", "processing", "awaiting_detection", "failed", "superseded"]).nullable().optional(),
+      update_state: z.enum(["awaiting_processing", "processing", "awaiting_detection", "ready", "failed", "superseded"]).nullable().optional(),
       update_error: nullableText.optional(),
+      // R3 Task 05D (migration 20261118500100)
+      open_reviews: z.number().int().min(0).nullable().optional(),
     })
     .optional(),
 });
@@ -381,6 +383,7 @@ export function mapSourceSummary(raw: unknown): SourceSummary {
             supersededAt: v.superseded_at,
             supersededBySourceId: v.superseded_by_source_id,
             ...(v.update_state !== undefined ? { updateState: v.update_state, updateError: v.update_error ?? null } : {}),
+            ...(typeof v.open_reviews === "number" ? { openReviews: v.open_reviews } : {}),
           },
         }
       : {}),
