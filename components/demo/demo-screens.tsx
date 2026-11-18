@@ -108,7 +108,7 @@ function SourcesScreen({ view }: { view: DemoView }) {
             <div className="space-y-1 border-t border-border pt-3 text-caption">
               <p className="flex items-center gap-1.5">
                 <ShieldCheck aria-hidden="true" className="size-3.5 shrink-0 text-success-fg" />
-                {masked.length ? `Masked: ${masked.map(([k, n]) => `${n} ${maskKindLabel[k as keyof typeof maskKindLabel].label.toLocaleLowerCase()}`).join(", ")}` : "Nothing needed masking"}
+                {masked.length ? `Masked: ${masked.map(([k, n]) => `${maskKindLabel[k as keyof typeof maskKindLabel].label.toLocaleLowerCase()} (${n})`).join(", ")}` : "Nothing needed masking"}
               </p>
               <p className="text-muted-foreground">
                 {s.consentRecordedAt ? `Consent recorded ${formatDate(s.consentRecordedAt)}` : "No consent yet"}
