@@ -2,12 +2,14 @@
 
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import { useRouter } from "next/navigation";
-import { Check, Clock, Copy, Crown, FileText, MessageCircle, RotateCcw, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { Check, Clock, Crown, FileText, MessageCircle, RotateCcw, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 
 import { AccessBadge, HandoverStateBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDate, formatDateRange } from "@/components/handover/format";
 import { AccessLinks } from "@/components/settings/access-links";
+import { inviteErrorMessage } from "@/components/settings/invite-delivery";
+import { InviteResult } from "@/components/settings/invite-result";
 import { ParticipantsPanel } from "@/components/settings/participants-panel";
 import { SourceVersionUpload } from "@/components/settings/source-version-upload";
 import { accessLevelMeta, maskKindLabel, memberRoleLabel, sourceKindLabel, sourceStateLabel } from "@/components/handover/labels";
@@ -18,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useAction } from "@/hooks/use-action";
-import type { AccessTokenSummary, ExclusionSummary, HandoverSummary, MemberSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
+import type { AccessTokenSummary, CreatedInvitation, ExclusionSummary, HandoverSummary, MemberSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, type AccessLevel, type MaskKind, type MemberRole } from "@/lib/contracts/enums";
 import { deleteHandover, offerCreatorTransfer, respondToCreatorTransfer, startRevision } from "@/lib/actions/handovers";
 import { inviteMember, removeMember, updateMemberClearance } from "@/lib/actions/members";
@@ -74,8 +76,9 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
   const offerIsForMe = !!offer && !!me && offer.toMemberId === me.id;
   const canManageSources = creator || h.viewerRole === "outgoing";
   const [invite, setInvite] = useState<{ email: string; role: MemberRole; clearance: AccessLevel | "" }>({ email: "", role: "incoming", clearance: "" });
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // R3 Task 06 (contract §4.3, A6): the created invitation, with whether it was emailed
+  const [created, setCreated] = useState<{ invitation: CreatedInvitation; email: string } | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [transferTo, setTransferTo] = useState("");
 
   // §12.9: an active outgoing or reviewer member who is not the creator (the server checks this too).
@@ -211,6 +214,8 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
             className="space-y-3 border-t border-border pt-5"
             onSubmit={(e) => {
               e.preventDefault();
+              setInviteError(null);
+              const email = invite.email;
               void run(
                 () =>
                   inviteMember({
@@ -220,11 +225,14 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                     clearance: reviewRole || !invite.clearance ? undefined : invite.clearance,
                   }),
                 {
-                  success: "Invite created",
+                  success: (d) => (d.delivery.status === "sent" ? `Invitation emailed to ${email}` : "Invitation created"),
                   onSuccess: (d) => {
-                    // The real action returns an absolute URL (BATON_SITE_URL); the mock returns a path.
-                    setInviteLink(new URL(d.url, window.location.origin).href);
+                    setCreated({ invitation: d, email });
                     setInvite({ email: "", role: "incoming", clearance: "" });
+                  },
+                  onError: (err) => {
+                    setInviteError(inviteErrorMessage(err));
+                    return true;
                   },
                 },
               );
@@ -261,31 +269,12 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                 Invite
               </Button>
             </div>
-            {inviteLink && (
-              <div className="space-y-1.5 rounded-lg bg-muted/40 p-3">
-                <p className="text-xs text-muted-foreground">
-                  Invite link, shown only once. It expires in 7 days and works once. They sign in with a magic link sent to that email.
-                </p>
-                <div className="flex gap-2">
-                  <Input readOnly value={inviteLink} aria-label="Invite link" className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(inviteLink);
-                        setCopied(true);
-                      } catch {
-                        setCopied(false);
-                      }
-                    }}
-                  >
-                    {copied ? <Check aria-hidden="true" data-icon="inline-start" /> : <Copy aria-hidden="true" data-icon="inline-start" />}
-                    {copied ? "Copied" : "Copy"}
-                  </Button>
-                </div>
-              </div>
+            {inviteError && (
+              <p role="alert" className="text-sm font-medium text-destructive-fg">
+                {inviteError}
+              </p>
             )}
+            {created && <InviteResult key={created.invitation.tokenId} invitation={created.invitation} email={created.email} />}
           </form>
         )}
       </Panel>

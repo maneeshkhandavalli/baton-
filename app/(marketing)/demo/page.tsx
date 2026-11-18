@@ -13,11 +13,11 @@ import { CODECELL_ID } from "@/lib/mocks/fixtures/codecell";
 import { PROFILES } from "@/lib/mocks/fixtures/profiles";
 import { createMockQueries } from "@/lib/mocks/queries";
 import { routes } from "@/lib/routes";
-import { cn } from "@/lib/utils";
+import { DEMO_FRAMING } from "@/components/demo/demo-guide";
 
 export const metadata: Metadata = {
   title: "Demo: CodeCell handover",
-  description: "Explore a read-only Baton handover for a fictional college coding club.",
+  description: "Try a Baton handover end to end for a fictional college coding club. Nothing is saved or sent.",
 };
 
 /** Short pointers for a first-time visitor (and judges) on where to look. */
@@ -32,17 +32,21 @@ export default function DemoPage() {
     <div className="mx-auto w-full max-w-[90rem] space-y-8 px-4 py-10 sm:px-6 lg:px-10 lg:py-12 xl:px-12">
       <header className="flex flex-col gap-6 border-b border-border pb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
         <div className="max-w-2xl space-y-3">
-          <p className="type-eyebrow text-muted-foreground">Public demo · read only</p>
+          <p className="type-eyebrow text-muted-foreground">{DEMO_FRAMING}</p>
           <h1 className="type-page-title">CodeCell: handing over the technical lead role</h1>
           <p className="type-body text-muted-foreground">
-            Priya is leaving CodeCell, a college coding club. Baton read two WhatsApp groups, a sponsorship MoU, the hackathon runbook and some infrastructure
-            notes. Browse what it found, how each point is backed, and what Neha, the incoming lead, receives.
+            Priya is leaving CodeCell, a college coding club. Baton read the club&rsquo;s WhatsApp groups and its written
+            notes. Step through the whole handover yourself: review the points, publish, then read it as Neha, the incoming lead.
           </p>
         </div>
-        <Link href={routes.handover.new} className={cn(buttonVariants({ size: "lg" }), "shrink-0")}>
-          Start your own handover
-          <ArrowRight aria-hidden="true" data-icon="inline-end" />
-        </Link>
+        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center lg:flex-col lg:items-end">
+          {/* R3 Task 06: one clear way in. A plain link: no sign-in, no form, no server function (contract §2.2). */}
+          <Link href={routes.demoWorkspace()} className={buttonVariants({ size: "lg" })}>
+            Enter the demo
+            <ArrowRight aria-hidden="true" data-icon="inline-end" />
+          </Link>
+          <p className="text-caption text-muted-foreground lg:text-right">Six short steps · no account needed</p>
+        </div>
       </header>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-10">
         <ul aria-label="What to look for" className="grid gap-2.5 sm:grid-cols-3 sm:gap-4">
@@ -55,9 +59,10 @@ export default function DemoPage() {
         </ul>
         <p className="flex items-start gap-2 text-caption text-muted-foreground lg:max-w-xs">
           <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          Everyone and everything here is fictional. Press J and K to move between points.
+          Everyone and everything here is fictional. Below is a read-only preview; the demo itself lets you act.
         </p>
       </div>
+      <h2 className="type-section-title">Read-only preview</h2>
       <Suspense fallback={<WorkspaceSkeleton label="Loading the demo…" />}>
         <DemoContent />
       </Suspense>

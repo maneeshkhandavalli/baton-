@@ -1,14 +1,19 @@
 "use client";
 
 import { Link2, Mail } from "lucide-react";
+import { useState } from "react";
 
 import { formatDate } from "@/components/handover/format";
 import { accessLevelMeta, memberRoleLabel, tokenStatusDetail, tokenStatusMeta } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/hooks/use-action";
-import type { AccessTokenSummary } from "@/lib/contracts/dto";
+import type { AccessTokenSummary, CreatedInvitation } from "@/lib/contracts/dto";
 import { revokeAccessToken } from "@/lib/actions/gaps";
+import { reissueInvitation } from "@/lib/actions/invitations";
+
+import { canReissue, deliveryStatusLabel, inviteErrorMessage } from "./invite-delivery";
+import { InviteResult } from "./invite-result";
 import { cn } from "@/lib/utils";
 
 /** Exactly the canonical derived status; nothing else is inferred from the token. */
@@ -24,6 +29,9 @@ function StatusPill({ token }: { token: AccessTokenSummary }) {
  */
 export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[]; creator: boolean }) {
   const { run } = useAction();
+  // R3 Task 06 (contract §3.2 item 4, §4.3): a reissued invitation's one-time link and delivery, by the OLD row's id
+  const [reissued, setReissued] = useState<Record<string, CreatedInvitation>>({});
+  const [reissueError, setReissueError] = useState<Record<string, string>>({});
   const invites = tokens.filter((t) => t.purpose === "member_invite");
   const gapLinks = tokens.filter((t) => t.purpose === "gap_interview");
   const pendingInvites = invites.filter((t) => t.status === "active");
@@ -41,6 +49,30 @@ export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[];
       destructive
       onConfirm={async () => {
         await run(() => revokeAccessToken({ tokenId: t.id }), { success: "Link revoked" });
+      }}
+    />
+  );
+
+  const reissue = (t: AccessTokenSummary) => (
+    <ConfirmDialog
+      trigger={
+        <Button size="xs" variant="ghost" aria-label={`Send a new link to ${t.recipientEmail ?? "this person"}`}>
+          Send a new link
+        </Button>
+      }
+      title="Send a new invitation link?"
+      description="The current link stops working and a new one replaces it, with the same address, role and access. If email is set up, Baton emails it."
+      confirmLabel="Send a new link"
+      onConfirm={async () => {
+        setReissueError((m) => ({ ...m, [t.id]: "" }));
+        await run(() => reissueInvitation({ tokenId: t.id }), {
+          success: (d) => (d.delivery.status === "sent" ? "New invitation emailed" : "New invitation link created"),
+          onSuccess: (d) => setReissued((m) => ({ ...m, [t.id]: d })),
+          onError: (err) => {
+            setReissueError((m) => ({ ...m, [t.id]: inviteErrorMessage(err) }));
+            return true;
+          },
+        });
       }}
     />
   );
@@ -63,10 +95,18 @@ export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[];
                     <p className="truncate text-sm font-medium">{t.recipientEmail ?? "Invitation"}</p>
                     <p className="text-xs text-muted-foreground">
                       {t.grantRole ? memberRoleLabel[t.grantRole] : "Member"} · sees {accessLevelMeta[t.maxAccessLevel].label.toLowerCase()} · {tokenStatusDetail(t, formatDate)}
+                      {deliveryStatusLabel(t.deliveryStatus) && ` · ${deliveryStatusLabel(t.deliveryStatus)}`}
                     </p>
                   </div>
                   <StatusPill token={t} />
-                  {t.status === "active" && revoke(t, `the invitation for ${t.recipientEmail ?? "this person"}`)}
+                  {canReissue(t) && !reissued[t.id] && reissue(t)}
+                  {t.status === "active" && !reissued[t.id] && revoke(t, `the invitation for ${t.recipientEmail ?? "this person"}`)}
+                  {reissueError[t.id] && (
+                    <p role="alert" className="w-full text-caption font-medium text-destructive-fg">
+                      {reissueError[t.id]}
+                    </p>
+                  )}
+                  {reissued[t.id] && <InviteResult className="w-full" invitation={reissued[t.id]} email={t.recipientEmail} />}
                 </li>
               ))}
             </ul>
