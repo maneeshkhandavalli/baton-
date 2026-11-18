@@ -1,7 +1,7 @@
 /** Members, invitations and acknowledgements (§6.3, §6.19, §11.3, §12.3). */
 
 import type { Result } from "../../contracts/api";
-import type { CreatedLink } from "../../contracts/dto";
+import type { CreatedInvitation } from "../../contracts/dto";
 import {
   acknowledgePublicationInput,
   inviteMemberInput,
@@ -10,21 +10,27 @@ import {
 } from "../../contracts/schemas";
 import type { AcknowledgePublicationInput, InviteMemberInput, UpdateMemberClearanceInput } from "../../contracts/schemas";
 import * as mutations from "../../db/mutations";
+import { consumeInviteSendLimits } from "../../db/rate-limit";
 import { routes } from "../../routes";
+import { deliverInvitation } from "./invitations";
 import { absoluteUrl, action, ok, siteOriginOrFail } from "./run";
 import type { ActionDeps } from "./types";
 
 /**
  * Creator only (SQL). Returns the raw invitation token once, inside an absolute url built from
- * BATON_SITE_URL. No email is sent here: the visitor of /h/[token] requests the magic link, which goes to
- * the invited address only (§12.3).
+ * BATON_SITE_URL. R3 Task 06: the per-creator and per-recipient send limits are consumed BEFORE the token exists, and
+ * the link is then emailed to the invited address when this server has an email transport (`delivery`); otherwise the
+ * creator copies the link (D6). The invitee can still request a magic link on /h/[token] (§12.3).
  */
-export async function inviteMember(deps: ActionDeps, input: InviteMemberInput): Promise<Result<CreatedLink>> {
+export async function inviteMember(deps: ActionDeps, input: InviteMemberInput): Promise<Result<CreatedInvitation>> {
   return action(deps, inviteMemberInput, input, async (actor, v) => {
     const site = siteOriginOrFail(deps); // before the token exists: a bad config leaves no orphan token
     if (!site.ok) return site;
+    await consumeInviteSendLimits(deps.adminDb(), actor.profileId, v.email); // rate_limited (invite_send): no token
     const link = await mutations.inviteMember(deps.adminDb(), actor, v);
-    return ok({ tokenId: link.tokenId, url: absoluteUrl(site.origin, routes.token.handover(link.rawToken)), expiresAt: link.expiresAt });
+    const url = absoluteUrl(site.origin, routes.token.handover(link.rawToken));
+    const delivery = await deliverInvitation(deps, actor, { tokenId: link.tokenId, rawToken: link.rawToken, url, expiresAt: link.expiresAt, recipientEmail: v.email });
+    return ok({ tokenId: link.tokenId, url, expiresAt: link.expiresAt, delivery });
   });
 }
 

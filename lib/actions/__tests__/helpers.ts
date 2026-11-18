@@ -6,6 +6,7 @@ import type { BatonQueries } from "../../contracts/queries";
 import type { VerifiedActor } from "../../db/actor-rules";
 import type { DbClient } from "../../db/client";
 import type { StorageClient } from "../../db/storage";
+import type { EmailMessage, EmailTransport } from "../../email/core";
 import type { AiRunConfig, PlanInput, ProcessingPlan } from "../../pipeline/plan";
 import type { ActionDeps } from "../core/types";
 
@@ -97,6 +98,8 @@ export interface FakeOptions {
   /** Account deletion: the auth side. */
   softDeleteUser?: (profileId: string) => Promise<void>;
   clientIp?: string | null;
+  /** R3 Task 06: the email transport (default: not configured, so nothing is ever sent). */
+  email?: EmailTransport;
 }
 
 export function fakeDeps(options: FakeOptions = {}) {
@@ -112,13 +115,14 @@ export function fakeDeps(options: FakeOptions = {}) {
   let listCalls = 0;
   const authCalls: Array<{ op: "softDeleteUser" | "endSession"; profileId?: string }> = [];
   const issues: Array<{ event: string; details: Record<string, string | number> }> = [];
+  const emails: EmailMessage[] = [];
   const folders = new Map(Object.entries(options.storage?.folders ?? {}).map(([k, v]) => [k, [...v]]));
 
   const client = (kind: "admin" | "user"): DbClient => ({
     rpc: async (fn, args) => {
       calls.push({ fn, args, client: kind });
       events.push(fn);
-      const handler = options.rpc?.[fn];
+      const handler = options.rpc?.[fn] ?? (fn === "consume_rate_limit" ? { data: true } : undefined);
       const r = typeof handler === "function" ? handler(args) : (handler ?? { data: null });
       return { data: r.data ?? null, error: r.error ?? null };
     },
@@ -218,6 +222,18 @@ export function fakeDeps(options: FakeOptions = {}) {
     logIssue: (event, details) => {
       issues.push({ event, details });
     },
+    email: () => {
+      const t = options.email;
+      if (!t) return { configured: false, send: async () => { throw new Error("email not expected in this test"); } };
+      return {
+        configured: t.configured,
+        send: async (m: EmailMessage) => {
+          emails.push(m);
+          events.push("email.send");
+          return t.send(m);
+        },
+      };
+    },
   };
 
   return {
@@ -230,6 +246,7 @@ export function fakeDeps(options: FakeOptions = {}) {
     events,
     authCalls,
     issues,
+    emails,
     folders,
     get actorLookups() {
       return actorLookups;

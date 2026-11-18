@@ -704,15 +704,132 @@ export async function redeemMemberInvite(
   actor: VerifiedActor,
   rawToken: string,
   clientIp: string | null,
-): Promise<{ handoverId: string; role: MemberRole; memberId: string }> {
+): Promise<{ handoverId: string; role: MemberRole; memberId: string; replayed: boolean }> {
   const tokenHashHex = await sha256Hex(rawToken);
   await consumeRateLimits(db, "invite_redeem", { client: await clientSubject(clientIp), tokenHashHex }); // M6
   if (!canRedeemInvitation(actor)) throw new DbError("token_invalid");
   const data = (await callRpc(db, "redeem_member_invite", {
     p_token_hash: hexToBytea(tokenHashHex),
     p_profile_id: actor.profileId,
-  })) as { handover_id: string; role: MemberRole; member_id: string };
-  return { handoverId: data.handover_id, role: data.role, memberId: data.member_id };
+  })) as { handover_id: string; role: MemberRole; member_id: string; replayed?: boolean };
+  // R3 Task 06 (20261118700100): the same user redeeming the same token again is a replay; nothing was written.
+  return { handoverId: data.handover_id, role: data.role, memberId: data.member_id, replayed: data.replayed === true };
+}
+
+// ── R3 Task 06: invitation details, reissue and delivery (migrations 20261118700100–20261118700300) ─────
+
+const INVITE_STATES = ["pending", "accepted", "expired", "revoked", "used", "unavailable"] as const;
+const ROLES: readonly MemberRole[] = ["outgoing", "incoming", "lead", "reviewer"];
+
+/** Raw shape of get_member_invite_details, validated here; nothing else from the row reaches the caller. */
+export type MemberInviteDetailsRow =
+  | {
+      state: "pending";
+      handoverTitle: string;
+      inviterName: string;
+      role: MemberRole;
+      expiresAt: string;
+      recipientEmailMasked: string;
+      viewer: { emailMatches: boolean; emailConfirmed: boolean; alreadyMember: boolean } | null;
+      /** Only when the viewer is already a member of the handover. */
+      member: { handoverId: string; role: MemberRole } | null;
+    }
+  | { state: "accepted"; handoverId: string; role: MemberRole }
+  | { state: "expired" | "revoked" | "used" | "unavailable" };
+
+function parseInviteDetails(raw: unknown): MemberInviteDetailsRow {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const state = r.state as (typeof INVITE_STATES)[number];
+  if (!INVITE_STATES.includes(state)) throw new DbError("internal");
+  if (state === "accepted") {
+    if (typeof r.handover_id !== "string" || !ROLES.includes(r.role as MemberRole)) throw new DbError("internal");
+    return { state, handoverId: r.handover_id, role: r.role as MemberRole };
+  }
+  if (state !== "pending") return { state };
+  const v = r.viewer as Record<string, unknown> | null | undefined;
+  if (
+    typeof r.handover_title !== "string" || typeof r.inviter_name !== "string" || typeof r.expires_at !== "string" ||
+    typeof r.recipient_email_masked !== "string" || !ROLES.includes(r.role as MemberRole)
+  ) {
+    throw new DbError("internal");
+  }
+  return {
+    state,
+    handoverTitle: r.handover_title,
+    inviterName: r.inviter_name,
+    role: r.role as MemberRole,
+    expiresAt: new Date(r.expires_at).toISOString(),
+    recipientEmailMasked: r.recipient_email_masked,
+    viewer: v
+      ? { emailMatches: v.email_matches === true, emailConfirmed: v.email_confirmed === true, alreadyMember: v.already_member === true }
+      : null,
+    member:
+      typeof r.member_handover_id === "string" && ROLES.includes(r.member_role as MemberRole)
+        ? { handoverId: r.member_handover_id, role: r.member_role as MemberRole }
+        : null,
+  };
+}
+
+/**
+ * Invitation details for the holder of a link (service role). The viewer, when given, is the VERIFIED session actor.
+ * `consume` = false skips the view limits: acceptInvitation classifies its own failure under the redeem limits.
+ * Throws `DbError("token_invalid")` for an unknown token.
+ */
+export async function getMemberInviteDetails(
+  db: DbClient,
+  rawToken: string,
+  viewer: VerifiedActor | null,
+  clientIp: string | null,
+  options: { consume?: boolean } = {},
+): Promise<MemberInviteDetailsRow> {
+  const tokenHashHex = await sha256Hex(rawToken);
+  if (options.consume !== false) {
+    await consumeRateLimits(db, "invite_view", { client: await clientSubject(clientIp), tokenHashHex });
+  }
+  return parseInviteDetails(
+    await callRpc(db, "get_member_invite_details", {
+      p_token_hash: hexToBytea(tokenHashHex),
+      p_viewer_profile_id: viewer?.profileId ?? null,
+    }),
+  );
+}
+
+/** Creator only: revokes the invitation and issues a new one for the same address and role, atomically. */
+export async function reissueMemberInvite(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { tokenId: string; expiresInDays: number },
+): Promise<{ rawToken: string; tokenId: string; expiresAt: string; recipientEmail: string }> {
+  const rawToken = generateRawToken();
+  const expiresAt = new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString();
+  const data = (await call(db, actor, "reissue_member_invite", {
+    p_token_id: input.tokenId,
+    p_token_hash: await tokenHashParam(rawToken),
+    p_expires_at: expiresAt,
+  })) as { token_id?: unknown; recipient_email?: unknown } | null;
+  if (typeof data?.recipient_email !== "string") throw new DbError("internal");
+  return { rawToken, tokenId: asUuid(data.token_id), expiresAt, recipientEmail: data.recipient_email };
+}
+
+/** Creator only: the invited address of an invitation (server only; used for the send limit before a reissue). */
+export async function memberInviteRecipient(db: DbClient, actor: VerifiedActor, tokenId: string): Promise<string> {
+  const email = await call(db, actor, "member_invite_recipient", { p_token_id: tokenId });
+  if (typeof email !== "string") throw new DbError("internal");
+  return email;
+}
+
+/** Creator only: what happened when the server tried to email an invitation. Never the address or the link. */
+export async function recordInvitationDelivery(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { tokenId: string; status: "sent" | "not_sent" | "failed"; reason: "email_not_configured" | "provider_failed" | "rate_limited" | null; providerRef: string | null },
+): Promise<void> {
+  await call(db, actor, "record_invitation_delivery", {
+    p_token_id: input.tokenId,
+    p_status: input.status,
+    p_reason: input.reason,
+    p_provider_ref: input.providerRef,
+  });
 }
 
 // ── R3 Task 03: extraction signals and review flags (migration 20261117300100) ──────────────────────
