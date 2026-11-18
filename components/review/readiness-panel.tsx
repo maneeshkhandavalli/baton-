@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowUpRight, CheckCircle2, CircleHelp, Scale, Send } from "lucide-react";
 
 import { HANDOVER_SECTIONS, blockerLabel, type HandoverSectionId } from "@/components/handover/labels";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { ReadinessRing } from "@/components/shared/readiness-ring";
 import { Button } from "@/components/ui/button";
 import type { PointDetail, ReadinessReport } from "@/lib/contracts/dto";
@@ -63,9 +64,12 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
         <div className="flex items-center gap-3">
           <ReadinessRing value={readiness?.score ?? 0} />
           <div className="min-w-0">
-            <h2 id="readiness-heading" className="type-subheading">
-              Readiness
-            </h2>
+            <div className="flex items-center gap-1">
+              <h2 id="readiness-heading" className="type-subheading">
+                Readiness
+              </h2>
+              <ContextualHelp topic="readiness" label="What does readiness mean?" />
+            </div>
             <p className="text-xs text-muted-foreground">
               {decided} of {points.length} points decided
             </p>
