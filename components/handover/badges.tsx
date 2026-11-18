@@ -1,5 +1,6 @@
 import { Clock3, Lock, Shield, Users } from "lucide-react";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { Badge } from "@/components/ui/badge";
 import type { AccessLevel, HandoverState } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
@@ -36,18 +37,18 @@ export function AccessBadge({ level, className, showEveryone = true }: { level: 
   );
 }
 
-/** The latest supporting evidence is old relative to the record (metadata tag, warning tone). */
+/**
+ * The latest supporting evidence is old relative to the record (metadata tag, warning tone). The explanation is a
+ * real button (ContextualHelp), not a hover-only title, so touch and keyboard users can read it too (R3 Task 06).
+ */
 export function OutdatedBadge({ className }: { className?: string }) {
   return (
-    <Badge
-      shape="tag"
-      size="sm"
-      tone="warning"
-      title="The latest supporting evidence is more than 30 days older than the end of the record."
-      className={className}
-    >
-      <Clock3 aria-hidden="true" />
-      Possibly outdated
-    </Badge>
+    <span className={cn("inline-flex items-center gap-0.5", className)}>
+      <Badge shape="tag" size="sm" tone="warning">
+        <Clock3 aria-hidden="true" />
+        Possibly outdated
+      </Badge>
+      <ContextualHelp topic="possibly_outdated" label="Why is this possibly outdated?" />
+    </span>
   );
 }

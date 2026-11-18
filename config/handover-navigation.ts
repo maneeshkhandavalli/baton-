@@ -10,6 +10,8 @@ export const handoverNav: readonly HandoverNavItem[] = [
   { title: "Processing", href: routes.handover.processing },
   { title: "Review", href: routes.handover.review },
   { title: "Gaps", href: routes.handover.gaps },
+  // R3 Task 06: source-update change reviews (Task 05E) were reachable only from links on other pages
+  { title: "Changes", href: routes.handover.changes },
   { title: "Settings", href: routes.handover.settings },
   { title: "Published", href: routes.handover.published },
 ];

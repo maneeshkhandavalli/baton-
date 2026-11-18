@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { formatDateTime } from "@/components/handover/format";
 import { MaskedText } from "@/components/shared/masked-text";
 import { Alert } from "@/components/ui/alert";
@@ -72,9 +73,12 @@ export function ChangeReviews({ handoverId, items, canDecide, handoverState, blo
   return (
     <div className="space-y-6">
       <section aria-labelledby="changes-summary" className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
-        <h2 id="changes-summary" className="type-subheading">
-          {unresolved.length === 0 ? "No change needs a decision" : `${unresolved.length} ${unresolved.length === 1 ? "change needs" : "changes need"} a decision`}
-        </h2>
+        <div className="flex items-center gap-1">
+          <h2 id="changes-summary" className="type-subheading">
+            {unresolved.length === 0 ? "No change needs a decision" : `${unresolved.length} ${unresolved.length === 1 ? "change needs" : "changes need"} a decision`}
+          </h2>
+          <ContextualHelp topic="change_reviews" label="How do source changes work?" />
+        </div>
         <p className="mt-1 text-sm text-muted-foreground" role="status" aria-live="polite">
           {unresolved.length > 0
             ? "Publishing the next version is blocked until every change is accepted or rejected. Changes you're investigating still block it."
@@ -89,21 +93,26 @@ export function ChangeReviews({ handoverId, items, canDecide, handoverState, blo
             {handoverState === "processing" ? "A source is being processed: decisions open again when it finishes." : "Changes can be decided while the handover is in review."}
           </p>
         )}
-        <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filter by kind of change">
-          <FilterChip active={kind === "all"} onClick={() => setKind("all")} count={unresolved.length}>
-            All
-          </FilterChip>
-          {CHANGE_REVIEW_KINDS.map((k) => (
-            <FilterChip key={k} active={kind === k} onClick={() => setKind(k)} count={counts[k]}>
-              {changeReviewKindText[k].label}
-            </FilterChip>
-          ))}
-        </div>
-        <label className="mt-3 flex w-fit cursor-pointer items-center gap-2 text-caption text-muted-foreground">
-          <input type="checkbox" className="size-4 accent-primary" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
-          Show decided and replaced changes
-        </label>
-        <div className="mt-4 flex flex-wrap gap-2">
+        {/* R3 Task 06: with no change at all, filters of zeros and a second "nothing here" line are only noise */}
+        {items.length > 0 && (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filter by kind of change">
+              <FilterChip active={kind === "all"} onClick={() => setKind("all")} count={unresolved.length}>
+                All
+              </FilterChip>
+              {CHANGE_REVIEW_KINDS.map((k) => (
+                <FilterChip key={k} active={kind === k} onClick={() => setKind(k)} count={counts[k]}>
+                  {changeReviewKindText[k].label}
+                </FilterChip>
+              ))}
+            </div>
+            <label className="mt-3 flex w-fit cursor-pointer items-center gap-2 text-caption text-muted-foreground">
+              <input type="checkbox" className="size-4 accent-primary" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
+              Show decided and replaced changes
+            </label>
+          </>
+        )}
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
           <Link href={routes.handover.review(handoverId)} className="text-sm font-medium text-primary-fg underline-offset-4 hover:underline">
             Open the review
           </Link>
@@ -113,7 +122,7 @@ export function ChangeReviews({ handoverId, items, canDecide, handoverState, blo
         </div>
       </section>
 
-      {shown.length === 0 ? (
+      {items.length === 0 ? null : shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">{showResolved ? "Nothing to show for this filter." : "No open change for this filter."}</p>
       ) : (
         <ul className="space-y-4" aria-label="Source changes">

@@ -227,7 +227,7 @@ investigating items → `stale` (`superseded`); removing the source → `stale` 
 gains `source_updates_pending` and `change_reviews_open`, so the dashboard and review panel never say "ready" around
 the gate.
 
-**Consent wording.** `getConsentDisclosure()` (lib/ai/config.ts) describes the actual configuration: the local fake
+**Consent wording.** `getConsentDisclosure()` (lib/ai/consent-disclosure.ts) describes the actual configuration: the local fake
 adapter is "no AI provider", Gemini is named only when configured (free tier vs. the approved paid profile), an
 evaluation provider by its public name. Each wording has its own statement version.
 

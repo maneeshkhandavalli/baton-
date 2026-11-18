@@ -23,6 +23,8 @@ interface EvidenceQuoteProps {
    * Needs `quoteCheck` and `supportVerdict`; review cards pass the whole EvidenceItem.
    */
   showVerification?: boolean;
+  /** Show the line/page location (technical; the evidence panel shows it, review cards do not). */
+  showLocation?: boolean;
   quoteCheck?: QuoteCheck;
   supportVerdict?: SupportVerdict;
   verdictRationale?: string | null;
@@ -103,6 +105,7 @@ export function EvidenceQuote({
   tone = "default",
   clamp = false,
   showVerification = false,
+  showLocation = true,
   quoteCheck,
   supportVerdict,
   verdictRationale,
@@ -110,7 +113,7 @@ export function EvidenceQuote({
   className,
 }: EvidenceQuoteProps) {
   const SourceIcon = kind === "testimony" ? UserRound : sentAt ? MessageCircle : FileText;
-  const where = location
+  const where = showLocation && location
     ? [location.page ? `p. ${location.page}` : null, location.heading ?? null, `line ${location.lineStart}`].filter(Boolean).join(" · ")
     : null;
   // Separator dots between metadata items (decorative; screen readers hear the items themselves).
@@ -133,7 +136,7 @@ export function EvidenceQuote({
       </blockquote>
       <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
         <SourceIcon aria-hidden="true" className="size-3.5 shrink-0" />
-        <span className="flex min-w-0 flex-wrap items-center gap-y-1">
+        <span className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-y-1">
           {authorLabel && (
             <span className={cn(sep, "font-medium text-foreground/85")}>
               <MaskedText text={authorLabel} />

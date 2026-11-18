@@ -298,10 +298,27 @@ export function sortRows(rows: readonly DashboardRow[]): DashboardRow[] {
 }
 
 /** The attention queue: every item across handovers, most urgent first, each tagged with its handover. */
-export function attentionQueue(rows: readonly DashboardRow[]): (AttentionItem & { handoverId: string; title: string; team: string })[] {
+export function attentionQueue(rows: readonly DashboardRow[]): QueuedAttention[] {
   return rows
     .flatMap((r) => r.attention.map((a) => ({ ...a, handoverId: r.id, title: r.title, team: r.team })))
     .sort((a, b) => a.rank - b.rank);
+}
+
+export type QueuedAttention = AttentionItem & { handoverId: string; title: string; team: string };
+
+/**
+ * R3 Task 06: the attention queue with one entry per handover, in queue order. The most urgent item leads (its CTA is
+ * the one action shown); the others are summarised by label, so "Up next" never lists the same handover twice with
+ * competing buttons.
+ */
+export function attentionByHandover(queue: readonly QueuedAttention[]): (QueuedAttention & { also: string[] })[] {
+  const out = new Map<string, QueuedAttention & { also: string[] }>();
+  for (const a of queue) {
+    const lead = out.get(a.handoverId);
+    if (!lead) out.set(a.handoverId, { ...a, also: [] });
+    else if (!lead.also.includes(a.label) && a.label !== lead.label) lead.also.push(a.label);
+  }
+  return [...out.values()];
 }
 
 /** Where to resume: the most recently updated handover the viewer is actively working on. */
