@@ -334,9 +334,12 @@ describe("links: absolute url from BATON_SITE_URL, checked before the token exis
     assert.ok(r.data.url.startsWith(`${ORIGIN}/h/`));
     assert.match(raw, /^[A-Za-z0-9_-]{43}$/);
     assert.equal(r.data.tokenId, NEW_ID);
-    const sent = allStrings(f.calls[0].args);
+    // R3 Task 06: the two send limits are consumed first, then the invitation is created.
+    assert.deepEqual(f.fns().slice(0, 3), ["consume_rate_limit", "consume_rate_limit", "invite_member"]);
+    const invite = f.calls.find((c) => c.fn === "invite_member")!;
+    const sent = allStrings(f.calls.map((c) => c.args));
     assert.ok(!sent.some((s) => s.includes(raw)), "the raw token never reaches the database");
-    assert.equal(f.calls[0].args?.p_token_hash, `\\x${createHash("sha256").update(raw).digest("hex")}`);
+    assert.equal(invite.args?.p_token_hash,`\\x${createHash("sha256").update(raw).digest("hex")}`);
   });
 
   it("createGapInterviewLink returns an absolute /g/ url and fails closed without a site URL", async () => {

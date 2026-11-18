@@ -14,7 +14,12 @@ import { DbError } from "./errors";
 import { callRpc } from "./rpc";
 import { sha256Hex } from "./tokens";
 
-export type RateLimitedAction = "gap_interview_view" | "gap_interview_submit" | "invite_magic_link" | "invite_redeem";
+export type RateLimitedAction =
+  | "gap_interview_view"
+  | "gap_interview_submit"
+  | "invite_magic_link"
+  | "invite_redeem"
+  | "invite_view"; // R3 Task 06 (20261118700300)
 
 /** Hash a client IP for counting. Returns null when no IP is known (the per-token limit still applies). */
 export async function clientSubject(ip: string | null | undefined): Promise<string | null> {
@@ -40,4 +45,21 @@ export async function consumeRateLimits(
     allowed = (await callRpc(db, "consume_rate_limit", { p_scope: `${action}_token`, p_subject: subjects.tokenHashHex })) === true && allowed;
   }
   if (!allowed) throw new DbError("rate_limited", undefined, true);
+}
+
+/**
+ * R3 Task 06: sending an invitation (and so, possibly, an email) is limited per creator and per recipient address,
+ * BEFORE the invitation exists. Both subjects are SHA-256 digests; the address and the profile id are never stored.
+ * Throws `DbError("rate_limited")` with `details.reason = "invite_send"` when either is over its limit.
+ */
+export async function consumeInviteSendLimits(db: DbClient, actorProfileId: string, recipientEmail: string): Promise<void> {
+  const actor = await sha256Hex(`baton-rate-limit:actor:${actorProfileId.toLowerCase()}`);
+  const recipient = await sha256Hex(`baton-rate-limit:recipient:${recipientEmail.trim().toLowerCase()}`);
+  let allowed = (await callRpc(db, "consume_rate_limit", { p_scope: "invite_send_actor", p_subject: actor })) === true;
+  allowed = (await callRpc(db, "consume_rate_limit", { p_scope: "invite_send_recipient", p_subject: recipient })) === true && allowed;
+  if (!allowed) {
+    const error = new DbError("rate_limited", undefined, true);
+    (error as unknown as { details: Record<string, string> }).details = { reason: "invite_send" };
+    throw error;
+  }
 }

@@ -13,6 +13,7 @@ import { getConsentDisclosure } from "../ai/consent-disclosure";
 import type { Result } from "../contracts/api";
 import { dbQueries, serverDb, serverStorage, userDb, userStorage } from "../db";
 import { previewSource } from "../parsers/parse-source";
+import { serverEmailTransport } from "../email";
 import { getVerifiedPepper } from "../pipeline/pepper";
 import { planProcessingRun, type AiRunConfig } from "../pipeline/plan";
 import { scheduleDrain } from "../pipeline/worker";
@@ -58,6 +59,7 @@ const DEPS: ActionDeps = Object.freeze({
   revalidate: () => refresh(),
   accountAuth: Object.freeze({ softDeleteUser: softDeleteAuthUser, endSession: endBrowserSession }),
   logIssue: logAccountIssue,
+  email: serverEmailTransport,
 });
 
 export function actionDeps(): ActionDeps {

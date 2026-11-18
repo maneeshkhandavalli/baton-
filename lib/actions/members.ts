@@ -3,12 +3,12 @@
 /** Member Server Functions (§11.3). Logic: lib/actions/core/members.ts. */
 
 import type { Result } from "../contracts/api";
-import type { CreatedLink } from "../contracts/dto";
+import type { CreatedInvitation } from "../contracts/dto";
 import type { AcknowledgePublicationInput, InviteMemberInput, UpdateMemberClearanceInput } from "../contracts/schemas";
 import * as core from "./core/members";
 import { actionDeps } from "./deps";
 
-export async function inviteMember(input: InviteMemberInput): Promise<Result<CreatedLink>> {
+export async function inviteMember(input: InviteMemberInput): Promise<Result<CreatedInvitation>> {
   return core.inviteMember(actionDeps(), input);
 }
 

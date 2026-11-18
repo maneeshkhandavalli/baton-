@@ -196,3 +196,25 @@ existing acknowledgement, because it covers exactly that state.
   without them.
 - **Contact names** always need a reviewer. That is a deliberate product consequence.
 - **Optional reason** on acknowledgements: not added (no product field yet).
+
+## 6. Round 3 Task 06: onboarding release checks (invitations and the demo)
+
+Before a hosted release that includes migrations `20261118700100`–`20261118700300`:
+
+1. **Supabase Auth must require email confirmation** (Dashboard → Authentication → Providers → Email → "Confirm
+   email" ON) and use a custom SMTP sender. Invitation acceptance relies on `auth.users.email_confirmed_at`
+   (`redeem_member_invite`, H3): with confirmation off, a password account would be "confirmed" without proving it
+   controls the address. The local Supabase stack has confirmation off and no mail server; that is dev-only.
+2. **Invitation email is optional.** It is sent only when BOTH `RESEND_API_KEY` and `BATON_EMAIL_FROM` are set as
+   server-only variables (never `NEXT_PUBLIC_`). Without them `inviteMember` still succeeds with
+   `delivery = { status: "not_sent", reason: "email_not_configured" }` and the creator copies the link (D6). No test
+   or local run sends real email.
+3. **The demo never touches the backend.** `/demo/**` skips the session refresh in `proxy.ts`, and `lib/demo/**` may
+   not import Supabase, `lib/db`, `lib/actions`, `lib/ai`, `lib/pipeline`, `lib/email` or the dev mock store
+   (`lib/demo/__tests__/engine-boundaries.test.ts`).
+4. **Apply order:** `20261118700100` → `20261118700200` → `20261118700300`, after `20261118600100`. The app's
+   invitation functions need all three; `inviteMember` needs `700200` (delivery record) and `700300` (send limits).
+   Deploy the database first. Rollback: `700300` restores the previous `consume_rate_limit` body and CHECK;
+   `700200` drops `invitation_deliveries`, `record_invitation_delivery`, `reissue_member_invite`,
+   `member_invite_recipient` and restores `list_access_tokens` from `20261111000600`; `700100` drops
+   `get_member_invite_details` and `_mask_email` and restores `redeem_member_invite` from `20261111000600`.

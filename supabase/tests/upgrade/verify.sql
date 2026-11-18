@@ -438,4 +438,44 @@ select tests.eq(tests.read(format('select public.api_get_change_reviews(%L)', te
                 '18600100: the reviewer read API works on the pre-upgrade handover');
 select tests.as_owner();
 
+-- ── 18700100–18700300 (R3 Task 06): invitations on PRE-UPGRADE rows ──────────
+select tests.as_service();
+select tests.eq(public.get_member_invite_details(sha256(convert_to('upgrade-invite', 'UTF8')), null) ->> 'state', 'pending',
+                '18700100: a pre-upgrade invitation reads as pending');
+select tests.eq(public.get_member_invite_details(sha256(convert_to('upgrade-invite', 'UTF8')), null) ->> 'recipient_email_masked', 'l***@example.test',
+                '18700100: with a masked address');
+select tests.as_owner();
+select tests.user('lee');
+select tests.as_service();
+select tests.eq((public.redeem_member_invite(sha256(convert_to('upgrade-invite', 'UTF8')), tests.id('lee')) ->> 'replayed')::boolean, false,
+                '18700100: the pre-upgrade invitation redeems');
+select tests.eq((public.redeem_member_invite(sha256(convert_to('upgrade-invite', 'UTF8')), tests.id('lee')) ->> 'replayed')::boolean, true,
+                '18700100: and replays for the same user');
+select tests.eq(public.get_member_invite_details(sha256(convert_to('upgrade-invite', 'UTF8')), tests.id('lee')) ->> 'state', 'accepted',
+                '18700100: the member sees it as accepted');
+select tests.as_owner();
+select tests.eq((select count(*)::int from public.handover_members where handover_id = tests.id('hr') and profile_id = tests.id('lee')), 1,
+                '18700100: one membership');
+select tests.as_reader('ann');
+select tests.ok((select bool_and(t ? 'delivery_status') from jsonb_array_elements(public.list_access_tokens(tests.id('hr'), 'member_invite', false)) t),
+                '18700200: the invitation listing carries delivery_status');
+select tests.ok((select bool_and(t -> 'delivery_status' = 'null'::jsonb) from jsonb_array_elements(public.list_access_tokens(tests.id('hr'), 'member_invite', false)) t),
+                '18700200: null for invitations never emailed');
+select tests.as_owner();
+select tests.ok(has_function_privilege('service_role', 'public.get_member_invite_details(bytea,uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.get_member_invite_details(bytea,uuid)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.reissue_member_invite(uuid,uuid,bytea,timestamp with time zone)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.reissue_member_invite(uuid,uuid,bytea,timestamp with time zone)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.record_invitation_delivery(uuid,uuid,text,text,text)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.member_invite_recipient(uuid,uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.redeem_member_invite(bytea,uuid)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.redeem_member_invite(bytea,uuid)', 'EXECUTE')
+                and not has_table_privilege('authenticated', 'public.invitation_deliveries', 'SELECT')
+                and not has_table_privilege('service_role', 'public.invitation_deliveries', 'INSERT'),
+                '18700100/200: the invitation functions are server-only; delivery records are unreadable by API roles');
+select tests.as_service();
+select tests.ok(public.consume_rate_limit('invite_redeem_client', repeat('cd', 32)) and public.consume_rate_limit('invite_send_actor', repeat('cd', 32)),
+                '18700300: existing and new rate-limit scopes both work');
+select tests.as_owner();
+
 select 'upgrade verified' as result;
