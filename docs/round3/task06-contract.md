@@ -34,6 +34,25 @@ through Main before implementation; workers must not invent endpoints or payload
 - **A5 Unknown reasons** render the generic state for their code (forward compatibility).
 - **A6 Delivery copy.** When `delivery.status = "not_sent"`, the UI shows the copyable link and says plainly that no
   email was sent and why (`email_not_configured` → "Email isn't set up on this server; send the link yourself").
+- **A7 DemoAction union (pinned; supersedes the union sketched in §2.5).** Real schema types only:
+
+  ```ts
+  export type DemoAction =
+    | { type: "reviewPoint"; input: ReviewPointInput }             // lib/contracts/schemas.ts
+    | { type: "submitGapAnswers"; input: SubmitGapAnswersInput }   // lib/contracts/schemas.ts
+    | { type: "reviewGapAnswer"; input: ReviewGapAnswerInput }     // lib/contracts/schemas.ts
+    | { type: "decideChangeReview"; input: DecideChangeReviewInput } // lib/contracts/change-review.ts (Task 05E)
+    | { type: "publish"; input: PublishHandoverInput }             // lib/contracts/schemas.ts
+    | { type: "acknowledge"; input: AcknowledgePublicationInput }  // lib/contracts/schemas.ts
+    | { type: "inviteMember"; input: InviteMemberInput };          // simulated: delivery not_sent / "demo"
+  ```
+
+  `reviewPoint` accepts only `action` ∈ {approve, reject, edit, confirm_inferred, resolve_conflict}; every other
+  `ReviewPointInput` action (exclude/restore evidence, change_access, reopen, resolve_privacy_review) returns
+  `forbidden` / `demo_read_only`. `decideChangeReview` applies Task 05E semantics (per-kind required inputs, states,
+  stale refusal) to the demo store. Reset and step changes are the functions `resetDemoSession` / `jumpToStep`, not
+  actions. `EditPointInput`, `ResolveConflictInput` and `AnswerGapInput` do not exist and are not used.
+
 
 ---
 
