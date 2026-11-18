@@ -101,6 +101,13 @@ update public.processing_jobs set status = 'failed', finished_at = now(), error_
 update public.processing_jobs set next_attempt_at = now() + interval '1 day'
  where run_id = tests.id('run_hx') and status = 'queued';
 
+-- ── R3 Task 06: a pending member invitation created BEFORE the upgrade (for 20261118700100–700300) ──
+-- To an address with no account yet, so no member's reads change.
+select tests.as_user('ann');
+select tests.put('inv_up', public.invite_member(tests.actor(), tests.id('hr'), 'lee@example.test', 'lead', null,
+                                                sha256(convert_to('upgrade-invite', 'UTF8')), now() + interval '7 days'));
+select tests.as_owner();
+
 -- ── snapshot helpers (schema "upgrade", local only) ─────────────────────────
 create schema upgrade;
 grant usage on schema upgrade to anon, authenticated, service_role;

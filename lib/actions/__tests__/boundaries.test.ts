@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (p: string) => readFileSync(`${ROOT}${p}`, "utf8");
 
-const ACTION_FILES = ["handovers", "sources", "review", "gaps", "members", "privacy", "account"] as const;
+const ACTION_FILES = ["handovers", "sources", "review", "gaps", "members", "privacy", "account", "invitations"] as const;
 
 /** §11.3 canonical placement. */
 const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
@@ -22,6 +22,8 @@ const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
   members: ["inviteMember", "updateMemberClearance", "removeMember", "acknowledgePublication"],
   privacy: ["eraseParticipant"],
   account: ["getAccountDeletionBlockers", "deleteAccount"],
+  // R3 Task 06 (docs/round3/task06-contract.md §6.2)
+  invitations: ["getInvitation", "acceptInvitation", "reissueInvitation", "requestInvitationSignInLink"],
 };
 
 const exportedNames = (text: string) => [...text.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|class)\s+(\w+)/gm)].map((m) => m[1]);
@@ -50,7 +52,10 @@ describe("lib/actions Server Function modules", () => {
     const real = new Set(Object.values(EXPECTED).flat());
     assert.deepEqual([...mock].filter((n) => !real.has(n)), [], "every mock export exists under the same name");
     const missing = [...real].filter((n) => !mock.has(n));
-    assert.deepEqual(missing.sort(), ["continueProcessing", "createManualPoint", "createSourceVersionUpload"]);
+    assert.deepEqual(missing.sort(), [
+      "acceptInvitation", "continueProcessing", "createManualPoint", "createSourceVersionUpload", "getInvitation",
+      "reissueInvitation", "requestInvitationSignInLink", // R3 Task 06: invitations have no mock (the demo simulates invites)
+    ]);
   });
 
   it("deps.ts is server-only, exports only actionDeps, and offers no override", () => {

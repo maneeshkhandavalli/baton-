@@ -94,6 +94,8 @@ export interface AccessTokenSummary {
   useCount: number;
   revokedAt: string | null;
   createdAt: string;
+  /** R3 Task 06: the latest invitation email outcome (member_invite, creator only); null when never attempted. */
+  deliveryStatus: InvitationDeliveryStatus | null;
 }
 
 /** Returned once by inviteMember and createGapInterviewLink; `url` contains the raw token. */
@@ -102,6 +104,64 @@ export interface CreatedLink {
   url: string;
   expiresAt: string;
 }
+
+// ── R3 Task 06: invitations (docs/round3/task06-contract.md §6.1) ──────────────────────────────────────
+
+/** What happened to the invitation email. The creator always also gets the copyable `url` (D6). */
+export type InvitationDelivery =
+  | { status: "sent" }
+  | { status: "not_sent"; reason: "email_not_configured" | "provider_failed" | "demo" };
+
+/** Stored outcome of one delivery attempt (AccessTokenSummary.deliveryStatus). */
+export const INVITATION_DELIVERY_STATUSES = ["sent", "not_sent", "failed"] as const;
+export type InvitationDeliveryStatus = (typeof INVITATION_DELIVERY_STATUSES)[number];
+
+/** Returned once by inviteMember and reissueInvitation; `url` contains the raw token. */
+export interface CreatedInvitation extends CreatedLink {
+  delivery: InvitationDelivery;
+}
+
+/** The signed-in viewer of a pending invitation (computed on the server from the verified session). */
+export interface InvitationViewer {
+  emailMatches: boolean;
+  emailConfirmed: boolean;
+  alreadyMember: boolean;
+}
+
+/** getInvitation: what a holder of an invitation link may see before accepting (D3: pending state only). */
+export type InvitationDetails =
+  | {
+      state: "pending";
+      handoverTitle: string;
+      inviterName: string;
+      role: MemberRole;
+      expiresAt: string;
+      /** e.g. "n***@example.com"; the full address never reaches the browser. */
+      recipientEmailMasked: string;
+      /** null = signed out. */
+      viewer: InvitationViewer | null;
+      /** Only when `viewer.alreadyMember`: where the viewer already reads this handover (contract §4.1 already_member). */
+      memberHref?: string;
+    }
+  | { state: "accepted"; handoverId: string; memberHref: string };
+
+/** acceptInvitation. `replayed` = this user had already accepted this link; nothing was written. */
+export interface AcceptedInvitation {
+  handoverId: string;
+  role: MemberRole;
+  redirectTo: string;
+  replayed: boolean;
+}
+
+/** `AppError.details.reason` for token_invalid on the invitation path only (contract D1-contract). */
+export type InvitationFailureReason =
+  | "invalid"
+  | "expired"
+  | "revoked"
+  | "used"
+  | "unavailable"
+  | "email_mismatch"
+  | "email_unconfirmed";
 
 /** Returned by publishHandover (§9.2). */
 export interface PublicationSummary {

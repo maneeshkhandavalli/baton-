@@ -11,6 +11,7 @@ import type { AiRunConfig, PlanInput, ProcessingPlan } from "../../pipeline/plan
 import type { VerifiedActor } from "../../db/actor-rules";
 import type { DbClient } from "../../db/client";
 import type { StorageClient } from "../../db/storage";
+import type { EmailTransport } from "../../email/core";
 
 export interface ActionDeps {
   /** The actor of the verified session (`auth.getUser()`), or null. The ONLY source of identity. */
@@ -56,4 +57,9 @@ export interface ActionDeps {
   };
   /** Server log for a cleanup step that failed after the point of no return (ids and counts only). */
   logIssue(event: string, details: Record<string, string | number>): void;
+  /**
+   * R3 Task 06: the invitation email transport (lib/email). Not configured unless RESEND_API_KEY and BATON_EMAIL_FROM
+   * are set; tests pass a fake. Never reachable from the demo.
+   */
+  email(): EmailTransport;
 }

@@ -6,6 +6,8 @@ export const routes = {
   home: "/",
   /** Public, read-only demo with synthetic data. */
   demo: "/demo",
+  /** R3 Task 06: the interactive, per-visitor demo workspace (runs in the browser; lib/demo/engine). */
+  demoWorkspace: (step?: string) => (step ? `/demo/workspace?step=${encodeURIComponent(step)}` : "/demo/workspace"),
   login: "/login",
   /** POST-only route handler (app/auth/signout): ends the session. */
   signOut: "/auth/signout",

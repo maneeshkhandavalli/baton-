@@ -510,6 +510,13 @@ export const createGapLinkInput = z.object({
 /** Creator: any token of the handover. Other review roles: Gap Interview links only (§12.4). */
 export const revokeAccessTokenInput = z.object({ tokenId: uuidSchema });
 
+/** R3 Task 06: a raw invitation token (43 base64url characters, lib/db/tokens.ts). */
+export const invitationTokenInput = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
+export const reissueInvitationInput = z.object({
+  tokenId: uuidSchema,
+  expiresInDays: z.number().int().min(1).max(30).default(7),
+});
+
 export const submitGapAnswersInput = z
   .object({
     token: z.string().min(32).max(128).optional(), // either a token or a signed-in session
@@ -663,6 +670,8 @@ export type CreateGapQuestionValues = z.output<typeof createGapQuestionInput>;
 export type CreateGapLinkInput = z.input<typeof createGapLinkInput>;
 export type CreateGapLinkValues = z.output<typeof createGapLinkInput>;
 export type RevokeAccessTokenInput = z.input<typeof revokeAccessTokenInput>;
+export type InvitationTokenInput = z.input<typeof invitationTokenInput>;
+export type ReissueInvitationInput = z.input<typeof reissueInvitationInput>;
 export type PrivacySurfaceDecisionInput = z.input<typeof privacySurfaceDecisionInput>;
 export type ReviewPointInput = z.input<typeof reviewPointInput>;
 export type SubmitGapAnswersInput = z.input<typeof submitGapAnswersInput>;

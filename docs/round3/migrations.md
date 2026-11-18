@@ -613,3 +613,16 @@ again; the newest version should be `20261113300900`.
 Roll back in reverse file order and only as far as needed. The app-tolerant migrations (§2.7) do not need to be
 rolled back to undo an app deploy. If several of these fail at once, restore from the backup or recovery marker
 taken in step 0.
+
+## 6. Round 3 Task 06 migrations (invitations)
+
+All three are additive and **require approval before any hosted apply**; order and rollback are in
+`docs/round3/release-guard.md` §6.
+
+| file | purpose |
+|---|---|
+| `20261118700100_invitation_details.sql` | `get_member_invite_details(bytea, uuid)` (service role): what a holder of an invitation link may see (pending: title, inviter, role, expiry, masked address; otherwise the state only). `redeem_member_invite` replaced in place (same signature and grants): the same confirmed user redeeming the same token again gets `replayed: true` and nothing is written. |
+| `20261118700200_invitation_delivery.sql` | `invitation_deliveries` (server-only, RLS on, no policies), `record_invitation_delivery`, `reissue_member_invite` (atomic revoke + new link), `member_invite_recipient`; `list_access_tokens` gains `delivery_status`. |
+| `20261118700300_invitation_rate_limits.sql` | scopes `invite_view_client`, `invite_view_token`, `invite_send_actor`, `invite_send_recipient`; every existing limit unchanged. |
+
+Upgrade test: `supabase/tests/upgrade/verify.sql` checks each of them on pre-upgrade rows.

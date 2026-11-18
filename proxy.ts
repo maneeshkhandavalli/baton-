@@ -5,6 +5,9 @@
  *
  * Token routes (/g/[token], /h/[token]) never require a session (D8, §12.3) and get no-referrer.
  *
+ * R3 Task 06 (D4): the public demo (/demo, /demo/...) runs entirely in the visitor's browser on synthetic data and never
+ * uses a session, so its requests skip the session refresh: they never reach the Auth server or touch auth cookies.
+ *
  * /auth/callback is deliberately NOT refreshed here. It exchanges a sign-in code using the PKCE verifier stored
  * in this browser, and replaces any old session itself. Refreshing first is harmful: with a stale session
  * cookie the refresh fails, and auth-js's session teardown then deletes every pending PKCE verifier before the
@@ -19,6 +22,7 @@ import { loginPath } from "@/lib/supabase/redirects";
 const PROTECTED_PREFIXES = ["/dashboard", "/handover", "/account"];
 const TOKEN_PREFIXES = ["/g/", "/h/"];
 const AUTH_CALLBACK = "/auth/callback";
+const DEMO_PREFIX = "/demo";
 
 function startsWithAny(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p.endsWith("/") ? p : `${p}/`));
@@ -27,6 +31,7 @@ function startsWithAny(pathname: string, prefixes: string[]) {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname === AUTH_CALLBACK) return NextResponse.next();
+  if (pathname === DEMO_PREFIX || pathname.startsWith(`${DEMO_PREFIX}/`)) return NextResponse.next();
   const { response, userId } = await updateSession(request);
 
   if (startsWithAny(pathname, TOKEN_PREFIXES)) {

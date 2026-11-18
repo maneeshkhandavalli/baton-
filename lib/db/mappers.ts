@@ -26,7 +26,7 @@ import type {
   SourceParticipantSummary,
   SourceSummary,
 } from "../contracts/dto";
-import { READINESS_BLOCKERS } from "../contracts/dto";
+import { INVITATION_DELIVERY_STATUSES, READINESS_BLOCKERS } from "../contracts/dto";
 import {
   ACCESS_LEVELS,
   ACCESS_TOKEN_STATUSES,
@@ -200,6 +200,8 @@ const accessTokenRow = z.strictObject({
   use_count: count,
   revoked_at: nullableTimestamp,
   created_at: timestamp,
+  // R3 Task 06 (20261118700200); optional so a database without that migration still maps
+  delivery_status: z.enum(INVITATION_DELIVERY_STATUSES).nullable().optional(),
 });
 
 export function mapAccessTokenSummary(raw: unknown): AccessTokenSummary {
@@ -216,6 +218,7 @@ export function mapAccessTokenSummary(raw: unknown): AccessTokenSummary {
     useCount: r.use_count,
     revokedAt: r.revoked_at,
     createdAt: r.created_at,
+    deliveryStatus: r.purpose === "member_invite" ? (r.delivery_status ?? null) : null,
   };
 }
 
