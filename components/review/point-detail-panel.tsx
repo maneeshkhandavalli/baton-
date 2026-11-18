@@ -6,6 +6,7 @@ import { AccessBadge } from "@/components/handover/badges";
 import { attributeRows } from "@/components/handover/attributes";
 import { formatDate, formatDateRange, formatDateTime, formatCount } from "@/components/handover/format";
 import { accessLevelMeta, categoryLabel, maskKindLabel, quoteCheckLabel, sourceKindLabel, supportVerdictLabel } from "@/components/handover/labels";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { GUARD_RATIONALE_PREFIX, isGuardedVerdict } from "@/components/shared/support-guard";
@@ -106,6 +107,7 @@ function Verification({ e }: { e: EvidenceItem }) {
       ) : (
         <CheckRow ok={quoteOk} warn={e.quoteCheck === "pending"}>
           {quoteCheckLabel[e.quoteCheck]}
+          <ContextualHelp topic="quote_check" label="What is the quote check?" className="-my-1 ml-0.5" />
         </CheckRow>
       )}
       <CheckRow
@@ -113,6 +115,7 @@ function Verification({ e }: { e: EvidenceItem }) {
         warn={e.supportVerdict === "partial" || e.supportVerdict === "unchecked"}
       >
         {supportVerdictLabel[e.supportVerdict]}
+        <ContextualHelp topic="ai_judgement" label="What is the AI judgement?" className="-my-1 ml-0.5" />
         {e.verdictRationale && <MaskedText className="block text-muted-foreground" text={e.verdictRationale} />}
       </CheckRow>
       {!e.isCurrentRevisionVerdict && e.supportVerdict !== "unchecked" && (
