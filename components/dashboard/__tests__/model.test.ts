@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { HandoverSummary, ReadinessReport } from "@/lib/contracts/dto";
 
-import { attentionQueue, classify, filterRows, groupActivityByDay, relativeTime, resumeTarget, sortRows, stageOf, type ActivityItem, type DashboardLinks } from "../model";
+import { attentionByHandover, attentionQueue, classify, filterRows, groupActivityByDay, relativeTime, resumeTarget, sortRows, stageOf, type ActivityItem, type DashboardLinks, type QueuedAttention } from "../model";
 
 const LINKS: DashboardLinks = {
   review: (id) => `/r/${id}`,
@@ -139,4 +139,36 @@ describe("activity timeline grouping", () => {
     );
     assert.deepEqual(groups.map((g) => [g.label, g.items.map((i) => i.id)]), [["Today", ["a"]], ["Yesterday", ["b"]], ["Earlier this week", ["c"]], ["Earlier", ["d"]]]);
   });
+});
+
+// R3 Task 06: "Up next" shows each handover once, led by its most urgent item.
+describe("attentionByHandover", () => {
+  const q = (handoverId: string, kind: QueuedAttention["kind"], label: string, rank: number): QueuedAttention => ({
+    kind,
+    label,
+    reason: `${label} reason`,
+    cta: label,
+    href: `/${handoverId}/${kind}`,
+    rank,
+    handoverId,
+    title: `T ${handoverId}`,
+    team: "Team",
+  });
+  it("keeps queue order, one entry per handover, the rest summarised by label", () => {
+    const out = attentionByHandover([
+      q("a", "conflicts", "Conflicts", 2),
+      q("b", "review", "Review", 3),
+      q("a", "review", "Review", 3),
+      q("a", "gaps", "Gap questions", 4),
+      q("a", "gaps", "Gap questions", 4),
+    ]);
+    assert.deepEqual(
+      out.map((o) => [o.handoverId, o.kind, o.also]),
+      [
+        ["a", "conflicts", ["Review", "Gap questions"]],
+        ["b", "review", []],
+      ],
+    );
+  });
+  it("an empty queue stays empty", () => assert.deepEqual(attentionByHandover([]), []));
 });

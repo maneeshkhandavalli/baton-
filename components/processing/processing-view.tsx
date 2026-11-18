@@ -24,6 +24,7 @@ import { ExtractionCoverageSummary } from "@/components/review/extraction-covera
 import type { ExtractionReport } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
+import { processingHeadline } from "./processing-headline";
 import { sourceErrorText } from "./source-error";
 
 const POLL_MS = 3_000; // D10
@@ -91,21 +92,16 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   const reason = r?.status === "failed" ? runReasonText(r.error?.message) : null;
   const currentStage = stages.find((s) => s.status === "running");
   // Never "complete" while a current version is unprocessed, unchecked or has changes waiting for a decision.
-  const title = active
-    ? "Processing your sources"
-    : r?.status === "succeeded" && pendingUpdates.length > 0
-      ? pendingUpdates.length === 1
-        ? "A source update needs processing"
-        : "Source updates need processing"
-      : r?.status === "succeeded" && openReviews > 0
-        ? "Processed · changes to review"
-        : r?.status === "succeeded"
-      ? "Processing complete"
-      : r?.status === "failed"
-        ? "Processing failed"
-        : r?.status === "cancelled"
-          ? "Processing cancelled"
-          : "Ready to process";
+  const headline = processingHeadline({
+    active,
+    runStatus: r?.status ?? null,
+    startedAt: r?.startedAt ? formatDateTime(r.startedAt) : null,
+    finishedAt: r?.finishedAt ? formatDateTime(r.finishedAt) : null,
+    pendingUpdates: pendingUpdates.length,
+    openReviews,
+    handoverState,
+  });
+  const title = headline.title;
   // One polite announcement per meaningful change (stage or outcome), never per percentage tick.
   const announcement = active
     ? `Processing. ${currentStage ? `Now: ${stageLabel[currentStage.stage].label}.` : "Starting."}`
@@ -166,19 +162,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
               {title}
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {active
-                ? `You can leave this page. Baton keeps working and the review opens when it's done.${r?.startedAt ? ` Started ${formatDateTime(r.startedAt)}.` : ""}`
-                : r?.status === "succeeded" && pendingUpdates.length > 0
-                  ? `The last run finished ${formatDateTime(r.finishedAt)}, but ${pendingUpdates.length === 1 ? "a newer version of a source hasn't" : `${pendingUpdates.length} newer source versions haven't`} been processed and checked yet. Publishing waits until ${pendingUpdates.length === 1 ? "it is" : "they are"}.`
-                  : r?.status === "succeeded" && openReviews > 0
-                    ? `Finished ${formatDateTime(r.finishedAt)}. Baton compared the new source version with the previous one and found ${openReviews} ${openReviews === 1 ? "change that needs" : "changes that need"} a decision before publishing.`
-                    : r?.status === "succeeded"
-                  ? `Finished ${formatDateTime(r.finishedAt)}. Every point is ready for your review.`
-                  : r?.status === "failed"
-                    ? "Your sources are safe. Nothing was published."
-                    : handoverState === "draft"
-                      ? "Add consent for every source, then start processing."
-                      : "Start processing to extract source-backed points."}
+              {headline.description}
             </p>
           </div>
           {active && canCancel && (
