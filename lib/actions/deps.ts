@@ -8,7 +8,8 @@ import "server-only";
 
 import { refresh } from "next/cache";
 
-import { getAiConfiguration, getConsentDisclosure } from "../ai/config";
+import { getAiConfiguration } from "../ai/config";
+import { getConsentDisclosure } from "../ai/consent-disclosure";
 import type { Result } from "../contracts/api";
 import { dbQueries, serverDb, serverStorage, userDb, userStorage } from "../db";
 import { previewSource } from "../parsers/parse-source";
