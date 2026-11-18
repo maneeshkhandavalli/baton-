@@ -1,26 +1,31 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LinkIcon, MailCheck, UserCheck } from "lucide-react";
+import { connection } from "next/server";
+import { Clock3, LinkIcon, MailCheck, UserCheck, UserRound } from "lucide-react";
 import { Suspense } from "react";
 
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { formatDate } from "@/components/handover/format";
+import { memberRoleLabel } from "@/components/handover/labels";
+import { invitationCopy, invitationViewFromDetails, invitationViewFromQuery, type InvitationView } from "@/components/invitations/invitation-view";
 import { PageContainer } from "@/components/layout/page-container";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { getInvitation } from "@/lib/actions/invitations";
+import { isWellFormedToken } from "@/lib/db/tokens";
 import { routes } from "@/lib/routes";
-import { getSessionUser } from "@/lib/supabase/auth";
 import { EMAIL_LOGIN_ENABLED } from "@/lib/supabase/login-options";
 import { siteOriginOrNull } from "@/lib/supabase/site-url";
 import { cn } from "@/lib/utils";
 
-import { acceptInvitation, requestInviteLink, startGoogleInviteSignIn } from "./actions";
-import { connection } from "next/server";
+import { acceptInvitationFromForm, requestInviteLink, startGoogleInviteSignIn } from "./actions";
 
 export const metadata: Metadata = { title: "Handover invitation" };
 
 /**
- * Invitation landing (§12.3). The token only redeems the invitation; afterwards the member reads the
- * publication by membership, never by token (§11.7).
+ * Invitation landing (§12.3; R3 Task 06 frozen contract §4). `getInvitation` is read-only and never redeems, so
+ * rendering (and prefetching) this page is harmless; accepting is a separate, explicit form submit (A4). The token
+ * only redeems the invitation; afterwards the member reads the handover by membership, never by token (§11.7).
  */
 export default function InvitationPage({ params, searchParams }: PageProps<"/h/[token]">) {
   return (
@@ -33,21 +38,6 @@ export default function InvitationPage({ params, searchParams }: PageProps<"/h/[
   );
 }
 
-type ErrorKind = "token_invalid" | "conflict" | "rate_limited" | "internal";
-
-const ERRORS: Record<ErrorKind, { title: string; description: string }> = {
-  token_invalid: {
-    title: "This link isn't valid",
-    description:
-      "It may have expired, been revoked or been used already. Ask the person who invited you for a new one. If you signed in with a different Google account or email address, sign out and use the one this invitation was sent to.",
-  },
-  conflict: { title: "You're already a member", description: "Open your dashboard to find this handover." },
-  rate_limited: { title: "Too many attempts", description: "Please wait a few minutes and try again." },
-  internal: { title: "Something went wrong", description: "Please try again in a moment." },
-};
-
-const isErrorKind = (v: string): v is ErrorKind => Object.hasOwn(ERRORS, v);
-
 /** One focused card: what this is, what happens next, one primary action. */
 function InvitationPanel({
   icon,
@@ -55,6 +45,7 @@ function InvitationPanel({
   title,
   description,
   steps,
+  details,
   children,
 }: {
   icon: React.ReactNode;
@@ -62,13 +53,11 @@ function InvitationPanel({
   title: string;
   description: string;
   steps?: string[];
+  details?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
-    <section
-      aria-labelledby="invitation-title"
-      className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8"
-    >
+    <section aria-labelledby="invitation-title" className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8">
       <div
         aria-hidden="true"
         className={cn(
@@ -82,6 +71,7 @@ function InvitationPanel({
         {title}
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
+      {details}
       {steps && (
         <ol className="mt-5 space-y-2.5 border-t border-border pt-5" aria-label="What happens next">
           {steps.map((step, i) => (
@@ -102,6 +92,45 @@ function InvitationPanel({
   );
 }
 
+/** The pending invitation's facts (contract D3: title, inviter, role, expiry and the masked address only). */
+function SummaryList({ view }: { view: InvitationView }) {
+  const s = view.summary;
+  if (!s) return null;
+  return (
+    <dl className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-lg border border-border bg-muted/30 p-4 text-sm">
+      <dt className="text-muted-foreground">Handover</dt>
+      <dd className="font-medium [overflow-wrap:anywhere]">{s.handoverTitle}</dd>
+      <dt className="text-muted-foreground">Invited by</dt>
+      <dd className="[overflow-wrap:anywhere]">{s.inviterName}</dd>
+      <dt className="text-muted-foreground">Your role</dt>
+      <dd>{memberRoleLabel[s.role]}</dd>
+      <dt className="text-muted-foreground">Sent to</dt>
+      <dd className="font-mono text-xs leading-5 [overflow-wrap:anywhere]">{s.recipientEmailMasked}</dd>
+      <dt className="text-muted-foreground">Expires</dt>
+      <dd className="inline-flex items-center gap-1.5">
+        <Clock3 aria-hidden="true" className="size-3.5 text-muted-foreground" />
+        <time dateTime={s.expiresAt}>{formatDate(s.expiresAt)}</time>
+      </dd>
+    </dl>
+  );
+}
+
+const SCREEN_ICON: Record<InvitationView["screen"], React.ReactNode> = {
+  sign_in_required: <MailCheck />,
+  ready_to_accept: <UserCheck />,
+  wrong_account: <UserRound />,
+  email_unconfirmed: <MailCheck />,
+  already_member: <UserCheck />,
+  already_accepted: <UserCheck />,
+  invalid_link: <LinkIcon />,
+  expired: <Clock3 />,
+  revoked: <LinkIcon />,
+  used: <LinkIcon />,
+  unavailable: <LinkIcon />,
+  too_many_attempts: <Clock3 />,
+  error: <LinkIcon />,
+};
+
 async function InvitationContent({
   params,
   searchParams,
@@ -110,37 +139,8 @@ async function InvitationContent({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ token }, query] = await Promise.all([params, searchParams]);
-  if (typeof query.error === "string") {
-    const kind: ErrorKind = isErrorKind(query.error) ? query.error : "internal";
-    const error = ERRORS[kind];
-    return (
-      <InvitationPanel tone={kind === "conflict" ? "neutral" : "error"} icon={kind === "conflict" ? <UserCheck /> : <LinkIcon />} title={error.title} description={error.description}>
-        {kind === "conflict" && (
-          <Link href={routes.dashboard} className={buttonVariants()}>
-            Open your dashboard
-          </Link>
-        )}
-        {kind === "token_invalid" && (
-          <>
-            {/* POST-only route: a link or prefetch can never sign someone out. */}
-            <form action={routes.signOut} method="post">
-              <Button type="submit" variant="outline">
-                Sign out
-              </Button>
-            </form>
-            <Link href={routes.home} className={buttonVariants({ variant: "ghost" })}>
-              Go to Baton
-            </Link>
-          </>
-        )}
-        {(kind === "rate_limited" || kind === "internal") && (
-          <Link href={routes.token.handover(token)} className={buttonVariants({ variant: "outline" })}>
-            Back to the invitation
-          </Link>
-        )}
-      </InvitationPanel>
-    );
-  }
+  const here = routes.token.handover(token);
+  const loginHref = `${routes.login}?next=${encodeURIComponent(here)}`;
 
   if (query.sent === "1") {
     return (
@@ -154,43 +154,102 @@ async function InvitationContent({
   }
 
   await connection(); // session reads check token expiry against the current time (auth-js); request-time only
-  const user = await getSessionUser();
-  if (!user) {
-    return (
-      <InvitationPanel
-        icon={<MailCheck />}
-        title="You've been invited to a handover"
-        description="Someone is passing on what their team knows, with quotes from the original chats and documents you can check. Sign in with the Google account for the email address this invitation was sent to."
-        steps={["Continue with the Google account for the invited email address.", "You come straight back to this invitation.", "Accept, and the handover opens."]}
-      >
-        <div className="w-full max-w-sm space-y-4">
-          <GoogleSignInButton start={startGoogleInviteSignIn.bind(null, token)} autoStart={query.continue === "google"} siteOrigin={siteOriginOrNull()} />
-          <Link href={`${routes.login}?next=${encodeURIComponent(routes.token.handover(token))}`} className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "w-full")}>
-            Sign in with email and password
-          </Link>
-          {EMAIL_LOGIN_ENABLED ? (
-            <form action={requestInviteLink.bind(null, token)}>
-              <Button type="submit" size="lg" variant="ghost" className="w-full">
-                Email me a sign-in link instead
-              </Button>
-            </form>
-          ) : null}
-        </div>
-      </InvitationPanel>
-    );
-  }
+  // A failed accept comes back as ?error=&reason=; otherwise read the invitation (read-only, never redeems).
+  const view =
+    invitationViewFromQuery(query) ??
+    (isWellFormedToken(token) ? invitationViewFromDetails(await getInvitation({ token })) : invitationViewFromQuery({ error: "token_invalid", reason: "invalid" })!);
+  const copy = invitationCopy(view, (r) => memberRoleLabel[r]);
+  const panel = { icon: SCREEN_ICON[view.screen], tone: copy.tone, title: copy.title, description: copy.description, steps: copy.steps, details: <SummaryList view={view} /> };
 
-  return (
-    <InvitationPanel
-      icon={<UserCheck />}
-      title="Accept the invitation"
-      description="You're signed in. Accept to join the handover with the role you were invited for."
-    >
-      <form action={acceptInvitation.bind(null, token)}>
-        <Button type="submit" size="lg">
-          Accept invitation
-        </Button>
-      </form>
-    </InvitationPanel>
-  );
+  switch (view.screen) {
+    case "sign_in_required":
+      return (
+        <InvitationPanel {...panel}>
+          <div className="w-full max-w-sm space-y-3">
+            <GoogleSignInButton start={startGoogleInviteSignIn.bind(null, token)} autoStart={query.continue === "google"} siteOrigin={siteOriginOrNull()} />
+            <Link href={loginHref} className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full")}>
+              Sign in or create an account with email
+            </Link>
+            {EMAIL_LOGIN_ENABLED ? (
+              <form action={requestInviteLink.bind(null, token)}>
+                <Button type="submit" size="lg" variant="ghost" className="w-full">
+                  Email me a sign-in link instead
+                </Button>
+              </form>
+            ) : null}
+          </div>
+        </InvitationPanel>
+      );
+    case "ready_to_accept":
+      return (
+        <InvitationPanel {...panel}>
+          {/* A4: the only way to accept is this explicit submit; rendering or prefetching never redeems. */}
+          <form action={acceptInvitationFromForm.bind(null, token)}>
+            <Button type="submit" size="lg">
+              Accept invitation
+            </Button>
+          </form>
+        </InvitationPanel>
+      );
+    case "wrong_account":
+      return (
+        <InvitationPanel {...panel}>
+          {/* POST-only route: a link or prefetch can never sign someone out. */}
+          <form action={routes.signOut} method="post">
+            <Button type="submit">Sign out</Button>
+          </form>
+          <Link href={routes.dashboard} className={buttonVariants({ variant: "ghost" })}>
+            Go to your dashboard
+          </Link>
+        </InvitationPanel>
+      );
+    case "email_unconfirmed":
+      return (
+        <InvitationPanel {...panel}>
+          <Link href={loginHref} className={buttonVariants()}>
+            Sign in again
+          </Link>
+        </InvitationPanel>
+      );
+    case "already_member":
+    case "already_accepted":
+      return (
+        <InvitationPanel {...panel}>
+          <Link href={view.memberHref ?? routes.dashboard} className={buttonVariants()}>
+            {view.memberHref ? "Open the handover" : "Open your dashboard"}
+          </Link>
+        </InvitationPanel>
+      );
+    case "used":
+      return (
+        <InvitationPanel {...panel}>
+          <form action={routes.signOut} method="post">
+            <Button type="submit" variant="outline">
+              Sign in with another account
+            </Button>
+          </form>
+          <Link href={routes.home} className={buttonVariants({ variant: "ghost" })}>
+            Go to Baton
+          </Link>
+        </InvitationPanel>
+      );
+    case "too_many_attempts":
+    case "error":
+      return (
+        <InvitationPanel {...panel}>
+          <Link href={here} className={buttonVariants({ variant: "outline" })}>
+            Try again
+          </Link>
+        </InvitationPanel>
+      );
+    default:
+      // invalid_link, expired, revoked, unavailable: nothing about the handover is shown.
+      return (
+        <InvitationPanel {...panel}>
+          <Link href={routes.home} className={buttonVariants({ variant: "ghost" })}>
+            Go to Baton
+          </Link>
+        </InvitationPanel>
+      );
+  }
 }
