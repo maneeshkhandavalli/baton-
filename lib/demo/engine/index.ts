@@ -20,7 +20,7 @@ import {
   publishHandoverInput,
   reviewGapAnswerInput,
   reviewPointInput,
-  uuidSchema,
+  submitGapAnswersInput,
 } from "@/lib/contracts/schemas";
 import { runStages } from "@/lib/mocks/run-stages";
 import { createStoreQueries } from "@/lib/mocks/store-queries";
@@ -60,18 +60,12 @@ export interface DemoSession {
   log: DemoAction[];
 }
 
-// ── the visitor's actions (contract A1) ──────────────────────────────────────────────────────────────────
-
-const answerGapInput = z.object({
-  gapQuestionId: uuidSchema,
-  answerText: z.string().trim().min(1).max(4000),
-  answererLabel: z.string().trim().min(1).max(80).optional(),
-});
+// ── the visitor's actions (contract A1, union pinned by A7: the real input schemas only) ─────────────────
 
 const demoActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("reviewPoint"), input: reviewPointInput }),
-  z.object({ type: z.literal("answerGapQuestion"), input: answerGapInput }),
-  z.object({ type: z.literal("acceptGapAnswer"), input: reviewGapAnswerInput }),
+  z.object({ type: z.literal("submitGapAnswers"), input: submitGapAnswersInput }),
+  z.object({ type: z.literal("reviewGapAnswer"), input: reviewGapAnswerInput }),
   z.object({ type: z.literal("decideChangeReview"), input: decideChangeReviewInput }),
   z.object({ type: z.literal("publish"), input: publishHandoverInput }),
   z.object({ type: z.literal("acknowledge"), input: acknowledgePublicationInput }),
@@ -80,8 +74,9 @@ const demoActionSchema = z.discriminatedUnion("type", [
 
 export type DemoAction = z.input<typeof demoActionSchema>;
 export type DemoActionType = DemoAction["type"];
-const DEMO_ACTION_TYPES = new Set<string>(["reviewPoint", "answerGapQuestion", "acceptGapAnswer", "decideChangeReview", "publish", "acknowledge", "inviteMember"]);
-const REVIEW_ACTIONS = new Set<string>(["approve", "reject", "edit"]);
+const DEMO_ACTION_TYPES = new Set<string>(["reviewPoint", "submitGapAnswers", "reviewGapAnswer", "decideChangeReview", "publish", "acknowledge", "inviteMember"]);
+/** A7: the review actions a visitor may take; every other ReviewPointInput action is demo_read_only. */
+const REVIEW_ACTIONS = new Set<string>(["approve", "reject", "edit", "confirm_inferred", "resolve_conflict"]);
 
 /** Who the visitor reads the demo as. */
 export type DemoViewer = Extract<DemoPersonKey, "priya" | "neha" | "kabir" | "arjun">;
@@ -152,12 +147,12 @@ function applyCanonical(store: DemoStore, a: ScenarioAction, clock: ops.DemoCloc
       r = ops.createGapLink(store, a.questions.map((n) => gapQuestionId(store, n)), clock);
       break;
     case "submit_gap_answer":
-      r = ops.answerGap(store, { gapQuestionId: gapQuestionId(store, a.question), answerText: a.text, answererLabel: a.answererLabel }, clock);
+      r = ops.submitGapAnswers(store, { answererLabel: a.answererLabel, answers: [{ gapQuestionId: gapQuestionId(store, a.question), answerText: a.text }] }, clock);
       break;
     case "accept_gap_answer": {
       const q = store.gapQuestions.find((x) => x.id === gapQuestionId(store, a.question));
       const answer = q?.answers.filter((x) => x.status === "submitted").pop();
-      r = ops.acceptGapAnswer(store, answer?.id ?? "", clock);
+      r = ops.reviewGapAnswer(store, answer?.id ?? "", "accept", clock);
       break;
     }
     case "start_revision":
@@ -172,14 +167,15 @@ function applyVisitor(store: DemoStore, action: z.output<typeof demoActionSchema
   switch (action.type) {
     case "reviewPoint": {
       const a = action.input;
-      if (a.action !== "approve" && a.action !== "reject" && a.action !== "edit") return readOnly();
+      if (a.action !== "approve" && a.action !== "reject" && a.action !== "edit" && a.action !== "confirm_inferred" && a.action !== "resolve_conflict") {
+        return readOnly();
+      }
       return ops.reviewPoint(store, a, clock);
     }
-    case "answerGapQuestion":
-      return ops.answerGap(store, action.input, clock);
-    case "acceptGapAnswer":
-      if (action.input.decision !== "accept") return readOnly();
-      return ops.acceptGapAnswer(store, action.input.answerId, clock);
+    case "submitGapAnswers":
+      return ops.submitGapAnswers(store, action.input, clock);
+    case "reviewGapAnswer":
+      return ops.reviewGapAnswer(store, action.input.answerId, action.input.decision, clock);
     case "decideChangeReview":
       return ops.decideChangeReview(store, action.input, clock);
     case "publish":
@@ -251,13 +247,16 @@ export function jumpToStep(session: DemoSession, step: DemoStepId): DemoSession 
 export function applyDemoAction(session: DemoSession, action: unknown): { session: DemoSession; result: Result<unknown> } {
   const type = typeof action === "object" && action !== null ? (action as { type?: unknown }).type : undefined;
   if (typeof type !== "string" || !DEMO_ACTION_TYPES.has(type)) return { session, result: readOnly() };
+  if (type === "reviewPoint") {
+    const reviewAction = ((action as { input?: { action?: unknown } }).input ?? {}).action;
+    if (typeof reviewAction === "string" && !REVIEW_ACTIONS.has(reviewAction)) return { session, result: readOnly() }; // before validation (A7)
+  }
   const parsed = demoActionSchema.safeParse(action);
   if (!parsed.success) {
     return { session, result: ops.fail("validation_failed", "Some fields need attention.", { fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]> }) };
   }
   const a = parsed.data;
   if (a.type === "reviewPoint" && !REVIEW_ACTIONS.has(a.input.action)) return { session, result: readOnly() };
-  if (a.type === "acceptGapAnswer" && a.input.decision !== "accept") return { session, result: readOnly() };
   if (a.type === "inviteMember") {
     // Simulated: no token, no email, nothing stored (contract A1).
     const invitation: CreatedInvitation = {

@@ -20,7 +20,7 @@ create table public.invitation_deliveries (
   reason text check (reason is null or reason in ('email_not_configured', 'provider_failed', 'rate_limited')),
   provider_ref text check (provider_ref is null or provider_ref ~ '^[A-Za-z0-9._:-]{1,200}$'),
   recorded_by uuid references public.profiles (id) on delete set null,
-  created_at timestamptz not null default now(),
+  created_at timestamptz not null default clock_timestamp(), -- ordered even within one transaction
   constraint invitation_deliveries_token_fkey
     foreign key (handover_id, token_id) references public.access_tokens (handover_id, id) on delete cascade,
   constraint invitation_deliveries_reason check ((status = 'sent') = (reason is null))

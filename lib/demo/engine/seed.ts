@@ -226,8 +226,8 @@ const UPDATE_ID = seedId(DEMO_NS, 0xc000);
 function seedChangeReviews(): DemoChangeReview[] {
   const base = {
     changeId: UPDATE_ID,
-    state: "open" as const,
-    staleReason: null,
+    state: "open" as ChangeReviewItem["state"],
+    staleReason: null as ChangeReviewItem["staleReason"],
     createdAt: DEMO_TIMELINE.nehaOpenedAt,
     decidedAt: null,
     sourceId: DEMO_INFRA_V2_SOURCE_ID,
@@ -265,6 +265,18 @@ function seedChangeReviews(): DemoChangeReview[] {
         oldEvidence: null,
         newMessage: { id: seedId(DEMO_NS, 0xc102), body: wifi, sentAt: null, authorLabel: null, quoteStart: null, quoteEnd: null },
       },
+    },
+    {
+      // the updated notes no longer mention the projector: accepting is a re-attestation with a note (≥ 20 characters)
+      id: seedId(DEMO_NS, 0xc003),
+      pointId: demoPointId("projector"),
+      item: { ...base, id: seedId(DEMO_NS, 0xc003), kind: "evidence_missing", detail: {}, oldEvidence: null, newMessage: null },
+    },
+    {
+      // a newer upload already replaced the version this item describes: it can no longer be decided
+      id: seedId(DEMO_NS, 0xc004),
+      pointId: demoPointId("deploy_risk"),
+      item: { ...base, id: seedId(DEMO_NS, 0xc004), kind: "support_changed", state: "stale", staleReason: "superseded", detail: {}, oldEvidence: null, newMessage: null },
     },
   ];
 }

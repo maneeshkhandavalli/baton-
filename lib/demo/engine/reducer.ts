@@ -269,31 +269,50 @@ export function createGapLink(store: DemoStore, questionIds: string[], clock: De
   return ok({ tokenId: id });
 }
 
-export function answerGap(store: DemoStore, input: { gapQuestionId: string; answerText: string; answererLabel?: string }, clock: DemoClock): Result<{ submitted: number }> {
-  const q = store.gapQuestions.find((x) => x.id === input.gapQuestionId && x.handoverId === DEMO_HANDOVER_ID);
-  if (!q || q.status === "waived") return notFound();
-  q.answers.push({
-    id: nextDemoId(store),
-    answererLabel: mockMaskText(input.answererLabel?.trim() || "Ananya Iyer"),
-    text: mockMaskText(input.answerText.trim()),
-    status: "submitted",
-    privacyHeld: false,
-    createdAt: clock.at,
-    answeredByProfileId: null,
-    viaToken: null,
-  });
-  q.status = "answered";
-  const link = store.tokens.find((t) => t.purpose === "gap_interview" && t.questionIds.includes(q.id) && !t.revokedAt);
-  if (link) link.useCount = Math.min(link.maxUses, link.useCount + 1);
+/**
+ * SubmitGapAnswersInput. In the demo the answers arrive as if through Priya's Gap Interview link: the answerer is the
+ * given label (Ananya by default). The link token, if any, is not checked: the demo issues no real tokens.
+ */
+export function submitGapAnswers(
+  store: DemoStore,
+  input: { answererLabel?: string; answers: Array<{ gapQuestionId: string; answerText: string }> },
+  clock: DemoClock,
+): Result<{ submitted: number }> {
+  const targets = input.answers.map((a) => ({ a, q: store.gapQuestions.find((x) => x.id === a.gapQuestionId && x.handoverId === DEMO_HANDOVER_ID) }));
+  // §8.5: anything closed or unknown is the same not_found, and nothing is written.
+  if (targets.some(({ q }) => !q || q.status === "waived")) return notFound();
+  const label = mockMaskText(input.answererLabel?.trim() || "Ananya Iyer");
+  for (const { a, q } of targets) {
+    q!.answers.push({
+      id: nextDemoId(store),
+      answererLabel: label,
+      text: mockMaskText(a.answerText.trim()),
+      status: "submitted",
+      privacyHeld: false,
+      createdAt: clock.at,
+      answeredByProfileId: null,
+      viaToken: null,
+    });
+    q!.status = "answered";
+    const link = store.tokens.find((t) => t.purpose === "gap_interview" && t.questionIds.includes(q!.id) && !t.revokedAt);
+    if (link) link.useCount = Math.min(link.maxUses, link.useCount + 1);
+  }
   touch(store, clock);
-  return ok({ submitted: 1 });
+  return ok({ submitted: targets.length });
 }
 
-export function acceptGapAnswer(store: DemoStore, answerId: string, clock: DemoClock): Result<null> {
+/** ReviewGapAnswerInput: accept adds testimony evidence to the question's point; reject reopens an unanswered question. */
+export function reviewGapAnswer(store: DemoStore, answerId: string, decision: "accept" | "reject", clock: DemoClock): Result<null> {
   const q = store.gapQuestions.find((x) => x.answers.some((a) => a.id === answerId));
   if (!q) return notFound();
   const answer = q.answers.find((a) => a.id === answerId)!;
   if (answer.status !== "submitted") return fail("invalid_transition", "This answer was already reviewed.");
+  if (decision === "reject") {
+    answer.status = "rejected";
+    if (!q.answers.some((a) => a.status !== "rejected")) q.status = "open";
+    touch(store, clock);
+    return ok(null);
+  }
   answer.status = "accepted";
   const p = q.pointId ? store.points.find((x) => x.id === q.pointId) : undefined;
   if (p) {
@@ -372,6 +391,11 @@ export function decideChangeReview(
   const entry = store.changeReviews.find((c) => c.id === v.itemId);
   if (!visible || !entry || !visible.point) return notFound();
 
+  if (entry.item.state === "stale") {
+    return fail("precondition_failed", "A newer version of this source replaced the version this change describes. It no longer needs a decision.", {
+      details: { reason: "change_review_stale" },
+    });
+  }
   const target = v.decision === "investigate" ? "investigating" : v.decision === "accept" ? "accepted" : "rejected";
   const last = entry.item.decisions[entry.item.decisions.length - 1];
   if (!isUnresolvedChangeReview(entry.item.state) || entry.item.state !== v.expectedState) {
