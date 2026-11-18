@@ -5,6 +5,10 @@ import { securityHeaders } from "./lib/security/headers";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // R3 Task 06 (security): Next logs every Server Function call WITH ITS ARGUMENTS during development by default.
+  // Those arguments include passwords (signInWithPassword) and invitation tokens (acceptInvitation), which must
+  // never reach a log. Keep it off.
+  logging: { serverFunctions: false },
   partialPrefetching: true,
   turbopack: {
     rules: {
