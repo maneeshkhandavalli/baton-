@@ -16,6 +16,7 @@ import type { GapQuestionSummary, PointDetail } from "@/lib/contracts/dto";
 import type { EvidenceStatus } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
+import { statementRepeatsTitle, verificationNeedsAttention } from "./card-evidence";
 import { EvidenceQuote } from "./evidence-quote";
 import { isStaleEvidence } from "./evidence-state";
 
@@ -99,9 +100,11 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
           <MaskedText text={point.title} />
         </button>
       </h3>
-      <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
-        <MaskedText text={point.statement} />
-      </p>
+      {!statementRepeatsTitle(point.title, point.statement) && (
+        <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
+          <MaskedText text={point.statement} />
+        </p>
+      )}
       {!rejected && <KeyFactsStrip facts={keyFacts(point.category, point.attributes)} className="mt-3" />}
 
       {!rejected && (
@@ -117,14 +120,14 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
                   <p className="type-eyebrow text-status-sourced-fg">Supports</p>
                   {supports.length === 0 && <p className="text-caption text-muted-foreground">No supporting quote.</p>}
                   {supports.slice(0, 2).map((e) => (
-                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp showVerification />
+                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp showVerification={verificationNeedsAttention(e)} showLocation={false} />
                   ))}
                 </div>
                 <div className="space-y-1.5">
                   <p className="type-eyebrow text-status-conflicting-fg">Contradicts</p>
                   {contradicts.length === 0 && <p className="text-caption text-muted-foreground">No contradicting quote.</p>}
                   {contradicts.slice(0, 2).map((e) => (
-                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp showVerification />
+                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp showVerification={verificationNeedsAttention(e)} showLocation={false} />
                   ))}
                 </div>
               </div>
@@ -153,7 +156,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
               )}
             </div>
           ) : (
-            lead && <EvidenceQuote {...lead} tone={lead.supportVerdict === "supports" ? "supports" : "default"} clamp showVerification />
+            lead && <EvidenceQuote {...lead} tone={lead.supportVerdict === "supports" ? "supports" : "default"} clamp showVerification={verificationNeedsAttention(lead)} showLocation={false} />
           )}
 
           {status === "inferred" && point.inferenceRationale && !lead && (
