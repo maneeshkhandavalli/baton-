@@ -6,8 +6,8 @@ import { historyOptions, PROVIDER_LABEL } from "@/components/connectors/view-mod
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { getCaptureConsent, recordCaptureConsent } from "@/lib/actions/connectors";
 import type { CaptureConsentDto, ConnectorLinkSummary } from "@/lib/contracts/connectors";
+import { useConnectorActions } from "./actions-context";
 
 interface ConsentStepProps {
   link: Pick<ConnectorLinkSummary, "id" | "provider" | "channelLabel">;
@@ -20,6 +20,7 @@ interface ConsentStepProps {
  * needs an explicit checkbox before "Start saving messages". Nothing is captured before this is confirmed.
  */
 export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
+  const actions = useConnectorActions();
   const id = useId();
   const [historyDays, setHistoryDays] = useState(0);
   const [consent, setConsent] = useState<CaptureConsentDto | null>(null);
@@ -30,7 +31,7 @@ export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
 
   useEffect(() => {
     let live = true;
-    getCaptureConsent({ provider: link.provider, channelLabel: link.channelLabel, historyDays })
+    actions.getCaptureConsent({ provider: link.provider, channelLabel: link.channelLabel, historyDays })
       .then((r) => {
         if (!live) return;
         if (r.ok) {
@@ -42,14 +43,14 @@ export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
     return () => {
       live = false;
     };
-  }, [link.provider, link.channelLabel, historyDays]);
+  }, [actions, link.provider, link.channelLabel, historyDays]);
 
   async function confirm() {
     if (!consent || !agreed) return;
     setPending(true);
     setError(null);
     try {
-      const r = await recordCaptureConsent({ linkId: link.id, consentVersion: consent.version, historyDays });
+      const r = await actions.recordCaptureConsent({ linkId: link.id, consentVersion: consent.version, historyDays });
       if (r.ok) onDone(r.data);
       else setError(r.error.message);
     } catch {

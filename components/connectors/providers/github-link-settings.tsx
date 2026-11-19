@@ -5,12 +5,13 @@
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { updateConnectorLinkSettings } from "@/lib/actions/connectors";
 
 import type { ProviderSettingsProps } from "../provider-settings";
 import { GithubSettings } from "./github-settings";
+import { useConnectorActions } from "../actions-context";
 
 export function GithubLinkSettings({ link, onSaved }: ProviderSettingsProps) {
+  const actions = useConnectorActions();
   const [settings, setSettings] = useState<Record<string, unknown>>(link.settings);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -28,7 +29,7 @@ export function GithubLinkSettings({ link, onSaved }: ProviderSettingsProps) {
           disabled={disabled || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await updateConnectorLinkSettings({ linkId: link.id, settings });
+              const r = await actions.updateConnectorLinkSettings({ linkId: link.id, settings });
               setMessage(r.ok ? "Saved." : r.error.message);
               if (r.ok) onSaved();
             })

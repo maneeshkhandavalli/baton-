@@ -22,17 +22,9 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  disconnectInstallation,
-  linkChannel,
-  listHandoverConnectors,
-  listInstallationChannels,
-  setCapturePaused,
-  syncLinkNow,
-  unlinkChannel,
-} from "@/lib/actions/connectors";
 import type { Result } from "@/lib/contracts/api";
 import type { ChannelChoiceDto, ConnectorInstallationSummary, ConnectorLinkSummary, HandoverConnectorsView } from "@/lib/contracts/connectors";
+import { useConnectorActions } from "./actions-context";
 
 type Announce = { tone: "success" | "danger" | "info"; text: string } | null;
 
@@ -51,6 +43,7 @@ interface PanelApi {
  * messages in, pause, resume or disconnect. Renders nothing for anyone who is not the creator.
  */
 export function ConnectedChannels({ handoverId }: { handoverId: string }) {
+  const actions = useConnectorActions();
   const [view, setView] = useState<HandoverConnectorsView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [announce, setAnnounce] = useState<Announce>(null);
@@ -60,7 +53,7 @@ export function ConnectedChannels({ handoverId }: { handoverId: string }) {
 
   useEffect(() => {
     let live = true;
-    listHandoverConnectors({ handoverId })
+    actions.listHandoverConnectors({ handoverId })
       .then((r) => {
         if (!live) return;
         if (r.ok) {
@@ -79,7 +72,7 @@ export function ConnectedChannels({ handoverId }: { handoverId: string }) {
     return () => {
       live = false;
     };
-  }, [handoverId, version]);
+  }, [actions, handoverId, version]);
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -177,6 +170,7 @@ function TelegramSteps({ href }: { href: string | null }) {
 }
 
 function InstallationBlock({ inst, api }: { inst: ConnectorInstallationSummary & { links: ConnectorLinkSummary[] }; api: PanelApi }) {
+  const actions = useConnectorActions();
   const status = installationStatus(inst);
   const [picking, setPicking] = useState(false);
   const [consentFor, setConsentFor] = useState<ConnectorLinkSummary | null>(null);
@@ -210,7 +204,7 @@ function InstallationBlock({ inst, api }: { inst: ConnectorInstallationSummary &
               confirmLabel={`Disconnect ${noun}`}
               destructive
               onConfirm={async () => {
-                await api.act(`inst:${inst.id}`, () => disconnectInstallation({ installationId: inst.id }), () => `${inst.accountLabel} disconnected.`);
+                await api.act(`inst:${inst.id}`, () => actions.disconnectInstallation({ installationId: inst.id }), () => `${inst.accountLabel} disconnected.`);
               }}
             />
           )}
@@ -254,6 +248,7 @@ function InstallationBlock({ inst, api }: { inst: ConnectorInstallationSummary &
 }
 
 function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSummary; api: PanelApi; onLinked(link: ConnectorLinkSummary): void }) {
+  const actions = useConnectorActions();
   const name = useId();
   const [channels, setChannels] = useState<ChannelChoiceDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,7 +257,7 @@ function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSum
 
   useEffect(() => {
     let live = true;
-    listInstallationChannels({ installationId: inst.id, handoverId: api.handoverId })
+    actions.listInstallationChannels({ installationId: inst.id, handoverId: api.handoverId })
       .then((r) => {
         if (!live) return;
         if (r.ok) {
@@ -274,7 +269,7 @@ function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSum
     return () => {
       live = false;
     };
-  }, [inst.id, api.handoverId, attempt]);
+  }, [actions, inst.id, api.handoverId, attempt]);
 
   if (error)
     return (
@@ -323,7 +318,7 @@ function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSum
         size="sm"
         disabled={!selected || api.busy !== null}
         onClick={async () => {
-          const r = await api.act(`pick:${inst.id}`, () => linkChannel({ installationId: inst.id, handoverId: api.handoverId, externalChannelId: selected }), (l) => `${l.channelLabel} linked. Confirm below to start saving messages.`);
+          const r = await api.act(`pick:${inst.id}`, () => actions.linkChannel({ installationId: inst.id, handoverId: api.handoverId, externalChannelId: selected }), (l) => `${l.channelLabel} linked. Confirm below to start saving messages.`);
           if (r?.ok) onLinked(r.data);
         }}
       >
@@ -334,6 +329,7 @@ function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSum
 }
 
 function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
+  const actions = useConnectorActions();
   const [consenting, setConsenting] = useState(false);
   const s = linkStatus(link, { pullBased: PULL_BASED.has(link.provider) });
   const Settings = PROVIDER_SETTINGS[link.provider];
@@ -381,7 +377,7 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
             variant="outline"
             disabled={busy}
             onClick={() =>
-              api.act(`sync:${link.id}`, () => syncLinkNow({ linkId: link.id }), (r) =>
+              api.act(`sync:${link.id}`, () => actions.syncLinkNow({ linkId: link.id }), (r) =>
                 r.status === "flushed" && r.messages > 0
                   ? `Added ${plural(r.messages, "message")} to the handover. Review the update in Sources and give consent to process it.`
                   : "There was nothing new to add.",
@@ -392,12 +388,12 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
           </Button>
         )}
         {s.canPause && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => api.act(`pause:${link.id}`, () => setCapturePaused({ linkId: link.id, paused: true }), () => `Paused ${link.channelLabel}.`)}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => api.act(`pause:${link.id}`, () => actions.setCapturePaused({ linkId: link.id, paused: true }), () => `Paused ${link.channelLabel}.`)}>
             <Pause aria-hidden /> Pause
           </Button>
         )}
         {s.canResume && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => api.act(`resume:${link.id}`, () => setCapturePaused({ linkId: link.id, paused: false }), () => `Resumed ${link.channelLabel}.`)}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => api.act(`resume:${link.id}`, () => actions.setCapturePaused({ linkId: link.id, paused: false }), () => `Resumed ${link.channelLabel}.`)}>
             <Play aria-hidden /> Resume
           </Button>
         )}
@@ -412,7 +408,7 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
           confirmLabel="Disconnect channel"
           destructive
           onConfirm={async () => {
-            await api.act(`unlink:${link.id}`, () => unlinkChannel({ linkId: link.id }), () => `${link.channelLabel} disconnected.`);
+            await api.act(`unlink:${link.id}`, () => actions.unlinkChannel({ linkId: link.id }), () => `${link.channelLabel} disconnected.`);
           }}
         />
       </div>
