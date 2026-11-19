@@ -109,6 +109,8 @@ export interface ChannelLinkRecord {
   lastFlushAt: string | null;
   /** Last flush problem shown to the creator, e.g. "handover_not_accepting_updates". */
   lastFlushError: string | null;
+  /** Pull-based providers (Discord): opaque position of the last message pulled (e.g. a snowflake). */
+  pullCursor: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -222,6 +224,10 @@ export interface ConnectorStore {
   /** Deletes the flushed buffer rows and records the new current source id. */
   completeFlush(linkId: string, bufferIds: readonly string[], sourceId: string): Promise<void>;
   recordFlushError(linkId: string, code: string): Promise<void>;
+  /** Pull-based providers: remember how far messages were pulled (system only; ≤ 200 chars). */
+  setPullCursor(linkId: string, cursor: string): Promise<void>;
+  /** Capturing links of one provider (for the scheduled pull of pull-based providers). */
+  capturingLinksForProvider(provider: ConnectorProvider, limit: number): Promise<ChannelLinkRecord[]>;
 }
 
 // ── Provider adapter (each worker implements one per provider) ──────────────

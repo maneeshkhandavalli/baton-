@@ -76,6 +76,7 @@ function link(r: Row): ChannelLinkRecord {
     lastEventAt: str(r.last_event_at),
     lastFlushAt: str(r.last_flush_at),
     lastFlushError: str(r.last_flush_error),
+    pullCursor: str(r.pull_cursor),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -184,6 +185,12 @@ export function createDbConnectorStore(db: () => DbClient): ConnectorStore {
     },
     async recordFlushError(linkId, code) {
       await rpc(db(), "connector_record_flush_error", { p_link_id: linkId, p_code: code.slice(0, 60) });
+    },
+    async setPullCursor(linkId, cursor) {
+      await rpc(db(), "connector_set_pull_cursor", { p_link_id: linkId, p_cursor: cursor });
+    },
+    async capturingLinksForProvider(provider, limit) {
+      return rows(await rpc(db(), "connector_capturing_links_for_provider", { p_provider: provider, p_limit: limit })).map(link);
     },
   };
 }

@@ -58,6 +58,13 @@ export interface ProviderServerAdapter {
    * to a history import at consent time (link.settings.historyDays > 0) or on "Bring in new messages".
    */
   fetchHistory?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, sinceIso: string, limit: number): Promise<ConnectorMessage[]>;
+  /**
+   * Optional, PULL-based providers only (Discord: message events exist only on the Gateway, which a serverless
+   * deployment cannot hold). Messages of a capturing link newer than `link.pullCursor` (or than consent time when
+   * null), oldest first, at most `limit`, and the new cursor. Main's scheduled sync and "Bring in new messages"
+   * call it, then ingest the messages through ingestEvent (de-duplicated by `pull:<link>:<cursor>`).
+   */
+  pullNew?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, limit: number): Promise<{ messages: ConnectorMessage[]; cursor: string | null }>;
   /** Optional: post a visible notice in the channel when capture starts/pauses/stops (consent transparency). */
   announceCapture?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, change: "started" | "paused" | "stopped"): Promise<void>;
   /** Optional: revoke at the provider on disconnect (Slack auth.revoke, Discord leave guild, Telegram leave chat). */

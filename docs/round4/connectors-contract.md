@@ -46,6 +46,12 @@ creator ──"Bring in new messages" / bot command / scheduled /api/connectors/
    creator then gives the usual processing consent in Settings → Sources, exactly like an upload
 ```
 
+**Pull-based providers (Discord).** Discord delivers message events only over its Gateway (a persistent socket a
+serverless deployment cannot hold). Its adapter implements `pullNew(link)` (REST `GET /channels/{id}/messages?after=`
+from `link.pullCursor`); Main's scheduled sync and "Bring in new messages" call it for capturing links, ingest the
+result through `ingestEvent` (delivery id `pull:<link>:<cursor>`), then `setPullCursor`. Slices of interactions
+(the `/handover` command) still arrive by HTTP webhook.
+
 A flush acts as the **creator who consented** (`getConnectorFlushActor(db, linkId)` in `lib/db/actor.ts`, from a
 link id only; the database checks link live, installation active, still the creator). New versions are only
 possible while the handover is draft/in review; otherwise messages stay buffered and the link shows

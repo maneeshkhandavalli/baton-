@@ -195,7 +195,7 @@ export class MemoryConnectorStore implements ConnectorStore {
     const link: ChannelLinkRecord = {
       id: this.id("l"), installationId: inst.id, provider: inst.provider, handoverId: input.handoverId, externalChannelId: input.externalChannelId,
       channelLabel: input.channelLabel, state: "pending_consent", settings: { ...(input.settings ?? {}) }, consentVersion: null, consentedAt: null,
-      consentedByProfileId: null, sourceId: null, bufferedCount: 0, lastEventAt: null, lastFlushAt: null, lastFlushError: null, createdAt: this.iso(), updatedAt: this.iso(),
+      consentedByProfileId: null, sourceId: null, bufferedCount: 0, lastEventAt: null, lastFlushAt: null, lastFlushError: null, pullCursor: null, createdAt: this.iso(), updatedAt: this.iso(),
     };
     this.links.set(link.id, link);
     this.audit.push({ action: "connector.channel_linked", actor: this.actorKey(actor), entityId: link.id, handoverId: link.handoverId });
@@ -333,6 +333,19 @@ export class MemoryConnectorStore implements ConnectorStore {
   async recordFlushError(linkId: string, code: string): Promise<void> {
     const l = this.requireLink(linkId);
     Object.assign(l, { lastFlushError: code, updatedAt: this.iso() });
+  }
+
+  async setPullCursor(linkId: string, cursor: string): Promise<void> {
+    const l = this.requireLink(linkId);
+    if (!cursor || cursor.length > 200) throw new ConnectorStoreError("validation_failed");
+    l.pullCursor = cursor;
+  }
+
+  async capturingLinksForProvider(provider: ConnectorProvider, limit: number): Promise<ChannelLinkRecord[]> {
+    return [...this.links.values()]
+      .filter((l) => l.provider === provider && l.state === "capturing" && this.installations.get(l.installationId)?.status === "active")
+      .slice(0, limit)
+      .map((l) => ({ ...l }));
   }
 
   /** Test helper: buffered messages of a link, oldest first. */
