@@ -70,6 +70,18 @@ describe("fake adapter default behaviour", () => {
     assert.ok(categories.has("decision") && categories.has("owner") && categories.has("open_task"));
   });
 
+  it("an announced new task is extracted as an open task even when it names its owner (R4 Living Handover run)", async () => {
+    const body = "new task: book the auditorium for the hackathon finals before 1 dec, I will own it";
+    const r = await createFakeProvider().extract({ ...extractReq(), messages: [{ id: M1, authorLabel: "Neha", sentAt: "2026-11-16T09:40:00Z", body }] });
+    assert.ok(r.ok);
+    const [c] = extractionResponseSchema.parse(r.data.raw).candidates.map((x) => extractionCandidateSchema.parse(x));
+    assert.equal(c.category, "open_task");
+    assert.equal(checkQuote(body, c.citations[0].quote).check, "exact");
+    const owner = await createFakeProvider().extract({ ...extractReq(), messages: [{ id: M1, authorLabel: "Neha", sentAt: null, body: "I'll own the sponsor follow-ups this term" }] });
+    assert.ok(owner.ok);
+    assert.equal(extractionCandidateSchema.parse(extractionResponseSchema.parse(owner.data.raw).candidates[0]).category, "owner");
+  });
+
   it("extract only emits requested categories", async () => {
     const req = { ...extractReq(), categories: ["owner"] as const };
     const r = await createFakeProvider().extract(req);

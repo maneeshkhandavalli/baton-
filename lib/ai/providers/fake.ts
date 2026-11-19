@@ -211,8 +211,11 @@ function delay(ms: number, signal: AbortSignal | undefined): Promise<boolean> {
 // ── Default extraction (deterministic keyword rules) ─────────────────────────
 
 const RULES: ReadonlyArray<{ category: PointCategory; pattern: RegExp; label: string }> = [
+  // An explicitly announced task ("new task: book the hall, I will own it") is an open task even when it also names
+  // an owner (R4 browser run: such a message was not extracted, so Living Handover had no new point to flag).
+  { category: "open_task", pattern: /\bnew task\b/i, label: "Open task" },
   { category: "decision", pattern: /\b(decided|agreed|we will go with|finali[sz]ed)\b/i, label: "Decision" },
-  { category: "owner", pattern: /\b(in charge of|responsible for|handles|owns)\b/i, label: "Owner" },
+  { category: "owner", pattern: /\b(in charge of|responsible for|handles|owns|i(?:'ll| will) own)\b/i, label: "Owner" },
   { category: "blocker", pattern: /\b(blocked|stuck|waiting on)\b/i, label: "Blocker" },
   { category: "risk", pattern: /\b(risk|might fail|could fail)\b/i, label: "Risk" },
   { category: "recurring_problem", pattern: /\b(again|every time|keeps happening)\b/i, label: "Recurring problem" },
