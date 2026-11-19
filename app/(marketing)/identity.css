@@ -155,6 +155,8 @@
   --elevation-overlay: inset 0 1px 0 0 rgb(255 255 255 / 0.06), 0 28px 56px -14px rgb(0 0 0 / 0.7);
 }
 
+/* Everything below sits in the components layer, so Tailwind utilities on the same element win (bg-*, border-*). */
+@layer components {
 /* ── Landing type and layout (bi-*) ──────────────────────────────────────────── */
 .brand-identity {
   /* Motion: a smooth in-out for reveals and size changes, a small overshoot for hover nudges. */
@@ -164,13 +166,22 @@
   --bi-radius: 1.5rem;
   --bi-radius-lg: 2rem;
 }
+/* Content column, aligned with the site header (max-w-6xl, px-4 / sm:px-6). `.bi-wide` lets a product stage
+   break out a little wider on large screens. */
 .bi-wrap {
-  width: min(1240px, 100% - 2rem);
+  width: min(1104px, 100% - 2rem);
+  margin-inline: auto;
+}
+.bi-wide {
+  width: min(1280px, 100% - 2rem);
   margin-inline: auto;
 }
 @media (min-width: 640px) {
   .bi-wrap {
-    width: min(1240px, 100% - 3rem);
+    width: min(1104px, 100% - 3rem);
+  }
+  .bi-wide {
+    width: min(1280px, 100% - 3rem);
   }
 }
 .bi-display {
@@ -386,6 +397,37 @@
   background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--foreground) 14%, transparent) 1px, transparent 0);
   background-size: 22px 22px;
 }
+/* Blueprint frame: hairline box on graph paper with square corner ticks and mono corner labels. Used for the
+   hero's product stage, where it reads as "the actual product, measured". */
+.bi-blueprint {
+  position: relative;
+  border: 1px solid var(--border-strong);
+  background-color: var(--sunken);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+.bi-blueprint::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--foreground), var(--foreground)) 0 0 / 7px 7px no-repeat,
+    linear-gradient(var(--foreground), var(--foreground)) 100% 0 / 7px 7px no-repeat,
+    linear-gradient(var(--foreground), var(--foreground)) 0 100% / 7px 7px no-repeat,
+    linear-gradient(var(--foreground), var(--foreground)) 100% 100% / 7px 7px no-repeat;
+}
+.bi-corner {
+  font-family: var(--font-atkinson-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
 .bi-lift {
   transition:
     transform 500ms var(--bi-out),
@@ -529,4 +571,5 @@
       animation-range: entry 40% cover 40%;
     }
   }
+}
 }

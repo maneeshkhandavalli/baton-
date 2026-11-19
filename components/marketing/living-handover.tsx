@@ -93,7 +93,7 @@ function WatchingFragment() {
 
 export function LivingHandover() {
   return (
-    <section id="living-handovers" aria-labelledby="living-title" className="py-20 sm:py-28">
+    <section id="living-handovers" aria-labelledby="living-title" className="py-16 sm:py-24">
       <div className="bi-wrap">
         <div className="reveal grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:items-end lg:gap-16">
           <div>
@@ -127,7 +127,7 @@ export function LivingHandover() {
             </p>
           </article>
 
-          <article aria-labelledby="living-next" className="bi-card flex flex-col gap-6 border-dashed bg-transparent p-5 sm:p-8">
+          <article aria-labelledby="living-next" className="bi-card flex flex-col gap-6 border-dashed border-border-strong bg-transparent p-5 sm:p-8">
             <div>
               <PreviewLabel />
               <h3 id="living-next" className="bi-h3 mt-4 flex items-center gap-2 text-[1.375rem]">

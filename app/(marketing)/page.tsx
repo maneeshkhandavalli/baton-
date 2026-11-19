@@ -108,16 +108,27 @@ export default function HomePage() {
   return (
     <>
       {/* ── Hero: a message becomes a checked point ─────────── */}
-      <section aria-labelledby="hero-title" className="pt-12 pb-20 sm:pt-20 sm:pb-28">
-        <div className="bi-wrap">
+      <section aria-labelledby="hero-title" className="pt-10 pb-12 sm:pt-16 sm:pb-16">
+        <div className="bi-wrap relative">
           <p className="bi-tag bi-rise" style={stagger(0)}>
-            Handovers for student clubs, project teams and volunteer groups
+            <span className="sm:hidden">For clubs, project teams and volunteers</span>
+            <span className="hidden sm:inline">Handovers for student clubs, project teams and volunteer groups</span>
           </p>
           <h1 id="hero-title" className="bi-display bi-rise mt-6 max-w-[15ch]" style={stagger(1)}>
             Hand over a project without losing <span className="bi-swipe">what matters</span>.
           </h1>
 
-          <div className="mt-8 grid gap-8 lg:mt-10 lg:grid-cols-[1.15fr_1fr] lg:items-end lg:gap-16">
+          {/* A receipt, pinned beside the headline (wide screens only; the same point is in the preview below). */}
+          <div aria-hidden="true" className="bi-pop absolute top-16 right-0 hidden w-64 xl:block" style={stagger(6)}>
+            <div className="bi-card bi-sticker p-4 shadow-raised [--r:4deg]">
+              <StatusBadge status="sourced" size="sm" />
+              <p className="mt-2 text-sm font-semibold">GitHub organisation owners</p>
+              <p className="bi-ref mt-1">↳ Priya · 2 Nov · line 41</p>
+            </div>
+            <p className="bi-hand mt-3 rotate-[-4deg] pl-6">every point has a receipt</p>
+          </div>
+
+          <div className="mt-8 grid gap-8 lg:mt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end lg:gap-16">
             <p className="bi-lede bi-rise max-w-[46ch]" style={stagger(2)}>
               Baton turns a team&rsquo;s WhatsApp chats and documents into a handover for the next person, where every decision, owner, task and risk
               links back to the message it came from.
@@ -137,32 +148,36 @@ export default function HomePage() {
           </ul>
         </div>
 
-        <div className="bi-wrap bi-rise mt-12 sm:mt-16" style={stagger(5)}>
-          <div className="bi-stage p-2 sm:p-4 lg:p-6">
-            <div aria-hidden="true" className="hidden px-2 pb-3 lg:grid lg:grid-cols-[1.05fr_1fr]">
+        <div className="bi-wide bi-rise mt-12 sm:mt-16" style={stagger(5)}>
+          <div className="bi-blueprint px-2 pt-3 pb-2 sm:px-6 sm:pt-5 sm:pb-6 lg:px-10 lg:pb-10">
+            <div aria-hidden="true" className="flex items-baseline justify-between gap-4 px-2 pb-3 sm:px-0">
+              <span className="bi-corner">Fig. 1 · Chat → handover</span>
+              <span className="bi-corner hidden sm:inline">CodeCell demo · fictional</span>
+            </div>
+            <div aria-hidden="true" className="hidden pb-3 lg:grid lg:grid-cols-[1.05fr_1fr]">
               <p className="bi-hand rotate-[-2deg]">the exact line it came from ↓</p>
               <p className="bi-hand rotate-[2deg] pl-5">hover or tap a point ↓</p>
             </div>
-            <p aria-hidden="true" className="bi-hand rotate-[-2deg] px-2 pt-1 pb-3 lg:hidden">
+            <p aria-hidden="true" className="bi-hand rotate-[-2deg] px-2 pb-3 lg:hidden">
               tap a point to see its source ↓
             </p>
             <EvidencePreview />
           </div>
-          <ul className="mt-6 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3 sm:gap-6">
-            {TRUST.map((t) => (
-              <li key={t} className="flex items-start gap-2.5">
-                <span aria-hidden="true" className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[var(--highlight)] text-[var(--on-highlight)]">
-                  <Check className="size-3" strokeWidth={3} />
-                </span>
-                {t}
-              </li>
-            ))}
-          </ul>
         </div>
+        <ul className="bi-wrap mt-8 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3 sm:gap-6">
+          {TRUST.map((t) => (
+            <li key={t} className="flex items-start gap-2.5">
+              <span aria-hidden="true" className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[var(--highlight)] text-[var(--on-highlight)]">
+                <Check className="size-3" strokeWidth={3} />
+              </span>
+              {t}
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* ── The problem ──────────────────────────────────── */}
-      <section aria-labelledby="problem-title" className="py-20 sm:py-28">
+      <section aria-labelledby="problem-title" className="py-16 sm:py-24">
         <div className="bi-wrap">
           <div className="grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:gap-16">
             <div className="reveal">
@@ -177,12 +192,12 @@ export default function HomePage() {
             </div>
             <figure className="bi-stage reveal px-4 py-8 sm:px-8 sm:py-10">
               <figcaption className="bi-hand rotate-[-2deg]">week one, in the new lead&rsquo;s DMs</figcaption>
-              <ul aria-label="Questions a new lead asks in week one" className="mt-5 flex flex-wrap gap-3 sm:gap-4">
+              <ul aria-label="Questions a new lead asks in week one" className="mt-5 flex flex-col gap-3">
                 {WEEK_ONE.map((m) => (
                   <li
                     key={m.text}
-                    className={`bi-sticker max-w-[19rem] rounded-2xl px-4 py-3 text-[0.9375rem] leading-snug shadow-soft ${
-                      m.reply ? "rounded-br-md bg-[var(--highlight)] text-[var(--on-highlight)] sm:ml-auto" : "rounded-bl-md bg-card"
+                    className={`bi-sticker w-fit max-w-[85%] rounded-2xl px-4 py-3 text-[0.9375rem] leading-snug shadow-soft odd:self-start even:self-end sm:max-w-[20rem] ${
+                      m.reply ? "rounded-br-md bg-[var(--highlight)] text-[var(--on-highlight)]" : "rounded-bl-md bg-card"
                     }`}
                     style={{ "--r": m.r } as CSSProperties}
                   >
@@ -207,7 +222,7 @@ export default function HomePage() {
       </section>
 
       {/* ── How it works ─────────────────────────────────── */}
-      <section id="how-it-works" aria-labelledby="how-title" className="py-20 sm:py-28">
+      <section id="how-it-works" aria-labelledby="how-title" className="py-16 sm:py-24">
         <div className="bi-wrap">
           <SectionHead
             tag="How it works"
@@ -220,7 +235,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Evidence ─────────────────────────────────────── */}
-      <section id="evidence" aria-labelledby="evidence-title" className="py-20 sm:py-28">
+      <section id="evidence" aria-labelledby="evidence-title" className="py-16 sm:py-24">
         <div className="bi-wrap">
           <SectionHead
             tag="Evidence"
@@ -278,7 +293,7 @@ export default function HomePage() {
       <LivingHandover />
 
       {/* ── Privacy ──────────────────────────────────────── */}
-      <section id="privacy" aria-labelledby="privacy-title" className="py-20 sm:py-28">
+      <section id="privacy" aria-labelledby="privacy-title" className="py-16 sm:py-24">
         <div className="bi-wrap grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
           <div className="reveal">
             <p className="bi-tag">Privacy</p>
@@ -326,7 +341,7 @@ export default function HomePage() {
       <ComingNext />
 
       {/* ── Closing ──────────────────────────────────────── */}
-      <section aria-labelledby="cta-title" className="pb-20 sm:pb-28">
+      <section aria-labelledby="cta-title" className="pt-4 pb-16 sm:pb-24">
         <div className="bi-wrap">
           <div className="bi-stage reveal grid gap-10 px-6 py-14 sm:px-12 sm:py-20 lg:grid-cols-[1.3fr_1fr] lg:items-end lg:gap-16 lg:px-16">
             <h2 id="cta-title" className="bi-display max-w-[16ch] text-[clamp(2.25rem,1.4rem+3.2vw,4.5rem)]">

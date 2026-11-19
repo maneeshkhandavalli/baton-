@@ -101,7 +101,7 @@ const PREVIEWS = [
 
 export function ComingNext() {
   return (
-    <section id="coming-next" aria-labelledby="coming-next-title" className="py-20 sm:py-28">
+    <section id="coming-next" aria-labelledby="coming-next-title" className="py-16 sm:py-24">
       <div className="bi-wrap">
         <div className="reveal grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:items-end lg:gap-16">
           <div>
@@ -119,7 +119,7 @@ export function ComingNext() {
 
         <ul className="reveal-group mt-12 grid gap-5 lg:grid-cols-[1.25fr_1fr] lg:gap-6">
           {PREVIEWS.map((p) => (
-            <li key={p.id} aria-labelledby={`coming-${p.id}`} className="bi-card flex min-w-0 flex-col border-dashed bg-transparent p-5 sm:p-8">
+            <li key={p.id} aria-labelledby={`coming-${p.id}`} className="bi-card flex min-w-0 flex-col border-dashed border-border-strong bg-transparent p-5 sm:p-8">
               <PreviewLabel />
               <h3 id={`coming-${p.id}`} className="bi-h3 mt-4 flex items-center gap-2 text-[1.375rem]">
                 <p.icon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
