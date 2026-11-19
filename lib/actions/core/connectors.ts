@@ -106,6 +106,16 @@ export function linkSummary(link: ChannelLinkRecord, installations: Map<string, 
 export async function listHandoverConnectors(deps: ActionDeps, c: ConnectorDeps, input: { handoverId: string }): Promise<Result<HandoverConnectorsView>> {
   return action(deps, z.object({ handoverId: uuid }), input, (actor, v) =>
     attempt(async () => {
+      // No provider configured on this server: say so without touching the connector tables (a deployment
+      // without connector credentials, or before the connector migration, must not show an error).
+      if (!CONNECTOR_PROVIDERS.some((p) => connectorConfigured(p, c.env))) {
+        return ok<HandoverConnectorsView>({
+          canManage: true,
+          providers: CONNECTOR_PROVIDERS.map((p) => ({ provider: p, configured: false, installPath: null })),
+          installations: [],
+          links: [],
+        });
+      }
       const store = c.store();
       let links: ChannelLinkRecord[];
       try {
