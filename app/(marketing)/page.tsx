@@ -340,18 +340,16 @@ export default function HomePage() {
       {/* ── Previews (not available yet) ─────────────────── */}
       <ComingNext />
 
-      {/* ── Closing ──────────────────────────────────────── */}
-      <section aria-labelledby="cta-title" className="pt-4 pb-16 sm:pb-24">
-        <div className="bi-wrap">
-          <div className="bi-stage reveal grid gap-10 px-6 py-14 sm:px-12 sm:py-20 lg:grid-cols-[1.3fr_1fr] lg:items-end lg:gap-16 lg:px-16">
-            <h2 id="cta-title" className="bi-display max-w-[16ch] text-[clamp(2.25rem,1.4rem+3.2vw,4.5rem)]">
-              The next person shouldn&rsquo;t have to start from <span className="bi-swipe">scratch</span>.
-            </h2>
-            <div>
-              <p className="bi-body">See it working first: the CodeCell demo shows the review workspace and the handover the incoming lead receives.</p>
-              <LandingCtas demoLabel="Explore the CodeCell demo" className="mt-6" />
-              <p className="mt-3 text-caption text-muted-foreground">No sign-in for the demo · Fictional data only · Nothing is saved or sent</p>
-            </div>
+      {/* ── Closing: the page's one full-bleed colour moment ── */}
+      <section aria-labelledby="cta-title" className="bi-lime">
+        <div className="bi-wrap reveal grid gap-10 py-20 sm:py-28 lg:grid-cols-[1.3fr_1fr] lg:items-end lg:gap-16">
+          <h2 id="cta-title" className="bi-display max-w-[16ch] text-[clamp(2.4rem,1.4rem+3.6vw,5rem)]">
+            The next person shouldn&rsquo;t have to start from scratch.
+          </h2>
+          <div>
+            <p className="bi-body text-[1.0625rem]">See it working first: the CodeCell demo shows the review workspace and the handover the incoming lead receives.</p>
+            <LandingCtas demoLabel="Explore the CodeCell demo" className="mt-6" />
+            <p className="mt-3 text-caption text-muted-foreground">No sign-in for the demo · Fictional data only · Nothing is saved or sent</p>
           </div>
         </div>
       </section>

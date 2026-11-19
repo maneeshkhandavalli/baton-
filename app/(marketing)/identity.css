@@ -369,6 +369,24 @@
   border-color: rgb(255 255 255 / 0.28);
 }
 
+/* The closing band: full-bleed highlighter with ink text and an ink pill in both themes. */
+.bi-lime {
+  --foreground: var(--on-highlight);
+  --muted-foreground: color-mix(in srgb, var(--on-highlight) 74%, transparent);
+  --border-strong: color-mix(in srgb, var(--on-highlight) 38%, transparent);
+  --card: color-mix(in srgb, #ffffff 35%, transparent);
+  --primary: #18181b;
+  --primary-hover: #2e2e33;
+  --primary-foreground: #ffffff;
+  --ring: #18181b;
+  background: var(--highlight);
+  color: var(--foreground);
+}
+.bi-lime .bi-cta__disc {
+  background: #ffffff;
+  color: #18181b;
+}
+
 /* Highlighter swipe across a key phrase (the identity's evidence mark, used once per heading at most). */
 .bi-swipe {
   background-image: linear-gradient(var(--highlight), var(--highlight));
@@ -378,6 +396,11 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   padding-inline: 0.04em;
+}
+
+/* On dark paper the full-strength band would sit under light text; a softer band keeps the letters legible. */
+.dark .bi-swipe {
+  background-image: linear-gradient(color-mix(in srgb, var(--highlight) 55%, transparent), color-mix(in srgb, var(--highlight) 55%, transparent));
 }
 
 /* Surfaces */

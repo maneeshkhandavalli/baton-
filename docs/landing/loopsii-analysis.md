@@ -1,10 +1,21 @@
 # Landing redesign: design analysis of the Loopsii reference
 
-**How the reference was inspected:** text only. The Claude in Chrome extension was not connected during this pass
-(`list_connected_browsers` returned no browsers), so loopsii.com was **not** viewed in a browser. The notes below come
-from its public HTML and inlined CSS (structure, custom properties, font faces, colours, easings, breakpoints). Visual
-traits such as rhythm, composition and how the motion feels are inferred from that source and are marked *(inferred)*.
-Treat any claim of visual similarity as unverified until both pages have been compared in a browser.
+**How the reference was inspected:** first as text, from loopsii.com's public HTML and inlined CSS (custom properties,
+font faces, colours, easings, breakpoints), while the Claude in Chrome extension was disconnected. The extension came
+back during the work, so the reference was then viewed in the browser on desktop (a maximised window, 1792 CSS px).
+Loopsii could not be checked at phone widths: the window cannot be resized, and the site cannot be framed. Baton was
+reviewed at 1440, 1024, 768 and 390 through a local framing proxy (QA only, not committed).
+
+### What the browser showed (beyond the source)
+
+- A floating, pill-shaped header that shrinks once you scroll.
+- Faint graph paper behind the content, and **blueprint hairlines with square corner ticks** framing sections and
+  product shots, with tiny mono uppercase corner labels.
+- A handwritten section label on the left with a large statement paragraph on the right.
+- A dark full-bleed band where pill-shaped "questions" cluster between the two halves of a split headline.
+- A full-bleed lime band for the "why" statement, then product UI in a window frame.
+- Large split feature cards (text on white, product UI on a colour panel) that stack while you scroll. This is a
+  pinned pattern and was **not** adopted.
 
 ## What the reference does
 
@@ -42,12 +53,16 @@ pricing, an FAQ and a cookie banner.
 Also adopted: the tilted "sticker" idea, reused as the questions a new lead actually asks in week one, and the honest
 "Works today" / "Preview" tags.
 
+Added after the browser review: the blueprint frame around the hero's product stage (hairline, graph paper, corner
+ticks, mono corner labels), and one full-bleed highlighter band for the closing call to action.
+
 ## Deliberately not adopted
 
 - Loopsii's name, copy, logo, fonts (Saans, Geist), illustrations and images.
 - Business features: pricing, testimonials, the tool-cost comparison, the FAQ and the cookie banner.
 - The preloader, the carousels and infinite marquees (an endless marquee would also need a pause control under
   WCAG 2.2.2).
-- Pinned or scroll-jacked sections, central 3D and WebGL.
+- Pinned or scroll-jacked sections (including the stacking feature cards), central 3D and WebGL.
+- The floating pill header. The header is shared (components/layout), outside this landing-only task.
 - Fully viewport-scaled type. Baton keeps `clamp()` with legible minimums instead.
 - Extra sections added only to match the reference's section count.
