@@ -63,7 +63,7 @@ export function EvidencePreview() {
   const point = POINTS.find((p) => p.id === active) ?? POINTS[0];
 
   return (
-    <div className="grid overflow-hidden rounded-lg border border-border bg-card lg:grid-cols-[1.05fr_1fr]">
+    <div className="grid overflow-hidden rounded-[1.25rem] border border-border bg-card shadow-raised lg:grid-cols-[1.05fr_1fr]">
       {/* The handover Baton drafts */}
       <div className="lg:order-2 lg:border-l lg:border-border">
         <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
@@ -117,7 +117,7 @@ export function EvidencePreview() {
             const hit = point.lines.includes(l.n);
             return (
               <li key={l.n} data-hit={hit} className="bi-line grid grid-cols-[2.25rem_1fr] gap-2 rounded-md px-2 py-1.5">
-                <span className="bi-mono pt-0.5 text-right text-xs text-faint-foreground tabular-nums">{l.n}</span>
+                <span className="bi-mono pt-0.5 text-right text-xs text-[var(--faint-foreground)] tabular-nums">{l.n}</span>
                 <span className="text-sm leading-relaxed">
                   <span className="bi-mono block text-xs text-muted-foreground">
                     {l.t} · {l.who}

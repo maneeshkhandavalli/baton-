@@ -7,13 +7,14 @@ import { useEffect } from "react";
 
 /**
  * Lenis smooth scrolling for the public marketing pages only. Never started when the visitor prefers reduced
- * motion (and stopped if that preference turns on). Same-page `#section` links scroll smoothly to their target,
+ * motion (and stopped if that preference turns on), nor on touch-first devices, where native scrolling feels right. Same-page `#section` links scroll smoothly to their target,
  * update the URL and move keyboard focus there; everything else (other pages, new tabs, modified clicks) is left
  * to the browser and Next.js. Elements marked `data-lenis-prevent` keep their own native scrolling.
  */
 export function SmoothScroll() {
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const touchFirst = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
     let lenis: Lenis | null = null;
 
     const onAnchorClick = (event: MouseEvent) => {
@@ -34,7 +35,7 @@ export function SmoothScroll() {
     };
 
     const start = () => {
-      if (lenis || media.matches) return;
+      if (lenis || media.matches || touchFirst) return;
       lenis = new Lenis({ autoRaf: true, lerp: 0.12, wheelMultiplier: 1, smoothWheel: true, syncTouch: false });
     };
     const stop = () => {
