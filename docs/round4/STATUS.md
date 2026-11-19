@@ -1,7 +1,7 @@
 # Hackathon completion checklist (live)
 
-Deadline: **2026-11-20 23:59 IST**. Branch `work/r4-integration` (pushed to GitHub at `72047c0`). Preview
-http://localhost:3110 (production build). Update this file at every checkpoint; never mark a column without evidence.
+Deadline: **2026-11-20 23:59 IST**. Branch `work/r4-integration` (GitHub remote `gh`). Preview
+http://localhost:3110 (`next dev` for browser verification; see review/browser/VERIFICATION.md). Update this file at every checkpoint; never mark a column without evidence.
 
 Legend: ✅ done · ⏳ in progress · ❌ not done · 🔒 blocked by owner action (see "Blocked on").
 
@@ -11,9 +11,9 @@ Legend: ✅ done · ⏳ in progress · ❌ not done · 🔒 blocked by owner act
 | 2 | Discord bot (real channel messages) | ✅ | ✅ | ❌ | ❌ | 🔒 credentials; isolated DB start; tunnel |
 | 3 | Telegram bot (real group messages) | ✅ (private connect link since `72047c0`) | ✅ | ❌ | ❌ | 🔒 bot token + webhook secret; isolated DB start; tunnel |
 | 4 | Slack (real Events API messages) | ✅ (minimal scopes since `0e3836d`) | ✅ | ❌ | ❌ | 🔒 app console changes (`slack.md` §3b) + credentials; isolated DB start; tunnel |
-| 5 | Living Handover end to end | ✅ (Task 05) | ✅ pipeline + SQL suites | ❌ on 3110 | — | Chrome extension connection; owner signs in to the Task 05 demo accounts |
-| 6 | Creator and incoming-member journeys | ✅ | ✅ actions + integration + SQL | ❌ signed-in run pending | — | Chrome extension connection |
-| 7 | Invitations and onboarding tours with saved progress | ✅ (migrations recorded in baton-dev) | ✅ | synthetic previews only | — | Chrome extension connection |
+| 5 | Living Handover end to end | ✅ (Task 05) | ✅ pipeline + SQL suites | ✅ Playwright: new version → change detection (2 contradictions) → corrections → v2 published → re-acknowledged (`review/browser/VERIFICATION.md`) | — | — |
+| 6 | Creator and incoming-member journeys | ✅ | ✅ actions + integration + SQL | ✅ Playwright: sign-up, wizard, processing, review, gaps, publish, invite, accept, role boundaries | — | — |
+| 7 | Invitations and onboarding tours with saved progress | ✅ | ✅ | ✅ Playwright: tours (creator + incoming), persistence (server metadata), replay/skip, reissue, used/accepted links | — | Task 06 demo-account checks: owner sign-in still pending |
 | 8 | Reliability and regression | ✅ audit fixes `72047c0` | ✅ see below | ✅ HTTP smoke 20/20 | — | — |
 | 9 | Submission documentation + judge-accessible link | ⏳ `docs/submission/SUBMISSION.md` draft | — | — | — | 🔒 owner decision on hosting (deployment not authorised yet) |
 
@@ -32,3 +32,14 @@ dev previews 404, unconfigured connector routes 404, sync/drain 401 without the 
   `C:\Users\manee\Documents\programing\baton-connectors-testdb` (config + 54 migrations from `72047c0`); **not
   started** — the start command needs the owner (see the hand-off in the latest report).
 * Host memory: 2.6 GB free before any isolated stack (2026-11-19); a `javaw` process uses ~2.3 GB.
+
+## Browser verification (Playwright MCP, 2026-11-19)
+
+See `review/browser/VERIFICATION.md`. Defects found and fixed in the run: landing compact header (`95c6016`), tour
+counter (`5a734ee`), incoming Gaps page (`d9acd00`). Environment: `BATON_SITE_URL` in `.env.local` points at 3106
+(overridden for the 3110 process); the test AI adapter only runs under `next dev`.
+
+## Audit follow-ups (2026-11-19)
+
+* Connector sync uses its own `CONNECTOR_SYNC_SECRET`; `CRON_SECRET` only drives the pipeline (`9b1ecb7`).
+* Capture notices name the person who connected / paused / stopped (Baton display name only) (`0196881`).
