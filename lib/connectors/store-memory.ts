@@ -124,6 +124,8 @@ export class MemoryConnectorStore implements ConnectorStore {
     if (actor.kind !== "user") throw new ConnectorStoreError("forbidden");
     let row = [...this.installations.values()].find((i) => i.provider === input.provider && i.externalAccountId === input.externalAccountId && i.status !== "revoked");
     if (row) {
+      // same rule as SQL: no takeover of a live account another Baton user connected
+      if (row.installedByProfileId !== actor.profileId) throw new ConnectorStoreError("conflict");
       Object.assign(row, { accountLabel: input.accountLabel, scopes: [...input.scopes], credentials: input.credentials ?? row.credentials, hasCredentials: (input.credentials ?? row.credentials) !== null, status: "active", statusReason: null, updatedAt: this.iso() });
       this.audit.push({ action: "connector.installation_updated", actor: this.actorKey(actor), entityId: row.id, handoverId: null });
     } else {

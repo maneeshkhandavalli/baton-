@@ -231,3 +231,51 @@ describe("signed state, sealed credentials, config", () => {
     assert.equal(connectorConfigured("telegram", { BATON_SITE_URL: "https://b.example", CONNECTOR_STATE_SECRET: "s", CONNECTOR_SECRET_KEY: "k", TELEGRAM_BOT_TOKEN: "t", TELEGRAM_BOT_USERNAME: "u" }), false);
   });
 });
+
+describe("scheduled sync: pull-based providers and flush", () => {
+  it("pulls new messages after the cursor, buffers them, advances the cursor and flushes", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const { runConnectorSync } = await import("../sync");
+    const pulls: Array<string | null> = [];
+    const adapter = {
+      provider: "slack" as const,
+      async listChannels() { return []; },
+      async describeChannel() { return null; },
+      async pullNew(_ctx: unknown, _i: unknown, l: { pullCursor: string | null }) {
+        pulls.push(l.pullCursor);
+        return l.pullCursor ? { messages: [], cursor: l.pullCursor } : { messages: [msg("p1", "2026-11-19T09:00:00.000Z")], cursor: "p1" };
+      },
+    };
+    const writes: string[] = [];
+    const deps = {
+      store, adapter: async () => adapter, ctx: {} as never, enabled: (p: string) => p === "slack", now: () => 0,
+      writer: { write: async () => (writes.push("w"), { ok: true as const, sourceId: "src-1" }) },
+    };
+    const r1 = await runConnectorSync(deps, { maxLinks: 10, deadlineMs: 10_000 });
+    assert.equal(r1.pulledMessages, 1);
+    assert.equal(r1.flushed, 1);
+    assert.equal((await store.getLink(link.id))?.pullCursor, "p1");
+    const r2 = await runConnectorSync(deps, { maxLinks: 10, deadlineMs: 10_000 });
+    assert.equal(r2.pulledMessages, 0);
+    assert.deepEqual(pulls, [null, "p1"]);
+    assert.equal(writes.length, 1);
+  });
+
+  it("losing access pauses the link instead of retrying forever", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const { pullLink } = await import("../sync");
+    const { ProviderError } = await import("../providers/adapter");
+    const adapter = { provider: "slack" as const, listChannels: async () => [], describeChannel: async () => null, pullNew: async () => { throw new ProviderError("forbidden"); } };
+    assert.equal(await pullLink(store, adapter, {} as never, (await store.getLink(link.id))!), 0);
+    const after = await store.getLink(link.id);
+    assert.equal(after?.state, "paused");
+    assert.equal(after?.lastFlushError, "provider_forbidden");
+  });
+
+  it("another Baton user cannot take over a live installation", async () => {
+    const { store } = await setup();
+    await assert.rejects(store.upsertInstallation({ kind: "user", profileId: OTHER }, { provider: "slack", externalAccountId: "T1", accountLabel: "x", scopes: [], credentials: null }), /conflict/);
+  });
+});

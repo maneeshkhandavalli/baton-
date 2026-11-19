@@ -19,6 +19,7 @@ import { captureConsentStatement, CONNECTOR_CAPTURE_CONSENT_VERSION, MAX_HISTORY
 import { ConnectorStoreError } from "../../connectors/errors";
 import { flushLink, type SourceWriter } from "../../connectors/flush";
 import { ingestEvent } from "../../connectors/ingest";
+import { pullLink } from "../../connectors/sync";
 import { ProviderError, type AdapterContext, type ProviderServerAdapter } from "../../connectors/providers/adapter";
 import { verifyConnectorState } from "../../connectors/state";
 import {
@@ -261,6 +262,8 @@ export async function syncLinkNow(deps: ActionDeps, c: ConnectorDeps, input: { l
       if (!link || link.state === "revoked") return failWith("not_found");
       // creator check (the flush itself acts as the consenting creator, re-checked in SQL)
       await store.listLinksForHandover({ kind: "user", profileId: actor.profileId }, link.handoverId);
+      // pull-based providers (Discord) fetch what is new first; push providers already buffered it
+      await pullLink(store, await c.adapter(link.provider), c.adapterContext(), link);
       const r = await flushLink(store, c.writer(), v.linkId);
       if (r.status === "refused") return failWith("precondition_failed", { message: FLUSH_MESSAGES[r.refusal] ?? FLUSH_MESSAGES.internal, details: { reason: r.refusal } });
       return ok({ status: r.status, messages: r.status === "flushed" ? r.messages : 0 });
