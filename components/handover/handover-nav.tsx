@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import { handoverNav } from "@/config/handover-navigation";
+import { visibleHandoverNav } from "@/config/handover-navigation";
+import type { MemberRole } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils";
  * Reads the handover id from the URL. Because the id is a dynamic param,
  * render inside <Suspense> (see app/(workspace)/handover/[id]/layout.tsx).
  */
-export function HandoverNav() {
+export function HandoverNav({ viewerRole = null }: { viewerRole?: MemberRole | null } = {}) {
   const pathname = usePathname();
   const { id } = useParams<{ id: string }>();
   const listRef = useRef<HTMLUListElement>(null);
@@ -26,7 +27,7 @@ export function HandoverNav() {
   return (
     <nav aria-label="Handover sections" className="-mb-px overflow-x-auto [scrollbar-width:none]">
       <ul ref={listRef} className="flex gap-5 sm:gap-6">
-        {handoverNav.map(({ title, href }) => {
+        {visibleHandoverNav(viewerRole).map(({ title, href }) => {
           const target = href(id);
           const active = pathname === target;
 

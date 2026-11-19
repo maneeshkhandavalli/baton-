@@ -70,7 +70,7 @@ export function DemoScreenView({ screen, view, pending, dispatch, onNext }: Scre
       );
     case "review":
       return (
-        <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
           <ReadinessSummary readiness={view.readiness} decided={decidedCount(view.points)} total={view.points.length} />
           <PointList view={view} points={view.points} readOnly={false} pending={pending} dispatch={dispatch} />
         </div>
@@ -90,7 +90,7 @@ const decidedCount = (points: PointDetail[]) => points.filter((p) => p.reviewSta
 
 function SourcesScreen({ view }: { view: DemoView }) {
   return (
-    <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Sources">
+    <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Sources">
       {view.sources.map((s) => {
         const masked = Object.entries(s.maskingCounts ?? {}).filter(([, n]) => (n ?? 0) > 0);
         const Icon = s.kind === "whatsapp_export" ? MessageCircle : FileText;
@@ -167,7 +167,7 @@ function PointList({ view, points, readOnly, pending, dispatch }: { view: DemoVi
   const panel = selected && <PointDetailPanel point={selected} sources={view.sources} readOnly pending={false} onExclude={() => {}} onRestore={() => {}} onChangeAccess={() => {}} />;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
       <ul className="space-y-4" aria-label="Points">
         {points.map((p) => (
           <li key={p.id}>
@@ -241,7 +241,7 @@ function PublishScreen({ view, pending, dispatch, onNext }: { view: DemoView; pe
   const [summary, setSummary] = useState("");
   const published = view.published;
   return (
-    <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <ReadinessSummary readiness={view.readiness} decided={decidedCount(view.points)} total={view.points.length} />
       <section aria-labelledby="demo-publish" className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-soft">
         <h3 id="demo-publish" className="type-subheading">

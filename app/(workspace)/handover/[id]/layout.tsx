@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 
 import { HandoverHeader, HandoverHeaderFallback } from "@/components/handover/handover-header";
-import { HandoverNav, HandoverNavFallback } from "@/components/handover/handover-nav";
+import { HandoverNavFallback } from "@/components/handover/handover-nav";
+import { HandoverNavForViewer } from "@/components/handover/handover-nav-for-viewer";
 import { PeopleProvider } from "@/components/shared/person-token";
 
 export default function HandoverLayout({ children, params }: LayoutProps<"/handover/[id]">) {
@@ -13,7 +14,7 @@ export default function HandoverLayout({ children, params }: LayoutProps<"/hando
             <HandoverHeader params={params} />
           </Suspense>
           <Suspense fallback={<HandoverNavFallback />}>
-            <HandoverNav />
+            <HandoverNavForViewer params={params} />
           </Suspense>
         </div>
       </div>

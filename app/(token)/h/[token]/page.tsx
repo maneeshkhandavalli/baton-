@@ -9,6 +9,7 @@ import { formatDate } from "@/components/handover/format";
 import { memberRoleLabel } from "@/components/handover/labels";
 import { invitationCopy, invitationViewFromDetails, invitationViewFromQuery, type InvitationView } from "@/components/invitations/invitation-view";
 import { PageContainer } from "@/components/layout/page-container";
+import { PendingSubmitButton } from "@/components/shared/pending-submit-button";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { getInvitation } from "@/lib/actions/invitations";
@@ -185,9 +186,9 @@ async function InvitationContent({
         <InvitationPanel {...panel}>
           {/* A4: the only way to accept is this explicit submit; rendering or prefetching never redeems. */}
           <form action={acceptInvitationFromForm.bind(null, token)}>
-            <Button type="submit" size="lg">
+            <PendingSubmitButton size="lg" pendingLabel="Accepting…">
               Accept invitation
-            </Button>
+            </PendingSubmitButton>
           </form>
         </InvitationPanel>
       );
