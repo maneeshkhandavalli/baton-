@@ -20,11 +20,11 @@ import { connectorConfigured, connectorPaths, siteBaseUrl } from "../../config";
 import { ConnectorStoreError } from "../../errors";
 import { httpStatusFor, ingestEvent, type IngestLogger } from "../../ingest";
 import { OAUTH_STATE_TTL_S, signConnectorState, verifyConnectorState } from "../../state";
-import type { ConnectorStore } from "../../types";
+import type { ConnectorMessage, ConnectorStore } from "../../types";
 import { verifyGithubSignature } from "../../verify";
 import { ProviderError } from "../adapter";
 import { exchangeOAuthCode, githubPaginate, revokeUserToken, type GithubHttp } from "./api";
-import { effectiveFamilies, familyOf, githubRouting, idStr, normalizeGithubWebhook, obj, str, type GithubFamilies } from "./events";
+import { familyOf, idStr, normalizeGithubWebhook, obj, parseGithubSettings, str } from "./events";
 
 type Env = Record<string, string | undefined>;
 type LogFields = Record<string, string | number | boolean | null>;
@@ -97,17 +97,12 @@ export async function handleGithubWebhook(request: Request, deps: GithubWebhookD
     return json({ error: "unavailable" }, 503);
   }
 
-  // Event families are a per-link setting; an event is captured only if every capturing link allows its family.
-  let families: GithubFamilies | undefined;
-  const { installationId, repositoryId } = githubRouting(payload);
-  if (installationId && repositoryId && familyOf(eventName, payload)) {
-    try {
-      families = effectiveFamilies((await store.capturingLinks("github", installationId, repositoryId)).map((l) => l.settings));
-    } catch {
-      logLine(deps, "webhook_failed", { code: "store_unavailable" });
-      return json({ error: "unavailable" }, 503);
-    }
-  }
+  // Event families are a per-link setting: every capturing link keeps only the families its creator chose
+  // (ingestEvent's per-link filter). A malformed setting captures nothing for that link (fail closed).
+  const family = familyOf(eventName, payload);
+  const filter = family
+    ? (link: { settings: Record<string, unknown> }, messages: ConnectorMessage[]) => (parseGithubSettings(link.settings)?.families[family] ? messages : [])
+    : undefined;
 
   const logger: IngestLogger = {
     info() {},
@@ -117,8 +112,8 @@ export async function handleGithubWebhook(request: Request, deps: GithubWebhookD
   };
   const nowIso = new Date(deps.now()).toISOString();
   let status = 200;
-  for (const event of normalizeGithubWebhook({ deliveryId, eventName, payload, families, nowIso })) {
-    const outcome = await ingestEvent(store, event, logger);
+  for (const event of normalizeGithubWebhook({ deliveryId, eventName, payload, nowIso })) {
+    const outcome = await ingestEvent(store, event, logger, { filter });
     if (outcome.status === "failed") logLine(deps, "webhook_event_failed", { eventType: event.eventType, code: outcome.code });
     status = Math.max(status, httpStatusFor(outcome));
   }

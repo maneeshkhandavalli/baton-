@@ -279,3 +279,20 @@ describe("scheduled sync: pull-based providers and flush", () => {
     await assert.rejects(store.upsertInstallation({ kind: "user", profileId: OTHER }, { provider: "slack", externalAccountId: "T1", accountLabel: "x", scopes: [], credentials: null }), /conflict/);
   });
 });
+
+describe("per-link selection (ingest filter)", () => {
+  it("each capturing link keeps only what its own settings allow; a link that keeps nothing stores nothing", async () => {
+    const { store, user, inst, link } = await setup();
+    const H2 = "44444444-4444-4444-8444-444444444444";
+    store.handovers.set(H2, { id: H2, creatorProfileId: CREATOR, state: "draft" });
+    const link2 = await store.linkChannel(user, { installationId: inst.id, handoverId: H2, externalChannelId: "C1", channelLabel: "#core-team", settings: { off: true } });
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await store.recordCaptureConsent(user, link2.id, "connector-capture-v1");
+    const r = await ingestEvent(store, event("f1", [msg("1", "2026-11-19T09:00:00.000Z")]), undefined, { filter: (l, m) => (l.settings.off ? [] : m) });
+    assert.deepEqual(r, { status: "processed", buffered: 1, links: 1 });
+    assert.equal(store.bufferedFor(link.id).length, 1);
+    assert.equal(store.bufferedFor(link2.id).length, 0);
+    const none = await ingestEvent(store, event("f2", [msg("2", "2026-11-19T09:01:00.000Z")]), undefined, { filter: () => [] });
+    assert.deepEqual(none, { status: "ignored", reason: "unsupported_event" });
+  });
+});

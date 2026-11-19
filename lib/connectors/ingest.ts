@@ -11,6 +11,7 @@
  */
 
 import {
+  type ChannelLinkRecord,
   CONNECTOR_MESSAGE_KINDS,
   CONNECTOR_MESSAGE_LIMITS,
   type ConnectorMessage,
@@ -59,7 +60,15 @@ function stripControl(s: string): string {
   return s.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029]/g, "");
 }
 
-export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent, logger: IngestLogger = silent): Promise<EventOutcome> {
+export interface IngestOptions {
+  /**
+   * Per-link selection (contract change requested by Worker 02): which of the event's messages ONE capturing link
+   * keeps, from that link's own settings (e.g. GitHub event families). A link that keeps nothing is skipped.
+   */
+  filter?: (link: ChannelLinkRecord, messages: ConnectorMessage[]) => ConnectorMessage[];
+}
+
+export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent, logger: IngestLogger = silent, options: IngestOptions = {}): Promise<EventOutcome> {
   const base = { provider: event.provider, eventType: event.eventType };
   let receipt;
   try {
@@ -79,7 +88,7 @@ export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent,
   }
 
   try {
-    const outcome = await route(store, event);
+    const outcome = await route(store, event, options);
     if (outcome.status === "processed") await store.finishEvent(receipt.eventId, { status: "processed" });
     else if (outcome.status === "ignored") await store.finishEvent(receipt.eventId, { status: "ignored", reason: outcome.reason });
     else if (outcome.status === "failed") await store.finishEvent(receipt.eventId, { status: "failed", code: outcome.code });
@@ -93,7 +102,7 @@ export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent,
   }
 }
 
-async function route(store: ConnectorStore, event: NormalizedEvent): Promise<EventOutcome> {
+async function route(store: ConnectorStore, event: NormalizedEvent, options: IngestOptions): Promise<EventOutcome> {
   if (event.externalAccountId === null) return { status: "ignored", reason: "unsupported_event" };
   const installation = await store.findInstallation(event.provider, event.externalAccountId);
   if (!installation) return { status: "ignored", reason: "no_installation" };
@@ -132,14 +141,20 @@ async function route(store: ConnectorStore, event: NormalizedEvent): Promise<Eve
 
   let buffered = 0;
   let accepted = 0;
+  let filteredOut = 0;
   for (const link of links) {
-    if (link.bufferedCount + messages.length > CONNECTOR_MESSAGE_LIMITS.bufferedPerLink) return { status: "failed", code: "buffer_full" };
-    const r = await store.bufferMessages(link.id, messages);
+    const selected = options.filter ? options.filter(link, messages) : messages;
+    if (selected.length === 0) {
+      filteredOut += 1;
+      continue;
+    }
+    if (link.bufferedCount + selected.length > CONNECTOR_MESSAGE_LIMITS.bufferedPerLink) return { status: "failed", code: "buffer_full" };
+    const r = await store.bufferMessages(link.id, selected);
     if (r.refused) continue;
     accepted += 1;
     buffered += r.inserted + r.updated;
   }
-  if (accepted === 0) return { status: "ignored", reason: "no_capturing_link" };
+  if (accepted === 0) return { status: "ignored", reason: filteredOut === links.length ? "unsupported_event" : "no_capturing_link" };
   return { status: "processed", buffered, links: accepted };
 }
 

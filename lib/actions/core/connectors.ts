@@ -227,6 +227,29 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
 
 const linkIdInput = z.object({ linkId: uuid });
 
+const settingsInput = z.object({ linkId: uuid, settings: z.record(z.string(), z.unknown()) });
+
+/**
+ * Saves a link's provider settings (e.g. GitHub event families). The provider adapter validates them
+ * (`parseSettings`, refusing malformed values); the consent-time `historyDays` choice is kept.
+ */
+export async function updateConnectorLinkSettings(deps: ActionDeps, c: ConnectorDeps, input: z.input<typeof settingsInput>): Promise<Result<ConnectorLinkSummary>> {
+  return action(deps, settingsInput, input, (actor, v) =>
+    attempt(async () => {
+      const store = c.store();
+      const link = await store.getLink(v.linkId);
+      if (!link || link.state === "revoked") return failWith("not_found");
+      const adapter = await c.adapter(link.provider);
+      const merged = { ...v.settings, ...(typeof link.settings.historyDays === "number" ? { historyDays: link.settings.historyDays } : {}) };
+      const parsed = adapter.parseSettings ? adapter.parseSettings(merged) : null;
+      if (!parsed) return failWith("validation_failed", { message: "These settings can't be used for this connection." });
+      const updated = await store.updateLinkSettings({ kind: "user", profileId: actor.profileId }, v.linkId, parsed);
+      const inst = await store.getInstallation(updated.installationId);
+      return ok(linkSummary(updated, new Map(inst ? [[inst.id, inst]] : [])));
+    }),
+  );
+}
+
 export async function setCapturePaused(deps: ActionDeps, c: ConnectorDeps, input: { linkId: string; paused: boolean }): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, z.object({ linkId: uuid, paused: z.boolean() }), input, (actor, v) =>
     attempt(async () => {

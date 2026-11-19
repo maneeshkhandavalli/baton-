@@ -44,3 +44,6 @@ export async function readLinkIntent(input: { intent: string }): Promise<Result<
 export async function linkFromIntent(input: { intent: string; handoverId: string }): Promise<Result<ConnectorLinkSummary>> {
   return core.linkFromIntent(getActionDeps(), connectorDeps(), input);
 }
+export async function updateConnectorLinkSettings(input: { linkId: string; settings: Record<string, unknown> }): Promise<Result<ConnectorLinkSummary>> {
+  return core.updateConnectorLinkSettings(getActionDeps(), connectorDeps(), input);
+}
