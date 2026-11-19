@@ -70,7 +70,7 @@ export const connectorPaths = {
   webhook: (p: ConnectorProvider) => `/api/connectors/${p}/webhook`,
   /** Signed link intent from a bot command → the creator picks a handover and consents. */
   connect: "/connect",
-  /** Scheduled flush of buffered messages (CRON_SECRET, like /api/pipeline/drain). */
+  /** Scheduled pull + flush (CONNECTOR_SYNC_SECRET; NOT the pipeline's CRON_SECRET — lib/connectors/sync-auth.ts). */
   sync: "/api/connectors/sync",
 } as const;
 

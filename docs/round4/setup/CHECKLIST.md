@@ -25,7 +25,7 @@ Shared variables (all providers):
 | `CONNECTOR_STATE_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `CONNECTOR_SECRET_KEY` | same command (32 random bytes, base64url) |
 | `CONNECTOR_SECRET_KEY_VERSION` | `c1` (optional) |
-| `CRON_SECRET` | already present (≥ 32 characters); used by `POST /api/connectors/sync` |
+| `CONNECTOR_SYNC_SECRET` | same command; **must differ from `CRON_SECRET`**. Only `POST /api/connectors/sync` accepts it (bearer); `CRON_SECRET` keeps driving the pipeline only. Unset/short/reused → the sync answers 503 naming the variable |
 
 A provider's routes answer **404** and its card says "Not set up on this server" until the shared variables AND all of
 that provider's variables are set.
@@ -55,7 +55,7 @@ that provider's variables are set.
 | Installation → Install Link | None (Baton builds its own signed link) |
 | Env | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` (General Information), `DISCORD_CLIENT_SECRET` (OAuth2), `DISCORD_BOT_TOKEN` (Bot → Reset Token) |
 | Script | `node scripts/connectors/discord-register-commands.mjs` with `DISCORD_APPLICATION_ID` + `DISCORD_BOT_TOKEN` → registers global `/handover` (guild channels only; may take minutes to appear) |
-| Capture | pulled on **Bring in new messages** and on `POST /api/connectors/sync` (CRON_SECRET bearer); there is no automatic schedule in the local preview |
+| Capture | pulled on **Bring in new messages** and on `POST /api/connectors/sync` (`CONNECTOR_SYNC_SECRET` bearer); there is no automatic schedule in the local preview |
 
 ## 3. Slack — app "baton", installed in midnight labs (exists; needs changes)
 

@@ -17,7 +17,7 @@ arrives over HTTP at the interactions endpoint.
 | `CONNECTOR_STATE_SECRET` | ≥ 32 random characters: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `CONNECTOR_SECRET_KEY` | 32 random bytes, base64url: same command as above. Losing it makes stored Slack tokens unreadable (reconnect Slack). |
 | `CONNECTOR_SECRET_KEY_VERSION` | Optional, `c1`. |
-| `CRON_SECRET` | Already used by `/api/pipeline/drain`; the connector sync uses the same. |
+| `CONNECTOR_SYNC_SECRET` | Only for `POST /api/connectors/sync` (bearer). Must differ from `CRON_SECRET`, which only authorises `/api/pipeline/drain`; neither works on the other endpoint. |
 
 ## 2. Create the application **[needs your credentials/approval]**
 
@@ -60,7 +60,7 @@ id, never the token. Global commands can take a few minutes to show up.
 
 ## 5. Scheduled sync (Main)
 
-Discord capture depends on `POST /api/connectors/sync` running on a schedule (Main's route, `CRON_SECRET`), plus the
+Discord capture depends on `POST /api/connectors/sync` running on a schedule (Main's route, `CONNECTOR_SYNC_SECRET`), plus the
 creator's **Bring in new messages**. Without a schedule, messages are pulled only when the creator presses the button.
 
 ## 6. Local development

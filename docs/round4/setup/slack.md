@@ -14,7 +14,7 @@ install that lacks either is refused and its token revoked (status "missing_perm
 
 ## 1. Shared variables
 
-See `discord.md` §1 (`BATON_SITE_URL`, `CONNECTOR_STATE_SECRET`, `CONNECTOR_SECRET_KEY`, `CRON_SECRET`).
+See `discord.md` §1 (`BATON_SITE_URL`, `CONNECTOR_STATE_SECRET`, `CONNECTOR_SECRET_KEY`, `CONNECTOR_SYNC_SECRET`).
 
 ## 2. Create the app from a manifest (minimal default) **[needs your credentials/approval]**
 

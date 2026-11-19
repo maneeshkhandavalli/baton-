@@ -12,7 +12,7 @@
  *
  * R3 Task 02: a dispatch is bound to its endpoint's PURPOSE. The pipeline drain signs "v1.<s>.<id>" (unchanged);
  * the raw-retention sweep signs "v1.<s>.<id>.retention". A header captured for one endpoint is refused by the
- * other.
+ * other. R4: "connector_sync" is signed with CONNECTOR_SYNC_SECRET (a different secret; lib/connectors/sync-auth.ts).
  */
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -26,7 +26,7 @@ export const DISPATCH_MAX_SKEW_S = 30;
 const DISPATCH = /^v1\.(\d{9,11})\.(\d{1,18})\.([0-9a-f]{64})$/;
 
 /** What a signed dispatch may trigger. "drain" keeps the original (Task 01B) message format. */
-export type DispatchPurpose = "drain" | "retention";
+export type DispatchPurpose = "drain" | "retention" | "connector_sync";
 
 export type WorkerAuth =
   | { ok: true; via: "bearer" | "dispatch"; dispatchId: number | null }

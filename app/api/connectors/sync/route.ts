@@ -1,7 +1,8 @@
 /**
  * Connector sync endpoint (Round 4 contract §5): pulls new messages for pull-based providers (Discord) and flushes
- * buffered messages into chat_import sources. Same authentication as /api/pipeline/drain (CRON_SECRET bearer or a
- * signed dispatch header); fails closed. Counts only in the response; nothing about content is logged.
+ * buffered messages into chat_import sources. Its own credential, CONNECTOR_SYNC_SECRET (bearer or a dispatch header
+ * signed for "connector_sync"); CRON_SECRET is NOT accepted here. Fails closed: 401 for a wrong credential, 503 with
+ * the variable name when the secret is unset, short or reused. Counts only; nothing about content is logged.
  */
 
 import { connectorConfigured } from "@/lib/connectors/config";
@@ -11,7 +12,7 @@ import { createSourceWriter } from "@/lib/connectors/source-writer";
 import { runConnectorSync } from "@/lib/connectors/sync";
 import { serverDb, serverStorage } from "@/lib/db";
 import { callRpc } from "@/lib/db/rpc";
-import { authenticateWorkerRequest } from "@/lib/pipeline/worker-auth";
+import { authenticateConnectorSync } from "@/lib/connectors/sync-auth";
 
 export const maxDuration = 300;
 
@@ -19,8 +20,12 @@ const BUDGET = { maxLinks: 50, deadlineMs: 200_000 } as const;
 const NO_STORE = { "cache-control": "no-store" };
 
 async function sync(request: Request): Promise<Response> {
-  const auth = authenticateWorkerRequest(request.headers, process.env.CRON_SECRET);
+  const auth = authenticateConnectorSync(request.headers);
   if (!auth.ok) {
+    if (auth.status === 503) {
+      console.error(JSON.stringify({ scope: "connector", event: "sync_not_configured", reason: auth.reason }));
+      return Response.json({ error: auth.error, message: auth.message }, { status: 503, headers: NO_STORE });
+    }
     if (auth.reason !== "no_credentials") console.warn(JSON.stringify({ scope: "connector", event: "sync_unauthorized", reason: auth.reason }));
     return Response.json({ error: "unauthorized" }, { status: 401, headers: NO_STORE });
   }

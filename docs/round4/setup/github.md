@@ -123,7 +123,7 @@ folder (keep a copy only in your password manager). Never commit it.
 | `CONNECTOR_STATE_SECRET` | At least 32 characters: `openssl rand -base64 48` |
 | `CONNECTOR_SECRET_KEY` | 32 random bytes, base64url: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `CONNECTOR_SECRET_KEY_VERSION` | Optional, `c1` |
-| `CRON_SECRET` | Existing (scheduled sync) |
+| `CONNECTOR_SYNC_SECRET` | Scheduled sync (`POST /api/connectors/sync`); distinct from `CRON_SECRET` |
 
 GitHub stores no per-installation credentials in Baton (`credentials: null`), but `CONNECTOR_SECRET_KEY` is still
 required for the connector feature as a whole.

@@ -13,7 +13,7 @@ that is active. Telegram pushes updates to Baton's webhook.
 
 ## 1. Shared variables
 
-See `discord.md` §1 (`BATON_SITE_URL`, `CONNECTOR_STATE_SECRET`, `CONNECTOR_SECRET_KEY`, `CRON_SECRET`).
+See `discord.md` §1 (`BATON_SITE_URL`, `CONNECTOR_STATE_SECRET`, `CONNECTOR_SECRET_KEY`, `CONNECTOR_SYNC_SECRET`).
 
 ## 2. Create the bot with BotFather **[needs your credentials/approval]**
 

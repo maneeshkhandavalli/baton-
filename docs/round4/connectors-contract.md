@@ -85,7 +85,7 @@ possible while the handover is draft/in review; otherwise messages stay buffered
 | `GET /api/connectors/<p>/install?handover=<id>` | provider worker | signed-in creator only; signs `state` (`lib/connectors/state.ts`, `t:"oauth"`) and redirects to the provider |
 | `GET /api/connectors/<p>/callback` | provider worker | verifies `state` against the signed-in user, exchanges the code server-side, `store.upsertInstallation`, redirects to `/handover/<id>/settings#connectors` |
 | `POST /api/connectors/<p>/webhook` | provider worker | raw body, signature first, `ingestEvent`, `httpStatusFor`. Discord: interactions endpoint (PING → PONG). Slack: `url_verification` challenge. |
-| `POST /api/connectors/sync` | Main | CRON_SECRET (same auth as `/api/pipeline/drain`), `flushDueLinks` with a fixed budget |
+| `POST /api/connectors/sync` | Main | `CONNECTOR_SYNC_SECRET` only (bearer or `connector_sync` dispatch; `CRON_SECRET` refused), pull + `flushDueLinks` with a fixed budget |
 | `/connect?intent=<signed>` page | Worker 03 | bot command → signed intent (`t:"intent"`) → creator picks a handover → `linkFromIntent` → consent |
 | Settings panel "Connected channels" (`components/connectors/*`, mounted in handover settings) | Worker 03 | generic, DTO-driven (`lib/contracts/connectors.ts`), all providers |
 | `components/connectors/providers/github*.tsx` | Worker 02 | GitHub-specific settings (event families), rendered by the panel |
@@ -114,7 +114,7 @@ Workers never write migrations; a worker needing a schema change asks Main.
 ## 8. Environment (names only; values in the setup guides, never in git)
 
 Shared: `BATON_SITE_URL`, `CONNECTOR_STATE_SECRET` (≥32 chars), `CONNECTOR_SECRET_KEY` (32 bytes base64url),
-optional `CONNECTOR_SECRET_KEY_VERSION` (`c1`), `CRON_SECRET` (existing).
+optional `CONNECTOR_SECRET_KEY_VERSION` (`c1`), `CONNECTOR_SYNC_SECRET` (sync only; must differ from the pipeline's `CRON_SECRET`).
 GitHub: `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`.
 Discord: `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_SECRET`.
 Slack: `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`.
