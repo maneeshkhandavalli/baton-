@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { AccessBadge, HandoverStateBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDate, formatDateRange } from "@/components/handover/format";
+import { ConnectedChannels } from "@/components/connectors/connected-channels";
 import { AccessLinks } from "@/components/settings/access-links";
 import { inviteErrorMessage } from "@/components/settings/invite-delivery";
 import { InviteResult } from "@/components/settings/invite-result";
@@ -354,6 +355,13 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               );
             })}
           </ul>
+        </Panel>
+      )}
+
+      {creator && (
+        <Panel id="connectors">
+          <SectionHeading title="Connected channels" description="Bring messages from Slack, Discord, Telegram or GitHub into this handover, with your consent per channel." />
+          <ConnectedChannels handoverId={h.id} />
         </Panel>
       )}
 
