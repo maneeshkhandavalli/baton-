@@ -33,7 +33,7 @@
     --ease-spring: cubic-bezier(0.3, 1.3, 0.4, 1);
     --ease-acc: cubic-bezier(0.65, 0, 0.35, 1);
 
-    --fs-display: calc(46 * var(--u));
+    --fs-display: calc(44 * var(--u));
     --fs-h2: calc(38 * var(--u));
     --fs-statement: calc(27 * var(--u));
     --fs-h3: calc(23 * var(--u));
@@ -208,6 +208,14 @@
   .lp-cta__label {
     border-radius: 999px;
     padding-inline: max(1.1rem, calc(26 * var(--u)));
+  }
+  @media (max-width: 479px) {
+    .lp-cta {
+      font-size: 0.875rem;
+    }
+    .lp-cta__label {
+      padding-inline: 0.95rem;
+    }
   }
   .lp-cta--ghost {
     color: var(--foreground);
@@ -791,7 +799,7 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: calc(8 * var(--u));
-    max-width: 30rem;
+    max-width: 34rem;
     padding: 0.25rem 1.1rem;
     margin-block: calc(16 * var(--u));
   }
@@ -1016,6 +1024,7 @@
   }
   .lp-steps__list {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: calc(20 * var(--u));
     margin-top: calc(60 * var(--u));
     padding-inline: var(--gutter);
@@ -1030,6 +1039,7 @@
   .lp-card {
     position: relative;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     overflow: clip;
     border-radius: var(--r-card);
     background: var(--card);
@@ -1041,7 +1051,7 @@
     .lp-card {
       position: sticky;
       top: calc(377 * var(--u) + var(--i) * 26 * var(--u));
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       min-height: calc(590 * var(--u));
       margin-bottom: calc(60 * var(--u));
     }
@@ -1064,6 +1074,7 @@
     background: var(--c);
     padding: calc(18 * var(--u));
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     color: #18181b;
   }
@@ -1179,7 +1190,7 @@
     .lp-ftile {
       min-height: 0;
     }
-    .lp-ftile__art {
+    .lp-ftile .lp-ftile__art {
       height: 3rem;
       min-height: 0;
     }
@@ -1447,22 +1458,22 @@
     height: 0;
   }
   @media (max-width: 899px) {
-    .lp-roadmap.is-wheel .lp-wheel {
+    .lp .lp-roadmap.is-wheel .lp-wheel {
       --R: 165vw;
-      --step: 30deg;
+      --step: 38deg;
       top: 54svh;
     }
-    .lp-roadmap.is-wheel .lp-rcard__band {
+    .lp .lp-roadmap.is-wheel .lp-rcard__band {
       height: 6rem;
     }
-    .lp-roadmap.is-wheel .lp-rcard__num {
+    .lp .lp-roadmap.is-wheel .lp-rcard__num {
       font-size: 8.5rem;
     }
-    .lp-roadmap.is-wheel .lp-rcard {
+    .lp .lp-roadmap.is-wheel .lp-rcard {
       transform: rotate(calc(var(--i) * var(--step))) translate(-50%, calc(var(--R) * -1 - 6rem + 0.75rem));
     }
     /* No room beside the wheel on a phone: the lede stays for screen readers, each card keeps its own label. */
-    .lp-roadmap.is-wheel .lp-roadmap__head .lp-body {
+    .lp .lp-roadmap.is-wheel .lp-roadmap__head .lp-body {
       position: absolute;
       width: 1px;
       height: 1px;
@@ -1470,7 +1481,7 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
-    .lp-roadmap.is-wheel .lp-roadmap__foot {
+    .lp .lp-roadmap.is-wheel .lp-roadmap__foot {
       display: none;
     }
   }

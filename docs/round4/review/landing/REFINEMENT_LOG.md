@@ -37,3 +37,29 @@ row), the wheel starts at 0° and uses a compact card on phones.
 
 Screenshots: `pass1-1440-*.png` (hero, intro, problem, receipt, window, steps, evidence, signoff, living, privacy,
 roadmap, nerds, outro), taken after the fixes above.
+
+## Pass 2 — 768, 390 and 1024 (Loopsii's tablet and phone layouts)
+
+**Compared:** Loopsii at 768 and 390 (hero, dark band, stacked cards, feature tiles, roadmap, footer) and its 1024
+breakpoint against Baton at the same widths; then rechecked the pass-1 items at 1440.
+
+**Biggest differences found, and what changed:**
+
+| Difference | Change |
+|---|---|
+| 1440: pills looked small next to the reference's (≈30 px tall) | pills 21u on desktop, 14u tablet, 12 px phone |
+| 1440: the Sign-off tiles started further right than the Labels tiles | stage grid `minmax(0,1fr) minmax(0,2fr)` so long headings can't widen the left column |
+| 1440: the stage word was invisible in the roadmap numeral | white word inside the numeral's counter (as the reference's "LOOP") |
+| 1440: lime ran too far down behind the window | window overlap 11rem on desktop |
+| Step panels had a large empty area where the reference shows a busy product window | each panel gets a row of product chips (sources, pipeline stages, review counts, the handover's people) |
+| 390: hero CTAs wrapped onto two lines and pushed the mosaic off the first screen | phone CTAs 14 px with tighter padding (one row), display 44u, less top padding |
+| 390: step cards were wider than the screen (grid items sized to the long file names) | `minmax(0,1fr)` on the list, card and panel grids |
+| 390: evidence-tile art was oversized | the phone rule now outranks the base rule (it was being overridden) |
+| 390 / 768: the roadmap card sat off-centre and a second card covered the first | wheel starts at 0°, phone step 38°, compact band; phone-only rules made more specific so they actually apply |
+| 768: pill cluster one per row | 34rem wide on tablet |
+
+1024 checked: hero two lines + lede, header links fit, stacked cards and the dark band hold. At 1024 the pill
+cluster is one per row (the reference fits two); left as is.
+
+Screenshots: `pass2-768-*.png`, `pass2-390-*.png`, `pass2-1024-*.png`. (`pass2-768-hero` caught the cycling word
+mid-transition; `pass2-390-evidence` and `pass2-390-roadmap` were taken before their fixes above.)
