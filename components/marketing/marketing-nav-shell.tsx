@@ -21,7 +21,8 @@ export function MarketingNavShell({ children }: { children: ReactNode }) {
       let isDark = false;
       for (const el of document.querySelectorAll<HTMLElement>("[data-header-tone='dark']")) {
         const r = el.getBoundingClientRect();
-        if (r.top <= probeY && r.bottom >= probeY) {
+        // The dark panel lifts off with a rounded, inset clip, so its last ~40 px are already light.
+        if (r.top <= probeY && r.bottom - 40 >= probeY) {
           isDark = true;
           break;
         }

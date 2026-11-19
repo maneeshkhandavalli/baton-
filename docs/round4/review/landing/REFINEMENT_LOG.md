@@ -63,3 +63,39 @@ cluster is one per row (the reference fits two); left as is.
 
 Screenshots: `pass2-768-*.png`, `pass2-390-*.png`, `pass2-1024-*.png`. (`pass2-768-hero` caught the cycling word
 mid-transition; `pass2-390-evidence` and `pass2-390-roadmap` were taken before their fixes above.)
+
+## Pass 3 — 1440, 1024, 768, 390 (final)
+
+**Compared:** the full page again at all four widths against the reference, plus the header anchor behaviour
+(clicking "Evidence" lands the section under the floating pill with focus moved to it) and dark theme at 1440.
+
+**Biggest differences found, and what changed:**
+
+| Difference | Change |
+|---|---|
+| Header logo much smaller than the reference's wordmark | marketing header uses the large Baton logo |
+| The header stayed light-on-dark for a moment after the dark panel lifted off (its rounded, inset clip leaves the last pixels light) | the tone check ignores the panel's last 40 px |
+| 1024: evidence tiles were square and their text overflowed into the art | tiles are square only from 1280 px; below that they size to content with a minimum height |
+| Roadmap stage word sat at the numeral's edge, white on white | it sits inside the numeral's counter, in ink, bold |
+| 390: the second roadmap card still overlapped the first | phone wheel step 50° |
+| 1024: dark-band pills one per row | cluster at least 30rem wide (two per row where they fit) |
+| 390: the window's bar crowded three labels | the "CodeCell demo · fictional" corner label hides on phones (the hero caption already says so) |
+
+Final screenshots: `final-1440-*.png` (hero, intro, problem, receipt, steps, evidence, living, privacy, roadmap,
+nerds, outro, close), `final-1024-*.png` (hero, problem, receipt, steps, evidence, roadmap, close), `final-768-*.png`
+(hero, problem, steps, evidence, roadmap, close), `final-390-*.png` (hero, intro, problem, receipt, steps, evidence,
+roadmap, nerds, close). The 390 roadmap shot predates the 50° step.
+
+## Remaining differences vs the reference (deliberate or open)
+
+- Loopsii's hero mosaic tiles carry illustrated shapes and a coral logo disc; Baton's use the evidence palette and
+  glyphs, and the disc is ink with the Baton mark.
+- Loopsii's dark band is a blurred photograph; Baton's is a flat ink gradient (no imagery to borrow).
+- The "That's why" section's app window in Loopsii has its own tabbed product UI; Baton reuses its real chat →
+  handover preview, which is denser.
+- No cost grid, pricing, testimonials, waitlist form or cookie banner (they don't explain Baton).
+- At 1024 the dark-band pill cluster is narrower than the reference's.
+- The roadmap wheel is CSS rotation scrubbed by GSAP rather than the reference's canvas-like tick wheel; ticks are a
+  conic gradient.
+- The page is shorter than the reference (≈16,400 px vs ≈22,900 px at 1440) because four reference sections were
+  dropped.

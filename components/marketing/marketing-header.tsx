@@ -37,7 +37,7 @@ export function MarketingHeader() {
       </a>
       <div className="lp-nav__body">
         <Link href={routes.home} aria-label="Baton home" className="shrink-0 rounded-md outline-none focus-ring">
-          <BatonLogo />
+          <BatonLogo size="lg" />
         </Link>
         <nav aria-label="Main" className="lp-nav__links">
           {SECTIONS.map((s) => (

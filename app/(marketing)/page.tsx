@@ -331,7 +331,7 @@ export default function HomePage() {
               <div aria-hidden="true" className="lp-window__bar">
                 <span className="lp-mono text-muted-foreground">Fig. 1 · Chat → handover</span>
                 <span className="lp-hand hidden text-[1.5rem] md:inline">hover or tap a point ↓</span>
-                <span className="lp-mono text-muted-foreground">CodeCell demo · fictional</span>
+                <span className="lp-mono text-muted-foreground max-sm:hidden">CodeCell demo · fictional</span>
               </div>
               <EvidencePreview />
             </figure>

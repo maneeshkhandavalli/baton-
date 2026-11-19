@@ -807,7 +807,7 @@
     .lp-problem__pills {
       grid-column: 2;
       grid-row: 1;
-      max-width: calc(780 * var(--u));
+      max-width: max(30rem, calc(780 * var(--u)));
       gap: calc(10 * var(--u));
     }
   }
@@ -844,7 +844,7 @@
   }
   @media (min-width: 1024px) {
     .lp-q {
-      font-size: max(0.875rem, calc(21 * var(--u)));
+      font-size: max(0.8125rem, calc(21 * var(--u)));
     }
   }
   .lp-q[data-tone="reply"] {
@@ -1197,9 +1197,15 @@
   }
   @media (min-width: 1024px) {
     .lp-ftile {
+      min-height: calc(430 * var(--u));
+      padding: calc(24 * var(--u));
+    }
+  }
+  /* Square tiles as in the reference once there is room for the text. */
+  @media (min-width: 1280px) {
+    .lp-ftile {
       aspect-ratio: 1;
       min-height: 0;
-      padding: calc(24 * var(--u));
     }
   }
   .lp-ftile--ink {
@@ -1409,13 +1415,13 @@
   }
   .lp-rcard__word {
     position: absolute;
-    left: 0.3em;
-    top: 0.6em;
+    left: 26%;
+    top: 56%;
     translate: -50% -50%;
     font-size: 0.085em;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.04em;
-    color: var(--card);
+    color: #18181b;
   }
   .lp-rcard__tag {
     position: absolute;
@@ -1460,7 +1466,7 @@
   @media (max-width: 899px) {
     .lp .lp-roadmap.is-wheel .lp-wheel {
       --R: 165vw;
-      --step: 38deg;
+      --step: 50deg;
       top: 54svh;
     }
     .lp .lp-roadmap.is-wheel .lp-rcard__band {
