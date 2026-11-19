@@ -19,7 +19,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 import { loginPath } from "@/lib/supabase/redirects";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/handover", "/account"];
+const PROTECTED_PREFIXES = ["/dashboard", "/handover", "/account", "/connect"];
 const TOKEN_PREFIXES = ["/g/", "/h/"];
 const AUTH_CALLBACK = "/auth/callback";
 const DEMO_PREFIX = "/demo";
