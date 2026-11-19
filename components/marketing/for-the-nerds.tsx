@@ -3,7 +3,9 @@ import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * "For the nerds": how Baton is built, for technical readers. Every statement here mirrors the code:
+ * "For the nerds": how Baton is built, for technical readers (reference: the FAQ: handwritten label and heading on
+ * the left, large accordion rows on hairlines on the right, a + that turns into × as the row opens with a
+ * `grid-template-rows`-style height animation). Every statement here mirrors the code:
  *   pipeline stages      lib/pipeline/stages (parse → extract → verify-quotes → verify-support → prepare-review)
  *   quote check          lib/ai/quote-check.ts (normalised tier, grapheme boundaries, ≥ 12 chars and 3 words)
  *   support check        lib/pipeline/stages/verify-support.ts (claim + quote + ≤ 3 neighbours, never the rationale)
@@ -74,86 +76,73 @@ const STACK = ["Next.js 16", "Supabase Postgres, Auth, Storage", "Vercel", "Gemi
 
 export function ForTheNerds() {
   return (
-    <section id="for-the-nerds" aria-labelledby="nerds-title" className="bi-band">
-      <div className="bi-wrap py-20 sm:py-28">
-        <div className="reveal grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:items-end lg:gap-16">
-          <div>
-            <p className="bi-tag">For the nerds</p>
-            <h2 id="nerds-title" className="bi-h2 mt-4">
-              How Baton keeps <span className="text-[var(--highlight)]">AI honest</span>.
-            </h2>
-          </div>
-          <p className="bi-lede">Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.</p>
-        </div>
+    <section id="for-the-nerds" aria-labelledby="nerds-title" className="lp-faq">
+      <div className="min-w-0" data-reveal>
+        <p className="lp-hand">For the nerds</p>
+        <h2 id="nerds-title" className="lp-h2 mt-3 max-w-[12ch]">
+          How Baton keeps AI honest.
+        </h2>
+        <p className="lp-body mt-5 max-w-[44ch]">Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.</p>
 
-        <div className="mt-14 grid gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
-          {/* The pipeline, in order */}
-          <figure className="min-w-0">
-            <figcaption className="bi-mono text-xs text-muted-foreground">From upload to published handover</figcaption>
-            <ol className="reveal-group relative mt-5 space-y-1.5 before:absolute before:top-5 before:bottom-5 before:left-[1.1875rem] before:w-px before:bg-[var(--border-strong)]">
-              {FLOW.map((f, i) => (
-                <li key={f.step} className="relative grid grid-cols-[2.5rem_1fr] gap-x-4 [&>*]:min-w-0">
+        {/* The pipeline, in order */}
+        <figure className="mt-10 max-w-[34rem]">
+          <figcaption className="lp-mono text-muted-foreground">From upload to published handover</figcaption>
+          <ol className="mt-4">
+            {FLOW.map((f, i) => (
+              <li key={f.step} className="grid grid-cols-[2.25rem_1fr] gap-x-3 border-t border-border py-2.5 [&>*]:min-w-0">
+                <span className="bi-mono pt-0.5 text-xs text-muted-foreground tabular-nums">
+                  <span className="sr-only">Step </span>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <p className="text-sm">
+                  <span className="font-semibold">{f.step}</span>{" "}
                   <span
                     className={cn(
-                      "bi-mono relative grid size-10 place-items-center rounded-full border text-sm tabular-nums",
-                      f.where === "people" ? "border-transparent bg-[var(--highlight)] text-[var(--on-highlight)]" : "border-[var(--border-strong)] bg-[var(--inverse)] text-muted-foreground",
+                      "bi-mono ml-1 rounded-full border px-1.5 py-px text-[0.6875rem]",
+                      f.where === "people" ? "border-transparent bg-[var(--highlight)] text-[var(--on-highlight)]" : "border-border text-muted-foreground",
                     )}
                   >
-                    <span className="sr-only">Step </span>
-                    {String(i + 1).padStart(2, "0")}
+                    {f.where}
                   </span>
-                  <div className="pt-1.5 pb-3">
-                    <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <span className="bi-h3 text-[1.0625rem]">{f.step}</span>
-                      <span className={cn("bi-mono rounded-full border px-2 py-px text-[0.6875rem]", f.where === "people" ? "border-[var(--highlight)] text-[var(--highlight)]" : "border-border text-muted-foreground")}>
-                        {f.where}
-                      </span>
-                    </p>
-                    <p className="bi-body mt-1 text-sm">{f.body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </figure>
+                  <span className="mt-0.5 block text-muted-foreground">{f.body}</span>
+                </p>
+              </li>
+            ))}
+          </ol>
+        </figure>
 
-          {/* The details, collapsed by default */}
-          <div className="min-w-0">
-            <p className="bi-mono text-xs text-muted-foreground">The details, if you want them</p>
-            <div className="mt-5 border-b border-border">
-              {TOPICS.map((t) => (
-                <details key={t.title} className="bi-details group border-t border-border">
-                  <summary className="flex cursor-pointer items-start justify-between gap-4 rounded-sm py-4">
-                    <span className="min-w-0">
-                      <span className="bi-h3 block text-[1.0625rem]">{t.title}</span>
-                      <span className="bi-body mt-0.5 block text-sm">{t.summary}</span>
-                    </span>
-                    <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-border-strong text-muted-foreground transition-colors group-hover:text-foreground">
-                      <Plus aria-hidden="true" className="bi-details__icon size-3.5" />
-                    </span>
-                  </summary>
-                  <ul className="space-y-2.5 pb-5">
-                    {t.points.map((p) => (
-                      <li key={p} className="bi-body flex gap-3 text-sm">
-                        <span aria-hidden="true" className="bi-mono text-[var(--highlight)]">
-                          →
-                        </span>
-                        <span>{p}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <ul aria-label="Built with" className="mt-14 flex flex-wrap gap-2">
+        <ul aria-label="Built with" className="mt-8 flex flex-wrap gap-2">
           {STACK.map((s) => (
             <li key={s} className="bi-tag">
               {s}
             </li>
           ))}
         </ul>
+      </div>
+
+      {/* The details, collapsed by default */}
+      <div className="min-w-0 lg:pt-[calc(40*var(--u))]">
+        {TOPICS.map((t) => (
+          <details key={t.title} className="lp-acc group">
+            <summary>
+              <span className="min-w-0">
+                <span className="lp-h3 block text-[max(1.1875rem,calc(34*var(--u)))]">{t.title}</span>
+                <span className="lp-body mt-1 block">{t.summary}</span>
+              </span>
+              <Plus aria-hidden="true" strokeWidth={1.5} className="lp-acc__icon" />
+            </summary>
+            <ul className="space-y-2.5 pb-6">
+              {t.points.map((p) => (
+                <li key={p} className="lp-body flex gap-3 text-foreground">
+                  <span aria-hidden="true" className="bi-mono text-[var(--highlight-ink)]">
+                    →
+                  </span>
+                  <span>{p}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
       </div>
     </section>
   );

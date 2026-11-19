@@ -1,37 +1,55 @@
 import type { CSSProperties } from "react";
-import { Check, CircleHelp, Lock } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, CalendarClock, Check, Contact, Gavel, KeyRound, ListChecks, Lock, OctagonX, TriangleAlert, UserRound } from "lucide-react";
 
 import { ComingNext } from "@/components/marketing/coming-next";
 import { LandingCtas } from "@/components/marketing/cta";
 import { EvidencePreview } from "@/components/marketing/evidence-preview";
 import { ForTheNerds } from "@/components/marketing/for-the-nerds";
+import { HeroMosaic } from "@/components/marketing/hero-mosaic";
 import { HowItWorksSteps } from "@/components/marketing/how-it-works";
+import { LandingMotion } from "@/components/marketing/landing-motion";
 import { LivingHandover } from "@/components/marketing/living-handover";
+import { PixelField } from "@/components/marketing/pixel-field";
+import { RotatingWord } from "@/components/marketing/rotating-word";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { statusConfig } from "@/config/status";
+import { routes } from "@/lib/routes";
 import { EVIDENCE_STATUSES } from "@/types/status";
 
 /**
- * Landing page, identity preview ("Graphite & Highlighter", scoped to the marketing routes; see
- * docs/design/AI-SLOP-AUDIT.md), Round 4 redesign (docs/landing/loopsii-analysis.md): large tight type, soft round
- * surfaces, pill calls to action, a handwritten margin voice and short eased motion, all off under reduced motion.
- * The page shows the product instead of describing it: every illustration is a piece of Baton with the fictional
- * CodeCell demo data (lib/demo/scenario). Claims are the product's real behaviour; previews are labelled.
+ * Landing page, round 2 reconstruction of the Loopsii reference in Baton's identity
+ * (docs/landing/loopsii-reference-breakdown.md; styles in app/(marketing)/landing.css; scroll choreography in
+ * components/marketing/landing-motion.tsx, motion-allowed only). Section order follows the reference:
+ * hero mosaic → statement + orbit → dark pinned band → lime band with the product window → stacked step cards →
+ * stage tiles → split panels → roadmap wheel → FAQ → stair-stepped outro → closing card.
+ * Every illustration is a piece of Baton with the fictional CodeCell demo data (lib/demo/scenario). Claims are the
+ * product's real behaviour; connectors are "Early access", Ask the Handover is a "Preview".
  */
 
-/** Stagger index for the CSS entrance animations (.bi-rise, .bi-pop). */
-const stagger = (n: number) => ({ "--d": n }) as CSSProperties;
+/** What a handover carries (the categories Baton extracts): the orbit around the Baton disc. */
+const CARRIES = [
+  { label: "Decisions", Icon: Gavel, c: "var(--t-sky)", s: "rounded-[22%]", tilt: "-14deg" },
+  { label: "Owners", Icon: UserRound, c: "var(--t-lime)", s: "rounded-full", tilt: "0deg" },
+  { label: "Open tasks", Icon: ListChecks, c: "var(--t-stone)", s: "rounded-[22%]", tilt: "12deg" },
+  { label: "Deadlines", Icon: CalendarClock, c: "var(--t-apricot)", s: "rounded-[22%]", tilt: "-24deg" },
+  { label: "Blockers", Icon: OctagonX, c: "var(--t-mauve)", s: "rounded-full", tilt: "0deg" },
+  { label: "Risks", Icon: TriangleAlert, c: "var(--t-lime-2)", s: "rounded-[22%]", tilt: "18deg" },
+  { label: "Contacts", Icon: Contact, c: "var(--t-sky)", s: "rounded-full", tilt: "0deg" },
+  { label: "Account access", Icon: KeyRound, c: "var(--t-apricot)", s: "rounded-[22%]", tilt: "-10deg" },
+] as const;
 
-/** What a handover carries (the categories Baton extracts). */
-const CARRIES = ["Decisions", "Owners", "Open tasks", "Deadlines", "Blockers", "Risks", "Contacts", "Account access"] as const;
-
-/** Week-one questions from the fictional CodeCell club; each one is a point (or a gap) in the demo handover. */
+/** Week-one questions from the fictional CodeCell club; each is a point (or a gap) in the demo handover. */
 const WEEK_ONE = [
-  { who: "Neha", text: "who has the login for the codecell.dev domain??", r: "-4deg", reply: false },
-  { who: "Neha", text: "did we ever decide the workshop fee for non-members", r: "3deg", reply: false },
-  { who: "Neha", text: "is DevForge one day or two this time?", r: "-2deg", reply: false },
-  { who: "Kabir", text: "it's somewhere in the chat, scroll up", r: "4deg", reply: true },
-  { who: "Neha", text: "who even runs the discord server", r: "-3deg", reply: false },
+  { text: "who has the login for the codecell.dev domain??", tone: "faint" },
+  { text: "did we ever decide the workshop fee for non-members", tone: "plain" },
+  { text: "is DevForge one day or two this time?", tone: "plain" },
+  { text: "when does the domain renew?", tone: "plain" },
+  { text: "who's our contact at Orbitstack?", tone: "plain" },
+  { text: "it's somewhere in the chat, scroll up", tone: "reply" },
+  { text: "who even runs the discord server", tone: "plain" },
+  { text: "do we still need Desai sir's form in person?", tone: "plain" },
+  { text: "is the weekly meeting still thursday?", tone: "plain" },
+  { text: "where are the github recovery codes?", tone: "faint" },
 ] as const;
 
 /** What usually goes missing in a handover. */
@@ -44,21 +62,25 @@ const LOST = [
 /** What each label means, with one real point from the CodeCell demo. */
 const EVIDENCE = {
   sourced: {
+    tone: "var(--t-sky)",
     meaning: "A quote that exists word for word in the source, checked separately to make sure it backs the claim.",
     example: "DevForge 2027 runs on two days, daytime only",
     ref: "Priya Raman · 21 Aug 2026 · Core Team 26-27 · line 15",
   },
   inferred: {
+    tone: "var(--t-apricot)",
     meaning: "A reasonable reading with no quote that states it outright. A reviewer must confirm it before it's published.",
     example: "The weekly meeting is on Thursdays",
     ref: "3 messages mention it; none states it as a rule",
   },
   conflicting: {
+    tone: "var(--t-mauve)",
     meaning: "Sources disagree. Both sides stay visible, newest first, until a person records what's true now.",
     example: "Workshop fee for non-members",
     ref: "Priya, 4 Aug: ₹100 · Kabir, 18 Sep: free for everyone",
   },
   missing: {
+    tone: "var(--t-stone)",
     meaning: "Something a handover should cover that nobody wrote down. It becomes a Gap Interview question.",
     example: "Who runs the Discord server?",
     ref: "No source · sent to the Gap Interview",
@@ -67,10 +89,10 @@ const EVIDENCE = {
 
 /** Mirrors the publish readiness check (lib/contracts/dto.ts READINESS_BLOCKERS, the review gates). */
 const PUBLISH_GATES = [
-  "a point is still waiting for review",
-  "an inferred point is unconfirmed",
-  "a conflict is unresolved",
-  "a required gap question is unanswered",
+  { text: "a point is still waiting for review", tone: "var(--t-lime-3)" },
+  { text: "an inferred point is unconfirmed", tone: "var(--t-apricot)" },
+  { text: "a conflict is unresolved", tone: "var(--t-mauve)" },
+  { text: "a required gap question is unanswered", tone: "var(--t-stone)" },
 ] as const;
 
 const PRIVACY = [
@@ -85,86 +107,239 @@ const TRUST = [
   "Nothing is published until a person has reviewed it.",
 ] as const;
 
+/** Deterministic lime pixel backdrop for the receipt band (no randomness during render). */
+const LIME_PIXELS = Array.from({ length: 16 * 12 }, (_, i) => {
+  const v = (i * 2654435761) % 997;
+  return v % 5 === 0 ? "var(--t-lime-2)" : v % 7 === 0 ? "var(--t-lime-3)" : v % 11 === 0 ? "color-mix(in srgb, var(--t-lime) 70%, #ffffff)" : "transparent";
+});
+
+const tone = (c: string) => ({ "--c": c }) as CSSProperties;
+
 function Token({ children }: { children: string }) {
   return <span className="bi-mono rounded-md bg-[var(--highlight)] px-1.5 py-px text-[0.85em] text-[var(--on-highlight)]">{children}</span>;
 }
 
-/** Section opener: tag, heading and lede, the heading on the left and the lede on the right from lg up. */
-function SectionHead({ tag, id, title, lede }: { tag: string; id: string; title: React.ReactNode; lede: string }) {
+/** Bold black shapes at the foot of each stage tile (reference: the feature tiles' geometric art). */
+function TileArt({ kind }: { kind: string }) {
+  const disc = "h-full aspect-square rounded-full bg-[#18181b]";
+  if (kind === "sourced")
+    return (
+      <span aria-hidden="true" className="lp-ftile__art">
+        <span className={disc} />
+        <span className={disc} />
+        <span className="h-[62%] w-[22%] self-start rounded-full bg-[#18181b]" />
+      </span>
+    );
+  if (kind === "inferred")
+    return (
+      <span aria-hidden="true" className="lp-ftile__art">
+        <span className={disc} />
+        <span className={`${disc} opacity-55`} />
+        <span className={`${disc} opacity-25`} />
+      </span>
+    );
+  if (kind === "conflicting")
+    return (
+      <span aria-hidden="true" className="lp-ftile__art gap-[8%]">
+        <span className="aspect-[1/2] h-full rounded-l-full bg-[#18181b]" />
+        <span className="aspect-[1/2] h-full rounded-r-full bg-[#18181b]" />
+      </span>
+    );
+  if (kind === "missing")
+    return (
+      <span aria-hidden="true" className="lp-ftile__art">
+        <span className="h-full aspect-square rounded-full border-[3px] border-dashed border-[#18181b]" />
+      </span>
+    );
   return (
-    <div className="reveal grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:items-end lg:gap-16">
-      <div>
-        <p className="bi-tag">{tag}</p>
-        <h2 id={id} className="bi-h2 mt-4">
-          {title}
-        </h2>
-      </div>
-      <p className="bi-lede">{lede}</p>
-    </div>
+    <span aria-hidden="true" className="lp-ftile__art">
+      <span className="h-[80%] aspect-square rounded-full border-[6px] border-[#18181b]" />
+    </span>
   );
 }
 
 export default function HomePage() {
   return (
-    <>
-      {/* ── Hero: a message becomes a checked point ─────────── */}
-      <section aria-labelledby="hero-title" className="pt-10 pb-12 sm:pt-16 sm:pb-16">
-        <div className="bi-wrap relative">
-          <p className="bi-tag bi-rise" style={stagger(0)}>
-            <span className="sm:hidden">For clubs, project teams and volunteers</span>
-            <span className="hidden sm:inline">Handovers for student clubs, project teams and volunteer groups</span>
-          </p>
-          <h1 id="hero-title" className="bi-display bi-rise mt-6 max-w-[15ch]" style={stagger(1)}>
-            Hand over a project without losing <span className="bi-swipe">what matters</span>.
-          </h1>
+    <div className="lp">
+      <LandingMotion />
 
-          {/* A receipt, pinned beside the headline (wide screens only; the same point is in the preview below). */}
-          <div aria-hidden="true" className="bi-pop absolute top-16 right-0 hidden w-64 xl:block" style={stagger(6)}>
-            <div className="bi-card bi-sticker p-4 shadow-raised [--r:4deg]">
-              <StatusBadge status="sourced" size="sm" />
-              <p className="mt-2 text-sm font-semibold">GitHub organisation owners</p>
-              <p className="bi-ref mt-1">↳ Priya · 2 Nov · line 41</p>
-            </div>
-            <p className="bi-hand mt-3 rotate-[-4deg] pl-6">every point has a receipt</p>
-          </div>
-
-          <div className="mt-8 grid gap-8 lg:mt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end lg:gap-16">
-            <p className="bi-lede bi-rise max-w-[46ch]" style={stagger(2)}>
-              Baton turns a team&rsquo;s WhatsApp chats and documents into a handover for the next person, where every decision, owner, task and risk
-              links back to the message it came from.
-            </p>
-            <div className="bi-rise" style={stagger(3)}>
-              <LandingCtas />
-              <p className="mt-3 text-caption text-muted-foreground">The demo is a fictional college coding club. No sign-in needed.</p>
+      <div className="lp-loop" data-loop>
+        {/* ── 1 · Hero ─────────────────────────────── */}
+        <section data-hero aria-labelledby="hero-title" className="lp-hero">
+          <div className="lp-wrap lp-hero__text">
+            <h1 id="hero-title" className="lp-display">
+              <span className="sr-only">Hand over a project without losing what matters.</span>
+              <span aria-hidden="true" data-hero-line className="lp-hero__line">
+                <span>Hand over a project</span>
+              </span>
+              <span aria-hidden="true" data-hero-line className="lp-hero__line">
+                <span>
+                  without losing <RotatingWord words={["what matters.", "decisions.", "owners.", "deadlines."]} />
+                </span>
+              </span>
+            </h1>
+            <div>
+              <p className="lp-lede max-w-[30ch]" data-hero-fade>
+                Baton turns a team&rsquo;s WhatsApp chats and documents into a handover for the next person, where every decision, owner, task and risk links
+                back to the message it came from.
+              </p>
+              <div data-hero-fade>
+                <LandingCtas className="lp-hero__ctas" />
+                <p className="mt-3 text-caption text-muted-foreground">The demo is a fictional college coding club. No sign-in needed.</p>
+              </div>
             </div>
           </div>
 
-          <ul aria-label="What a handover carries" className="mt-10 flex flex-wrap gap-2">
-            {CARRIES.map((c, i) => (
-              <li key={c} className="bi-pop rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium" style={stagger(i)}>
-                {c}
-              </li>
+          <div className="lp-frame">
+            <div aria-hidden="true" className="lp-frame__labels">
+              <span className="lp-mono">Sourced</span>
+              <span className="lp-mono">Inferred</span>
+            </div>
+            <HeroMosaic />
+            <div aria-hidden="true" className="lp-frame__labels lp-frame__labels--bottom">
+              <span className="lp-mono">Conflicting</span>
+              <span className="lp-mono">Missing</span>
+            </div>
+          </div>
+        </section>
+
+        {/* The Baton disc + the orbit of what a handover carries (sticky: rides from the hero into the intro). */}
+        <div aria-hidden="true" className="lp-stage">
+          <div className="lp-stage__center">
+            <div className="lp-orbit" data-orbit>
+              {CARRIES.map((c, i) => (
+                <span
+                  key={c.label}
+                  className={`lp-orbit__item ${c.s}`}
+                  style={{ "--c": c.c, "--a": `${(360 / CARRIES.length) * i}deg`, "--tilt": c.tilt } as CSSProperties}
+                >
+                  <c.Icon strokeWidth={2.25} />
+                </span>
+              ))}
+            </div>
+            <div className="lp-disc" data-disc>
+              <span className="lp-disc__mark">
+                <span className="bg-status-sourced" />
+                <span className="bg-status-inferred" />
+                <span className="bg-status-conflicting" />
+                <span className="bg-status-missing" />
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 2 · Intro: the statement ─────────────── */}
+        <section data-intro aria-labelledby="problem-title" className="lp-intro lp-graph">
+          <div className="lp-wrap lp-intro__head" data-intro-head data-reveal>
+            <p className="lp-hand">the problem</p>
+            <div>
+              <h2 id="problem-title" className="sr-only">
+                What leaves with the person who leaves.
+              </h2>
+              <p className="lp-statement max-w-[30ch]">
+                The next lead inherits months of group chat and a few half-finished documents. The answers are in there somewhere, scattered across replies.
+              </p>
+            </div>
+          </div>
+          <div className="lp-intro__side lp-wrap">
+            <p className="lp-lede">Baton pulls out what the next person needs:</p>
+            <ul aria-label="What a handover carries" className="lp-body mt-2 flex flex-wrap gap-x-2 text-foreground max-lg:justify-center">
+              {CARRIES.map((c, i) => (
+                <li key={c.label}>
+                  {c.label}
+                  {i < CARRIES.length - 1 ? "," : "."}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      {/* ── 3 · The problem: dark pinned band ─────── */}
+      <section data-problem aria-label="Questions a new lead asks in week one" className="lp-problem">
+        <div className="lp-problem__pin" data-header-tone="dark">
+          <div className="lp-problem__panel" data-problem-panel>
+            <div className="lp-problem__frame">
+              <span aria-hidden="true" className="lp-tick" style={{ left: 0, top: 0 }} />
+              <span aria-hidden="true" className="lp-tick" style={{ left: "100%", top: 0 }} />
+              <span aria-hidden="true" className="lp-tick" style={{ left: 0, top: "100%" }} />
+              <span aria-hidden="true" className="lp-tick" style={{ left: "100%", top: "100%" }} />
+              <div className="lp-problem__grid">
+                <p aria-hidden="true" className="lp-problem__a" data-problem-a>
+                  What leaves
+                  <br />
+                  with
+                </p>
+                <div className="lp-problem__pills">
+                  <span aria-hidden="true" className="lp-problem__paren" data-paren>
+                    (
+                  </span>
+                  <ul className="contents">
+                    {WEEK_ONE.map((m) => (
+                      <li key={m.text} data-q className="lp-q" data-tone={m.tone}>
+                        {m.text}
+                      </li>
+                    ))}
+                  </ul>
+                  <span aria-hidden="true" className="lp-problem__paren" data-paren>
+                    )
+                  </span>
+                </div>
+                <p aria-hidden="true" className="lp-problem__b" data-problem-b>
+                  the person
+                  <br />
+                  who leaves
+                </p>
+                <ul className="lp-problem__lost" data-lost aria-label="What usually goes missing">
+                  {LOST.map((l) => (
+                    <li key={l.title}>
+                      <strong>{l.title}</strong>
+                      {l.body}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 4 · Every point has a receipt: lime band + product window ─ */}
+      <section data-receipt aria-labelledby="receipt-title" className="lp-receipt">
+        <div className="lp-receipt__sticky">
+          <div aria-hidden="true" className="lp-pixels">
+            {LIME_PIXELS.map((c, i) => (
+              <span key={i} style={{ "--px": c } as CSSProperties} />
             ))}
-          </ul>
+          </div>
+          <h2 id="receipt-title" data-receipt-title className="lp-h2 lp-receipt__title">
+            Every point has a receipt.
+          </h2>
         </div>
-
-        <div className="bi-wide bi-rise mt-12 sm:mt-16" style={stagger(5)}>
-          <div className="bi-blueprint px-2 pt-3 pb-2 sm:px-6 sm:pt-5 sm:pb-6 lg:px-10 lg:pb-10">
-            <div aria-hidden="true" className="flex items-baseline justify-between gap-4 px-2 pb-3 sm:px-0">
-              <span className="bi-corner">Fig. 1 · Chat → handover</span>
-              <span className="bi-corner hidden sm:inline">CodeCell demo · fictional</span>
+        <div className="lp-receipt__body">
+          <div className="lp-window-wrap">
+            <div aria-hidden="true" className="lp-window-fan max-lg:hidden" data-fan>
+              <span style={tone("var(--t-sky)")} />
+              <span style={tone("var(--t-mauve)")} />
+              <span style={tone("var(--t-apricot)")} />
             </div>
-            <div aria-hidden="true" className="hidden pb-3 lg:grid lg:grid-cols-[1.05fr_1fr]">
-              <p className="bi-hand rotate-[-2deg]">the exact line it came from ↓</p>
-              <p className="bi-hand rotate-[2deg] pl-5">hover or tap a point ↓</p>
+            <div aria-hidden="true" className="lp-window-fan lp-window-fan--low max-lg:hidden">
+              <span style={tone("var(--t-stone)")} />
+              <span style={tone("var(--t-apricot)")} />
             </div>
-            <p aria-hidden="true" className="bi-hand rotate-[-2deg] px-2 pb-3 lg:hidden">
-              tap a point to see its source ↓
-            </p>
-            <EvidencePreview />
+            <figure className="lp-window" data-window aria-label="Example: a chat and the handover Baton drafts from it">
+              <div aria-hidden="true" className="lp-window__bar">
+                <span className="lp-mono text-muted-foreground">Fig. 1 · Chat → handover</span>
+                <span className="lp-hand hidden text-[1.5rem] md:inline">hover or tap a point ↓</span>
+                <span className="lp-mono text-muted-foreground">CodeCell demo · fictional</span>
+              </div>
+              <EvidencePreview />
+            </figure>
           </div>
         </div>
-        <ul className="bi-wrap mt-8 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3 sm:gap-6">
+      </section>
+      <div className="lp-receipt__after">
+        <ul className="mx-auto grid max-w-[calc(1400*var(--u))] gap-3 text-sm text-muted-foreground max-lg:max-w-[44rem] sm:grid-cols-3 sm:gap-6">
           {TRUST.map((t) => (
             <li key={t} className="flex items-start gap-2.5">
               <span aria-hidden="true" className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[var(--highlight)] text-[var(--on-highlight)]">
@@ -174,185 +349,182 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
-      </section>
-
-      {/* ── The problem ──────────────────────────────────── */}
-      <section aria-labelledby="problem-title" className="py-16 sm:py-24">
-        <div className="bi-wrap">
-          <div className="grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:gap-16">
-            <div className="reveal">
-              <p className="bi-tag">The problem</p>
-              <h2 id="problem-title" className="bi-h2 mt-4 max-w-[14ch]">
-                What leaves with the person who leaves.
-              </h2>
-              <p className="bi-lede mt-5 max-w-[44ch]">
-                The next lead inherits months of group chat and a few half-finished documents. The answers are in there somewhere, scattered across
-                replies.
-              </p>
-            </div>
-            <figure className="bi-stage reveal px-4 py-8 sm:px-8 sm:py-10">
-              <figcaption className="bi-hand rotate-[-2deg]">week one, in the new lead&rsquo;s DMs</figcaption>
-              <ul aria-label="Questions a new lead asks in week one" className="mt-5 flex flex-col gap-3">
-                {WEEK_ONE.map((m) => (
-                  <li
-                    key={m.text}
-                    className={`bi-sticker w-fit max-w-[85%] rounded-2xl px-4 py-3 text-[0.9375rem] leading-snug shadow-soft odd:self-start even:self-end sm:max-w-[20rem] ${
-                      m.reply ? "rounded-br-md bg-[var(--highlight)] text-[var(--on-highlight)]" : "rounded-bl-md bg-card"
-                    }`}
-                    style={{ "--r": m.r } as CSSProperties}
-                  >
-                    <span className="bi-mono block text-xs opacity-70">{m.who}</span>
-                    {m.text}
-                  </li>
-                ))}
-              </ul>
-            </figure>
+        <div className="lp-framed-cta">
+          <div>
+            <Link href={routes.handover.new} className="lp-cta">
+              <span aria-hidden="true" className="lp-cta__disc">
+                <ArrowUpRight className="size-4" />
+              </span>
+              <span className="lp-cta__label">Start a handover</span>
+            </Link>
           </div>
-
-          <ul className="reveal-group mt-14 grid gap-5 sm:grid-cols-3 lg:gap-6">
-            {LOST.map((l, i) => (
-              <li key={l.title} className="bi-card p-6">
-                <span className="bi-mono text-xs text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
-                <h3 className="bi-h3 mt-3 text-[1.25rem]">{l.title}</h3>
-                <p className="bi-body mt-2">{l.body}</p>
-              </li>
-            ))}
-          </ul>
         </div>
+      </div>
+
+      {/* ── 5 · How it works: stacked cards ───────── */}
+      <section id="how-it-works" aria-labelledby="how-title" className="lp-steps">
+        <div className="lp-steps__head" data-reveal>
+          <p className="lp-hand">how it works</p>
+          <h2 id="how-title" className="lp-h2 mx-auto mt-3 max-w-[18ch]">
+            From the team chat to a handover, in four steps.
+          </h2>
+        </div>
+        <HowItWorksSteps />
       </section>
 
-      {/* ── How it works ─────────────────────────────────── */}
-      <section id="how-it-works" aria-labelledby="how-title" className="py-16 sm:py-24">
-        <div className="bi-wrap">
-          <SectionHead
-            tag="How it works"
-            id="how-title"
-            title="From the team chat to a handover, in four steps."
-            lede="Baton pulls out what the next person needs: decisions, owners, open tasks, deadlines, blockers, risks, contacts and account access."
-          />
-          <HowItWorksSteps />
+      {/* ── 6 · Evidence: stage tiles ─────────────── */}
+      <section id="evidence" aria-labelledby="evidence-title" className="lp-features lp-wrap">
+        <div data-reveal>
+          <p className="lp-hand">evidence</p>
+          <h2 id="evidence-title" className="lp-h2 mt-3 max-w-[16ch]">
+            Every point says how sure you can be.
+          </h2>
         </div>
-      </section>
 
-      {/* ── Evidence ─────────────────────────────────────── */}
-      <section id="evidence" aria-labelledby="evidence-title" className="py-16 sm:py-24">
-        <div className="bi-wrap">
-          <SectionHead
-            tag="Evidence"
-            id="evidence-title"
-            title={
-              <>
-                Every point says how <span className="bi-swipe">sure</span> you can be.
-              </>
-            }
-            lede="Baton never presents a guess as a fact. Each point carries one of four labels, worked out from the evidence rather than set by hand."
-          />
-
-          <dl className="reveal-group mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+        <div className="lp-stage-group">
+          <div className="lp-stage-group__head">
+            <span className="lp-pill-tag">Labels</span>
+            <h3 className="lp-h3 mt-4 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">Four labels, worked out from the evidence.</h3>
+            <p className="lp-body mt-3 max-w-[36ch]">
+              Baton never presents a guess as a fact. Each point carries one of four labels, worked out from the evidence rather than set by hand.
+            </p>
+          </div>
+          <dl className="lp-tiles">
             {EVIDENCE_STATUSES.map((s) => (
-              <div key={s} className="bi-card bi-lift flex min-w-0 flex-col p-5 sm:p-6">
-                <dt>
-                  <StatusBadge status={s} />
-                  <span className="sr-only"> {statusConfig[s].description}</span>
+              <div key={s} className="lp-ftile" style={tone(EVIDENCE[s].tone)}>
+                <dt className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="lp-ftile__title capitalize">{s}</span>
+                  <StatusBadge status={s} size="sm" />
                 </dt>
-                <dd className="bi-body mt-4 mb-5 text-sm">{EVIDENCE[s].meaning}</dd>
-                <dd className="bi-inset mt-auto p-4">
-                  <p className="flex items-start gap-2 text-sm font-semibold">
-                    {s === "missing" ? <CircleHelp aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-missing" /> : null}
-                    {EVIDENCE[s].example}
-                  </p>
-                  <p className="bi-ref mt-1.5">↳ {EVIDENCE[s].ref}</p>
+                <dd className="lp-ftile__body">{EVIDENCE[s].meaning}</dd>
+                <dd className="lp-ftile__ref">
+                  <span className="font-semibold">{EVIDENCE[s].example}</span>
+                  <br />↳ {EVIDENCE[s].ref}
                 </dd>
+                <TileArt kind={s} />
               </div>
             ))}
           </dl>
+        </div>
 
-          <div className="bi-stage reveal mt-6 grid gap-8 p-6 sm:p-10 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:gap-16">
-            <div>
-              <h3 className="bi-h3 text-[1.5rem]">Sign-off</h3>
-              <p className="bi-body mt-2 max-w-[42ch]">A person signs off before anything is published. Publishing stays locked while:</p>
-            </div>
-            <div className="bi-card p-5 shadow-soft sm:p-6">
-              <ul className="space-y-2.5">
-                {PUBLISH_GATES.map((g) => (
-                  <li key={g} className="flex items-baseline gap-3 text-sm">
-                    <span aria-hidden="true" className="inline-block size-3 shrink-0 translate-y-px rounded-full border-2 border-warning" />
-                    <span className="first-letter:uppercase">{g}</span>
-                  </li>
-                ))}
-              </ul>
-              <p aria-hidden="true" className="mt-5 inline-flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground">
-                <Lock className="size-3.5" />
-                Publish handover
-              </p>
-            </div>
+        <div className="lp-stage-group">
+          <div className="lp-stage-group__head">
+            <span className="lp-pill-tag">Sign-off</span>
+            <h3 className="lp-h3 mt-4 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">A person signs off before anything is published.</h3>
+            <p className="lp-body mt-3 max-w-[36ch]">Publishing stays locked while:</p>
           </div>
+          <ul className="lp-tiles">
+            {PUBLISH_GATES.map((g) => (
+              <li key={g.text} className="lp-ftile" style={tone(g.tone)}>
+                <span className="lp-ftile__title first-letter:uppercase">{g.text}</span>
+                <TileArt kind="gate" />
+              </li>
+            ))}
+            <li aria-hidden="true" className="lp-ftile lp-ftile--ink">
+              <span className="lp-ftile__title">Publish handover</span>
+              <span className="lp-hand mt-2 text-[var(--t-lime)]">locked until all four clear</span>
+              <span className="lp-ftile__art">
+                <Lock className="h-full w-auto" strokeWidth={1.75} />
+              </span>
+            </li>
+          </ul>
         </div>
       </section>
 
       <LivingHandover />
 
-      {/* ── Privacy ──────────────────────────────────────── */}
-      <section id="privacy" aria-labelledby="privacy-title" className="py-16 sm:py-24">
-        <div className="bi-wrap grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-          <div className="reveal">
-            <p className="bi-tag">Privacy</p>
-            <h2 id="privacy-title" className="bi-h2 mt-4">
-              Built for group chats full of phone numbers.
-            </h2>
-            <p className="bi-lede mt-5">
-              Student and volunteer groups run on WhatsApp. Sharing those chats for a handover shouldn&rsquo;t mean sharing everyone&rsquo;s details. You confirm
-              the group was told, and anyone can ask to be left out.
-            </p>
-            <dl className="mt-10 grid gap-6 sm:grid-cols-3 lg:grid-cols-1">
-              {PRIVACY.map((p) => (
-                <div key={p.title} className="border-t border-border pt-4">
-                  <dt className="bi-h3">{p.title}</dt>
-                  <dd className="bi-body mt-1">{p.body}</dd>
-                </div>
-              ))}
-            </dl>
+      {/* ── 7 · Privacy: split card + sky panel ───── */}
+      <section id="privacy" aria-labelledby="privacy-title" className="lp-split">
+        <div className="lp-split__card" data-reveal>
+          <p className="lp-hand">privacy</p>
+          <h2 id="privacy-title" className="lp-statement max-w-[16ch]">
+            Built for group chats full of phone numbers.
+          </h2>
+          <p className="lp-body max-w-[52ch]">
+            Student and volunteer groups run on WhatsApp. Sharing those chats for a handover shouldn&rsquo;t mean sharing everyone&rsquo;s details. You confirm the
+            group was told, and anyone can ask to be left out.
+          </p>
+          <dl className="lp-rows mt-auto">
+            {PRIVACY.map((p) => (
+              <div key={p.title}>
+                <dt className="lp-h3 text-[max(1.125rem,calc(28*var(--u)))]">{p.title}</dt>
+                <dd className="lp-body mt-1">{p.body}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <figure className="lp-split__panel flex flex-col gap-4 p-[calc(22*var(--u))] lg:p-[calc(46*var(--u))]" style={tone("var(--t-sky)")}>
+          <div aria-hidden="true" className="flex flex-wrap items-end gap-x-5 gap-y-2">
+            <span className="lp-big">[PHONE_1]</span>
+            <span className="lp-hand pb-2">masked before it&rsquo;s stored</span>
           </div>
-          <figure className="bi-stage reveal self-start p-3 sm:p-5">
-            <figcaption className="px-2 pt-1 pb-3 text-caption text-muted-foreground">One message from the fictional demo · Arjun Mehta · CodeCell Leads</figcaption>
+          <figcaption className="text-caption text-[#18181b]/75">One message from the fictional demo · Arjun Mehta · CodeCell Leads</figcaption>
+          <div className="mt-auto space-y-3">
             <div className="bi-card p-5 sm:p-6">
               <p className="bi-mono text-xs text-muted-foreground">As received</p>
               <p className="bi-mono mt-2 text-sm leading-relaxed text-muted-foreground">
                 our contact at orbitstack is farah khan, partnerships manager. <s>farah.khan@example.org</s>, office line <s>99999 00010</s>
               </p>
             </div>
-            <p aria-hidden="true" className="bi-hand rotate-[-2deg] px-3 py-3">
-              masked before it&rsquo;s stored ↓
-            </p>
-            <div className="bi-card p-5 shadow-soft sm:p-6">
+            <div className="bi-card p-5 shadow-raised sm:p-6">
               <p className="bi-mono text-xs text-muted-foreground">As stored, and the only version AI ever sees</p>
               <p className="bi-mono mt-2 text-sm leading-relaxed">
                 our contact at orbitstack is farah khan, partnerships manager. <Token>[EMAIL_1]</Token>, office line <Token>[PHONE_1]</Token>
               </p>
             </div>
-            <p className="px-2 pt-3 pb-1 text-caption text-muted-foreground">The original upload is deleted once processing succeeds.</p>
-          </figure>
-        </div>
+            <p className="text-caption text-[#18181b]/75">The original upload is deleted once processing succeeds.</p>
+          </div>
+        </figure>
       </section>
+
+      {/* ── 8 · Works today, early access, preview ── */}
+      <ComingNext />
 
       <ForTheNerds />
 
-      {/* ── Previews (not available yet) ─────────────────── */}
-      <ComingNext />
+      {/* ── 9 · Outro: stair-stepped words over the pixel field ── */}
+      <section data-outro aria-labelledby="cta-title" className="lp-outro">
+        <PixelField />
+        <h2 id="cta-title" className="lp-display lp-outro__words">
+          <span className="lp-outro__row">
+            <span data-outro-word style={{ "--lift": "0em" } as CSSProperties}>
+              The next person
+            </span>{" "}
+            <span data-outro-word style={{ "--lift": "0.85em" } as CSSProperties}>
+              shouldn&rsquo;t
+            </span>
+          </span>{" "}
+          <span className="lp-outro__row">
+            <span data-outro-word style={{ "--lift": "0.3em" } as CSSProperties}>
+              have to start
+            </span>{" "}
+            <span data-outro-word style={{ "--lift": "1.1em" } as CSSProperties}>
+              from scratch.
+            </span>
+          </span>
+        </h2>
+      </section>
 
-      {/* ── Closing: the page's one full-bleed colour moment ── */}
-      <section aria-labelledby="cta-title" className="bi-lime">
-        <div className="bi-wrap reveal grid gap-10 py-20 sm:py-28 lg:grid-cols-[1.3fr_1fr] lg:items-end lg:gap-16">
-          <h2 id="cta-title" className="bi-display max-w-[16ch] text-[clamp(2.4rem,1.4rem+3.6vw,5rem)]">
-            The next person shouldn&rsquo;t have to start from scratch.
-          </h2>
-          <div>
-            <p className="bi-body text-[1.0625rem]">See it working first: the CodeCell demo shows the review workspace and the handover the incoming lead receives.</p>
-            <LandingCtas demoLabel="Explore the CodeCell demo" className="mt-6" />
-            <p className="mt-3 text-caption text-muted-foreground">No sign-in for the demo · Fictional data only · Nothing is saved or sent</p>
+      {/* ── 10 · Closing card ─────────────────────── */}
+      <section aria-labelledby="close-title" className="lp-close">
+        <div className="lp-close__card">
+          <span aria-hidden="true" className="lp-close__frame">
+            <span className="lp-tick" style={{ left: 0, top: 0 }} />
+            <span className="lp-tick" style={{ left: "100%", top: 0 }} />
+            <span className="lp-tick" style={{ left: 0, top: "100%" }} />
+            <span className="lp-tick" style={{ left: "100%", top: "100%" }} />
+          </span>
+          <div className="relative flex flex-col items-center" data-reveal>
+            <h2 id="close-title" className="lp-h2 max-w-[12ch]">
+              See it working first.
+            </h2>
+            <p className="lp-hand mt-4">no sign-in for the demo</p>
+            <p className="lp-body mt-5 max-w-[40ch]">The CodeCell demo shows the review workspace and the handover the incoming lead receives.</p>
+            <LandingCtas demoLabel="Explore the CodeCell demo" className="mt-8 justify-center" />
+            <p className="mt-4 text-caption text-muted-foreground">Fictional data only · Nothing is saved or sent</p>
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }
