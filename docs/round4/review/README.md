@@ -41,8 +41,8 @@ there (live connector testing needs the isolated database, `docs/round4/setup/IS
 * `landing/final-*` match the current landing code (no landing change after `c2817d9`).
 * `app/*` were taken on synthetic `/preview/*` routes; the onboarding components are unchanged since, except the
   build fix that removed `usePathname` from the guidance provider (no visual change).
-* `connectors/*` predate `0e3836d`: the Slack card now also says "Public channels only…" and the `/handover` hint
-  appears for Slack only when its slash command is enabled. Retake when the browser extension is available.
+* `connectors/01…06` predate `0e3836d` (Slack wording); `connectors/07-slack-minimal-connect-1440.png` shows the
+  current Slack card. Browser-run evidence for the app journeys: `browser/VERIFICATION.md` and `browser/*.png`.
 
 ## Connector setup
 

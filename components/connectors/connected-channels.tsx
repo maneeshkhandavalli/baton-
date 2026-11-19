@@ -97,7 +97,9 @@ export function ConnectedChannels({ handoverId }: { handoverId: string }) {
 
   if (loadError) return <Alert tone="danger">{loadError}</Alert>;
   if (!view) return <p className="text-sm text-muted-foreground">Loading connected channels…</p>;
-  if (!view.canManage) return null;
+  // Not the creator: the server returns no providers. A server with no provider configured returns all four as "not
+  // set up" with canManage false; those cards are still shown (honest state, nothing to act on).
+  if (!view.canManage && view.providers.length === 0) return null;
 
   const api: PanelApi = { handoverId, busy, act, reload };
   return (

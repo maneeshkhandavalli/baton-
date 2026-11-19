@@ -24,6 +24,8 @@ the production build refuses it, see "Environment" below). Accounts: two fresh s
 | Incoming tour | 5 steps | "1 of 5" … "5 of 5", completes |
 | Role boundaries (incoming) | nav; direct URLs review, gaps, changes, processing, settings | only Published in the handover nav; Review/Processing/Changes show "… is for reviewers"; Settings read-only ("Only the creator can invite"). **Defect fixed** (`d9acd00`): Gaps showed an empty manager. |
 | Living Handover | Start a revision → New version (consent again) → Process the new version → Changes: 2 "possible contradictions" (fee reversal, domain move) → Correct the point ×2 (note required) → approve → Publish v2 | Version 2 published with both corrections; old wording gone. The new "book the auditorium" task was not flagged as new information (noted). |
+| Phone width (390) | incoming published page; creator review page | no page-level horizontal scroll (the section chip row scrolls on purpose) |
+| Missing provider configuration | creator Settings → Connected channels on a server without provider variables | "Not set up on this server" for all four. **Regression found and fixed** (`connected-channels.tsx`): the earlier canManage audit change had hidden these cards. |
 | Re-acknowledge | incoming reads v2 → tick → Acknowledge handover | "Acknowledged" |
 
 ## Environment findings
@@ -38,5 +40,7 @@ the production build refuses it, see "Environment" below). Accounts: two fresh s
 
 `landing-1440-01-hero.png`, `landing-1440-evidence.png` (before fix), `landing-390-scrolled-header.png` (before fix),
 `landing-1440-compact-header-fixed.png` (after), `app-creator-01-first-dashboard.png`,
-`app-creator-03-processing-complete.png`, `app-incoming-01-welcome.png`, `app-living-02-published-v2.png` (full page).
+`app-creator-03-processing-complete.png`, `app-incoming-01-welcome.png`, `app-living-02-published-v2.png` (full page),
+`app-incoming-390-published.png`, `app-creator-390-review.png`, `app-connectors-not-configured.png`; and
+`../connectors/connectors-07-slack-minimal-connect-1440.png` (current Slack wording, synthetic gallery).
 Reference screenshots of loopsii.com were taken for comparison but are not committed (third-party site).
