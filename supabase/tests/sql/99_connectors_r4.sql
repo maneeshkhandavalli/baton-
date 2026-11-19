@@ -63,13 +63,14 @@ begin
 end $$;
 
 -- ── 2. consent gate, buffer, edits ───────────────────────────────────────────
+-- Message times are in 2099: after consent, inside the open capture window (§9 tests the window boundaries).
 do $$
 declare
   v jsonb;
   v_link uuid := tests.id('link');
 begin
   perform tests.as_service();
-  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"1","sent_at":"2026-11-19T09:00:00Z","author_label":"Asha","kind":"text","text":"hi"}]');
+  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"1","sent_at":"2099-11-19T09:00:00Z","author_label":"Asha","kind":"text","text":"hi"}]');
   perform tests.eq(v ->> 'refused', 'true', 'nothing is buffered before consent');
   perform tests.eq(tests.buf_count(), 0, 'no rows before consent');
   perform tests.eq(jsonb_array_length(public.connector_capturing_links('slack', 'T1', 'C1')), 0, 'not capturing before consent');
@@ -83,16 +84,16 @@ begin
   perform tests.eq(jsonb_array_length(public.connector_capturing_links('slack', 'T1', 'C1')), 1, 'routing finds the capturing link');
   perform tests.eq(jsonb_array_length(public.connector_capturing_links('slack', 'T1', 'C-other')), 0, 'other channels are not routed');
 
-  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"1","sent_at":"2026-11-19T09:00:00Z","author_label":"Asha","kind":"text","text":"hi"},
-                                                  {"provider_message_id":"2","sent_at":"2026-11-19T09:01:00Z","author_label":"Ravi","kind":"text","text":"yo"}]');
+  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"1","sent_at":"2099-11-19T09:00:00Z","author_label":"Asha","kind":"text","text":"hi"},
+                                                  {"provider_message_id":"2","sent_at":"2099-11-19T09:01:00Z","author_label":"Ravi","kind":"text","text":"yo"}]');
   perform tests.eq(v ->> 'inserted', '2', 'two messages buffered');
-  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"1","sent_at":"2026-11-19T09:00:00Z","author_label":"Asha","kind":"text","text":"edited","edited_at":"2026-11-19T09:05:00Z"}]');
+  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"1","sent_at":"2099-11-19T09:00:00Z","author_label":"Asha","kind":"text","text":"edited","edited_at":"2099-11-19T09:05:00Z"}]');
   perform tests.eq(v ->> 'updated', '1', 'an edit replaces the buffered message');
   perform tests.eq(tests.buf_body('1'), 'edited', 'edited body kept');
 
   perform tests.throws(format($q$select public.connector_set_link_state('provider', null, %L, 'capturing')$q$, v_link), 'BTFB0', 'a provider cannot resume capture');
   perform tests.eq((public.connector_set_link_state('provider', null, v_link, 'paused')) ->> 'state', 'paused', 'a provider can pause');
-  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"3","sent_at":"2026-11-19T09:02:00Z","author_label":"Asha","kind":"text","text":"x"}]');
+  v := public.connector_buffer_messages(v_link, '[{"provider_message_id":"3","sent_at":"2099-11-19T09:02:00Z","author_label":"Asha","kind":"text","text":"x"}]');
   perform tests.eq(v ->> 'refused', 'true', 'a paused link stores nothing new');
   perform tests.eq((public.connector_set_link_state('user', tests.id('ann'), v_link, 'capturing')) ->> 'state', 'capturing', 'the creator resumes');
   perform tests.as_owner();
@@ -231,5 +232,104 @@ begin
   perform tests.ok(public.connector_actor_display_name(tests.id('mal')) is null, 'a deleted account is never named');
   perform tests.as_reader('ann');
   perform tests.throws(format($q$select public.connector_actor_display_name(%L)$q$, tests.id('ann')), '42501', 'browser sessions cannot call it');
+  perform tests.as_owner();
+end $$;
+
+-- ── 9. capture windows: the database enforces the consent boundary ───────────
+-- A message is stored only when its send time is inside an authorised window and an edit lies in the SAME window.
+-- Calls go straight to the functions (as the server does), so the app cannot be the only gate.
+create function tests.wbuf(p_link uuid, p_id text, p_sent text, p_edited text default null, p_text text default 'x') returns jsonb
+language sql as $$
+  select public.connector_buffer_messages(p_link, jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+    'provider_message_id', p_id, 'sent_at', p_sent, 'edited_at', p_edited, 'author_label', 'Asha', 'kind', 'text', 'text', p_text))))
+$$;
+grant execute on function tests.wbuf(uuid, text, text, text, text) to service_role;
+do $$
+declare
+  v_inst uuid;
+  v_link uuid;
+  v_link2 uuid;
+begin
+  perform tests.as_service();
+  v_inst := (public.connector_upsert_installation('user', tests.id('ann'), 'telegram', '-1009', 'Window QA', '{}', null) ->> 'id')::uuid;
+  v_link := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), '-1009', 'Window QA', '{}') ->> 'id')::uuid;
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link, 'connector-capture-v1');
+  perform tests.as_owner();
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link and closed_at is null), 1, 'consent opens exactly one window');
+  -- a fixed timeline: window A [08:00, 09:00), paused, window B [10:00, …)
+  delete from public.connector_capture_windows where link_id = v_link;
+  insert into public.connector_capture_windows (link_id, opened_at, closed_at)
+  values (v_link, '2030-01-01T08:00:00Z', '2030-01-01T09:00:00Z'), (v_link, '2030-01-01T10:00:00Z', null);
+
+  perform tests.as_service();
+  perform tests.eq(tests.wbuf(v_link, 'm0', '2030-01-01T07:59:59Z') ->> 'outside_window', '1', 'sent before consent → outside');
+  perform tests.eq(tests.wbuf(v_link, 'm1', '2030-01-01T08:00:00Z') ->> 'inserted', '1', 'sent at the opening second → inside');
+  perform tests.eq(tests.wbuf(v_link, 'm2', '2030-01-01T08:59:59Z') ->> 'inserted', '1', 'last second of window A → inside');
+  perform tests.eq(tests.wbuf(v_link, 'm3', '2030-01-01T09:00:00Z') ->> 'outside_window', '1', 'the pause second → outside');
+  perform tests.eq(tests.wbuf(v_link, 'm4', '2030-01-01T09:30:00Z') ->> 'outside_window', '1', 'sent during the pause → outside');
+  perform tests.eq(tests.wbuf(v_link, 'm4', '2030-01-01T09:30:00Z', '2030-01-01T10:30:00Z') ->> 'outside_window', '1',
+                   'sent during the pause, edited after resuming → outside');
+  perform tests.eq(tests.wbuf(v_link, 'm0', '2030-01-01T07:59:59Z', '2030-01-01T08:30:00Z') ->> 'outside_window', '1',
+                   'sent before consent, edited after consent → outside');
+
+  perform tests.eq(tests.wbuf(v_link, 'e1', '2030-01-01T08:30:00Z', null, 'valid') ->> 'inserted', '1', 'valid message in window A');
+  perform tests.eq(tests.wbuf(v_link, 'e1', '2030-01-01T08:30:00Z', '2030-01-01T09:30:00Z', 'edited while paused') ->> 'outside_window', '1',
+                   'an edit made during the pause is refused');
+  perform tests.eq(tests.wbuf(v_link, 'e1', '2030-01-01T08:30:00Z', '2030-01-01T10:30:00Z', 'edited in window B') ->> 'outside_window', '1',
+                   'an edit in a different window is refused');
+  perform tests.eq(tests.buf_body('e1'), 'valid', 'refused edits never overwrite the valid buffered body');
+  perform tests.eq(tests.wbuf(v_link, 'e1', '2030-01-01T08:30:00Z', '2030-01-01T08:45:00Z', 'edited in window A') ->> 'updated', '1',
+                   'an edit inside the same window updates');
+  perform tests.eq(tests.buf_body('e1'), 'edited in window A', 'same-window edit applied');
+
+  perform tests.eq(tests.wbuf(v_link, 'd1', '2030-01-01T08:40:00Z') ->> 'inserted', '1',
+                   'a delayed delivery from an earlier valid window is accepted while capturing');
+  perform tests.eq(tests.wbuf(v_link, 'b1', '2030-01-01T10:30:00Z') ->> 'inserted', '1', 'window B accepts new messages');
+  perform tests.eq(tests.wbuf(v_link, 'x1', 'not-a-time') ->> 'outside_window', '1', 'a malformed send time is refused, not an error');
+  perform tests.eq(tests.wbuf(v_link, 'x2', '2030-01-01T08:10:00Z', 'not-a-time') ->> 'outside_window', '1', 'a malformed edit time is refused');
+  perform tests.eq(tests.buf_count(v_link), 5, 'exactly the authorised rows exist');
+
+  -- pause closes, resume opens, disconnect closes (maintained by the functions themselves)
+  perform public.connector_set_link_state('user', tests.id('ann'), v_link, 'paused');
+  perform tests.as_owner();
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link and closed_at is null), 0, 'pause closes the window');
+  perform tests.as_service();
+  perform public.connector_set_link_state('user', tests.id('ann'), v_link, 'capturing');
+  perform tests.as_owner();
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link and closed_at is null), 1, 'resume opens a new window');
+  perform tests.as_service();
+  perform public.connector_revoke_link('user', tests.id('ann'), v_link, 'creator_unlinked');
+  perform tests.as_owner();
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link and closed_at is null), 0, 'disconnect closes the window');
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link), 3, 'window history is kept');
+
+  -- consented history days back-date only the first window
+  perform tests.as_service();
+  v_link2 := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), '-1010', 'History QA', '{}') ->> 'id')::uuid;
+  perform public.connector_update_link_settings('user', tests.id('ann'), v_link2, '{"historyDays": 7}');
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link2, 'connector-capture-v1');
+  perform tests.as_owner();
+  perform tests.ok((select opened_at from public.connector_capture_windows where link_id = v_link2) = now() - interval '7 days',
+                   'the first window starts at the consented history days');
+  perform tests.eq(public._connector_history_days('{"historyDays": 999}'), 30, 'history days are capped at 30');
+  perform tests.eq(public._connector_history_days('{"historyDays": "x"}'), 0, 'non-numeric history days count as 0');
+
+  -- backfill reconstructs windows from the audit log (consented → open, paused → close, resumed → open)
+  delete from public.connector_capture_windows where link_id = v_link2;
+  perform tests.ok(public._connector_backfill_capture_windows() >= 1, 'backfill processes links without windows');
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link2 and closed_at is null), 1, 'backfill reopens the capturing link');
+  perform tests.ok((select opened_at from public.connector_capture_windows where link_id = v_link2) = now() - interval '7 days',
+                   'backfill applies the consented history days from the audit time');
+end $$;
+
+-- ── 10. capture windows stay server-only ─────────────────────────────────────
+do $$
+begin
+  perform tests.as_reader('ann');
+  perform tests.throws('select * from public.connector_capture_windows', '42501', 'browser sessions cannot read capture windows');
+  perform tests.as_service();
+  perform tests.throws('select * from public.connector_capture_windows', '42501', 'service_role reads windows only through the functions');
+  perform tests.throws(format($q$select public._connector_open_capture_window(%L, now())$q$, gen_random_uuid()), '42501', 'internal window helpers are not callable');
+  perform tests.throws('select public._connector_backfill_capture_windows()', '42501', 'the backfill is not callable by API roles');
   perform tests.as_owner();
 end $$;

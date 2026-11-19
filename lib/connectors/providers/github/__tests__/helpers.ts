@@ -39,7 +39,8 @@ export const ENV: Record<string, string> = {
 export const sign = (body: string, secret = SECRETS.webhook) => "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
 
 export async function setupStore(opts: { consent?: boolean; settings?: Record<string, unknown> } = {}) {
-  const store = new MemoryConnectorStore(() => NOW);
+  // Consent recorded two hours before NOW: fixture items created at 09:00 are inside the capture window.
+  const store = new MemoryConnectorStore(() => NOW - 2 * 3600 * 1000);
   store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
   const user = { kind: "user", profileId: CREATOR } as const;
   const inst = await store.upsertInstallation(user, { provider: "github", externalAccountId: INSTALLATION_ID, accountLabel: "acme", scopes: ["issues", "metadata"], credentials: null });

@@ -29,7 +29,7 @@ function signed(body: string, opts: { ts?: string; secret?: string; form?: boole
 }
 
 const envelope = (eventId: string, event: Record<string, unknown>) => JSON.stringify({ type: "event_callback", team_id: TEAM, event_id: eventId, event });
-const msg = (over: Record<string, unknown> = {}) => ({ type: "message", channel: CH, user: "U0ASHA", text: "Sponsor call moved to Tuesday", ts: "1763546400.000100", ...over });
+const msg = (over: Record<string, unknown> = {}) => ({ type: "message", channel: CH, user: "U0ASHA", text: "Sponsor call moved to Tuesday", ts: "1795082400.000100", ...over });
 
 async function installSlack(deps: ReturnType<typeof makeDeps>["deps"], store: ReturnType<typeof makeDeps>["store"]) {
   const { sealCredentials } = await import("../../../secrets");
@@ -65,13 +65,13 @@ describe("slack event mapping", () => {
     assert.ok(p.kind === "event");
     if (p.kind === "event") {
       assert.equal(p.event.deliveryId, "Ev1");
-      assert.equal(p.pending[0].message.providerMessageId, "1763546400.000100");
+      assert.equal(p.pending[0].message.providerMessageId, "1795082400.000100");
       assert.equal(p.pending[0].message.replyToId, "1763546000.000001");
-      assert.equal(p.pending[0].message.sentAt, "2025-11-19T10:00:00.000Z");
+      assert.equal(p.pending[0].message.sentAt, "2026-11-19T10:00:00.000Z");
     }
-    const edit = parseSlackEnvelope(JSON.parse(envelope("Ev2", { type: "message", subtype: "message_changed", channel: CH, message: msg({ text: "Sponsor call moved to Wed", edited: { user: "U0ASHA", ts: "1763546460.000000" } }) })));
-    assert.ok(edit.kind === "event" && edit.pending[0].message.providerMessageId === "1763546400.000100" && edit.pending[0].message.editedAt === "2025-11-19T10:01:00.000Z");
-    const del = parseSlackEnvelope(JSON.parse(envelope("Ev3", { type: "message", subtype: "message_deleted", channel: CH, deleted_ts: "1763546400.000100", previous_message: msg() })));
+    const edit = parseSlackEnvelope(JSON.parse(envelope("Ev2", { type: "message", subtype: "message_changed", channel: CH, message: msg({ text: "Sponsor call moved to Wed", edited: { user: "U0ASHA", ts: "1795082460.000000" } }) })));
+    assert.ok(edit.kind === "event" && edit.pending[0].message.providerMessageId === "1795082400.000100" && edit.pending[0].message.editedAt === "2026-11-19T10:01:00.000Z");
+    const del = parseSlackEnvelope(JSON.parse(envelope("Ev3", { type: "message", subtype: "message_deleted", channel: CH, deleted_ts: "1795082400.000100", previous_message: msg() })));
     assert.ok(del.kind === "event" && del.pending[0].message.kind === "deleted");
     const file = parseSlackEnvelope(JSON.parse(envelope("Ev4", msg({ subtype: "file_share", text: "", files: [{ id: "F1" }] }))));
     assert.ok(file.kind === "event" && file.pending[0].message.kind === "media_omitted");
@@ -113,9 +113,9 @@ describe("slack ingest through the webhook", () => {
 
     await handleSlackWebhook(signed(envelope("Ev11", msg())), deps); // Slack retry
     assert.equal(store.events.filter((e) => e.deliveryId === "Ev11").length, 1);
-    await handleSlackWebhook(signed(envelope("Ev12", { type: "message", subtype: "message_changed", channel: CH, message: msg({ text: "edited", edited: { ts: "1763546460.000000" } }) })), deps);
+    await handleSlackWebhook(signed(envelope("Ev12", { type: "message", subtype: "message_changed", channel: CH, message: msg({ text: "edited", edited: { ts: "1795082460.000000" } }) })), deps);
     assert.deepEqual(store.bufferedFor(link.id).map((m) => m.text), ["edited"]);
-    await handleSlackWebhook(signed(envelope("Ev13", { type: "message", subtype: "message_deleted", channel: CH, deleted_ts: "1763546400.000100", previous_message: msg() })), deps);
+    await handleSlackWebhook(signed(envelope("Ev13", { type: "message", subtype: "message_deleted", channel: CH, deleted_ts: "1795082400.000100", previous_message: msg() })), deps);
     assert.deepEqual(store.bufferedFor(link.id).map((m) => m.kind), ["deleted"]);
   });
 
@@ -299,7 +299,7 @@ describe("slack adapter", () => {
     const { deps, store } = makeDeps();
     const { inst, link } = await installSlack(deps, store);
     deps.fetch = fakeFetch([
-      [`POST ${API}/conversations.history`, { json: { ok: true, messages: [msg({ ts: "1763546500.000000", text: "second" }), msg({ ts: "1763546400.000000", text: "first", user_profile: { display_name: "Asha" } }), msg({ bot_id: "B1", ts: "1763546450.0" })], has_more: false } }],
+      [`POST ${API}/conversations.history`, { json: { ok: true, messages: [msg({ ts: "1795082500.000000", text: "second" }), msg({ ts: "1795082400.000000", text: "first", user_profile: { display_name: "Asha" } }), msg({ bot_id: "B1", ts: "1795082450.0" })], has_more: false } }],
       [`POST ${API}/users.info`, { json: { ok: true, user: { profile: { display_name: "Asha" } } } }],
     ]).fetch;
     const out = await slackAdapter.fetchHistory!(deps, inst, link, "2025-11-01T00:00:00Z", 100);

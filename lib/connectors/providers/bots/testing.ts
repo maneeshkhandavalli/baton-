@@ -10,6 +10,8 @@ import { MemoryConnectorStore } from "../../store-memory";
 import type { ConnectorLogEntry, BotRouteDeps } from "./shared";
 
 export const NOW = Date.parse("2026-11-19T10:00:00Z");
+/** How long before NOW the in-memory store records consent (opens the capture window). */
+export const CONSENT_LEAD_MS = 2 * 3600 * 1000;
 export const CREATOR = "11111111-1111-4111-8111-111111111111";
 export const OTHER = "22222222-2222-4222-8222-222222222222";
 export const HANDOVER = "33333333-3333-4333-8333-333333333333";
@@ -66,7 +68,8 @@ export function fakeFetch(routes: Array<[string, FakeAnswer]>) {
 
 export function makeDeps(opts: { store?: MemoryConnectorStore; fetch?: typeof fetch; actor?: string | null; env?: Record<string, string | undefined>; now?: number } = {}) {
   const now = opts.now ?? NOW;
-  const store = opts.store ?? new MemoryConnectorStore(() => now);
+  // The store records consent two hours before NOW, so fixture messages from NOW-1h onwards are inside the capture window.
+  const store = opts.store ?? new MemoryConnectorStore(() => now - CONSENT_LEAD_MS);
   if (!store.handovers.has(HANDOVER)) store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
   const env = opts.env ?? { ...SYNTHETIC_ENV };
   const key = parseConnectorSecretKey(env.CONNECTOR_SECRET_KEY, env.CONNECTOR_SECRET_KEY_VERSION);

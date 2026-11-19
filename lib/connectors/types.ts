@@ -139,6 +139,8 @@ export const IGNORE_REASONS = [
   "unsupported_event",
   "bot_or_self_message",
   "empty",
+  /** every message was sent (or edited) outside an authorised capture window: before consent or while paused */
+  "outside_capture_window",
 ] as const;
 export type IgnoreReason = (typeof IGNORE_REASONS)[number];
 
@@ -172,6 +174,11 @@ export interface BufferResult {
   updated: number;
   /** true when the link was not capturing (consent withdrawn between routing and buffering): nothing stored. */
   refused: boolean;
+  /**
+   * Messages refused because their send time, or an edit time, is outside the link's authorised capture windows
+   * (before consent, during a pause, or an edit in a different window than the original). Never stored or applied.
+   */
+  outsideWindow: number;
 }
 
 export interface FlushBatch {

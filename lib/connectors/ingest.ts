@@ -142,6 +142,7 @@ async function route(store: ConnectorStore, event: NormalizedEvent, options: Ing
   let buffered = 0;
   let accepted = 0;
   let filteredOut = 0;
+  let outsideWindow = 0;
   for (const link of links) {
     const selected = options.filter ? options.filter(link, messages) : messages;
     if (selected.length === 0) {
@@ -151,10 +152,17 @@ async function route(store: ConnectorStore, event: NormalizedEvent, options: Ing
     if (link.bufferedCount + selected.length > CONNECTOR_MESSAGE_LIMITS.bufferedPerLink) return { status: "failed", code: "buffer_full" };
     const r = await store.bufferMessages(link.id, selected);
     if (r.refused) continue;
+    if (r.inserted + r.updated === 0 && r.outsideWindow > 0) {
+      outsideWindow += 1; // nothing authorised for this link (sent or edited outside its capture windows)
+      continue;
+    }
     accepted += 1;
     buffered += r.inserted + r.updated;
   }
-  if (accepted === 0) return { status: "ignored", reason: filteredOut === links.length ? "unsupported_event" : "no_capturing_link" };
+  if (accepted === 0) {
+    if (outsideWindow > 0) return { status: "ignored", reason: "outside_capture_window" };
+    return { status: "ignored", reason: filteredOut === links.length ? "unsupported_event" : "no_capturing_link" };
+  }
   return { status: "processed", buffered, links: accepted };
 }
 

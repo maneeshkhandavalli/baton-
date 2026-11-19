@@ -66,6 +66,11 @@ export class MemoryConnectorStore implements ConnectorStore {
   private readonly links = new Map<string, ChannelLinkRecord>();
   /** linkId → lease expiry (ms): a flush in progress (mirrors connector_channel_links.flush_lease_until). */
   private readonly flushLeases = new Map<string, number>();
+  /**
+   * linkId → authorised capture windows (ms), mirroring connector_capture_windows: opened at first consent (back-dated
+   * only by consented history days), at re-consent and resume; closed at pause and disconnect.
+   */
+  private readonly captureWindows = new Map<string, Array<{ openedAt: number; closedAt: number | null }>>();
   private readonly buffer: BufferRow[] = [];
   private seq = 0;
   private ids = 0;
@@ -219,7 +224,10 @@ export class MemoryConnectorStore implements ConnectorStore {
     if (!consentVersion) throw new ConnectorStoreError("validation_failed");
     const inst = this.installations.get(l.installationId);
     if (!inst || inst.status !== "active") throw new ConnectorStoreError("invalid_transition");
+    const first = l.consentedAt === null;
+    const wasCapturing = l.state === "capturing";
     Object.assign(l, { state: "capturing", consentVersion, consentedAt: this.iso(), consentedByProfileId: (actor as { profileId: string }).profileId, updatedAt: this.iso() });
+    if (!wasCapturing) this.openWindow(l.id, this.now() - (first ? historyDaysOf(l.settings) * 86_400_000 : 0));
     this.audit.push({ action: "connector.capture_consented", actor: this.actorKey(actor), entityId: l.id, handoverId: l.handoverId });
     return { ...l };
   }
@@ -234,6 +242,8 @@ export class MemoryConnectorStore implements ConnectorStore {
     }
     if (l.state !== state) {
       Object.assign(l, { state, updatedAt: this.iso() });
+      if (state === "paused") this.closeWindow(l.id, this.now());
+      else this.openWindow(l.id, this.now());
       this.audit.push({ action: `connector.capture_${state === "paused" ? "paused" : "resumed"}`, actor: this.actorKey(actor), entityId: l.id, handoverId: l.handoverId });
     }
     return { ...l };
@@ -242,6 +252,7 @@ export class MemoryConnectorStore implements ConnectorStore {
   private revokeLinkRow(l: ChannelLinkRecord, actor: ConnectorActor): void {
     for (let i = this.buffer.length - 1; i >= 0; i--) if (this.buffer[i].linkId === l.id) this.buffer.splice(i, 1);
     Object.assign(l, { state: "revoked", bufferedCount: 0, updatedAt: this.iso() });
+    this.closeWindow(l.id, this.now());
     this.audit.push({ action: "connector.channel_unlinked", actor: this.actorKey(actor), entityId: l.id, handoverId: l.handoverId });
   }
 
@@ -287,10 +298,17 @@ export class MemoryConnectorStore implements ConnectorStore {
   // ── buffer ──
   async bufferMessages(linkId: string, messages: readonly ConnectorMessage[]): Promise<BufferResult> {
     const l = this.requireLink(linkId);
-    if (l.state !== "capturing") return { inserted: 0, updated: 0, refused: true };
+    if (l.state !== "capturing") return { inserted: 0, updated: 0, refused: true, outsideWindow: 0 };
     let inserted = 0;
     let updated = 0;
+    let outsideWindow = 0;
     for (const m of messages) {
+      // Same rule as connector_buffer_messages: send time inside a window, an edit inside the SAME window.
+      const w = this.windowAt(linkId, m.sentAt);
+      if (w === -1 || (m.editedAt != null && this.windowAt(linkId, m.editedAt) !== w)) {
+        outsideWindow += 1;
+        continue;
+      }
       const existing = this.buffer.find((b) => b.linkId === linkId && b.providerMessageId === m.providerMessageId);
       if (existing) {
         Object.assign(existing, { ...m, bufferId: existing.bufferId, linkId, seq: existing.seq });
@@ -303,8 +321,33 @@ export class MemoryConnectorStore implements ConnectorStore {
       l.bufferedCount += 1;
       inserted += 1;
     }
-    l.lastEventAt = this.iso();
-    return { inserted, updated, refused: false };
+    if (inserted + updated > 0) l.lastEventAt = this.iso();
+    return { inserted, updated, refused: false, outsideWindow };
+  }
+
+  private openWindow(linkId: string, openedAt: number): void {
+    const list = this.captureWindows.get(linkId) ?? [];
+    if (list.some((w) => w.closedAt === null)) return;
+    list.push({ openedAt, closedAt: null });
+    this.captureWindows.set(linkId, list);
+  }
+
+  private closeWindow(linkId: string, closedAt: number): void {
+    for (const w of this.captureWindows.get(linkId) ?? []) if (w.closedAt === null) w.closedAt = Math.max(closedAt, w.openedAt);
+  }
+
+  /** Index of the window containing the time ([opened, closed) at second precision), or -1 (also for malformed times). */
+  private windowAt(linkId: string, iso: string | null | undefined): number {
+    if (typeof iso !== "string") return -1;
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return -1;
+    const sec = (ms: number) => Math.floor(ms / 1000) * 1000;
+    const list = this.captureWindows.get(linkId) ?? [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const w = list[i];
+      if (sec(w.openedAt) <= t && (w.closedAt === null || t < sec(w.closedAt))) return i;
+    }
+    return -1;
   }
 
   async linksDueForFlush(limit: number): Promise<string[]> {
@@ -362,4 +405,10 @@ export class MemoryConnectorStore implements ConnectorStore {
   bufferedFor(linkId: string): ConnectorMessage[] {
     return this.buffer.filter((b) => b.linkId === linkId).sort((a, b) => a.seq - b.seq).map(({ bufferId: _b, linkId: _l, seq: _s, ...m }) => (void _b, void _l, void _s, m));
   }
+}
+
+/** Consented history days from link settings (0–30), as public._connector_history_days. */
+function historyDaysOf(settings: Record<string, unknown> | null | undefined): number {
+  const v = settings?.historyDays;
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? Math.min(v, 30) : 0;
 }

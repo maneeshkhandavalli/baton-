@@ -192,7 +192,7 @@ describe("discord pullNew", () => {
     const { inst, link, user } = await installed(store);
     const consented = await store.recordCaptureConsent(user, link.id, "v1");
     const start = initialCursor(consented, NOW);
-    assert.equal(start, snowflakeForTime(NOW));
+    assert.equal(start, snowflakeForTime(Date.parse(consented.consentedAt!)));
     const base = BigInt(start);
     const f = fakeFetch([[`GET ${API}/channels/${CHANNEL}/messages?after=${start}&limit=100`, { json: [dmsg(base + BigInt(30)), dmsg(base + BigInt(20), { author: { id: "x", username: "b", bot: true } }), dmsg(base + BigInt(10))] }]]);
     deps.fetch = f.fetch;

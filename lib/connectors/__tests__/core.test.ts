@@ -23,7 +23,8 @@ const HANDOVER = "33333333-3333-4333-8333-333333333333";
 const msg = (id: string, at: string, author = "Asha", text = `message ${id}`): ConnectorMessage => ({ providerMessageId: id, sentAt: at, authorLabel: author, kind: "text", text });
 
 async function setup() {
-  const store = new MemoryConnectorStore(() => Date.parse("2026-11-19T10:00:00Z"));
+  // Consent is recorded at 08:00, before the 09:00–10:00 fixture messages (capture windows: messages must be sent after consent).
+  const store = new MemoryConnectorStore(() => Date.parse("2026-11-19T08:00:00Z"));
   store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
   const user = { kind: "user", profileId: CREATOR } as const;
   const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T1", accountLabel: "CodeCell", scopes: ["channels:history"], credentials: "c1.x.y.z" });
@@ -274,7 +275,7 @@ describe("scheduled sync: pull-based providers and flush", () => {
       provider: "slack" as const,
       async listChannels() { return []; },
       async describeChannel() { return null; },
-      async pullNew() { return { messages: [msg("old1", "2026-11-01T09:00:00.000Z")], cursor: "c1" }; },
+      async pullNew() { return { messages: [msg("old1", "2026-11-19T09:00:00.000Z")], cursor: "c1" }; },
     };
     assert.equal(await pullLink(store, adapter, {} as never, (await store.getLink(link.id))!), 1);
     assert.equal(store.bufferedFor(link.id).length, 1);

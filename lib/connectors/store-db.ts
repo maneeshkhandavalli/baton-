@@ -152,7 +152,7 @@ export function createDbConnectorStore(db: () => DbClient): ConnectorStore {
         provider_message_id: m.providerMessageId, sent_at: m.sentAt, author_label: m.authorLabel, kind: m.kind, text: m.text, reply_to_id: m.replyToId ?? null, edited_at: m.editedAt ?? null,
       }));
       const r = (await rpc(db(), "connector_buffer_messages", { p_link_id: linkId, p_messages: payload })) as Row;
-      return { inserted: Number(r.inserted ?? 0), updated: Number(r.updated ?? 0), refused: r.refused === true };
+      return { inserted: Number(r.inserted ?? 0), updated: Number(r.updated ?? 0), refused: r.refused === true, outsideWindow: Number(r.outside_window ?? 0) };
     },
     async linksDueForFlush(limit) {
       const r = await rpc(db(), "connector_links_due_for_flush", { p_limit: limit });
