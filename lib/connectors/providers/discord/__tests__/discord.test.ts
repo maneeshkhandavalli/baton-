@@ -117,7 +117,7 @@ describe("discord OAuth install and callback", () => {
 
   it("install refuses someone who is not the handover's creator", async () => {
     const res = await handleDiscordInstall(getRequest(`${SITE}/api/connectors/discord/install?handover=${HANDOVER}`), makeDeps({ actor: OTHER }).deps);
-    assert.equal(res.status, 403);
+    assert.equal(res.headers.get("location"), `${SITE}/handover/${HANDOVER}/settings?connector=discord&status=not_creator#connectors`);
   });
 
   const state = (over: Partial<{ profileId: string; exp: number; p: "discord" | "slack" }> = {}) =>
@@ -143,7 +143,7 @@ describe("discord OAuth install and callback", () => {
     const { deps, store } = makeDeps({ fetch: f.fetch });
     const res = await handleDiscordCallback(getRequest(`${SITE}/api/connectors/discord/callback?code=abc&guild_id=999999999999999999&state=${encodeURIComponent(state())}`), deps);
     assert.equal(res.status, 302);
-    assert.equal(res.headers.get("location"), `${SITE}/handover/${HANDOVER}/settings?connector=discord&installed=1#connectors`);
+    assert.equal(res.headers.get("location"), `${SITE}/handover/${HANDOVER}/settings?connector=discord&status=connected#connectors`);
     const token = f.calls[0];
     assert.match(token.body ?? "", /code=abc/);
     assert.match(token.body ?? "", /redirect_uri=https%3A%2F%2Fbaton.example.test%2Fapi%2Fconnectors%2Fdiscord%2Fcallback/);
@@ -158,7 +158,7 @@ describe("discord OAuth install and callback", () => {
     const f = fakeFetch([["POST https://discord.com/api/v10/oauth2/token", { status: 400, json: { error: "invalid_grant", error_description: "secret detail" } }]]);
     const { deps, logs } = makeDeps({ fetch: f.fetch });
     const res = await handleDiscordCallback(getRequest(`${SITE}/api/connectors/discord/callback?code=abc&state=${encodeURIComponent(state())}`), deps);
-    assert.match(res.headers.get("location") ?? "", /connectorError=provider_unauthorized/);
+    assert.match(res.headers.get("location") ?? "", /status=authorization_failed/);
     assert.doesNotMatch(JSON.stringify(logs), /secret detail|discord-synthetic/);
   });
 });

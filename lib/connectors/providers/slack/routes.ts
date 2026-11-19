@@ -48,13 +48,13 @@ export async function handleSlackCallback(request: Request, deps: BotRouteDeps):
   if (!check.ok) return check.response;
   if (!deps.secretKey) {
     logCode(deps, "slack", "oauth_callback", "secret_key_missing");
-    return redirectTo(deps.env, afterInstallPath("slack", check.handoverId, "provider_not_configured"));
+    return redirectTo(deps.env, afterInstallPath("slack", check.handoverId, "unavailable"));
   }
   try {
     const x = await exchangeSlackCode(deps, check.code, check.redirectUri);
     const sealed = sealCredentials(deps.secretKey, "slack", x.teamId, x.token);
     await deps.store.upsertInstallation({ kind: "user", profileId: check.profileId }, { provider: "slack", externalAccountId: x.teamId, accountLabel: x.teamName.slice(0, 120), scopes: x.scopes, credentials: sealed });
-    return redirectTo(deps.env, afterInstallPath("slack", check.handoverId, null));
+    return redirectTo(deps.env, afterInstallPath("slack", check.handoverId, "connected"));
   } catch (e) {
     const code = callbackErrorCode(e);
     logCode(deps, "slack", "oauth_callback", code);

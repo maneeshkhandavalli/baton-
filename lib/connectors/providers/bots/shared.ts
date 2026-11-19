@@ -100,7 +100,7 @@ export async function beginInstall(provider: BotProvider, request: Request, deps
       await deps.store.listLinksForHandover({ kind: "user", profileId: actor.profileId }, handoverId);
     } catch {
       logCode(deps, provider, "install", "not_creator");
-      return { ok: false, response: text("Only the handover's creator can connect channels.", 403) };
+      return { ok: false, response: redirectTo(deps.env, afterInstallPath(provider, handoverId, "not_creator")) };
     }
   }
   const state = signConnectorState(deps.env.CONNECTOR_STATE_SECRET ?? "", {
@@ -134,18 +134,29 @@ export async function checkCallback(provider: BotProvider, request: Request, dep
   const handoverId = check.payload.handoverId;
   if (url.searchParams.get("error")) {
     logCode(deps, provider, "oauth_callback", "denied");
-    return { ok: false, response: redirectTo(deps.env, afterInstallPath(provider, handoverId, "denied")) };
+    return { ok: false, response: redirectTo(deps.env, afterInstallPath(provider, handoverId, "authorization_failed")) };
   }
   const code = url.searchParams.get("code");
-  if (!code || code.length > 512) return { ok: false, response: redirectTo(deps.env, afterInstallPath(provider, handoverId, "invalid_code")) };
+  if (!code || code.length > 512) return { ok: false, response: redirectTo(deps.env, afterInstallPath(provider, handoverId, "invalid_request")) };
   return { ok: true, profileId: actor.profileId, handoverId, code, redirectUri: connectorUrls(provider, deps.env).callback };
 }
 
+/**
+ * Result codes on the redirect back to Baton (`?connector=<p>&status=<code>#connectors`), shared with the GitHub
+ * connector so the panel shows one readable message per code.
+ */
+export type InstallStatusCode =
+  | "connected"
+  | "invalid_request"
+  | "authorization_failed"
+  | "connected_by_someone_else"
+  | "not_creator"
+  | "rate_limited"
+  | "unavailable";
+
 /** Where a finished (or failed) install lands: the handover's Connected channels panel, or /connect. */
-export function afterInstallPath(provider: BotProvider, handoverId: string | null, error: string | null): string {
-  const q = new URLSearchParams({ connector: provider });
-  if (error) q.set("connectorError", error);
-  else q.set("installed", "1");
+export function afterInstallPath(provider: BotProvider, handoverId: string | null, status: InstallStatusCode): string {
+  const q = new URLSearchParams({ connector: provider, status });
   return handoverId ? `/handover/${encodeURIComponent(handoverId)}/settings?${q}#connectors` : `${connectorPaths.connect}?${q}`;
 }
 
@@ -153,10 +164,15 @@ export function loginRedirectPath(next: string): string {
   return loginPath(next);
 }
 
-/** Maps a provider failure during a callback to a short code for the redirect (never the provider's message). */
-export function callbackErrorCode(e: unknown): string {
-  if (e instanceof ConnectorStoreError && e.code === "conflict") return "installed_by_someone_else";
-  return e instanceof ProviderError ? `provider_${e.code}` : "internal";
+/** Maps a failure during a callback to a status code for the redirect (never the provider's message). */
+export function callbackErrorCode(e: unknown): InstallStatusCode {
+  if (e instanceof ConnectorStoreError) return e.code === "conflict" ? "connected_by_someone_else" : e.code === "forbidden" ? "not_creator" : "unavailable";
+  if (e instanceof ProviderError) {
+    if (e.code === "rate_limited") return "rate_limited";
+    if (e.code === "unavailable" || e.code === "not_configured") return "unavailable";
+    return "authorization_failed";
+  }
+  return "unavailable";
 }
 
 // ── Bot command (/handover) ─────────────────────────────────────────────────

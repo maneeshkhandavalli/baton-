@@ -65,7 +65,7 @@ export async function handleDiscordCallback(request: Request, deps: BotRouteDeps
       { kind: "user", profileId: check.profileId },
       { provider: "discord", externalAccountId: exchanged.guildId, accountLabel: (guildName ?? "Discord server").slice(0, 120), scopes: exchanged.scopes, credentials: null },
     );
-    return redirectTo(deps.env, afterInstallPath("discord", check.handoverId, null));
+    return redirectTo(deps.env, afterInstallPath("discord", check.handoverId, "connected"));
   } catch (e) {
     const code = callbackErrorCode(e);
     logCode(deps, "discord", "oauth_callback", code);

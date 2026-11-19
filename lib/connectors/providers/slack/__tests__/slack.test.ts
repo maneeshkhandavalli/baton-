@@ -154,7 +154,7 @@ describe("slack OAuth", () => {
     const f = fakeFetch([[`POST ${API}/oauth.v2.access`, { json: { ok: true, token_type: "bot", access_token: BOT_TOKEN, scope: "channels:history,chat:write", team: { id: TEAM, name: "CodeCell" }, bot_user_id: "U0BOT" } }]]);
     const { deps, store, logs } = makeDeps({ fetch: f.fetch });
     const res = await handleSlackCallback(cb(state()), deps);
-    assert.equal(res.headers.get("location"), `${SITE}/handover/${HANDOVER}/settings?connector=slack&installed=1#connectors`);
+    assert.equal(res.headers.get("location"), `${SITE}/handover/${HANDOVER}/settings?connector=slack&status=connected#connectors`);
     assert.match(f.calls[0].body ?? "", /client_secret=slack-synthetic-client-secret/);
     const inst = await store.findInstallation("slack", TEAM);
     assert.ok(inst?.hasCredentials);
@@ -170,14 +170,14 @@ describe("slack OAuth", () => {
     const { deps, store } = makeDeps({ fetch: f.fetch, actor: OTHER });
     await store.upsertInstallation({ kind: "user", profileId: CREATOR }, { provider: "slack", externalAccountId: TEAM, accountLabel: "CodeCell", scopes: [], credentials: null });
     const res = await handleSlackCallback(cb(state(OTHER)), deps);
-    assert.match(res.headers.get("location") ?? "", /connectorError=installed_by_someone_else/);
+    assert.match(res.headers.get("location") ?? "", /status=connected_by_someone_else/);
   });
 
   it("provider errors redirect with a code, never Slack's text or the token", async () => {
     const f = fakeFetch([[`POST ${API}/oauth.v2.access`, { json: { ok: false, error: "invalid_code" } }]]);
     const { deps } = makeDeps({ fetch: f.fetch });
     const res = await handleSlackCallback(cb(state()), deps);
-    assert.match(res.headers.get("location") ?? "", /connectorError=provider_invalid_response/);
+    assert.match(res.headers.get("location") ?? "", /status=authorization_failed/);
   });
 });
 
