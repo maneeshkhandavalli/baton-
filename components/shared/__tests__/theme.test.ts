@@ -96,7 +96,8 @@ describe("theme wiring", () => {
     for (const f of [
       "components/layout/app-sidebar.tsx", // workspace, desktop
       "components/layout/mobile-header.tsx", // workspace, below lg
-      "components/layout/site-header.tsx", // public pages
+      "components/layout/site-header.tsx", // public pages (shared header)
+      "components/marketing/marketing-header.tsx", // marketing routes
       "app/(auth)/layout.tsx", // login
       "components/layout/shared-link-shell.tsx", // token links
     ]) assert.match(read(f), /<ThemeToggle\b/, f);

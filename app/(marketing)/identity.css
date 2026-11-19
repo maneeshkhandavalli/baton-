@@ -305,6 +305,12 @@
 .bi-tag[data-tone="preview"] {
   border-style: dashed;
 }
+/* Built but not yet connected to live apps: dotted, so it reads as neither "Works today" nor "Preview". */
+.bi-tag[data-tone="early"] {
+  border-style: dotted;
+  border-width: 1.5px;
+  color: var(--foreground);
+}
 
 /* Handwritten margin notes. Short, never body copy; decorative copies are aria-hidden. */
 .bi-hand {

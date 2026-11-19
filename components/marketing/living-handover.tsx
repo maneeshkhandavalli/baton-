@@ -1,18 +1,21 @@
-import { ArrowRight, GitCompareArrows, Lock, RefreshCw } from "lucide-react";
+import { ArrowRight, GitCompareArrows, Lock } from "lucide-react";
+import type { CSSProperties } from "react";
 
-import { PreviewLabel } from "@/components/marketing/preview-label";
+import { EarlyAccessLabel } from "@/components/marketing/early-access-label";
 
 /**
- * Living Handovers: keeping a handover true after the person has left.
+ * Living Handovers: keeping a handover true after the person has left (reference: the split "folders" panel, a white
+ * card beside a colour panel of stacked folder tabs).
  *
- * Two halves, labelled differently on purpose:
+ * Labelled differently on purpose:
  *  - WORKS TODAY: source versions and change review (R3 Task 05B/05E: components/settings/source-version-upload.tsx,
  *    app/(workspace)/handover/[id]/changes). A newer export or document is compared with the previous version; each
  *    change waits for a reviewer, publishing waits until all are decided, and published snapshots are never touched.
  *    The change labels are the product's own (lib/contracts/change-review.ts changeReviewKindText).
- *  - PREVIEW: watching a connected chat after publishing. It does not exist yet, so it carries the Preview label and
- *    nothing in it is interactive.
- * Content is the fictional CodeCell scenario used by the demo.
+ *  - EARLY ACCESS: watching a connected channel after publishing. It depends on the GitHub, Discord, Telegram and
+ *    Slack connectors, which are built but not yet set up with real apps, so it is labelled Early access and nothing
+ *    here suggests a live sync.
+ * Content is the fictional CodeCell scenario used by the demo. Decorative tabs are aria-hidden.
  */
 
 const VERSIONS = [
@@ -26,9 +29,19 @@ const CHANGES = [
   { kind: "Quotation moved", point: "GitHub organisation owners", note: "Now in another message; the wording still matches" },
 ] as const;
 
+const TABS = [
+  { label: "v2 · 3 Dec", c: "var(--t-lime)", x: "62%" },
+  { label: "v1 · 12 Nov", c: "var(--t-sky)", x: "4%" },
+  { label: "Core Team", c: "var(--t-apricot)", x: "36%" },
+  { label: "Leads", c: "var(--t-mauve)", x: "66%" },
+  { label: "infra-notes", c: "var(--t-stone)", x: "8%" },
+  { label: "handbook", c: "var(--t-lime-3)", x: "40%" },
+  { label: "MoU", c: "var(--t-sky)", x: "70%" },
+] as const;
+
 function ChangesFragment() {
   return (
-    <figure aria-label="Example: the source changes Baton found in a newer chat export" className="bi-card overflow-hidden text-sm shadow-soft">
+    <figure aria-label="Example: the source changes Baton found in a newer chat export" className="bi-card overflow-hidden text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <p className="flex items-center gap-2 font-semibold">
           <GitCompareArrows aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -66,82 +79,51 @@ function ChangesFragment() {
   );
 }
 
-/** New messages after publishing are matched against the handover and flagged for a person to review. */
-function WatchingFragment() {
-  const rows = [
-    { tag: "Outdated", tone: "text-warning-fg", text: "Workshops are free for everyone", note: "Kabir, 3 Dec: “₹100 for non-members again from Jan”" },
-    { tag: "Owner changed", tone: "text-foreground", text: "Venue bookings: Rohan → Ananya", note: "Rohan, 28 Nov: “ananya takes over bookings”" },
-    { tag: "Done", tone: "text-success-fg", text: "Renew the codecell.dev domain", note: "Neha, 25 Nov: “renewed till 2027”" },
-    { tag: "Needs review", tone: "text-muted-foreground", text: "New sponsor contact at Orbitstack", note: "Mentioned once; not yet in the handover" },
-  ] as const;
-  return (
-    <figure aria-label="Living Handover: illustrative preview" className="bi-card overflow-hidden border-dashed text-sm">
-      <ul className="divide-y divide-border">
-        {rows.map((r) => (
-          <li key={r.text} className="grid gap-0.5 px-4 py-3 sm:grid-cols-[7rem_1fr] sm:gap-3">
-            <span className={`bi-mono text-xs ${r.tone}`}>{r.tag}</span>
-            <span className="min-w-0">
-              <span className="font-medium">{r.text}</span>
-              <span className="block truncate text-caption text-muted-foreground">{r.note}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </figure>
-  );
-}
-
 export function LivingHandover() {
   return (
-    <section id="living-handovers" aria-labelledby="living-title" className="py-16 sm:py-24">
-      <div className="bi-wrap">
-        <div className="reveal grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:items-end lg:gap-16">
+    <section id="living-handovers" aria-labelledby="living-title" className="lp-split">
+      <div className="lp-split__card" data-reveal>
+        <span className="bi-tag" data-tone="live">
+          Works today
+        </span>
+        <h2 id="living-title" className="lp-statement max-w-[16ch]">
+          A handover that keeps up with the team.
+        </h2>
+        <p className="lp-body max-w-[48ch]">
+          Projects keep moving after someone leaves. Baton keeps the handover honest as its sources change, and never edits it behind anyone&rsquo;s back.
+        </p>
+        <div className="mt-auto space-y-6">
           <div>
-            <p className="bi-tag">Living Handovers</p>
-            <h2 id="living-title" className="bi-h2 mt-4">
-              A handover that keeps up with the <span className="bi-swipe">team</span>.
-            </h2>
-          </div>
-          <p className="bi-lede">
-            Projects keep moving after someone leaves. Baton keeps the handover honest as its sources change, and never edits it behind anyone&rsquo;s back.
-          </p>
-        </div>
-
-        <div className="reveal-group mt-12 grid gap-5 lg:grid-cols-[1.15fr_1fr] lg:gap-6">
-          <article aria-labelledby="living-today" className="bi-stage flex flex-col gap-6 p-5 sm:p-8">
-            <div>
-              <span className="bi-tag" data-tone="live">
-                Works today
-              </span>
-              <h3 id="living-today" className="bi-h3 mt-4 text-[1.375rem]">
-                Upload a newer version of a source
-              </h3>
-              <p className="bi-body mt-2 max-w-[54ch]">
-                Add the latest export of a chat or a revised document. Baton compares it with the version before and lists what changed. Every change waits
-                for a reviewer&rsquo;s decision, publishing waits until each one is decided, and earlier published versions stay exactly as they were.
-              </p>
-            </div>
-            <ChangesFragment />
-            <p aria-hidden="true" className="bi-hand -mt-2 self-end rotate-[-3deg] pr-2">
-              nothing changes on its own ↑
+            <h3 className="lp-h3 text-[max(1.125rem,calc(30*var(--u)))]">Upload a newer version of a source</h3>
+            <p className="lp-body mt-2 max-w-[54ch]">
+              Add the latest export of a chat or a revised document. Baton compares it with the version before and lists what changed. Every change waits
+              for a reviewer&rsquo;s decision, publishing waits until each one is decided, and earlier published versions stay exactly as they were.
             </p>
-          </article>
+          </div>
+          <div className="border-t border-border pt-5">
+            <EarlyAccessLabel />
+            <p className="lp-body mt-3 max-w-[54ch]">
+              Watching a connected channel: after publishing, new messages from a connected GitHub, Discord, Telegram or Slack would be checked against the
+              handover, and outdated decisions, changed owners and finished tasks flagged for a person to confirm. The connectors are built but not yet set
+              up with real apps, so nothing syncs today.
+            </p>
+          </div>
+        </div>
+      </div>
 
-          <article aria-labelledby="living-next" className="bi-card flex flex-col gap-6 border-dashed border-border-strong bg-transparent p-5 sm:p-8">
-            <div>
-              <PreviewLabel />
-              <h3 id="living-next" className="bi-h3 mt-4 flex items-center gap-2 text-[1.375rem]">
-                <RefreshCw aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
-                Living Handover
-              </h3>
-              <p className="bi-body mt-2">
-                Next, the handover watches the chat for you. After publishing, new messages are checked against it. Outdated decisions, changed owners and
-                finished tasks are flagged for a person to confirm.
-              </p>
+      <div className="lp-split__panel" style={{ "--c": "var(--t-stone)" } as CSSProperties}>
+        <div aria-hidden="true" className="lp-folders" data-folders>
+          {TABS.map((t, i) => (
+            <div key={t.label} data-folder className="lp-folder" style={{ "--c": t.c, "--x": t.x, zIndex: i } as CSSProperties}>
+              <span className="lp-folder__tab">{t.label}</span>
             </div>
-            <WatchingFragment />
-            <p className="text-caption text-muted-foreground">An illustration with invented CodeCell content, not a feature you can use today.</p>
-          </article>
+          ))}
+        </div>
+        <div className="lp-split__float">
+          <ChangesFragment />
+          <p aria-hidden="true" className="lp-hand mt-4 justify-self-end rotate-[-3deg]">
+            nothing changes on its own ↑
+          </p>
         </div>
       </div>
     </section>
