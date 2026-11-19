@@ -18,8 +18,10 @@ function routes(dir: string): string[] {
 describe("connector GET routes run at request time", () => {
   const files = routes(ROOT.pathname.replace(/^\/([A-Za-z]:)/, "$1"));
   it("finds the install and callback routes", () => assert.ok(files.filter((f) => /install|callback/.test(f)).length >= 7));
-  for (const f of files.filter((f) => /[\/](install|callback)[\/]route\.ts$/.test(f))) {
-    it(f.split(/[\/]api[\/]/)[1], () => {
+  const targets = files.filter((f) => /[\\/](install|callback)[\\/]route\.ts$/.test(f));
+  it("checks every install and callback route", () => assert.equal(targets.length, 7));
+  for (const f of targets) {
+    it(f.split(/[\\/]api[\\/]/)[1], () => {
       const src = readFileSync(f, "utf8");
       assert.match(src, /export async function GET\([^)]*\)[^{]*\{\s*\n\s*await connection\(\);/);
     });
