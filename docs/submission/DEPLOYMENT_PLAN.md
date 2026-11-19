@@ -47,3 +47,31 @@ provider configured. The signed-in flow needs §1 AI + database.
 1. Option A, B or C. 2. AI: approve a billed Gemini key with `AI_DATA_GOVERNANCE=gemini-paid-dpa` (or accept that
 judges see the "No AI provider" state beyond the demo). 3. Whether connectors are part of the judged deployment or
 shown from the local live tests (recording/screenshots).
+
+## 6. Scheduler authentication (verified against the code)
+
+* `/api/pipeline/drain`: Vercel Cron sends `Authorization: Bearer $CRON_SECRET` automatically → works.
+* `/api/connectors/sync`: accepts only `CONNECTOR_SYNC_SECRET` (bearer) or a `connector_sync` dispatch header signed
+  with it; a CRON_SECRET bearer is refused (401, tested in `lib/connectors/__tests__/sync-auth.test.ts`). Use a GitHub
+  Actions `schedule` (minimum 5 min) with the secret stored as an Actions secret, sending
+  `curl -X POST -H "Authorization: Bearer $CONNECTOR_SYNC_SECRET" https://<domain>/api/connectors/sync`, or any
+  external cron that can send a header. Missing/short/reused secret → 503 naming the variable.
+
+## 7. Costs and billing (estimates; confirm on the providers' pricing pages before approving)
+
+| Item | Expected cost |
+|---|---|
+| Vercel Hobby | free (non-commercial use; function duration and invocation limits apply) |
+| Supabase free project | free (500 MB database, 1 GB storage; projects pause after a period of inactivity; max 2 free projects per org) |
+| Gemini API on a billed project | pay per token; a judging session of a few handovers is small, but set a **budget alert / quota cap** in Google Cloud before enabling |
+| ngrok (dev only) | free tier sufficient for local live tests |
+| Provider apps (GitHub, Slack, Discord, Telegram) | free |
+
+## 8. Backup and rollback
+
+* The judge project is new and holds only synthetic data: rollback = redeploy the previous Vercel deployment
+  (instant promote) or delete the project. No data migration from existing projects (none is planned).
+* Before any migration on a hosted project: Supabase dashboard backup / `pg_dump` of the schema; migrations are
+  forward-only — a failed push stops at the failing file inside its transaction.
+* Secrets are generated per environment; rotating = replace in Vercel and redeploy (connector tokens are sealed with
+  `CONNECTOR_SECRET_KEY`, so rotating it requires reconnecting providers).
