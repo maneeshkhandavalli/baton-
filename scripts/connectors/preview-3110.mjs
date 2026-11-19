@@ -23,6 +23,13 @@ if (file) {
 }
 const env = { ...process.env, ...extra, BATON_DEV_WORKER: "0" };
 if (!extra.BATON_SITE_URL) env.BATON_SITE_URL = "http://localhost:3110";
+// A tunnel origin (e.g. https://x.ngrok-free.app) must be allowed to load Next's dev assets (next.config.ts).
+try {
+  const siteHost = new URL(env.BATON_SITE_URL).hostname;
+  if (siteHost !== "localhost" && siteHost !== "127.0.0.1") env.BATON_DEV_ORIGINS = siteHost;
+} catch {
+  /* BATON_SITE_URL is validated by the app itself */
+}
 
 const host = (() => {
   try {
