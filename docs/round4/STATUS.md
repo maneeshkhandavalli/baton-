@@ -46,3 +46,25 @@ counter (`5a734ee`), incoming Gaps page (`d9acd00`). Environment: `BATON_SITE_UR
 * Capture notices name the person who connected / paused / stopped (Baton display name only) (`0196881`).
 * Living Handover "new task not flagged" (browser run): root cause was the built-in test adapter's keyword rules,
   not the detector; fixed and re-verified in the browser with version 3 (`e9d8b92`).
+
+## Live provider verification matrix (evidence only; updated 2026-11-19)
+
+| Verification | Telegram | Discord | Slack | GitHub |
+|---|---|---|---|---|
+| Code implemented | ✅ | ✅ | ✅ | ✅ |
+| Credentials configured | ❌ token missing (username + webhook secret set) | ❌ 4 values missing | ❌ 3 values missing | ❌ App not registered; webhook secret generated |
+| Provider app configured | ❌ owner: BotFather privacy/joins | ❌ owner: intent + redirects | ❌ owner: `slack.md` §3b | ❌ owner: register App |
+| Installation successful | ❌ | ❌ | ❌ | ❌ |
+| Consent verified | ❌ | ❌ | ❌ | ❌ |
+| Real event received | ❌ | ❌ | ❌ | ❌ |
+| Message persisted | ❌ | ❌ | ❌ | ❌ |
+| Correct handover updated | ❌ | ❌ | ❌ | ❌ |
+| Duplicate/retry tested | ❌ (synthetic tests only) | ❌ | ❌ | ❌ |
+| Disconnect tested | ❌ | ❌ | ❌ | ❌ |
+| Real AI processing verified | ❌ (test adapter only; billed key not approved) | ❌ | ❌ | ❌ |
+
+Ready on our side: isolated stack running; 3110 switched to it (`preview-3110.mjs`, Supabase 127.0.0.1:55321,
+verified: a new account exists only there); synthetic Telegram test handover "R4 Telegram QA treasurer" published
+(v1) on the isolated stack; credential checker `scripts/connectors/check-credentials.mjs`; ngrok policy prepared.
+Blocked on: ngrok token (the configured one is rejected, ERR_NGROK_105) and provider credentials
+(`setup/OWNER_INPUTS.md`).
