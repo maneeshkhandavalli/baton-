@@ -145,7 +145,7 @@ export const blockerLabel: Record<ReadinessBlocker, (n: number) => string> = {
   unconfirmed_inferred: (n) => `${n} inferred ${n === 1 ? "point needs" : "points need"} confirming`,
   unresolved_conflicts: (n) => `${n} ${n === 1 ? "conflict needs" : "conflicts need"} resolving`,
   open_required_gaps: (n) => `${n} required ${n === 1 ? "gap is" : "gaps are"} unanswered`,
-  no_incoming_recipient: () => "No incoming member has been invited",
+  no_incoming_recipient: () => "No incoming person invited yet: invite them in Settings",
   no_approved_points: () => "No points have been approved yet",
   privacy_review_required: (n) => `${n} ${n === 1 ? "point needs" : "points need"} a privacy review`,
   source_updates_pending: (n) => `${n} source ${n === 1 ? "update hasn't" : "updates haven't"} been processed and checked yet`,

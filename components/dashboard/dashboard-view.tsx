@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, FileUp, Inbox, MessageCircleQuestion, Scale, ShieldAlert, Sparkles, UsersRound } from "lucide-react";
+import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, FileUp, Inbox, MessageCircleQuestion, Scale, ShieldAlert, Sparkles, UserPlus, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -18,6 +18,7 @@ const KIND_ICON: Record<AttentionKind, typeof Scale> = {
   conflicts: Scale,
   review: FilePen,
   gaps: MessageCircleQuestion,
+  invite: UserPlus,
   publish: CheckCircle2,
   acknowledge: Inbox,
   privacy: ShieldAlert,
@@ -56,7 +57,7 @@ export function upNextItems(cards: readonly HandoverCardData[], limit = 3): UpNe
 function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
   if (!items.length) return null;
   return (
-    <section aria-labelledby="up-next" className="rounded-xl border border-border bg-card shadow-soft">
+    <section aria-labelledby="up-next" data-tour="up-next" className="rounded-xl border border-border bg-card shadow-soft">
       <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
         <h2 id="up-next" className="type-heading">
           Up next

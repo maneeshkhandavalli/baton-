@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BatonLogo } from "@/components/shared/baton-logo";
+import { HelpMenu } from "@/components/onboarding/help-menu";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { routes } from "@/lib/routes";
 
@@ -17,10 +18,13 @@ export function AppSidebar() {
         <Link href={routes.dashboard} aria-label="Baton dashboard" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40">
           <BatonLogo />
         </Link>
-        <ThemeToggle
-          size="icon-sm"
-          className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring/40"
-        />
+        <div className="flex items-center gap-0.5">
+          <HelpMenu className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
+          <ThemeToggle
+            size="icon-sm"
+            className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring/40"
+          />
+        </div>
       </div>
       <WorkspaceNavigation className="flex-1 px-3 pt-2 pb-4" />
     </aside>

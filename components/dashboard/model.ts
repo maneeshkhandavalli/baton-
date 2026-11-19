@@ -49,7 +49,7 @@ export const STAGES: readonly { id: Stage; label: string }[] = [
 
 export type Side = "preparing" | "receiving";
 
-export type AttentionKind = "offer" | "failed" | "conflicts" | "review" | "gaps" | "publish" | "acknowledge" | "privacy";
+export type AttentionKind = "offer" | "failed" | "conflicts" | "review" | "gaps" | "invite" | "publish" | "acknowledge" | "privacy";
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -189,6 +189,8 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
     // R3 Task 05D: the database publication gate (source updates and their change reviews), never "ready" around it
     const updates = blocker(r, "source_updates_pending");
     const changes = blocker(r, "change_reviews_open");
+    // Round 4 (journey audit #2): publishing needs an incoming member or a pending incoming invitation
+    const noRecipient = blocker(r, "no_incoming_recipient");
     const openGaps = (input.gaps ?? []).filter((g) => g.status === "open").length;
     if (r) {
       const decided = r.counts.byReviewState.approved + r.counts.byReviewState.rejected;
@@ -202,12 +204,14 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
       gaps && `${gaps} required gap${gaps === 1 ? "" : "s"} open`,
       updates && `${plural(updates, "source update")} not checked yet`,
       changes && `${plural(changes, "source change")} to decide`,
+      noRecipient && "no incoming person invited yet",
     ]
       .filter(Boolean)
       .join(" · ");
-    status = bits || (r?.canPublish ? "Ready to publish" : "In review");
+    // Only the creator publishes (review-workspace canPublishNow): never offer "Publish" to another reviewer.
+    status = bits || (r?.canPublish ? (h.viewerIsCreator ? "Ready to publish" : "Ready · the creator publishes") : "In review");
     health = conflicts || privacy ? "blocked" : bits ? "attention" : "ok";
-    cta = side === "preparing" ? (r?.canPublish ? "Publish" : "Continue review") : "Open";
+    cta = side === "preparing" ? (r?.canPublish ? (h.viewerIsCreator ? "Publish" : "Open review") : "Continue review") : "Open";
     href = links.review(h.id);
     if (side === "preparing") {
       if (conflicts) attention.push({ kind: "conflicts", label: "Conflicts", reason: `${plural(conflicts, "conflict")} where sources disagree. Decide what's true now.`, cta: "Resolve", href: links.review(h.id), rank: 2 });
@@ -228,6 +232,13 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
           kind: "review", label: "Source update", reason: `${parts}. Publishing waits for this.`,
           cta: changes ? "Decide changes" : "See source updates",
           href: changes ? (links.changes ?? links.review)(h.id) : links.processing(h.id), rank: 2,
+        });
+      }
+      if (noRecipient && h.viewerIsCreator) {
+        attention.push({
+          kind: "invite", label: "Invite",
+          reason: "Publishing needs an incoming person. Invite them now; they can read the handover once it's published.",
+          cta: "Invite", href: `${links.settings(h.id)}#members`, rank: 3,
         });
       }
       if (r?.canPublish && h.viewerIsCreator) {

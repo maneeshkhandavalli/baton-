@@ -82,7 +82,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
       </nav>
 
       <article className="min-w-0 space-y-14">
-        <header className="space-y-6 border-b border-border pb-10">
+        <header className="space-y-6 border-b border-border pb-10" data-tour="published-header">
           <div className="space-y-3">
             <p className="type-eyebrow text-muted-foreground">
               {handover.teamName}
@@ -149,8 +149,8 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
 
         <FirstWeek handover={handover} />
 
-        {groups.map((g) => (
-          <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="space-y-5">
+        {groups.map((g, i) => (
+          <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="space-y-5" data-tour={i === 0 ? "published-sections" : undefined}>
             <h3 id={`${g.id}-h`} className="type-section-title">
               {g.label}
               <span className="ml-3 align-middle font-sans text-sm text-muted-foreground tabular-nums">{g.points.length}</span>
@@ -167,7 +167,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         ))}
 
         {gaps.length > 0 && (
-          <section id="open-questions" aria-labelledby="oq-h" className="space-y-5">
+          <section id="open-questions" aria-labelledby="oq-h" className="space-y-5" data-tour="open-questions">
             <div className="space-y-1.5">
               <h3 id="oq-h" className="type-section-title">
                 Open questions
@@ -347,7 +347,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
   if (total === 0) return null;
 
   return (
-    <section id="first-week" aria-labelledby="fw-h" className="space-y-5">
+    <section id="first-week" aria-labelledby="fw-h" className="space-y-5" data-tour="first-week">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1.5">
           <h3 id="fw-h" className="type-section-title">
@@ -407,7 +407,7 @@ function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handov
   const acked = handover.viewerAcknowledgedAt;
 
   return (
-    <section id="acknowledge" aria-labelledby="ack-h" className="rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8">
+    <section id="acknowledge" aria-labelledby="ack-h" className="scroll-mt-6 rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8" data-tour="acknowledge">
       {acked ? (
         <div className="flex items-start gap-3">
           <CheckCircle2 aria-hidden="true" className="mt-1 size-6 shrink-0 text-status-sourced" />

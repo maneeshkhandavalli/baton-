@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Clock, Crown, FileText, MessageCircle, RotateCcw, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { AccessBadge, HandoverStateBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDate, formatDateRange } from "@/components/handover/format";
 import { ConnectedChannels } from "@/components/connectors/connected-channels";
@@ -149,7 +150,12 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
 
       <Panel id="members">
         <SectionHeading
-          title="Members and access"
+          title={
+            <span className="inline-flex items-center gap-1">
+              Members and access
+              <ContextualHelp topic="invitations" label="How do invitations work?" />
+            </span>
+          }
           description={creator ? "Clearance decides which points each person can see. Outgoing and reviewer members always see everything." : "Only the creator can invite people or change access."}
         />
         <ul className="divide-y divide-border rounded-lg border border-border">
@@ -292,7 +298,15 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
 
       {currentSources.length > 0 && (
         <Panel id="sources">
-          <SectionHeading title="Sources" description="Access is set per source when consent is recorded. Points inherit the strictest level of their evidence." />
+          <SectionHeading
+            title={
+              <span className="inline-flex items-center gap-1">
+                Sources
+                <ContextualHelp topic="living_handover" label="What are source versions?" />
+              </span>
+            }
+            description="Access is set per source when consent is recorded. Points inherit the strictest level of their evidence. When a chat continues, upload the newer export as a new version."
+          />
           <ul className="divide-y divide-border rounded-lg border border-border">
             {currentSources.map((s) => {
               const pending = pendingFor(s);
@@ -360,7 +374,14 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
 
       {creator && (
         <Panel id="connectors">
-          <SectionHeading title="Connected channels" description="Bring messages from Slack, Discord, Telegram or GitHub into this handover, with your consent per channel." />
+          <SectionHeading
+            title={
+              <span className="inline-flex items-center gap-1">
+                Connected channels
+                <ContextualHelp topic="source_connections" label="What are sources and connected channels?" />
+              </span>
+            }
+            description="Bring messages from Slack, Discord, Telegram or GitHub into this handover, with your consent per channel." />
           <ConnectedChannels handoverId={h.id} />
         </Panel>
       )}

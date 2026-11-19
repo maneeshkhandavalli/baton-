@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS } from "@/components/handover/labels";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Alert } from "@/components/ui/alert";
@@ -233,6 +234,11 @@ export function ReviewWorkspace({
   );
 
   function onBlocker(kind: ReadinessReport["blockers"][number]["kind"]) {
+    // Round 4 (journey audit #2): publishing needs an incoming person; the creator invites them in Settings → Members
+    if (kind === "no_incoming_recipient") {
+      if (!preview) router.push(`${routes.handover.settings(handover.id)}#members`);
+      return;
+    }
     // R3 Task 05D: source updates and their change reviews are listed on the processing page
     if (kind === "source_updates_pending" || kind === "change_reviews_open") {
       // R3 Task 05E: open change reviews are decided on their own page
@@ -298,6 +304,7 @@ export function ReviewWorkspace({
       gapsHref={gapsHref}
       canPublish={!!readiness?.canPublish}
       onPublish={canPublishNow ? () => (preview ? toast.info("Preview only: publishing is turned off.") : setPublishOpen(true)) : null}
+      publishNote={!canPublishNow && !readOnly && handover.state === "in_review" ? "Only the creator can publish. They'll see it's ready." : undefined}
       extra={
         <>
           <ExtractionCoverageSummary report={extraction} />
@@ -387,6 +394,16 @@ export function ReviewWorkspace({
             Shortcuts
           </Button>
         </div>
+
+        {!readOnly && handover.state === "in_review" && (
+          <p className="flex items-start gap-1 text-sm text-muted-foreground" data-tour="review-decisions">
+            <span>
+              Baton drafted each point from your sources. Approve what the evidence supports, edit what&rsquo;s nearly right, reject what&rsquo;s wrong.
+              Nothing is shared until the handover is published.
+            </span>
+            <ContextualHelp topic="review_decisions" label="How do review decisions work?" className="-mt-0.5" />
+          </p>
+        )}
 
         <p className="text-caption text-muted-foreground" aria-live="polite">
           Showing {visible.length} of {points.length} points

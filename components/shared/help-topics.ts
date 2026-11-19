@@ -16,7 +16,16 @@ export type HelpTopicId =
   | "ai_judgement"
   | "source_coverage"
   | "change_reviews"
-  | "readiness";
+  | "readiness"
+  // Round 4 (Worker 02): the application journey's key terms
+  | "source_connections"
+  | "consent"
+  | "processing_status"
+  | "evidence"
+  | "review_decisions"
+  | "publishing"
+  | "invitations"
+  | "living_handover";
 
 export interface HelpTopic {
   title: string;
@@ -73,6 +82,43 @@ export const HELP_TOPICS: Readonly<Record<HelpTopicId, HelpTopic>> = Object.free
   readiness: {
     title: "Readiness",
     body: "What still stands between this handover and publishing: points to decide, required gaps to answer, conflicts, and source updates to check.",
+  },
+  source_connections: {
+    title: "Sources",
+    body: "Sources are where the team's knowledge lives: uploaded chat exports and documents, or channels connected from Slack, Discord, Telegram or GitHub. Each source has its own consent and access level.",
+    action: "Upload files while setting up; connect channels later in Settings, once the handover exists.",
+  },
+  consent: {
+    title: "Consent",
+    body: "Before Baton reads a source, you confirm how it may be used. Consent is recorded per source, with the exact wording you agreed to. Nothing is uploaded or read without it.",
+  },
+  processing_status: {
+    title: "Processing",
+    body: "Baton reads each source, drafts points with the quotes they came from, checks those quotes, and looks for gaps. Each stage shows Waiting, In progress, Done, Partly done or Failed.",
+    action: "You can leave the page; the review opens when processing finishes.",
+  },
+  evidence: {
+    title: "Evidence",
+    body: "The messages a point was drawn from, quoted word for word from the masked source. Quotes and automatic checks help you decide; they never decide for you.",
+  },
+  review_decisions: {
+    title: "Review decisions",
+    body: "Approve a point the evidence supports, edit it if it's nearly right (saved as a new revision), or reject it if it's wrong. Rejected points are left out of the handover.",
+    action: "Nothing is shared until the creator publishes.",
+  },
+  publishing: {
+    title: "Publishing",
+    body: "Publishing makes the approved points readable by the handover's members, at each person's access level. It unlocks only when nothing on the readiness list is left, including an invited incoming person. Only the creator publishes.",
+  },
+  invitations: {
+    title: "Invitations",
+    body: "An invitation is a private link for one email address. The person signs in with that address and accepts it to join with the role you chose. Links expire, and you can turn one off in Settings.",
+    action: "Publishing needs at least one incoming person invited.",
+  },
+  living_handover: {
+    title: "Source versions",
+    body: "When a chat continues, upload the newer export as a new version of the same source. Baton processes only the new version and lists what changed; nothing in the handover changes until a reviewer decides.",
+    action: "Publishing waits until every new version is processed and every change is decided.",
   },
 });
 
