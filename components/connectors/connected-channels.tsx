@@ -170,8 +170,8 @@ function TelegramSteps({ href }: { href: string | null }) {
         )}{" "}
         (a group admin does this).
       </li>
-      <li>In the group, send /handover.</li>
-      <li>Open the link the bot replies with, choose this handover and confirm.</li>
+      <li>Open a private chat with the bot and press Start (once), then send /handover in the group (group admins only, not anonymous).</li>
+      <li>Open the link the bot sends you privately, choose this handover and confirm.</li>
     </ol>
   );
 }
