@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, FileUp, Inbox, MessageCircleQuestion, Scale, ShieldAlert, Sparkles, UsersRound } from "lucide-react";
+import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, FileUp, Inbox, MessageCircleQuestion, Scale, ShieldAlert, Sparkles, UserPlus, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -18,6 +18,7 @@ const KIND_ICON: Record<AttentionKind, typeof Scale> = {
   conflicts: Scale,
   review: FilePen,
   gaps: MessageCircleQuestion,
+  invite: UserPlus,
   publish: CheckCircle2,
   acknowledge: Inbox,
   privacy: ShieldAlert,

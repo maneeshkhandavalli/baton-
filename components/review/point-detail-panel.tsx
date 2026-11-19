@@ -49,10 +49,13 @@ const reviewActionLabel: Record<string, string> = {
   change_review: "Decided a source change",
 };
 
-function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+function Section({ title, children, className, help }: { title: string; children: React.ReactNode; className?: string; help?: React.ReactNode }) {
   return (
     <section className={cn("space-y-3 border-t border-border px-5 py-4", className)}>
-      <h3 className="type-eyebrow text-muted-foreground">{title}</h3>
+      <h3 className="flex items-center gap-1 type-eyebrow text-muted-foreground">
+        {title}
+        {help}
+      </h3>
       {children}
     </section>
   );
@@ -176,7 +179,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
         </Section>
       )}
 
-      <Section title={`Evidence (${point.evidence.length})`}>
+      <Section title={`Evidence (${point.evidence.length})`} help={<ContextualHelp topic="evidence" label="What counts as evidence?" />}>
         {point.evidence.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <CircleDashed aria-hidden="true" className="size-4" />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, Loader2, MessageCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { AccessBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
@@ -158,9 +159,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                 "Processing"
               )}
             </p>
-            <h2 id="run-heading" className="type-section-title">
-              {title}
-            </h2>
+            <div className="flex items-center gap-1">
+              <h2 id="run-heading" className="type-section-title">
+                {title}
+              </h2>
+              <ContextualHelp topic="processing_status" label="What happens during processing?" />
+            </div>
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {headline.description}
             </p>

@@ -6,6 +6,8 @@ import { ArrowLeft, ArrowRight, Link2, Lock, Trash2, UserCheck, UserX } from "lu
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
+import type { HelpTopicId } from "@/components/shared/help-topics";
 import { identityKindLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { SaveIndicator } from "@/components/shared/save-indicator";
@@ -778,6 +780,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
               <StepHeading
                 index={1}
                 title="Privacy and consent"
+                help="consent"
                 description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
               />
               <GroupNotice teamName={details.teamName} />
@@ -789,6 +792,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
               <StepHeading
                 index={2}
                 title="Add the team’s record"
+                help="source_connections"
                 description="Export WhatsApp chats without media (Chat → More → Export chat → Without media) and add any handbooks or notes. Up to 10 files, 25 MB each."
               />
               {skipped > 0 && (
@@ -861,7 +865,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
 /** Set when the step changes; the next StepHeading to mount takes focus (then clears it). */
 const focusNextStep = { current: false };
 
-export function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
+export function StepHeading({ index, title, description, help }: { index: number; title: string; description: string; help?: HelpTopicId }) {
   return (
     <header className="space-y-2">
       <p className="type-eyebrow text-muted-foreground">
@@ -878,6 +882,7 @@ export function StepHeading({ index, title, description }: { index: number; titl
         }}
       >
         {title}
+        {help && <ContextualHelp topic={help} className="ml-1" />}
       </h2>
       <p className="max-w-2xl type-body text-muted-foreground">{description}</p>
     </header>

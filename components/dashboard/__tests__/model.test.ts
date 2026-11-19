@@ -99,6 +99,24 @@ describe("dashboard classify()", () => {
     assert.equal(row.status, "Ready to publish");
     assert.equal(row.cta, "Publish");
   });
+
+  it("never offers Publish to a reviewer who is not the creator", () => {
+    const row = classify({ summary: base({ viewerIsCreator: false, viewerRole: "reviewer" }), readiness: readiness([], true) }, LINKS);
+    assert.equal(row.status, "Ready · the creator publishes");
+    assert.equal(row.cta, "Open review");
+    assert.ok(!row.attention.some((a) => a.kind === "publish"));
+  });
+
+  it("says when publishing waits for an incoming person, and links the creator to Members", () => {
+    const blocked = readiness([{ kind: "no_incoming_recipient", count: 1, pointIds: [] }]);
+    const row = classify({ summary: base(), readiness: blocked }, LINKS);
+    assert.match(row.status, /no incoming person invited yet/);
+    const invite = row.attention.find((a) => a.kind === "invite");
+    assert.ok(invite, "an Invite item");
+    assert.equal(invite.href, "/s/h1#members");
+    const reviewer = classify({ summary: base({ viewerIsCreator: false, viewerRole: "reviewer" }), readiness: blocked }, LINKS);
+    assert.ok(!reviewer.attention.some((a) => a.kind === "invite"), "only the creator invites");
+  });
 });
 
 describe("dashboard filtering and ordering", () => {
