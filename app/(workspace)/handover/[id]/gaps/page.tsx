@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, Lock } from "lucide-react";
 import { Suspense } from "react";
 
 import { GapsManager } from "@/components/gaps/gaps-manager";
@@ -35,7 +35,11 @@ async function GapsContent({ params }: { params: Promise<{ id: string }> }) {
   const [handover, questions, points] = await Promise.all([queries.getHandover(id), queries.listGapQuestions(id), queries.listPoints(id)]);
   if (!handover.ok) notFound();
   const review = handover.data.viewerRole === "outgoing" || handover.data.viewerRole === "reviewer";
-  if (review && !questions.ok) {
+  if (!review) {
+    // Incoming members never manage questions (RLS already returns none); say so instead of an empty manager.
+    return <EmptyState icon={<Lock />} title="The Gap Interview is for reviewers" description="Only the creator, outgoing member and reviewers ask and review these questions. Accepted answers appear in the published handover." />;
+  }
+  if (!questions.ok) {
     return (
       <EmptyState
         tone="error"
