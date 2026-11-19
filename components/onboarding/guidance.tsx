@@ -11,8 +11,8 @@
  * waits on the network. Previews pass `persist: false`.
  */
 
-import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createContext, Suspense, useCallback, useContext, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { recordOnboardingEvent } from "@/lib/actions/onboarding";
@@ -55,7 +55,6 @@ export function useGuidance(): GuidanceValue | null {
 
 export function GuidanceProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [data, setData] = useState<GuidanceInitData | null>(null);
   const [state, setState] = useState<OnboardingState | null>(null);
   const [tour, dispatchTour] = useReducer(tourReducer, IDLE_TOUR);
@@ -93,9 +92,10 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
       setWelcomeOpen(false);
       dispatchTour({ type: "start", role, steps });
       // Started from another page (Help): go to where the first step is.
-      if (steps[0]?.href && !onStepPage(steps[0], pathname)) router.push(steps[0].href);
+      // Read at call time (not usePathname): the provider wraps every route's shell and must not block prerendering.
+      if (steps[0]?.href && !onStepPage(steps[0], window.location.pathname)) router.push(steps[0].href);
     },
-    [data, pathname, router],
+    [data, router],
   );
 
   const value = useMemo<GuidanceValue>(
@@ -118,7 +118,12 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
     <GuidanceContext.Provider value={value}>
       {children}
       {data && <WelcomeDialog />}
-      {data && <TourOverlay />}
+      {data && (
+        // The overlay reads the current path; streamed so it never blocks a route's prerender.
+        <Suspense fallback={null}>
+          <TourOverlay />
+        </Suspense>
+      )}
     </GuidanceContext.Provider>
   );
 }
