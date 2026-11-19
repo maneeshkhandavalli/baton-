@@ -278,7 +278,7 @@
     padding: 0 6px 0 max(1rem, calc(26 * var(--u)));
     border: 1px solid color-mix(in srgb, var(--foreground) 40%, transparent);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--background) 62%, transparent);
+    background: color-mix(in srgb, var(--background) 85%, transparent);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
     color: var(--foreground);
@@ -291,6 +291,10 @@
   @media (min-width: 1024px) {
     .lp-nav[data-compact="true"] .lp-nav__body {
       max-width: max(52rem, calc(1100 * var(--u)));
+    }
+    /* a signed-in visitor's account menu needs room; the section links never wrap */
+    .lp-nav[data-compact="true"] .lp-nav__body:has(.lp-nav__account > *) {
+      max-width: max(64rem, calc(1340 * var(--u)));
     }
   }
   .lp-nav[data-tone="dark"] .lp-nav__body {
@@ -316,6 +320,7 @@
     }
   }
   .lp-nav__links a {
+    white-space: nowrap;
     position: relative;
     border-radius: 4px;
     outline: none;

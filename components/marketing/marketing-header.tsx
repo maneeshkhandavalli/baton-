@@ -48,9 +48,11 @@ export function MarketingHeader() {
         </nav>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Suspense fallback={null}>
-            <HeaderAccount />
-          </Suspense>
+          <span className="lp-nav__account contents max-sm:hidden">
+            <Suspense fallback={null}>
+              <HeaderAccount />
+            </Suspense>
+          </span>
           <Link href={routes.dashboard} className="lp-cta ml-1">
             <span aria-hidden="true" className="lp-cta__disc max-sm:hidden">
               <ArrowUpRight className="size-4" />
