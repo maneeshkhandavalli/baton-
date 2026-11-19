@@ -9,6 +9,8 @@ import type { ComponentType } from "react";
 
 import type { ConnectorLinkSummary, ConnectorProvider } from "@/lib/contracts/connectors";
 
+import { GithubLinkSettings } from "./providers/github-link-settings";
+
 export interface ProviderSettingsProps {
   handoverId: string;
   link: ConnectorLinkSummary;
@@ -17,7 +19,7 @@ export interface ProviderSettingsProps {
 }
 
 export const PROVIDER_SETTINGS: Record<ConnectorProvider, ComponentType<ProviderSettingsProps> | null> = {
-  github: null,
+  github: GithubLinkSettings,
   discord: null,
   slack: null,
   telegram: null,

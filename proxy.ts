@@ -23,6 +23,7 @@ const PROTECTED_PREFIXES = ["/dashboard", "/handover", "/account"];
 const TOKEN_PREFIXES = ["/g/", "/h/"];
 const AUTH_CALLBACK = "/auth/callback";
 const DEMO_PREFIX = "/demo";
+const CONNECTOR_MACHINE_PATH = /^\/api\/connectors\/(?:sync|(?:github|discord|slack|telegram)\/webhook)$/;
 
 function startsWithAny(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p.endsWith("/") ? p : `${p}/`));
@@ -32,6 +33,9 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname === AUTH_CALLBACK) return NextResponse.next();
   if (pathname === DEMO_PREFIX || pathname.startsWith(`${DEMO_PREFIX}/`)) return NextResponse.next();
+  // Round 4: provider webhooks and the connector sync are server-to-server (signed by the provider / CRON_SECRET);
+  // they never use a browser session, so skip the Auth round trip (Slack expects an answer within 3 s).
+  if (CONNECTOR_MACHINE_PATH.test(pathname)) return NextResponse.next();
   const { response, userId } = await updateSession(request);
 
   if (startsWithAny(pathname, TOKEN_PREFIXES)) {
