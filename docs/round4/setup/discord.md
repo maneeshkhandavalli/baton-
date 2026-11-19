@@ -76,7 +76,7 @@ in this repo may target a real database (see `.env.local`).
 1. Sign in as a handover's creator → **Settings → Connected channels** → **Add to Discord** → choose a server you
    manage → Authorize. You land back on the panel with "Discord added".
 2. **Link a channel** → pick a text channel → **Link channel** → read the statement, tick the box (optionally choose
-   earlier days) → **Start saving messages**. The bot posts "Baton is now saving messages in this channel…".
+   earlier days) → **Start saving messages**. The bot posts "<your Baton display name> connected this channel to a Baton handover. Baton is now saving messages…" (display name only; never an email or id; neutral wording if no name is set).
 3. Post a message in the channel as a person (not a bot).
 4. Press **Bring in new messages** (this pulls, then adds). Or wait for the scheduled sync, which first shows
    "1 message waiting to be added" and adds it on its next run.

@@ -43,6 +43,8 @@ export interface ConnectorDeps {
   now(): number;
   /** Handovers the actor created that accept new sources (draft / in review), for the /connect picker. */
   creatorHandovers(profileId: string): Promise<Array<{ id: string; title: string }>>;
+  /** The person's Baton display name for channel notices (never an email); null when unknown. Optional in tests. */
+  displayName?(profileId: string): Promise<string | null>;
 }
 
 const uuid = z.string().uuid();
@@ -99,6 +101,11 @@ export function linkSummary(link: ChannelLinkRecord, installations: Map<string, 
     sourceId: link.sourceId,
     settings: link.settings,
   };
+}
+
+/** Display name for a channel notice; a lookup failure never blocks the action (the notice falls back to neutral). */
+async function actorName(c: ConnectorDeps, profileId: string): Promise<string | null> {
+  return c.displayName ? c.displayName(profileId).catch(() => null) : null;
 }
 
 /** Shown when a Slack private channel is picked while private channels are off (SLACK_PRIVATE_CHANNELS). */
@@ -241,7 +248,8 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
           externalAccountId: inst.externalAccountId, externalChannelId: link.externalChannelId, messages,
         }, undefined, { filter: onlyLink(link.id) });
       }
-      await adapter.announceCapture?.(ctx, inst, link, "started").catch(() => {}); // a notice failure never blocks consent
+      const by = await actorName(c, actor.profileId);
+      await adapter.announceCapture?.(ctx, inst, link, "started", by).catch(() => {}); // a notice failure never blocks consent
       return ok(linkSummary((await store.getLink(link.id)) ?? link, new Map([[inst.id, inst]])));
     }),
   );
@@ -281,7 +289,7 @@ export async function setCapturePaused(deps: ActionDeps, c: ConnectorDeps, input
       const adapter = inst ? await c.adapter(inst.provider) : null;
       // Resuming a pull-based link starts from now: nothing sent while it was paused is captured.
       if (!v.paused && adapter?.cursorAt) await store.setPullCursor(link.id, adapter.cursorAt(c.now()));
-      if (inst && adapter) await adapter.announceCapture?.(c.adapterContext(), inst, link, v.paused ? "paused" : "started").catch(() => {});
+      if (inst && adapter) await adapter.announceCapture?.(c.adapterContext(), inst, link, v.paused ? "paused" : "started", await actorName(c, actor.profileId)).catch(() => {});
       return ok(linkSummary(link, new Map(inst ? [[inst.id, inst]] : [])));
     }),
   );
@@ -295,7 +303,7 @@ export async function unlinkChannel(deps: ActionDeps, c: ConnectorDeps, input: {
       if (!link) return failWith("not_found");
       await store.revokeLink({ kind: "user", profileId: actor.profileId }, v.linkId, "creator_unlinked");
       const inst = await store.getInstallation(link.installationId);
-      if (inst) await (await c.adapter(inst.provider)).announceCapture?.(c.adapterContext(), inst, link, "stopped").catch(() => {});
+      if (inst) await (await c.adapter(inst.provider)).announceCapture?.(c.adapterContext(), inst, link, "stopped", await actorName(c, actor.profileId)).catch(() => {});
       return ok(null);
     }),
   );

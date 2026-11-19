@@ -221,15 +221,38 @@ export async function handoverCommand(store: ConnectorStore, env: AdapterContext
 
 // ── Capture notices ─────────────────────────────────────────────────────────
 
-/** The neutral notice posted in a channel when capture starts, pauses or stops. No ids, no names of people. */
-export function captureNotice(change: "started" | "paused" | "stopped"): string {
+/**
+ * A person's Baton display name made safe to post in a chat: no mention or markup syntax (@, <, >, #, *, _, `, ~, |, [, ]),
+ * no control characters, at most 60 characters. Null when nothing readable is left. Never an email or an id.
+ */
+export function safeDisplayName(name: string | null | undefined): string | null {
+  if (!name || name.includes("@")) return null; // an email-shaped name is never posted
+  const clean = name
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e]/g, "")
+    .replace(/[<>#*_`~|[\]\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60)
+    .trim();
+  return clean.length > 0 ? clean : null;
+}
+
+/**
+ * The notice posted in a channel when capture starts, pauses or stops. Names the person in Baton who did it (their
+ * Baton display name, made safe by safeDisplayName) so the channel knows who is saving its messages; no emails, ids
+ * or handover titles. Without a usable name it falls back to the neutral wording.
+ */
+export function captureNotice(change: "started" | "paused" | "stopped", by?: string | null): string {
+  const who = safeDisplayName(by);
   switch (change) {
     case "started":
-      return "Baton is now saving messages in this channel for a handover. A channel admin or the handover’s creator can pause or stop it in Baton.";
+      return who
+        ? `${who} connected this channel to a Baton handover. Baton is now saving messages in this channel for that handover. A channel admin or the handover’s creator can pause or stop it in Baton.`
+        : "Baton is now saving messages in this channel for a handover. A channel admin or the handover’s creator can pause or stop it in Baton.";
     case "paused":
-      return "Baton has paused saving messages in this channel. Nothing new is saved until the handover’s creator resumes it.";
+      return `Baton has paused saving messages in this channel${who ? ` (paused by ${who})` : ""}. Nothing new is saved until the handover’s creator resumes it.`;
     case "stopped":
-      return "Baton has stopped saving messages in this channel. Messages it had not yet added to the handover were deleted.";
+      return `Baton has stopped saving messages in this channel${who ? ` (stopped by ${who})` : ""}. Messages it had not yet added to the handover were deleted.`;
   }
 }
 

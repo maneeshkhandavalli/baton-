@@ -162,9 +162,9 @@ export const telegramAdapter: ProviderServerAdapter = {
     return describeChat(ctx, installation, externalChannelId);
   },
 
-  async announceCapture(ctx, installation, link, change) {
+  async announceCapture(ctx, installation, link, change, by) {
     if (link.externalChannelId !== installation.externalAccountId) return;
-    await telegramCall(ctx, "sendMessage", { chat_id: link.externalChannelId, text: captureNotice(change), link_preview_options: { is_disabled: true } });
+    await telegramCall(ctx, "sendMessage", { chat_id: link.externalChannelId, text: captureNotice(change, by), link_preview_options: { is_disabled: true } });
   },
 
   async revokeAtProvider(ctx, installation) {

@@ -143,9 +143,9 @@ export const discordAdapter: ProviderServerAdapter = {
     return (await pullAfter(ctx, link.externalChannelId, snowflakeForTime(since), limit)).messages;
   },
 
-  async announceCapture(ctx, installation, link, change) {
+  async announceCapture(ctx, installation, link, change, by) {
     ensureDiscordChannel(installation, link.externalChannelId);
-    await discordBotRequest(ctx, "POST", `/channels/${link.externalChannelId}/messages`, { content: captureNotice(change), allowed_mentions: { parse: [] } });
+    await discordBotRequest(ctx, "POST", `/channels/${link.externalChannelId}/messages`, { content: captureNotice(change, by), allowed_mentions: { parse: [] } });
   },
 
   async revokeAtProvider(ctx, installation) {

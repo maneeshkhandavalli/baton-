@@ -48,5 +48,9 @@ export function connectorDeps(): ConnectorDeps {
       const r = await callRpc(serverDb(), "connector_creator_handovers", { p_actor_profile_id: profileId });
       return Array.isArray(r) ? (r as Array<{ id: string; title: string }>).map((h) => ({ id: String(h.id), title: String(h.title) })) : [];
     },
+    async displayName(profileId) {
+      const r = await callRpc(serverDb(), "connector_actor_display_name", { p_profile_id: profileId });
+      return typeof r === "string" && r.trim() !== "" ? r : null;
+    },
   };
 }

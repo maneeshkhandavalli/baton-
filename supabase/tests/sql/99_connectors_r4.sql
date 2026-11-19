@@ -221,3 +221,15 @@ begin
   perform tests.ok(public.connector_installation_credentials(v_inst) is null, 'and deletes its sealed credentials');
   perform tests.as_owner();
 end $$;
+
+-- ── 8. notices name a live account by display name only ──────────────────────
+do $$
+begin
+  perform tests.as_service();
+  perform tests.ok(public.connector_actor_display_name(tests.id('ann')) is not null, 'a live account has a display name for notices');
+  perform tests.ok(public.connector_actor_display_name(tests.id('ann')) !~ '@', 'the notice name is not an email');
+  perform tests.ok(public.connector_actor_display_name(tests.id('mal')) is null, 'a deleted account is never named');
+  perform tests.as_reader('ann');
+  perform tests.throws(format($q$select public.connector_actor_display_name(%L)$q$, tests.id('ann')), '42501', 'browser sessions cannot call it');
+  perform tests.as_owner();
+end $$;

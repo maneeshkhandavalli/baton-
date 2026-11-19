@@ -74,7 +74,7 @@ export interface ProviderServerAdapter {
    */
   cursorAt?(nowMs: number): string;
   /** Optional: post a visible notice in the channel when capture starts/pauses/stops (consent transparency). */
-  announceCapture?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, change: "started" | "paused" | "stopped"): Promise<void>;
+  announceCapture?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, change: "started" | "paused" | "stopped", by?: string | null): Promise<void>;
   /** Optional: revoke at the provider on disconnect (Slack auth.revoke, Discord leave guild, Telegram leave chat). */
   revokeAtProvider?(ctx: AdapterContext, installation: InstallationRecord): Promise<void>;
   /** Validates and normalises link.settings for this provider; throws ProviderError("invalid_response") never — returns null when invalid. */

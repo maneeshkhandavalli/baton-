@@ -211,9 +211,9 @@ export const slackAdapter: ProviderServerAdapter = {
     return resolveAuthors(ctx, token, pending.slice(-limit));
   },
 
-  async announceCapture(ctx, installation, link, change) {
+  async announceCapture(ctx, installation, link, change, by) {
     const token = await botToken(ctx, installation);
-    await slackCall(ctx, token, "chat.postMessage", { channel: link.externalChannelId, text: captureNotice(change), unfurl_links: false, unfurl_media: false });
+    await slackCall(ctx, token, "chat.postMessage", { channel: link.externalChannelId, text: captureNotice(change, by), unfurl_links: false, unfurl_media: false });
   },
 
   async revokeAtProvider(ctx, installation) {

@@ -441,6 +441,18 @@ create trigger connector_revoke_on_account_delete
   for each row when (old.deleted_at is null and new.deleted_at is not null)
   execute function public._connector_revoke_on_account_delete();
 
+-- The display name posted in a channel notice ("<name> connected this channel …"): profiles.display_name of a live
+-- account only. Never an email or an id; server-only (service_role), like every connector function.
+create function public.connector_actor_display_name(p_profile_id uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select nullif(btrim(p.display_name), '') from public.profiles p where p.id = p_profile_id and p.deleted_at is null
+$$;
+
 create function public.connector_list_installations_for_profile(p_profile_id uuid)
 returns jsonb
 language sql
@@ -886,7 +898,8 @@ revoke execute on function
   public.connector_record_flush_error(uuid, text),
   public.connector_set_pull_cursor(uuid, text),
   public.connector_flush_actor(uuid),
-  public.connector_creator_handovers(uuid)
+  public.connector_creator_handovers(uuid),
+  public.connector_actor_display_name(uuid)
   from public, anon, authenticated, service_role;
 
 grant execute on function
@@ -916,5 +929,6 @@ grant execute on function
   public.connector_record_flush_error(uuid, text),
   public.connector_set_pull_cursor(uuid, text),
   public.connector_flush_actor(uuid),
-  public.connector_creator_handovers(uuid)
+  public.connector_creator_handovers(uuid),
+  public.connector_actor_display_name(uuid)
   to service_role;
