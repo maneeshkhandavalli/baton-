@@ -10,7 +10,7 @@
 import type { ConnectorMessage, InstallationRecord, NormalizedEvent } from "../../types";
 import { ProviderError, type AdapterContext, type ChannelChoice, type ProviderServerAdapter } from "../adapter";
 import { captureNotice, isObject, str } from "../bots/shared";
-import { botToken, slackCall } from "./api";
+import { botToken, slackCall, slackOptions } from "./api";
 
 /** A message whose author still has to be turned into a display name. */
 export interface PendingSlackMessage {
@@ -23,7 +23,7 @@ export interface PendingSlackMessage {
 
 export type SlackEventParsed =
   | { kind: "challenge"; challenge: string }
-  | { kind: "event"; event: NormalizedEvent; pending: PendingSlackMessage[] }
+  | { kind: "event"; event: NormalizedEvent; pending: PendingSlackMessage[]; /** event came from a private channel (`channel_type: "group"`) */ privateChannel: boolean }
   | { kind: "invalid" };
 
 /** Slack `ts` ("1700000000.123456") → ISO 8601. */
@@ -77,7 +77,8 @@ export function parseSlackEnvelope(body: unknown): SlackEventParsed {
   const subtype = typeof ev.subtype === "string" ? ev.subtype : null;
   const channel = str(ev.channel);
   const base: NormalizedEvent = { provider: "slack", deliveryId: body.event_id, eventType: subtype ? `${type}.${subtype}` : type, externalAccountId: team, externalChannelId: channel, messages: [] };
-  const out = (pending: PendingSlackMessage[], over: Partial<NormalizedEvent> = {}): SlackEventParsed => ({ kind: "event", event: { ...base, ...over }, pending });
+  const privateChannel = ev.channel_type === "group" || type === "group_left";
+  const out = (pending: PendingSlackMessage[], over: Partial<NormalizedEvent> = {}): SlackEventParsed => ({ kind: "event", event: { ...base, ...over }, pending, privateChannel });
 
   switch (type) {
     case "app_uninstalled":
@@ -139,10 +140,20 @@ async function displayName(ctx: AdapterContext, token: string, user: string): Pr
   }
 }
 
-function choice(c: Record<string, unknown>): ChannelChoice | null {
+/** True for a private channel (conversations.* objects; `is_group` on very old workspaces). */
+export function isPrivateSlackChannel(c: Record<string, unknown>): boolean {
+  return c.is_private === true || c.is_group === true;
+}
+
+/**
+ * A conversation → picker choice. Private channels are refused with `private_channel` unless the server enabled
+ * them (SLACK_PRIVATE_CHANNELS=1): they are never silently linked without the optional scopes.
+ */
+function choice(c: Record<string, unknown>, privateChannels: boolean): ChannelChoice | null {
   const id = str(c.id);
   if (!id || c.is_archived === true || c.is_im === true || c.is_mpim === true) return null;
-  return { id, label: `#${str(c.name) ?? "channel"}`, blockedReason: c.is_member === true ? null : "bot_not_member" };
+  const blockedReason = isPrivateSlackChannel(c) && !privateChannels ? "private_channel" : c.is_member === true ? null : "bot_not_member";
+  return { id, label: `#${str(c.name) ?? "channel"}`, blockedReason };
 }
 
 export const slackAdapter: ProviderServerAdapter = {
@@ -150,12 +161,15 @@ export const slackAdapter: ProviderServerAdapter = {
 
   async listChannels(ctx, installation) {
     const token = await botToken(ctx, installation);
+    const { privateChannels } = slackOptions(ctx.env);
+    // Without groups:read Slack answers missing_scope for private_channel, so the type is requested only when enabled.
+    const types = privateChannels ? "public_channel,private_channel" : "public_channel";
     const out: ChannelChoice[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 10; page++) {
-      const r = await slackCall(ctx, token, "conversations.list", { types: "public_channel,private_channel", exclude_archived: true, limit: 200, cursor });
+      const r = await slackCall(ctx, token, "conversations.list", { types, exclude_archived: true, limit: 200, cursor });
       for (const c of Array.isArray(r.channels) ? r.channels : []) {
-        const ch = isObject(c) ? choice(c) : null;
+        const ch = isObject(c) ? choice(c, privateChannels) : null;
         if (ch) out.push(ch);
       }
       const next = isObject(r.response_metadata) ? str(r.response_metadata.next_cursor) : null;
@@ -170,7 +184,7 @@ export const slackAdapter: ProviderServerAdapter = {
     const token = await botToken(ctx, installation);
     try {
       const r = await slackCall(ctx, token, "conversations.info", { channel: externalChannelId });
-      return isObject(r.channel) ? choice(r.channel) : null;
+      return isObject(r.channel) ? choice(r.channel, slackOptions(ctx.env).privateChannels) : null;
     } catch (e) {
       if (e instanceof ProviderError && (e.code === "not_found" || e.code === "forbidden")) return null;
       throw e;

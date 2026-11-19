@@ -42,8 +42,8 @@ export function ConnectIntent({ intent, connector, status }: { intent: string | 
         <PageHeader title="Connect a channel" description="Bring messages from a team chat into one of your handovers." />
         {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
         <p className="text-sm text-muted-foreground">
-          Type <span className="font-mono">/handover</span> in the Slack, Discord or Telegram channel you want to connect, then open the link the bot replies with. You can also connect channels from a handover&apos;s
-          settings.
+          Type <span className="font-mono">/handover</span> in the Discord or Telegram channel you want to connect (or in Slack, where the command is turned on), then open the link the bot replies with. You can always
+          connect channels from a handover&apos;s settings.
         </p>
         <Link href={routes.dashboard} className={buttonVariants({ variant: "outline", size: "sm" })}>
           Go to your handovers

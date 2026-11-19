@@ -96,6 +96,16 @@ describe("connected channels: grouping and summaries", () => {
     assert.equal(groupSummary(groups[3]), "Not set up on this server.");
   });
 
+  it("Slack's slash command and private channels follow the server flags (both off when absent)", () => {
+    const off = providerGroups(view());
+    assert.equal(off[0].slashCommand, false);
+    assert.equal(off[0].privateChannels, false);
+    assert.equal(off[1].slashCommand, true); // Discord always answers /handover
+    const on = providerGroups(view({ providers: [{ provider: "slack", configured: true, installPath: "/x", slashCommand: true, privateChannels: true }] }));
+    assert.equal(on[0].slashCommand, true);
+    assert.equal(on[0].privateChannels, true);
+  });
+
   it("an installed app without a linked channel says so", () => {
     assert.equal(groupSummary(providerGroups(view())[0]), "No channel linked to this handover yet.");
   });
@@ -105,6 +115,7 @@ describe("connected channels: reasons and messages", () => {
   it("explains blocked channels per provider", () => {
     assert.match(blockedReasonText("bot_not_member", "slack") ?? "", /\/invite @Baton Handover/);
     assert.match(blockedReasonText("privacy_mode", "telegram") ?? "", /setprivacy/);
+    assert.match(blockedReasonText("private_channel", "slack") ?? "", /Private channels aren't turned on/);
     assert.equal(blockedReasonText(null, "slack"), null);
   });
 
@@ -112,6 +123,7 @@ describe("connected channels: reasons and messages", () => {
     assert.equal(installStatusText("slack", "connected")?.tone, "success");
     assert.match(installStatusText("discord", "connected_by_someone_else")?.text ?? "", /Someone else/);
     assert.equal(installStatusText("github", "install_requested")?.tone, "info");
+    assert.match(installStatusText("slack", "missing_permissions")?.text ?? "", /who said what/);
     assert.equal(installStatusText("slack", "whatever")?.tone, "danger");
     assert.equal(installStatusText("slack", null), null);
   });

@@ -1,4 +1,9 @@
-# Slack permission audit (Round 4) — for review before any scope change or reinstall
+# Slack permission audit (Round 4)
+
+**Decision (owner, 2026-11-19): minimal default, private channels and slash command optional — implemented.**
+Required: `channels:history`, `channels:read`, `chat:write`, `users:read`. Optional (off unless set):
+`SLACK_PRIVATE_CHANNELS=1` → `groups:history`, `groups:read`; `SLACK_SLASH_COMMAND=1` → `commands`. Reinstall
+procedure: `slack.md` §3b. The audit below describes the calls; line numbers are from before the change.
 
 Source of truth: `lib/connectors/providers/slack/api.ts` (`SLACK_BOT_SCOPES`, requested in the install URL by
 `routes.ts`) and the Slack Web API calls in `lib/connectors/providers/slack/server.ts`. Every call Baton makes:
@@ -45,5 +50,7 @@ Source of truth: `lib/connectors/providers/slack/api.ts` (`SLACK_BOT_SCOPES`, re
    * Tests: install URL scopes per flag; `conversations.list` types per flag; a private channel link refused when the
      flag is off.
 
-Decision needed: keep the full set, or implement the flags (minimal default). No scope is added and nothing is
-reinstalled until you decide.
+Implemented as described in 6 (code: `lib/connectors/config.ts` `slackOptions`, `providers/slack/api.ts`
+`slackBotScopes` / `missingRequiredSlackScopes`, `server.ts`, `routes.ts`, `lib/actions/core/connectors.ts`), plus:
+the OAuth callback refuses an install missing any required scope and revokes its token, so attribution and the
+capture notice are never silently lost. Nothing in the Slack console has been changed.

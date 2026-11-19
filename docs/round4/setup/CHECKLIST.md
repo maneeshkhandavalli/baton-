@@ -63,13 +63,14 @@ that provider's variables are set.
 |---|---|
 | OAuth redirect URL | `<TUNNEL>/api/connectors/slack/callback` |
 | Event Subscriptions → Request URL | `<TUNNEL>/api/connectors/slack/webhook` (signed `url_verification` on save: preview must be running with Slack variables) |
-| Slash command | `/handover` → Request URL `<TUNNEL>/api/connectors/slack/webhook` |
-| Bot scopes | **Pending your decision** — see `SLACK_SCOPE_AUDIT.md`. Today the code requests `channels:history`, `channels:read`, `groups:history`, `groups:read`, `chat:write`, `commands`, `users:read`; the proposed minimal default is `channels:history`, `channels:read`, `chat:write`, `users:read` with private channels and the slash command as opt-in flags. Do not add scopes or reinstall yet. |
-| Bot events | `message.channels`, `message.groups`, `app_uninstalled`, `tokens_revoked`, `channel_left`, `group_left` |
-| Env | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (Basic Information → App Credentials) |
+| Slash command | **none** by default (delete `/handover`; Slack adds `commands` while one exists). Only with `SLACK_SLASH_COMMAND=1`: `/handover` → `<TUNNEL>/api/connectors/slack/webhook` |
+| Bot scopes (decided: minimal) | `channels:history`, `channels:read`, `chat:write`, `users:read`. Optional: `groups:history`, `groups:read` only with `SLACK_PRIVATE_CHANNELS=1`; `commands` only with `SLACK_SLASH_COMMAND=1`. An install missing a required scope is refused. |
+| Bot events | `message.channels`, `app_uninstalled`, `tokens_revoked`, `channel_left` (+ `message.groups`, `group_left` only with `SLACK_PRIVATE_CHANNELS=1`) |
+| Env | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (Basic Information → App Credentials); optional flags `SLACK_PRIVATE_CHANNELS`, `SLACK_SLASH_COMMAND` (unset = off) |
+| Changing the existing app | follow `slack.md` §3b (scopes, slash command, events, remove the old console install, install from Baton) — only after your review of the procedure |
 | Install | from **Baton** (Settings → Connected channels → Add to Slack), not the console's "Install to Workspace": Baton's signed state ties the install to you and seals the bot token. The existing console install's token is not used. |
 | In Slack | `/invite @baton` in the test channel before linking it |
-| Manifest | full YAML in `slack.md` §2 (replace `<BATON_SITE_URL>` with `<TUNNEL>`) |
+| Manifest | minimal YAML in `slack.md` §2 (replace `<BATON_SITE_URL>` with `<TUNNEL>`) |
 
 ## 4. GitHub — App (not yet registered)
 

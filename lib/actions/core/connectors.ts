@@ -14,7 +14,7 @@ import type {
   HandoverConnectorsView,
   LinkIntentDto,
 } from "../../contracts/connectors";
-import { connectorConfigured, connectorPaths } from "../../connectors/config";
+import { connectorConfigured, connectorPaths, slackOptions } from "../../connectors/config";
 import { captureConsentStatement, CONNECTOR_CAPTURE_CONSENT_VERSION, MAX_HISTORY_DAYS } from "../../connectors/consent";
 import { ConnectorStoreError } from "../../connectors/errors";
 import { flushLink, type SourceWriter } from "../../connectors/flush";
@@ -101,6 +101,9 @@ export function linkSummary(link: ChannelLinkRecord, installations: Map<string, 
   };
 }
 
+/** Shown when a Slack private channel is picked while private channels are off (SLACK_PRIVATE_CHANNELS). */
+const PRIVATE_CHANNEL_OFF = "Private channels aren't turned on for Slack on this Baton server. Link a public channel, or ask the server owner to enable private channels.";
+
 // ── reads ────────────────────────────────────────────────────────────────────
 
 export async function listHandoverConnectors(deps: ActionDeps, c: ConnectorDeps, input: { handoverId: string }): Promise<Result<HandoverConnectorsView>> {
@@ -138,7 +141,14 @@ export async function listHandoverConnectors(deps: ActionDeps, c: ConnectorDeps,
         canManage: true,
         providers: CONNECTOR_PROVIDERS.map((p) => {
           const configured = connectorConfigured(p, c.env);
-          return { provider: p, configured, installPath: configured && p !== "telegram" ? `${connectorPaths.install(p)}?handover=${v.handoverId}` : null };
+          const slack = slackOptions(c.env);
+          return {
+            provider: p,
+            configured,
+            installPath: configured && p !== "telegram" ? `${connectorPaths.install(p)}?handover=${v.handoverId}` : null,
+            slashCommand: p === "slack" ? slack.slashCommand : p !== "github",
+            ...(p === "slack" ? { privateChannels: slack.privateChannels } : {}),
+          };
         }),
         installations: [...byId.values()].map((i) => ({ id: i.id, provider: i.provider, accountLabel: i.accountLabel, status: i.status, statusReason: i.statusReason })),
         links: links.filter((l) => l.state !== "revoked").map((l) => linkSummary(l, byId)),
@@ -192,6 +202,7 @@ export async function linkChannel(deps: ActionDeps, c: ConnectorDeps, input: z.i
       const adapter = await c.adapter(inst.provider);
       const channel = await adapter.describeChannel(c.adapterContext(), inst, v.externalChannelId);
       if (!channel) return failWith("not_found", { message: "Baton can't see that channel. Check the app's access and try again." });
+      if (channel.blockedReason === "private_channel") return failWith("forbidden", { message: PRIVATE_CHANNEL_OFF });
       const link = await store.linkChannel(
         { kind: "user", profileId: actor.profileId },
         { installationId: inst.id, handoverId: v.handoverId, externalChannelId: channel.id, channelLabel: createInputMasker().text(channel.label) },
@@ -366,6 +377,7 @@ export async function linkFromIntent(deps: ActionDeps, c: ConnectorDeps, input: 
       const adapter = await c.adapter(inst.provider);
       const channel = await adapter.describeChannel(c.adapterContext(), inst, p.channel);
       if (!channel) return failWith("not_found", { message: "Baton can't see that channel any more." });
+      if (channel.blockedReason === "private_channel") return failWith("forbidden", { message: PRIVATE_CHANNEL_OFF });
       const link = await store.linkChannel(user, { installationId: inst.id, handoverId: v.handoverId, externalChannelId: channel.id, channelLabel: createInputMasker().text(channel.label) });
       return ok(linkSummary(link, new Map([[inst.id, inst]])));
     }),

@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 
 import { openCredentials } from "../../../secrets";
 import { signConnectorState, verifyConnectorState } from "../../../state";
+import { missingRequiredSlackScopes, slackBotScopes, slackOptions } from "../api";
 import { CREATOR, HANDOVER, NOW, OTHER, SITE, STATE_SECRET, SYNTHETIC_ENV, fakeFetch, getRequest, makeDeps } from "../../bots/testing";
 import { handleSlackCallback, handleSlackInstall, handleSlackWebhook } from "../routes";
 import { parseSlackEnvelope, slackAdapter } from "../server";
@@ -14,6 +15,8 @@ import { parseSlackEnvelope, slackAdapter } from "../server";
 const TEAM = "T0SYNTH";
 const CH = "C0CORE";
 const BOT_TOKEN = "xoxb-synthetic";
+const REQUIRED = "channels:history,channels:read,chat:write,users:read";
+const WITH = (flags: Record<string, string>) => ({ ...SYNTHETIC_ENV, ...flags });
 const API = "https://slack.com/api";
 const TS = String(Math.floor(NOW / 1000));
 
@@ -116,6 +119,17 @@ describe("slack ingest through the webhook", () => {
     assert.deepEqual(store.bufferedFor(link.id).map((m) => m.kind), ["deleted"]);
   });
 
+  it("private-channel messages are never stored while private channels are off; stored when enabled", async () => {
+    const users = fakeFetch([[`POST ${API}/users.info`, { json: { ok: true, user: { profile: { display_name: "Asha" } } } }]]);
+    for (const [env, expected] of [[SYNTHETIC_ENV, 0], [WITH({ SLACK_PRIVATE_CHANNELS: "1" }), 1]] as const) {
+      const { deps, store } = makeDeps({ fetch: users.fetch, env: { ...env } });
+      const { link, user } = await installSlack(deps, store);
+      await store.recordCaptureConsent(user, link.id, "v1");
+      await handleSlackWebhook(signed(envelope(`Evp${expected}`, msg({ channel_type: "group" }))), deps);
+      assert.equal(store.bufferedFor(link.id).length, expected);
+    }
+  });
+
   it("app_uninstalled revokes the installation, deletes the sealed token and buffered messages", async () => {
     const { deps, store } = makeDeps({ fetch: fakeFetch([[`POST ${API}/users.info`, { json: { ok: true, user: { profile: { display_name: "Asha" } } } }]]).fetch });
     const { inst, link, user } = await installSlack(deps, store);
@@ -132,11 +146,31 @@ describe("slack OAuth", () => {
   const state = (profileId = CREATOR, exp = Math.floor(NOW / 1000) + 600) => signConnectorState(STATE_SECRET, { t: "oauth", p: "slack", profileId, handoverId: HANDOVER, nonce: "n", exp });
   const cb = (s: string) => getRequest(`${SITE}/api/connectors/slack/callback?code=code-1&state=${encodeURIComponent(s)}`);
 
+  it("scope helpers: minimal by default, optional scopes only with their flags", () => {
+    assert.deepEqual(slackOptions({}), { privateChannels: false, slashCommand: false });
+    assert.deepEqual(slackOptions({ SLACK_PRIVATE_CHANNELS: "0", SLACK_SLASH_COMMAND: "" }), { privateChannels: false, slashCommand: false });
+    assert.deepEqual(slackOptions({ SLACK_PRIVATE_CHANNELS: "1", SLACK_SLASH_COMMAND: "true" }), { privateChannels: true, slashCommand: true });
+    assert.equal(slackBotScopes({ privateChannels: false, slashCommand: false }).join(","), REQUIRED);
+    assert.equal(slackBotScopes({ privateChannels: true, slashCommand: false }).join(","), `${REQUIRED},groups:history,groups:read`);
+    assert.equal(slackBotScopes({ privateChannels: false, slashCommand: true }).join(","), `${REQUIRED},commands`);
+    assert.deepEqual(missingRequiredSlackScopes(REQUIRED.split(",")), []);
+    assert.deepEqual(missingRequiredSlackScopes(["channels:history", "channels:read", "chat:write"]), ["users:read"]);
+  });
+
+  it("install URL requests exactly the scopes for the server's flags", async () => {
+    const scopeFor = async (env: Record<string, string>) =>
+      new URL((await handleSlackInstall(getRequest(`${SITE}/api/connectors/slack/install?handover=${HANDOVER}`), makeDeps({ env }).deps)).headers.get("location") ?? "").searchParams.get("scope");
+    assert.equal(await scopeFor({ ...SYNTHETIC_ENV }), REQUIRED);
+    assert.equal(await scopeFor(WITH({ SLACK_PRIVATE_CHANNELS: "1" })), `${REQUIRED},groups:history,groups:read`);
+    assert.equal(await scopeFor(WITH({ SLACK_SLASH_COMMAND: "1" })), `${REQUIRED},commands`);
+    assert.equal(await scopeFor(WITH({ SLACK_PRIVATE_CHANNELS: "1", SLACK_SLASH_COMMAND: "1" })), `${REQUIRED},groups:history,groups:read,commands`);
+  });
+
   it("install redirects to Slack with bot scopes, callback URL and signed state", async () => {
     const res = await handleSlackInstall(getRequest(`${SITE}/api/connectors/slack/install?handover=${HANDOVER}`), makeDeps().deps);
     const loc = new URL(res.headers.get("location") ?? "");
     assert.equal(loc.origin + loc.pathname, "https://slack.com/oauth/v2/authorize");
-    assert.equal(loc.searchParams.get("scope"), "channels:history,channels:read,groups:history,groups:read,chat:write,commands,users:read");
+    assert.equal(loc.searchParams.get("scope"), REQUIRED);
     assert.equal(loc.searchParams.get("redirect_uri"), `${SITE}/api/connectors/slack/callback`);
     assert.ok(verifyConnectorState(STATE_SECRET, loc.searchParams.get("state"), NOW).ok);
   });
@@ -151,7 +185,7 @@ describe("slack OAuth", () => {
   });
 
   it("exchanges the code server-side and stores only the sealed bot token", async () => {
-    const f = fakeFetch([[`POST ${API}/oauth.v2.access`, { json: { ok: true, token_type: "bot", access_token: BOT_TOKEN, scope: "channels:history,chat:write", team: { id: TEAM, name: "CodeCell" }, bot_user_id: "U0BOT" } }]]);
+    const f = fakeFetch([[`POST ${API}/oauth.v2.access`, { json: { ok: true, token_type: "bot", access_token: BOT_TOKEN, scope: REQUIRED, team: { id: TEAM, name: "CodeCell" }, bot_user_id: "U0BOT" } }]]);
     const { deps, store, logs } = makeDeps({ fetch: f.fetch });
     const res = await handleSlackCallback(cb(state()), deps);
     assert.equal(res.headers.get("location"), `${SITE}/handover/${HANDOVER}/settings?connector=slack&status=connected#connectors`);
@@ -166,11 +200,27 @@ describe("slack OAuth", () => {
   });
 
   it("a re-install by a different Baton user is refused with a clear code", async () => {
-    const f = fakeFetch([[`POST ${API}/oauth.v2.access`, { json: { ok: true, token_type: "bot", access_token: BOT_TOKEN, scope: "", team: { id: TEAM, name: "CodeCell" } } }]]);
+    const f = fakeFetch([[`POST ${API}/oauth.v2.access`, { json: { ok: true, token_type: "bot", access_token: BOT_TOKEN, scope: REQUIRED, team: { id: TEAM, name: "CodeCell" } } }]]);
     const { deps, store } = makeDeps({ fetch: f.fetch, actor: OTHER });
     await store.upsertInstallation({ kind: "user", profileId: CREATOR }, { provider: "slack", externalAccountId: TEAM, accountLabel: "CodeCell", scopes: [], credentials: null });
     const res = await handleSlackCallback(cb(state(OTHER)), deps);
     assert.match(res.headers.get("location") ?? "", /status=connected_by_someone_else/);
+  });
+
+  it("an install granted without a required scope is refused, the token revoked and nothing stored", async () => {
+    for (const scope of ["channels:history,channels:read,chat:write", "channels:history,channels:read,users:read"]) {
+      const f = fakeFetch([
+        [`POST ${API}/oauth.v2.access`, { json: { ok: true, token_type: "bot", access_token: BOT_TOKEN, scope, team: { id: TEAM, name: "CodeCell" } } }],
+        [`POST ${API}/auth.revoke`, { json: { ok: true, revoked: true } }],
+      ]);
+      const { deps, store, logs } = makeDeps({ fetch: f.fetch });
+      const res = await handleSlackCallback(cb(state()), deps);
+      assert.match(res.headers.get("location") ?? "", /status=missing_permissions/);
+      assert.equal(await store.findInstallation("slack", TEAM), null);
+      assert.equal(f.calls[1].url, `${API}/auth.revoke`);
+      assert.equal(f.calls[1].headers.authorization, `Bearer ${BOT_TOKEN}`);
+      assert.doesNotMatch(JSON.stringify([res.headers.get("location"), logs]), /xoxb/);
+    }
   });
 
   it("provider errors redirect with a code, never Slack's text or the token", async () => {
@@ -184,8 +234,17 @@ describe("slack OAuth", () => {
 describe("slack slash command", () => {
   const form = (over: Record<string, string> = {}) => new URLSearchParams({ command: "/handover", team_id: TEAM, team_domain: "codecell", channel_id: CH, channel_name: "core", user_name: "asha", text: "", ...over }).toString();
 
-  it("answers ephemerally with a verified intent when not capturing, a status when capturing", async () => {
+  it("is off by default: points to Baton's settings and issues no intent", async () => {
     const { deps, store } = makeDeps();
+    await installSlack(deps, store);
+    const body = (await (await handleSlackWebhook(signed(form(), { form: true }), deps)).json()) as { response_type: string; text: string };
+    assert.equal(body.response_type, "ephemeral");
+    assert.match(body.text, /isn't turned on/);
+    assert.doesNotMatch(body.text, /intent=/);
+  });
+
+  it("answers ephemerally with a verified intent when not capturing, a status when capturing", async () => {
+    const { deps, store } = makeDeps({ env: WITH({ SLACK_SLASH_COMMAND: "1" }) });
     const { link, user } = await installSlack(deps, store);
     const body = (await (await handleSlackWebhook(signed(form(), { form: true }), deps)).json()) as { response_type: string; text: string };
     assert.equal(body.response_type, "ephemeral");
@@ -200,14 +259,25 @@ describe("slack slash command", () => {
   });
 
   it("an unsigned slash command is refused", async () => {
-    const { deps } = makeDeps();
+    const { deps } = makeDeps({ env: WITH({ SLACK_SLASH_COMMAND: "1" }) });
     assert.equal((await handleSlackWebhook(signed(form(), { form: true, noSig: true }), deps)).status, 401);
   });
 });
 
 describe("slack adapter", () => {
-  it("lists public and private channels; non-member channels are flagged bot_not_member", async () => {
+  it("by default lists public channels only; a private channel that slips through is refused as private_channel", async () => {
     const { deps, store } = makeDeps();
+    const { inst } = await installSlack(deps, store);
+    const f = fakeFetch([[`POST ${API}/conversations.list`, { json: { ok: true, channels: [{ id: "C1", name: "core", is_member: true }, { id: "C7", name: "leads", is_private: true, is_member: true }] } }]]);
+    deps.fetch = f.fetch;
+    assert.deepEqual(await slackAdapter.listChannels(deps, inst), [{ id: "C1", label: "#core", blockedReason: null }, { id: "C7", label: "#leads", blockedReason: "private_channel" }]);
+    assert.match(f.calls[0].body ?? "", /types=public_channel(&|$)/);
+    deps.fetch = fakeFetch([[`POST ${API}/conversations.info`, { json: { ok: true, channel: { id: "C7LEADS", name: "leads", is_private: true, is_member: true } } }]]).fetch;
+    assert.equal((await slackAdapter.describeChannel(deps, inst, "C7LEADS"))?.blockedReason, "private_channel");
+  });
+
+  it("with SLACK_PRIVATE_CHANNELS lists public and private channels; non-member channels are flagged bot_not_member", async () => {
+    const { deps, store } = makeDeps({ env: WITH({ SLACK_PRIVATE_CHANNELS: "1" }) });
     const { inst } = await installSlack(deps, store);
     const f = fakeFetch([[`POST ${API}/conversations.list`, (call) => (call.body?.includes("cursor=") ? { json: { ok: true, channels: [{ id: "C3", name: "random", is_member: true }] } } : { json: { ok: true, channels: [{ id: "C1", name: "core", is_member: true }, { id: "G2", name: "leads", is_private: true, is_member: false }, { id: "C4", name: "old", is_archived: true }], response_metadata: { next_cursor: "abc" } } })]]);
     deps.fetch = f.fetch;

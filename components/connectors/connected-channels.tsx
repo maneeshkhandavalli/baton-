@@ -139,7 +139,12 @@ function ProviderCard({ group: g, api }: { group: ProviderGroup; api: PanelApi }
       </div>
 
       {g.configured && g.provider === "telegram" && <TelegramSteps href={g.installHref} />}
-      {g.configured && (g.provider === "slack" || g.provider === "discord") && g.installations.length > 0 && (
+      {g.configured && g.provider === "slack" && (
+        <p className="text-caption text-muted-foreground">
+          {g.privateChannels ? "Public and private channels the Baton app was added to can be linked." : "Public channels only: private channels aren't turned on for this server."} Messages keep their author&apos;s Slack display name, and the app posts a notice in the channel when saving starts, pauses or stops.
+        </p>
+      )}
+      {g.configured && (g.provider === "slack" || g.provider === "discord") && g.slashCommand && g.installations.length > 0 && (
         <p className="text-caption text-muted-foreground">You can also type /handover in a channel to get a link to connect it.</p>
       )}
 

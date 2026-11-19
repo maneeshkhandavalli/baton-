@@ -60,7 +60,8 @@ function seed(s: FixtureScenario): HandoverConnectorsView {
   const configured = s !== "not-configured";
   const view: HandoverConnectorsView = {
     canManage: true,
-    providers: ALL.map((p) => ({ provider: p, configured, installPath: configured && p !== "telegram" ? `#install-${p}` : null })),
+    // Slack mirrors the server defaults: public channels only, slash command off (SLACK_PRIVATE_CHANNELS / SLACK_SLASH_COMMAND).
+    providers: ALL.map((p) => ({ provider: p, configured, installPath: configured && p !== "telegram" ? `#install-${p}` : null, slashCommand: p === "discord" || p === "telegram", ...(p === "slack" ? { privateChannels: false } : {}) })),
     installations: [],
     links: [],
   };

@@ -18,6 +18,27 @@ export const CONNECTOR_ENV: Readonly<Record<ConnectorProvider, readonly string[]
   telegram: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_USERNAME", "TELEGRAM_WEBHOOK_SECRET"],
 };
 
+/**
+ * Optional Slack capabilities (off by default; docs/round4/setup/SLACK_SCOPE_AUDIT.md). Turning one on also needs
+ * the matching scopes/events in the Slack app and a reinstall from Baton.
+ *  SLACK_PRIVATE_CHANNELS=1  private channels (groups:history, groups:read; events message.groups, group_left)
+ *  SLACK_SLASH_COMMAND=1     the /handover slash command (commands)
+ */
+export const SLACK_OPTION_ENV = ["SLACK_PRIVATE_CHANNELS", "SLACK_SLASH_COMMAND"] as const;
+
+export interface SlackOptions {
+  /** Private channels can be listed, linked and captured. */
+  privateChannels: boolean;
+  /** The /handover slash command is answered. */
+  slashCommand: boolean;
+}
+
+const flagOn = (v: string | undefined) => v !== undefined && ["1", "true", "yes", "on"].includes(v.trim().toLowerCase());
+
+export function slackOptions(env: Env = process.env): SlackOptions {
+  return { privateChannels: flagOn(env.SLACK_PRIVATE_CHANNELS), slashCommand: flagOn(env.SLACK_SLASH_COMMAND) };
+}
+
 /** Shared by every provider. */
 export const CONNECTOR_SHARED_ENV = ["BATON_SITE_URL", "CONNECTOR_STATE_SECRET", "CONNECTOR_SECRET_KEY"] as const;
 

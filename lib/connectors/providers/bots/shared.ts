@@ -152,6 +152,7 @@ export type InstallStatusCode =
   | "connected_by_someone_else"
   | "not_creator"
   | "rate_limited"
+  | "missing_permissions"
   | "unavailable";
 
 /** Where a finished (or failed) install lands: the handover's Connected channels panel, or /connect. */

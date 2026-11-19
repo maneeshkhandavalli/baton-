@@ -4,6 +4,7 @@
  * Authorization header and never appears in errors or logs.
  */
 
+import type { SlackOptions } from "../../config";
 import type { InstallationRecord } from "../../types";
 import { ProviderError, type AdapterContext } from "../adapter";
 import { isObject, providerFetch, readJson, retryAfter, statusError } from "../bots/shared";
@@ -12,14 +13,34 @@ export const SLACK_API = "https://slack.com/api";
 export const SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2/authorize";
 
 /**
- * Bot scopes, each with the reason it is needed (shown in the setup guide):
- *  channels:history / groups:history  read messages of public / private channels the bot was added to
- *  channels:read / groups:read        list channels for the picker and read a channel's name and membership
- *  chat:write                         post the capture notice (started / paused / stopped)
- *  commands                           the /handover slash command
- *  users:read                         turn a message author into a display name (users.info); ids are never stored
+ * Bot scopes, each with the reason it is needed (shown in the setup guide, docs/round4/setup/SLACK_SCOPE_AUDIT.md).
+ *
+ * Required (always requested, and checked on the OAuth callback — an install missing any of them is refused):
+ *  channels:history   read messages of public channels the app was added to (message.channels, history import)
+ *  channels:read      list public channels for the picker, read a channel's name and membership
+ *  chat:write         post the capture notice (started / paused / stopped) — part of the consent design
+ *  users:read         turn a message author into a display name (users.info); ids are never stored
+ *
+ * Optional, off by default (server env flags, see slackOptions):
+ *  SLACK_PRIVATE_CHANNELS=1  groups:history, groups:read  — private channels the app was invited to
+ *  SLACK_SLASH_COMMAND=1     commands                     — the /handover slash command
  */
-export const SLACK_BOT_SCOPES = ["channels:history", "channels:read", "groups:history", "groups:read", "chat:write", "commands", "users:read"] as const;
+export const SLACK_REQUIRED_SCOPES = ["channels:history", "channels:read", "chat:write", "users:read"] as const;
+export const SLACK_PRIVATE_CHANNEL_SCOPES = ["groups:history", "groups:read"] as const;
+export const SLACK_SLASH_COMMAND_SCOPES = ["commands"] as const;
+
+export { slackOptions, type SlackOptions } from "../../config";
+
+/** Exactly the bot scopes the install URL requests for these options (required first, then optional). */
+export function slackBotScopes(options: SlackOptions): string[] {
+  return [...SLACK_REQUIRED_SCOPES, ...(options.privateChannels ? SLACK_PRIVATE_CHANNEL_SCOPES : []), ...(options.slashCommand ? SLACK_SLASH_COMMAND_SCOPES : [])];
+}
+
+/** Required scopes Slack did NOT grant (empty = the install keeps attribution and the consent notice). */
+export function missingRequiredSlackScopes(granted: readonly string[]): string[] {
+  const g = new Set(granted);
+  return SLACK_REQUIRED_SCOPES.filter((s) => !g.has(s));
+}
 
 const AUTH_ERRORS = new Set(["invalid_auth", "not_authed", "token_revoked", "token_expired", "account_inactive", "no_permission"]);
 const FORBIDDEN_ERRORS = new Set(["missing_scope", "not_in_channel", "restricted_action", "access_denied", "ekm_access_denied"]);

@@ -129,6 +129,8 @@ export function blockedReasonText(reason: string | null, provider: ConnectorProv
       return "The bot can only see commands here. Turn off privacy mode in BotFather (/setprivacy → Disable) and add the bot to the group again, or make it a group admin.";
     case "missing_permission":
       return "The bot lacks permission to read this channel.";
+    case "private_channel":
+      return "Private channels aren't turned on for Slack on this Baton server, so this channel can't be linked.";
     default:
       return "Baton can't read this channel yet.";
   }
@@ -143,6 +145,10 @@ export interface ProviderGroup {
   configured: boolean;
   /** Same-origin href that starts installation, or null. */
   installHref: string | null;
+  /** The provider answers a `/handover` chat command (Slack only when its optional slash command is on). */
+  slashCommand: boolean;
+  /** Slack: private channels can be linked on this server. */
+  privateChannels: boolean;
   installations: Array<ConnectorInstallationSummary & { links: ConnectorLinkSummary[] }>;
 }
 
@@ -156,6 +162,8 @@ export function providerGroups(view: HandoverConnectorsView): ProviderGroup[] {
       name: PROVIDER_LABEL[p],
       configured,
       installHref: !configured ? null : p === "telegram" ? TELEGRAM_ADD_PATH : (status?.installPath ?? null),
+      slashCommand: status?.slashCommand ?? (p === "discord" || p === "telegram"),
+      privateChannels: status?.privateChannels ?? false,
       installations: view.installations
         .filter((i) => i.provider === p && (i.status !== "revoked" || view.links.some((l) => l.installationId === i.id)))
         .map((i) => ({ ...i, links: view.links.filter((l) => l.installationId === i.id && l.state !== "revoked") })),
@@ -206,6 +214,8 @@ export function installStatusText(provider: ConnectorProvider | null, code: stri
       return bad("Only the handover's creator can connect channels.");
     case "rate_limited":
       return bad(`${name} asked Baton to slow down. Try again in a minute.`);
+    case "missing_permissions":
+      return bad(`${name} wasn't added: it was approved without permissions Baton needs to show who said what and to tell the channel it's being saved. Ask a workspace admin to approve all requested permissions, then try again.`);
     case "unavailable":
       return bad(`${name} couldn't be reached, or isn't fully set up on this server. Try again later.`);
     default:

@@ -5,7 +5,11 @@
  *   GET  /api/connectors/slack/callback               → state check → oauth.v2.access server-side → sealed token
  *   POST /api/connectors/slack/webhook                → signing secret + replay window first, then:
  *        url_verification → challenge;  event_callback → ingestEvent (de-dup by event_id);
- *        form-encoded slash command `/handover` → ephemeral answer with a signed intent or a status.
+ *        form-encoded slash command `/handover` → ephemeral answer with a signed intent or a status
+ *        (only when SLACK_SLASH_COMMAND is on; otherwise a pointer to Baton's settings).
+ * Scopes: required set always, private channels / slash command only when their flags are on (api.ts slackOptions).
+ * The callback refuses an install that lacks a required scope (users:read keeps author attribution, chat:write keeps
+ * the capture notice), revoking the just-issued token, instead of silently degrading.
  * Slack expects an answer within 3 s: the only provider calls on this path are users.info lookups for channels that
  * are actually capturing (cached per request).
  */
@@ -31,7 +35,7 @@ import {
   text,
   type BotRouteDeps,
 } from "../bots/shared";
-import { SLACK_AUTHORIZE_URL, SLACK_BOT_SCOPES, exchangeSlackCode } from "./api";
+import { SLACK_AUTHORIZE_URL, exchangeSlackCode, missingRequiredSlackScopes, slackBotScopes, slackCall, slackOptions } from "./api";
 import { parseSlackEnvelope, resolveAuthors } from "./server";
 
 export const SLACK_COMMAND = "/handover";
@@ -39,7 +43,7 @@ export const SLACK_COMMAND = "/handover";
 export async function handleSlackInstall(request: Request, deps: BotRouteDeps): Promise<Response> {
   const start = await beginInstall("slack", request, deps);
   if (!start.ok) return start.response;
-  const q = new URLSearchParams({ client_id: deps.env.SLACK_CLIENT_ID ?? "", scope: SLACK_BOT_SCOPES.join(","), redirect_uri: start.redirectUri, state: start.state });
+  const q = new URLSearchParams({ client_id: deps.env.SLACK_CLIENT_ID ?? "", scope: slackBotScopes(slackOptions(deps.env)).join(","), redirect_uri: start.redirectUri, state: start.state });
   return redirectExternal(`${SLACK_AUTHORIZE_URL}?${q}`);
 }
 
@@ -52,6 +56,12 @@ export async function handleSlackCallback(request: Request, deps: BotRouteDeps):
   }
   try {
     const x = await exchangeSlackCode(deps, check.code, check.redirectUri);
+    if (missingRequiredSlackScopes(x.scopes).length > 0) {
+      // Never keep a token that would capture without names or without telling the channel. Best effort revoke.
+      await slackCall(deps, x.token, "auth.revoke", {}).catch(() => undefined);
+      logCode(deps, "slack", "oauth_callback", "missing_required_scopes");
+      return redirectTo(deps.env, afterInstallPath("slack", check.handoverId, "missing_permissions"));
+    }
     const sealed = sealCredentials(deps.secretKey, "slack", x.teamId, x.token);
     await deps.store.upsertInstallation({ kind: "user", profileId: check.profileId }, { provider: "slack", externalAccountId: x.teamId, accountLabel: x.teamName.slice(0, 120), scopes: x.scopes, credentials: sealed });
     return redirectTo(deps.env, afterInstallPath("slack", check.handoverId, "connected"));
@@ -78,6 +88,10 @@ export async function handleSlackWebhook(request: Request, deps: BotRouteDeps): 
   if (parsed.kind === "challenge") return json({ challenge: parsed.challenge });
 
   const event = parsed.event;
+  if (parsed.privateChannel && !slackOptions(deps.env).privateChannels) {
+    // Private channels are off on this server: never store their messages (lifecycle events still apply).
+    parsed.pending = [];
+  }
   if (parsed.pending.length > 0 && event.externalAccountId && event.externalChannelId) {
     // Resolve display names only when a link of this channel is capturing; otherwise ingest drops the event anyway.
     const capturing = await deps.store.capturingLinks("slack", event.externalAccountId, event.externalChannelId).catch(() => []);
@@ -99,6 +113,9 @@ export async function handleSlackWebhook(request: Request, deps: BotRouteDeps): 
 
 async function slashCommand(form: URLSearchParams, deps: BotRouteDeps): Promise<Response> {
   if (form.get("command") !== SLACK_COMMAND) return json({ response_type: "ephemeral", text: "Baton doesn't know that command." });
+  if (!slackOptions(deps.env).slashCommand) {
+    return json({ response_type: "ephemeral", text: "The /handover command isn't turned on for this Baton server. Link this channel from the handover's Settings → Connected channels in Baton." });
+  }
   const team = form.get("team_id");
   const channel = form.get("channel_id");
   if (!team || !channel || !/^[CG]/.test(channel)) {

@@ -27,8 +27,11 @@ export interface ChannelChoice {
   id: string;
   /** "#core-team", "owner/repo", group title. */
   label: string;
-  /** Present when the bot cannot read this channel yet (e.g. Slack: not a member; Telegram: privacy mode). */
-  blockedReason?: "bot_not_member" | "missing_permission" | "privacy_mode" | null;
+  /**
+   * Present when the bot cannot read this channel yet (e.g. Slack: not a member; Telegram: privacy mode).
+   * `private_channel`: a Slack private channel while private channels are off on this server — linking is refused.
+   */
+  blockedReason?: "bot_not_member" | "missing_permission" | "privacy_mode" | "private_channel" | null;
 }
 
 export const PROVIDER_ERROR_CODES = ["not_configured", "unauthorized", "forbidden", "not_found", "rate_limited", "unavailable", "invalid_response"] as const;

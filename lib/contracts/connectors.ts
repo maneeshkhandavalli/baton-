@@ -13,6 +13,10 @@ export interface ConnectorProviderStatus {
   configured: boolean;
   /** Same-origin path that starts installation for this handover; null when not configured or not applicable (Telegram). */
   installPath: string | null;
+  /** A `/handover` chat command is answered for this provider (Slack: only when SLACK_SLASH_COMMAND is on). */
+  slashCommand?: boolean;
+  /** Slack only: private channels can be linked (SLACK_PRIVATE_CHANNELS). */
+  privateChannels?: boolean;
 }
 
 export interface ConnectorInstallationSummary {
@@ -52,7 +56,7 @@ export interface HandoverConnectorsView {
 export interface ChannelChoiceDto {
   id: string;
   label: string;
-  blockedReason: "bot_not_member" | "missing_permission" | "privacy_mode" | null;
+  blockedReason: "bot_not_member" | "missing_permission" | "privacy_mode" | "private_channel" | null;
   /** Already linked to this handover (any non-revoked state). */
   linked: boolean;
 }
