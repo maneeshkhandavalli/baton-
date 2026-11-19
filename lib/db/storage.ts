@@ -19,7 +19,7 @@
  */
 
 import type { SourceUploadTicket } from "../contracts/dto";
-import type { DateOrder, SourceKind } from "../contracts/enums";
+import { isChatSourceKind, type DateOrder, type SourceKind } from "../contracts/enums";
 import type { VerifiedActor } from "./actor-rules";
 import type { DbClient } from "./client";
 import { DbError } from "./errors";
@@ -39,6 +39,15 @@ export interface StorageBucketApi {
   createSignedUploadUrl(path: string): PromiseLike<{ data: { signedUrl: string; token: string; path: string } | null; error: StorageError | null }>;
   download(path: string): PromiseLike<{ data: Blob | null; error: StorageError | null }>;
   remove(paths: string[]): PromiseLike<{ data: unknown; error: StorageError | null }>;
+  /**
+   * Round 4: server-side upload with the service-role client (connector transcripts only; browsers keep using
+   * signed upload URLs). Optional so narrow fakes need not implement it.
+   */
+  upload?(
+    path: string,
+    body: Uint8Array,
+    options?: { contentType?: string; upsert?: boolean },
+  ): PromiseLike<{ data: unknown; error: StorageError | null }>;
   /** Objects directly under a folder (Supabase Storage `list`). Optional so narrow fakes need not implement it. */
   list?(
     prefix: string,
@@ -76,6 +85,7 @@ export const SOURCE_KIND_EXTENSIONS: Readonly<Record<SourceKind, readonly string
   docx: ["docx"],
   markdown: ["md", "markdown"],
   text: ["txt", "text"],
+  chat_import: ["jsonl"],
 };
 
 /**
@@ -89,6 +99,7 @@ export const SOURCE_KIND_MIME_TYPES: Readonly<Record<SourceKind, readonly string
   docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", ...GENERIC_MIME],
   markdown: ["text/markdown", "text/x-markdown", "text/plain", ...GENERIC_MIME],
   text: ["text/plain", ...GENERIC_MIME],
+  chat_import: ["application/x-ndjson", "application/jsonl", ...GENERIC_MIME],
 };
 
 export interface SourceUploadRequest {
@@ -158,6 +169,8 @@ export function bytesMatchKind(bytes: Uint8Array, kind: SourceKind): boolean {
       return isZip || (text && !isCfb && !startsAsPdf);
     case "markdown":
     case "text":
+      return !isZip && !isCfb && text && !startsAsPdf;
+    case "chat_import": // Round 4: server-written JSON Lines; the parser checks the format header
       return !isZip && !isCfb && text && !startsAsPdf;
     default:
       return false;
@@ -488,7 +501,7 @@ export async function readRawSourceForPeople(
     const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as
       | (RawSourceRow & { state?: string })
       | null;
-    if (!source || !source.raw_storage_path || source.kind !== "whatsapp_export") return null;
+    if (!source || !source.raw_storage_path || !isChatSourceKind(source.kind)) return null;
     if (source.state !== "uploaded" && source.state !== "parsing" && source.state !== "failed") return null;
     if (!isOwnedRawPath(source.raw_storage_path, sourceId, handoverId)) return null;
     const bytes = await download(adminStorage, source.raw_storage_path);

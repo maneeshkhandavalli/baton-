@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
-import { MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import { isUserUploadSourceKind, MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind, type UserUploadSourceKind } from "@/lib/contracts/enums";
 import type { HandoverSummary, SourceSummary } from "@/lib/contracts/dto";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
@@ -74,7 +74,7 @@ export interface WizardInitial {
   step: number;
 }
 
-function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
+function kindFor(fileName: string, group: "chat" | "doc"): UserUploadSourceKind | null {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
   // A .txt is decided by its contents (looksLikeChatExport); this is only the starting guess.
   if (ext === "txt") return group === "chat" ? "whatsapp_export" : "text";
@@ -86,7 +86,7 @@ function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
 }
 
 /** "This file isn't a valid …" */
-const KIND_NOUN: Record<SourceKind, string> = {
+const KIND_NOUN: Record<UserUploadSourceKind, string> = {
   whatsapp_export: "WhatsApp chat export",
   pdf: "PDF",
   docx: "Word document",
@@ -94,7 +94,7 @@ const KIND_NOUN: Record<SourceKind, string> = {
   text: "text file",
 };
 
-const MIME: Record<SourceKind, string> = {
+const MIME: Record<UserUploadSourceKind, string> = {
   whatsapp_export: "text/plain",
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -390,7 +390,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   }
 
   // ── Step 3: real signed upload → server verification → consent → preview ─
-  async function uploadSource(localId: string, entry: { name: string; size: number; kind: SourceKind; file: File }) {
+  async function uploadSource(localId: string, entry: { name: string; size: number; kind: UserUploadSourceKind; file: File }) {
     if (!handoverId) return;
     if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", errorPhase: "too_large", error: TOO_LARGE_MESSAGE });
     if (entry.size === 0) return update(localId, { status: "error", errorPhase: "empty", error: "This file is empty." });
@@ -510,7 +510,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
       setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
       if (isTxt(file.name)) {
         void (async () => {
-          const detected: SourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
+          const detected: UserUploadSourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
           if (detected !== kind) update(localId, { kind: detected });
           await uploadSource(localId, { name: file.name, size: file.size, kind: detected, file });
         })();
@@ -556,7 +556,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   }
 
   function retry(s: DraftSource) {
-    if (!s.file || phaseOf(s) !== "failed" || (s.kind === "text" && !isTxt(s.name))) return;
+    if (!s.file || phaseOf(s) !== "failed" || !isUserUploadSourceKind(s.kind) || (s.kind === "text" && !isTxt(s.name))) return;
     void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
   }
 

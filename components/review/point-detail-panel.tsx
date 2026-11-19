@@ -13,7 +13,7 @@ import { GUARD_RATIONALE_PREFIX, isGuardedVerdict } from "@/components/shared/su
 import { MaskedText } from "@/components/shared/masked-text";
 import { statusConfig } from "@/config/status";
 import type { EvidenceItem, PointDetail, SourceSummary } from "@/lib/contracts/dto";
-import { ACCESS_LEVELS, type AccessLevel, type MaskKind } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, isChatSourceKind, type AccessLevel, type MaskKind } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 import type { PointReviewFlag } from "@/lib/contracts/extraction";
@@ -249,7 +249,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                         <dd>{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</dd>
                       </>
                     )}
-                    <dt className="text-muted-foreground">{s.kind === "whatsapp_export" ? "Messages" : "Blocks"}</dt>
+                    <dt className="text-muted-foreground">{isChatSourceKind(s.kind) ? "Messages" : "Blocks"}</dt>
                     <dd>{formatCount(s.messageCount)}</dd>
                     <dt className="text-muted-foreground">Raw file</dt>
                     <dd>{s.rawDeletedAt ? `Deleted ${formatDate(s.rawDeletedAt)}` : "Kept until processed"}</dd>

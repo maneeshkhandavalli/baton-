@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useAction } from "@/hooks/use-action";
 import type { AccessTokenSummary, CreatedInvitation, ExclusionSummary, HandoverSummary, MemberSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
-import { ACCESS_LEVELS, type AccessLevel, type MaskKind, type MemberRole } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, isChatSourceKind, isUserUploadSourceKind, type AccessLevel, type MaskKind, type MemberRole } from "@/lib/contracts/enums";
 import { deleteHandover, offerCreatorTransfer, respondToCreatorTransfer, startRevision } from "@/lib/actions/handovers";
 import { inviteMember, removeMember, updateMemberClearance } from "@/lib/actions/members";
 import { removeSource } from "@/lib/actions/sources";
@@ -298,12 +298,12 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               const earlier = earlierCount(s);
               return (
               <li key={s.id} className="flex flex-wrap items-start gap-3 px-3 py-3">
-                {s.kind === "whatsapp_export" ? <MessageCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : <FileText aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+                {isChatSourceKind(s.kind) ? <MessageCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : <FileText aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{s.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} · {sourceStateLabel[s.state]}
-                    {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${s.kind === "whatsapp_export" ? "messages" : "blocks"}`}
+                    {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${isChatSourceKind(s.kind) ? "messages" : "blocks"}`}
                     {s.firstMessageAt && ` · ${formatDateRange(s.firstMessageAt, s.lastMessageAt)}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -329,7 +329,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                   )}
                 </div>
                 <AccessBadge level={s.accessLevel} />
-                {canAddVersion && !pending && (s.state === "uploaded" || s.state === "parsed" || s.state === "failed") && <SourceVersionUpload source={s} consentDisclosure={consentDisclosure} />}
+                {canAddVersion && !pending && isUserUploadSourceKind(s.kind) && (s.state === "uploaded" || s.state === "parsed" || s.state === "failed") && <SourceVersionUpload source={s} consentDisclosure={consentDisclosure} />}
                 {canManageSources && h.state !== "processing" && (
                   <ConfirmDialog
                     trigger={

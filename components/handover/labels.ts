@@ -85,6 +85,7 @@ export const sourceKindLabel: Record<SourceKind, string> = {
   docx: "Word document",
   markdown: "Markdown",
   text: "Text",
+  chat_import: "Connected channel",
 };
 
 export const sourceStateLabel: Record<SourceState, string> = {

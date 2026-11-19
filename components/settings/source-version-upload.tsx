@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { SourceSummary } from "@/lib/contracts/dto";
-import { ACCESS_LEVELS, type AccessLevel, type SourceKind } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, isUserUploadSourceKind, type AccessLevel, type SourceKind } from "@/lib/contracts/enums";
 import { confirmSourceUploaded, createSourceVersionUpload, recordSourceConsent } from "@/lib/actions/sources";
 import { createSupabaseUploadClient } from "@/lib/supabase/client";
 
@@ -30,6 +30,7 @@ const ACCEPT: Record<SourceKind, string> = {
   docx: ".docx",
   markdown: ".md,.markdown",
   text: ".txt",
+  chat_import: ".jsonl", // never offered: connector sources are updated by their channel (Round 4)
 };
 const MIME: Record<SourceKind, string> = {
   whatsapp_export: "text/plain",
@@ -37,6 +38,7 @@ const MIME: Record<SourceKind, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   markdown: "text/markdown",
   text: "text/plain",
+  chat_import: "application/x-ndjson",
 };
 
 async function sha256Hex(data: ArrayBuffer) {
@@ -75,9 +77,11 @@ export function SourceVersionUpload({ source, consentDisclosure = DEFAULT_CONSEN
     setMessage(null);
     try {
       const sha = await sha256Hex(await file.arrayBuffer());
+      const kind = source.kind;
+      if (!isUserUploadSourceKind(kind)) return; // Round 4: a connector source gets new versions from its channel
       const started = await createSourceVersionUpload({
         previousSourceId: source.id,
-        kind: source.kind,
+        kind,
         fileName: file.name,
         mimeType: file.type || MIME[source.kind],
         sizeBytes: file.size,

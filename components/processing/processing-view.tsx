@@ -15,7 +15,7 @@ import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, consentComplete, emptyCon
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import { useAction } from "@/hooks/use-action";
 import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
-import type { MaskKind } from "@/lib/contracts/enums";
+import { isChatSourceKind, type MaskKind } from "@/lib/contracts/enums";
 import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
 import { isCurrentSourceVersion, sourceUpdateStateLabel } from "@/lib/contracts/source-versions";
@@ -400,7 +400,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function SourceRow({ s }: { s: SourceSummary }) {
-  const Icon = s.kind === "whatsapp_export" ? MessageCircle : FileText;
+  const Icon = isChatSourceKind(s.kind) ? MessageCircle : FileText;
   return (
     <li className="space-y-1.5 px-4 py-3">
       <div className="flex items-start gap-2">
@@ -411,7 +411,7 @@ function SourceRow({ s }: { s: SourceSummary }) {
       <p className="pl-6 text-caption text-muted-foreground">
         {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} ·{" "}
         <span className={cn(s.state === "failed" && "text-destructive-fg", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
-        {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${s.kind === "whatsapp_export" ? "messages" : "blocks"}`}
+        {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${isChatSourceKind(s.kind) ? "messages" : "blocks"}`}
       </p>
       {s.firstMessageAt && <p className="pl-6 text-caption text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}
       <p className="pl-6 text-caption text-muted-foreground">

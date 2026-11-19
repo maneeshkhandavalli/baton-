@@ -122,8 +122,22 @@ export type SupportVerdict = (typeof SUPPORT_VERDICTS)[number];
 export const EVIDENCE_STANCES = ["supports", "contradicts"] as const;
 export type EvidenceStance = (typeof EVIDENCE_STANCES)[number];
 
-export const SOURCE_KINDS = ["whatsapp_export", "pdf", "docx", "markdown", "text"] as const;
+export const SOURCE_KINDS = ["whatsapp_export", "pdf", "docx", "markdown", "text", "chat_import"] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
+
+/**
+ * Round 4: kinds a person may upload. `chat_import` is written only by the server from a connector channel
+ * (lib/connectors), never accepted from a browser upload.
+ */
+export const USER_UPLOAD_SOURCE_KINDS = ["whatsapp_export", "pdf", "docx", "markdown", "text"] as const satisfies readonly SourceKind[];
+export type UserUploadSourceKind = (typeof USER_UPLOAD_SOURCE_KINDS)[number];
+export const isUserUploadSourceKind = (kind: unknown): kind is UserUploadSourceKind =>
+  (USER_UPLOAD_SOURCE_KINDS as readonly unknown[]).includes(kind);
+
+/** Round 4: kinds whose content is messages (people, timestamps), as opposed to document blocks. */
+export const CHAT_SOURCE_KINDS = ["whatsapp_export", "chat_import"] as const satisfies readonly SourceKind[];
+export const isChatSourceKind = (kind: SourceKind | string | null | undefined): boolean =>
+  kind === "whatsapp_export" || kind === "chat_import";
 
 export const SOURCE_STATES = ["pending_upload", "uploaded", "parsing", "parsed", "failed", "removed"] as const;
 export type SourceState = (typeof SOURCE_STATES)[number];

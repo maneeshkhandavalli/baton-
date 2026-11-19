@@ -28,6 +28,7 @@ import {
   RELATED_PRIVACY_SURFACE_KINDS,
   RISK_LEVELS,
   SOURCE_KINDS,
+  USER_UPLOAD_SOURCE_KINDS,
   SUPPORT_VERDICTS,
 } from "./enums";
 import { IDENTITY_HASH_PATTERN } from "./identity";
@@ -273,7 +274,7 @@ export const deleteAccountInput = z.object({
 
 export const createSourceUploadInput = z.object({
   handoverId: uuidSchema,
-  kind: z.enum(SOURCE_KINDS),
+  kind: z.enum(USER_UPLOAD_SOURCE_KINDS),
   fileName: z.string().min(1).max(255),
   mimeType: z.string().max(127),
   sizeBytes: z.number().int().positive().max(MAX_SOURCE_BYTES),
@@ -288,7 +289,7 @@ export const sourceIdInput = z.object({ sourceId: uuidSchema });
  */
 export const createSourceVersionUploadInput = z.object({
   previousSourceId: uuidSchema,
-  kind: z.enum(SOURCE_KINDS),
+  kind: z.enum(USER_UPLOAD_SOURCE_KINDS),
   fileName: z.string().min(1).max(255),
   mimeType: z.string().max(127),
   sizeBytes: z.number().int().positive().max(MAX_SOURCE_BYTES),
