@@ -13,7 +13,7 @@ written here: you enter them in `C:\Users\manee\Documents\programing\baton-r4-ma
 |---|---|---|---|
 | 0.1 | Local Supabase stack running (you start Docker Desktop and the existing `baton-dev` stack) | owner | waiting |
 | 0.2 | **Connector database schema available.** The connector migrations (`20261119800100`, `20261119800200`) are NOT in the shared `baton-dev` database and must not be applied there. Live events can only be stored in an **isolated** database with its own storage. Main will propose one (separate Supabase CLI project id → separate containers and volume) for your approval, after checking memory. Until then: installs fail at "store" and events are acknowledged but cannot be saved. | owner approval → Main | **blocked on approval** |
-| 0.3 | Start the tunnel: `cloudflared tunnel --url http://localhost:3110` (or `ngrok http 3110`) and note `<TUNNEL>` | owner | — |
+| 0.3 | **After local verification and the isolated-database decision only:** start the tunnel: `cloudflared tunnel --url http://localhost:3110` (or `ngrok http 3110`) and note `<TUNNEL>` | owner | — |
 | 0.4 | In `.env.local`: `BATON_SITE_URL=<TUNNEL>` and the shared variables below; Main restarts the 3110 preview so the server reads them | owner + Main | — |
 | 0.5 | **Browse the preview at `<TUNNEL>`, not localhost**, when connecting a provider: the install route needs your Baton session on the same origin the provider redirects back to. Use email + password sign-in there (the local Auth config only allows `localhost:3000` for OAuth redirects, so Google sign-in through the tunnel will not work). | owner | — |
 
@@ -64,7 +64,7 @@ that provider's variables are set.
 | OAuth redirect URL | `<TUNNEL>/api/connectors/slack/callback` |
 | Event Subscriptions → Request URL | `<TUNNEL>/api/connectors/slack/webhook` (signed `url_verification` on save: preview must be running with Slack variables) |
 | Slash command | `/handover` → Request URL `<TUNNEL>/api/connectors/slack/webhook` |
-| Bot scopes (exactly what the install requests; Slack refuses the install if any is missing) | `channels:history`, `channels:read`, `groups:history`, `groups:read`, `chat:write`, `commands`, `users:read` — your app has public-channel scopes; **add `groups:history`, `groups:read`, `commands`, `users:read`** (and `chat:write` if missing) |
+| Bot scopes | **Pending your decision** — see `SLACK_SCOPE_AUDIT.md`. Today the code requests `channels:history`, `channels:read`, `groups:history`, `groups:read`, `chat:write`, `commands`, `users:read`; the proposed minimal default is `channels:history`, `channels:read`, `chat:write`, `users:read` with private channels and the slash command as opt-in flags. Do not add scopes or reinstall yet. |
 | Bot events | `message.channels`, `message.groups`, `app_uninstalled`, `tokens_revoked`, `channel_left`, `group_left` |
 | Env | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (Basic Information → App Credentials) |
 | Install | from **Baton** (Settings → Connected channels → Add to Slack), not the console's "Install to Workspace": Baton's signed state ties the install to you and seals the bot token. The existing console install's token is not used. |
