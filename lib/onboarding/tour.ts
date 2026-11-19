@@ -190,6 +190,9 @@ export type TourEvent =
   | { type: "back" }
   | { type: "dismiss" }
   | { type: "anchor_missing"; stepId: string }
+  /** Later OPTIONAL steps known to be absent (checked when an earlier step on the same page is found), dropped before
+   * they are reached so the "n of N" total never shrinks mid-tour. Current and earlier steps are never pruned. */
+  | { type: "prune"; stepIds: string[] }
   | { type: "reset" };
 
 export const IDLE_TOUR: TourState = Object.freeze({ status: "idle" });
@@ -212,6 +215,11 @@ export function tourReducer(state: TourState, event: TourEvent): TourState {
       return state.index === 0 ? state : { ...state, index: state.index - 1, direction: -1 };
     case "dismiss":
       return { status: "finished", role: state.role, outcome: "dismissed" };
+    case "prune": {
+      const drop = new Set(event.stepIds);
+      const steps = state.steps.filter((s, i) => i <= state.index || !(s.optional && drop.has(s.id)));
+      return steps.length === state.steps.length ? state : { ...state, steps };
+    }
     case "anchor_missing": {
       // Stale report (the step already changed): ignore.
       if (state.steps[state.index]?.id !== event.stepId) return state;

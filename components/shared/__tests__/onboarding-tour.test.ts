@@ -113,6 +113,18 @@ describe("tour state machine", () => {
     assert.equal(tourReducer(s, { type: "anchor_missing", stepId: "stale" }), s, "a stale report is ignored");
   });
 
+  it("prune drops absent later OPTIONAL steps up front, so the total never shrinks mid-tour", () => {
+    const opt = steps(4).map((st) => (st.id === "s1" || st.id === "s3" ? { ...st, optional: true } : st));
+    let s = tourReducer(IDLE_TOUR, { type: "start", role: "creator", steps: opt });
+    s = tourReducer(s, { type: "prune", stepIds: ["s1", "s2"] }); // s2 is not optional: kept
+    assert.equal(stepProgress(s)?.label, "1 of 3");
+    s = tourReducer(s, { type: "next" });
+    assert.equal(at(s), "s2");
+    assert.equal(stepProgress(s)?.label, "2 of 3");
+    const before = s;
+    assert.equal(tourReducer(s, { type: "prune", stepIds: ["s0", "s2"] }), before, "current and earlier steps are never pruned");
+  });
+
   it("missing anchors at the end complete the tour; all missing ends it quietly", () => {
     let s = tourReducer(start(2), { type: "next" });
     s = tourReducer(s, { type: "anchor_missing", stepId: "s1" });

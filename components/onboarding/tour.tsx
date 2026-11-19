@@ -53,6 +53,11 @@ export function TourOverlay() {
   const step = currentStep(tour);
   const progress = stepProgress(tour);
   const onPage = step ? onStepPage(step, pathname) : false;
+  // The latest tour state for effects that must not re-run on every tour change (pruning absent optional steps).
+  const tourRef = useRef(tour);
+  useEffect(() => {
+    tourRef.current = tour;
+  });
 
   // The element found for a step (keyed by step id, so a new step never shows the previous step's element).
   const [found, setFound] = useState<{ stepId: string; el: HTMLElement } | null>(null);
@@ -105,6 +110,16 @@ export function TourOverlay() {
           else el.scrollIntoView({ block: "center", behavior });
         }
         setFound({ stepId: step.id, el });
+        // The page has rendered: later optional steps on this same page whose element is absent are dropped now,
+        // before they are reached, so the "n of N" total stays stable.
+        const running = tourRef.current;
+        if (running.status === "running") {
+          const absent = running.steps
+            .slice(running.index + 1)
+            .filter((s) => s.optional && s.href === step.href && !findAnchor(s.anchor))
+            .map((s) => s.id);
+          if (absent.length > 0) dispatch({ type: "prune", stepIds: absent });
+        }
         return;
       }
       if (Date.now() > deadline) dispatch({ type: "anchor_missing", stepId: step.id });
