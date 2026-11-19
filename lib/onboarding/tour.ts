@@ -280,18 +280,23 @@ export function placeTourCard(anchor: Rect, card: { width: number; height: numbe
     const r = { top: c.top, left: c.left, width: card.width, height: card.height };
     if (fits(r) && clear(r)) return c;
   }
-  // Small screens: pin to an edge, the one farther from the anchor; keep clear of avoid areas when possible.
+  // Small screens: pin to the edge away from the element's top (its heading); keep clear of avoid areas when possible.
   const left = clamp((viewport.width - card.width) / 2, EDGE, viewport.width - EDGE - card.width);
   const top: Placement = { side: "top-sheet", top: EDGE, left };
   const bottomSheet: Placement = { side: "bottom-sheet", top: Math.max(EDGE, viewport.height - EDGE - card.height), left };
-  const anchorCentre = anchor.top + anchor.height / 2;
-  const ordered = anchorCentre > viewport.height / 2 ? [top, bottomSheet] : [bottomSheet, top];
+  // The part of the element people read first is its top (its heading): keep that visible.
+  const focus = anchor.top + Math.min(anchor.height, 120) / 2;
+  const ordered = focus > viewport.height / 2 ? [top, bottomSheet] : [bottomSheet, top];
   for (const c of ordered) {
     const r = { top: c.top, left: c.left, width: card.width, height: card.height };
     if (clear(r)) return c;
   }
   for (const c of ordered) {
     if (!overlaps({ top: c.top, left: c.left, width: card.width, height: card.height }, anchor)) return c;
+  }
+  // The element is taller than the screen: overlap is unavoidable; at least keep the primary action clear.
+  for (const c of ordered) {
+    if (avoid.every((a) => !overlaps({ top: c.top, left: c.left, width: card.width, height: card.height }, a))) return c;
   }
   return ordered[0];
 }

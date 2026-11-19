@@ -55,7 +55,9 @@ export function WizardPreview({
   return (
     <div className="space-y-8">
       <div className="space-y-5 border-b border-border pb-6">
-        <Stepper steps={STEPS} current={step} label="New handover steps" />
+        <div data-tour="wizard-steps">
+          <Stepper steps={STEPS} current={step} label="New handover steps" />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <SaveIndicator state={{ kind: "saved", at: savedAt }} className="min-w-0 flex-1" />
           <Button size="sm" variant="destructive-ghost" disabled>
@@ -114,7 +116,7 @@ export function WizardPreview({
         </div>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+      <div data-tour-avoid className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">
           {step > 0 ? (
             <Link href={href(step - 1)} className={buttonVariants({ variant: "ghost" })}>

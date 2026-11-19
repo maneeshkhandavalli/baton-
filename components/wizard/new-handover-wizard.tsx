@@ -735,7 +735,9 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   return (
     <div className="space-y-8">
       <div className="space-y-5 border-b border-border pb-6">
-        <Stepper steps={STEPS} current={shownStep} onStepClick={submitting ? undefined : (i) => setStep(i)} label="New handover steps" />
+        <div data-tour="wizard-steps">
+          <Stepper steps={STEPS} current={shownStep} onStepClick={submitting ? undefined : (i) => setStep(i)} label="New handover steps" />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <SaveIndicator
             state={save}
@@ -835,7 +837,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
         </Alert>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+      <div data-tour-avoid className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">
           <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
             <ArrowLeft aria-hidden="true" data-icon="inline-start" />
@@ -936,7 +938,7 @@ export function DetailsStep({
         </Alert>
       )}
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-6 sm:grid-cols-2" data-tour="wizard-details">
         <Field id="title" label="Handover title" hint={hint.title} error={errors.title} className="sm:col-span-2">
           <Input
             id="title"

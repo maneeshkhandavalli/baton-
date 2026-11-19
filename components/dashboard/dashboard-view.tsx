@@ -57,7 +57,7 @@ export function upNextItems(cards: readonly HandoverCardData[], limit = 3): UpNe
 function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
   if (!items.length) return null;
   return (
-    <section aria-labelledby="up-next" className="rounded-xl border border-border bg-card shadow-soft">
+    <section aria-labelledby="up-next" data-tour="up-next" className="rounded-xl border border-border bg-card shadow-soft">
       <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
         <h2 id="up-next" className="type-heading">
           Up next
