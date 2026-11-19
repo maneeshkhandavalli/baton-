@@ -8,12 +8,8 @@ import { ConnectorActionsProvider } from "./actions-context";
 import { ConnectedChannels } from "./connected-channels";
 import { createFixtureActions, FIXTURE_SCENARIOS, SCENARIO_TITLES, type FixtureScenario } from "./fixture-actions";
 
-export function ConnectorFixtureGallery() {
-  const [scenario, setScenario] = useState<FixtureScenario>(() => {
-    if (typeof window === "undefined") return "capturing";
-    const q = new URLSearchParams(window.location.search).get("scenario");
-    return (FIXTURE_SCENARIOS as readonly string[]).includes(q ?? "") ? (q as FixtureScenario) : "capturing";
-  });
+export function ConnectorFixtureGallery({ initial }: { initial: FixtureScenario }) {
+  const [scenario, setScenario] = useState<FixtureScenario>(initial);
   const actions = useMemo(() => createFixtureActions(scenario), [scenario]);
   return (
     <div className="space-y-6 py-8">
