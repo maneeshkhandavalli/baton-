@@ -1,4 +1,22 @@
-# Proposal: isolated connector test database (NOT created — awaiting approval)
+# Isolated connector test database — STARTED 2026-11-19 (approved; host free memory 2.8 GB before start)
+
+Run from `C:\Users\manee\Documents\programing\baton-connectors-testdb` (migrations copied from `91bcafe`; `SOURCE.txt`):
+
+```
+npx supabase@2.122.1 start --workdir C:\Users\manee\Documents\programing\baton-connectors-testdb -x realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+```
+
+Verified after start: baton-dev's 5 containers keep their ids and creation times; added only the 5
+`supabase_*_baton-connectors-test` containers, volumes `supabase_db_baton-connectors-test` and
+`supabase_storage_baton-connectors-test`, network `supabase_network_baton-connectors-test`, and two unattached anonymous
+volumes left by the CLI's one-off setup container (not removed). Auth/REST/Storage 200 on 127.0.0.1:55321; 4 connector
+tables in the isolated database, 0 in baton-dev (still 52 migration rows). Env file for 3110:
+`.env.connectors-test.local` (git-ignored). Stop/cleanup: §6 (the two anonymous volumes would need a separate,
+approved removal).
+
+---
+
+Original proposal follows.
 
 Purpose: a throwaway local Supabase stack that has the connector migrations, so live provider events can be stored
 and shown as connected-channel sources, without touching `baton-dev` (Task 05 data, shared preview database).

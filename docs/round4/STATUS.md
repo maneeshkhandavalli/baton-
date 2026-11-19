@@ -7,15 +7,15 @@ Legend: ✅ done · ⏳ in progress · ❌ not done · 🔒 blocked by owner act
 
 | # | Deliverable | Implemented | Automated tests | Browser verified | Live provider verified | Blocked on |
 |---|---|---|---|---|---|---|
-| 1 | GitHub integration (real repo events) | ✅ | ✅ connectors suite (synthetic) | ❌ | ❌ | 🔒 GitHub App registration + credentials; isolated DB start; tunnel |
-| 2 | Discord bot (real channel messages) | ✅ | ✅ | ❌ | ❌ | 🔒 credentials; isolated DB start; tunnel |
-| 3 | Telegram bot (real group messages) | ✅ (private connect link since `72047c0`) | ✅ | ❌ | ❌ | 🔒 bot token + webhook secret; isolated DB start; tunnel |
-| 4 | Slack (real Events API messages) | ✅ (minimal scopes since `0e3836d`) | ✅ | ❌ | ❌ | 🔒 app console changes (`slack.md` §3b) + credentials; isolated DB start; tunnel |
-| 5 | Living Handover end to end | ✅ (Task 05) | ✅ pipeline + SQL suites | ✅ Playwright: new version → change detection (2 contradictions) → corrections → v2 published → re-acknowledged (`review/browser/VERIFICATION.md`) | — | — |
+| 1 | GitHub integration (real repo events) | ✅ | ✅ connectors suite (synthetic) | ❌ | ❌ | 🔒 GitHub App registration + credentials; tunnel (ngrok token) |
+| 2 | Discord bot (real channel messages) | ✅ | ✅ | ❌ | ❌ | 🔒 credentials; tunnel (ngrok token) |
+| 3 | Telegram bot (real group messages) | ✅ (private connect link since `72047c0`) | ✅ | ❌ | ❌ | 🔒 bot token + webhook secret; tunnel (ngrok token) |
+| 4 | Slack (real Events API messages) | ✅ (minimal scopes since `0e3836d`) | ✅ | ❌ | ❌ | 🔒 app console changes (`slack.md` §3b) + credentials; tunnel (ngrok token) |
+| 5 | Living Handover end to end | ✅ (Task 05) | ✅ pipeline + SQL suites | ✅ Playwright: new version → change detection (2 contradictions) → corrections → v2 published → re-acknowledged; v3 → 2 × New information (`review/browser/VERIFICATION.md`) | — | — |
 | 6 | Creator and incoming-member journeys | ✅ | ✅ actions + integration + SQL | ✅ Playwright: sign-up, wizard, processing, review, gaps, publish, invite, accept, role boundaries | — | — |
 | 7 | Invitations and onboarding tours with saved progress | ✅ | ✅ | ✅ Playwright: tours (creator + incoming), persistence (server metadata), replay/skip, reissue, used/accepted links | — | Task 06 demo-account checks: owner sign-in still pending |
 | 8 | Reliability and regression | ✅ audit fixes `72047c0` | ✅ see below | ✅ HTTP smoke 20/20 | — | — |
-| 9 | Submission documentation + judge-accessible link | ⏳ `docs/submission/SUBMISSION.md` draft | — | — | — | 🔒 owner decision on hosting (deployment not authorised yet) |
+| 9 | Submission documentation + judge-accessible link | ⏳ `submission/SUBMISSION.md` draft; `submission/DEPLOYMENT_PLAN.md` (options A/B/C) | — | — | — | 🔒 owner decisions: hosting option; billed AI provider (`AI_DATA_GOVERNANCE=gemini-paid-dpa`) |
 
 ## Last full regression (`72047c0`, 2026-11-19)
 
@@ -28,10 +28,11 @@ dev previews 404, unconfigured connector routes 404, sync/drain 401 without the 
 
 * `baton-dev` (127.0.0.1:54321): healthy; Task 06 invitation migrations recorded; connector migrations NOT applied
   (by design). Task 05 demo handovers unchanged (last update 2026-11-17).
-* Isolated connector stack: project folder prepared at
-  `C:\Users\manee\Documents\programing\baton-connectors-testdb` (config + 54 migrations from `72047c0`); **not
-  started** — the start command needs the owner (see the hand-off in the latest report).
-* Host memory: 2.6 GB free before any isolated stack (2026-11-19); a `javaw` process uses ~2.3 GB.
+* Isolated connector stack **running** since 2026-11-19 (`baton-connectors-test`, 127.0.0.1:55321, migrations from
+  `91bcafe`); baton-dev verified unchanged against the recorded baseline. 3110 env file `.env.connectors-test.local`
+  generated (provider lines empty); 3110 keeps using baton-dev until provider credentials are in.
+* Host memory: 2.8 GB free before the isolated start, 2.5 GB after.
+* Live provider steps and evidence to capture: `setup/LIVE_TEST_PLAN.md`. Deployment options: `../submission/DEPLOYMENT_PLAN.md`.
 
 ## Browser verification (Playwright MCP, 2026-11-19)
 
@@ -43,3 +44,5 @@ counter (`5a734ee`), incoming Gaps page (`d9acd00`). Environment: `BATON_SITE_UR
 
 * Connector sync uses its own `CONNECTOR_SYNC_SECRET`; `CRON_SECRET` only drives the pipeline (`9b1ecb7`).
 * Capture notices name the person who connected / paused / stopped (Baton display name only) (`0196881`).
+* Living Handover "new task not flagged" (browser run): root cause was the built-in test adapter's keyword rules,
+  not the detector; fixed and re-verified in the browser with version 3 (`e9d8b92`).

@@ -3,7 +3,7 @@
 > Draft. Items marked **[to confirm]** are filled in only after they are verified live. Do not submit claims that the
 > status checklist (`docs/round4/STATUS.md`) does not back.
 
-**Project link:** [to confirm — hosting not decided yet] · **Code:** https://github.com/maneeshkhandavalli/baton- (branch
+**Project link:** [to confirm — hosting option and AI provider pending; see `DEPLOYMENT_PLAN.md`] · **Code:** https://github.com/maneeshkhandavalli/baton- (branch
 `work/r4-integration`) · **Demo without an account:** `<link>/demo`
 
 ## One line
@@ -33,8 +33,12 @@ stale the week after, and can't be checked.
 ## For the judges: how to try it
 
 * `/demo` — a fictional college coding club, no sign-in.
-* `/login` → create an account → the welcome tour and Getting Started checklist guide the creator journey.
-* [to confirm] Connected channels on a test handover: Settings → Connected channels.
+* `/login` → create an account → the welcome tour and Getting Started checklist guide the creator journey:
+  New handover → consent → "Use sample data" → processing → review → Gap Interview link (answer it signed out in
+  another browser) → publish → Settings → invite → open the invitation in another browser and accept.
+* Living Handover: Settings → Start a revision → New version of the chat → Process the new version → Changes.
+* [to confirm] Connected channels on a test handover: Settings → Connected channels (needs provider setup on the
+  deployment; otherwise every provider honestly shows "Not set up on this server").
 
 ## Privacy and safety (implemented)
 
@@ -54,7 +58,17 @@ containers. Details: `docs/architecture/`, connectors: `docs/round4/connectors-c
 
 ## Verification (honest status)
 
-See `docs/round4/STATUS.md`. Live provider delivery: [to confirm per provider]. Browser-verified journeys: [to confirm].
+See `docs/round4/STATUS.md`.
+
+* **Browser-verified (Playwright, real interactions, 2026-11-19; local stack, built-in test AI adapter):** sign-up,
+  welcome and tours with saved progress, the full creator journey, Gap Interview without an account, publish,
+  invitation (reissue, accept, already-used), incoming-member restrictions and acknowledgement, and Living Handover
+  (new version → 2 contradictions → corrections → version 2 → re-acknowledge; version 3 → new information).
+  Evidence: `docs/round4/review/browser/VERIFICATION.md`.
+* **Automated:** ≈3,000 unit/integration tests plus SQL suites in throwaway Postgres containers, all passing.
+* **Live provider delivery (GitHub, Discord, Telegram, Slack):** [to confirm per provider] — implemented and tested
+  with synthetic events only so far; no live event has been verified yet.
+* **Processing with a real AI provider:** [to confirm] — verified with the deterministic test adapter only.
 
 ## Team
 

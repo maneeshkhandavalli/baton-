@@ -2,28 +2,31 @@
 
 Derived from the code at `work/r4-integration` (scopes, permissions and events are the exact values the code requests;
 see `lib/connectors/providers/*/api.ts` and `routes.ts`) and the per-provider guides in this folder. Secrets are never
-written here: you enter them in `C:\Users\manee\Documents\programing\baton-r4-main\.env.local` (git-ignored).
+written here: you enter them in `C:\Users\manee\Documents\programing\baton-r4-main\.env.connectors-test.local`
+(git-ignored; generated 2026-11-19 with the isolated stack's URL and keys and fresh connector secrets; the provider
+lines are empty for you to fill). `.env.local` (baton-dev) stays unchanged. Live test steps and the evidence to
+capture: `LIVE_TEST_PLAN.md`.
 
 `<TUNNEL>` below = your public HTTPS tunnel origin to the review preview on port **3110**, e.g.
-`https://abc-123.trycloudflare.com` (no trailing slash). It must equal `BATON_SITE_URL` in `.env.local`.
+`https://abc-123.ngrok-free.app` (no trailing slash). It must equal `BATON_SITE_URL` in `.env.connectors-test.local`.
 
 ## 0. Before any provider (order matters)
 
 | # | Step | Who | Status |
 |---|---|---|---|
-| 0.1 | Local Supabase stack running (you start Docker Desktop and the existing `baton-dev` stack) | owner | waiting |
-| 0.2 | **Connector database schema available.** The connector migrations (`20261119800100`, `20261119800200`) are NOT in the shared `baton-dev` database and must not be applied there. Live events can only be stored in an **isolated** database with its own storage. Main will propose one (separate Supabase CLI project id → separate containers and volume) for your approval, after checking memory. Until then: installs fail at "store" and events are acknowledged but cannot be saved. | owner approval → Main | **blocked on approval** |
+| 0.1 | Local Supabase stack running (you start Docker Desktop and the existing `baton-dev` stack) | owner | done |
+| 0.2 | **Connector database schema available.** The connector migrations (`20261119800100`, `20261119800200`) are NOT in the shared `baton-dev` database and must not be applied there. Live events can only be stored in an **isolated** database with its own storage. Main will propose one (separate Supabase CLI project id → separate containers and volume) for your approval, after checking memory. **Started 2026-11-19**: `baton-connectors-test`, API 127.0.0.1:55321, all 54 migrations incl. the connector tables; baton-dev unchanged (container ids, creation times, volumes and network diffed against the recorded baseline). Start/stop commands: `ISOLATED_DB_PROPOSAL.md`. | owner approval → Main | **done** |
 | 0.3 | **After local verification and the isolated-database decision only:** start the tunnel: `cloudflared tunnel --url http://localhost:3110` (or `ngrok http 3110`) and note `<TUNNEL>` | owner | — |
-| 0.4 | In `.env.local`: `BATON_SITE_URL=<TUNNEL>` and the shared variables below; Main restarts the 3110 preview so the server reads them | owner + Main | — |
+| 0.4 | In `.env.connectors-test.local`: `BATON_SITE_URL=<TUNNEL>` and the provider lines (shared connector secrets are already generated there). Main restarts 3110 with `node scripts/connectors/preview-3110.mjs .env.connectors-test.local` (prints the Supabase host and which providers have values, never a value) | owner + Main | — |
 | 0.5 | **Browse the preview at `<TUNNEL>`, not localhost**, when connecting a provider: the install route needs your Baton session on the same origin the provider redirects back to. Use email + password sign-in there (the local Auth config only allows `localhost:3000` for OAuth redirects, so Google sign-in through the tunnel will not work). | owner | — |
 
 Shared variables (all providers):
 
 | Variable | How to generate |
 |---|---|
-| `BATON_SITE_URL` | `<TUNNEL>` |
-| `CONNECTOR_STATE_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
-| `CONNECTOR_SECRET_KEY` | same command (32 random bytes, base64url) |
+| `BATON_SITE_URL` | `<TUNNEL>` (pre-set to `http://localhost:3110` until the tunnel runs) |
+| `CONNECTOR_STATE_SECRET` | already generated in `.env.connectors-test.local`; otherwise `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
+| `CONNECTOR_SECRET_KEY` | already generated (32 random bytes, base64url) |
 | `CONNECTOR_SECRET_KEY_VERSION` | `c1` (optional) |
 | `CONNECTOR_SYNC_SECRET` | same command; **must differ from `CRON_SECRET`**. Only `POST /api/connectors/sync` accepts it (bearer); `CRON_SECRET` keeps driving the pipeline only. Unset/short/reused → the sync answers 503 naming the variable |
 
