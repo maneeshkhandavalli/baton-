@@ -1,9 +1,9 @@
 import { Check, FileText, Lock, MessageSquareText } from "lucide-react";
 
 /**
- * "How it works" as a ledger: four rows on one rule (step · what happens · what you see). No cards; each row's
- * fragment is a small, plain piece of the product with fictional CodeCell data. Rows arrive in sequence (.reveal-group,
- * CSS scroll-driven; complete without it).
+ * "How it works": four numbered cards (step · what happens · what you see). Each card's fragment is a small, plain
+ * piece of the product with fictional CodeCell data. Cards arrive in sequence (.reveal-group, CSS scroll-driven;
+ * complete without it) and lift slightly under a pointer.
  */
 
 const STEPS = [
@@ -86,18 +86,20 @@ function Fragment({ i }: { i: number }) {
 
 export function HowItWorksSteps() {
   return (
-    <ol className="reveal-group mt-10 border-b border-border">
+    <ol className="reveal-group mt-12 grid gap-5 md:grid-cols-2 lg:gap-6">
       {STEPS.map((s, i) => (
-        <li key={s.title} className="grid gap-4 border-t border-border py-7 md:grid-cols-[3rem_1fr_1fr] md:gap-8 lg:py-8 [&>*]:min-w-0">
-          <span className="bi-mono text-sm text-muted-foreground tabular-nums">
-            <span className="sr-only">Step </span>
-            {String(i + 1).padStart(2, "0")}
-          </span>
-          <div>
-            <h3 className="bi-h3">{s.title}</h3>
-            <p className="bi-body mt-2 max-w-[48ch]">{s.body}</p>
+        <li key={s.title} className="bi-card bi-lift flex min-w-0 flex-col gap-6 p-5 sm:p-7">
+          <div className="flex items-start gap-4">
+            <span className="bi-mono grid size-10 shrink-0 place-items-center rounded-full bg-foreground text-sm text-background tabular-nums">
+              <span className="sr-only">Step </span>
+              {i + 1}
+            </span>
+            <div className="min-w-0">
+              <h3 className="bi-h3 text-[1.25rem]">{s.title}</h3>
+              <p className="bi-body mt-2 max-w-[48ch]">{s.body}</p>
+            </div>
           </div>
-          <div aria-hidden="true" className="rounded-md bg-muted/60 p-4">
+          <div aria-hidden="true" className="bi-inset mt-auto p-4 sm:p-5">
             <Fragment i={i} />
           </div>
         </li>
