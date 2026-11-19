@@ -68,6 +68,11 @@ export interface ProviderServerAdapter {
    * call it, then ingest the messages through ingestEvent (de-duplicated by `pull:<link>:<cursor>`).
    */
   pullNew?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, limit: number): Promise<{ messages: ConnectorMessage[]; cursor: string | null }>;
+  /**
+   * Pull-based providers: the cursor meaning "from this moment on". Used when a paused link resumes, so messages sent
+   * while capture was paused are never pulled (the pause notice promises nothing is saved until it resumes).
+   */
+  cursorAt?(nowMs: number): string;
   /** Optional: post a visible notice in the channel when capture starts/pauses/stops (consent transparency). */
   announceCapture?(ctx: AdapterContext, installation: InstallationRecord, link: ChannelLinkRecord, change: "started" | "paused" | "stopped"): Promise<void>;
   /** Optional: revoke at the provider on disconnect (Slack auth.revoke, Discord leave guild, Telegram leave chat). */

@@ -42,8 +42,16 @@ export function slackOptions(env: Env = process.env): SlackOptions {
 /** Shared by every provider. */
 export const CONNECTOR_SHARED_ENV = ["BATON_SITE_URL", "CONNECTOR_STATE_SECRET", "CONNECTOR_SECRET_KEY"] as const;
 
+/** Shared secrets shorter than this make signing throw; a provider is not "configured" with them. */
+const MIN_SECRET_LENGTH = 32;
+
 export function connectorConfigured(provider: ConnectorProvider, env: Env = process.env): boolean {
-  return [...CONNECTOR_SHARED_ENV, ...CONNECTOR_ENV[provider]].every((k) => typeof env[k] === "string" && env[k]!.trim() !== "");
+  const set = (k: string) => typeof env[k] === "string" && env[k]!.trim() !== "";
+  return (
+    [...CONNECTOR_SHARED_ENV, ...CONNECTOR_ENV[provider]].every(set) &&
+    (env.CONNECTOR_STATE_SECRET ?? "").trim().length >= MIN_SECRET_LENGTH &&
+    (env.CONNECTOR_SECRET_KEY ?? "").trim().length >= MIN_SECRET_LENGTH
+  );
 }
 
 /** The configured base URL without a trailing slash; throws when unset or not http(s). */

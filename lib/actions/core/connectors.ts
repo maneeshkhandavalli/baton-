@@ -19,7 +19,7 @@ import { captureConsentStatement, CONNECTOR_CAPTURE_CONSENT_VERSION, MAX_HISTORY
 import { ConnectorStoreError } from "../../connectors/errors";
 import { flushLink, type SourceWriter } from "../../connectors/flush";
 import { ingestEvent } from "../../connectors/ingest";
-import { pullLink } from "../../connectors/sync";
+import { onlyLink, pullLink } from "../../connectors/sync";
 import { ProviderError, type AdapterContext, type ProviderServerAdapter } from "../../connectors/providers/adapter";
 import { verifyConnectorState } from "../../connectors/state";
 import {
@@ -113,7 +113,7 @@ export async function listHandoverConnectors(deps: ActionDeps, c: ConnectorDeps,
       // without connector credentials, or before the connector migration, must not show an error).
       if (!CONNECTOR_PROVIDERS.some((p) => connectorConfigured(p, c.env))) {
         return ok<HandoverConnectorsView>({
-          canManage: true,
+          canManage: false, // nothing to manage on this server; never claims rights it did not check
           providers: CONNECTOR_PROVIDERS.map((p) => ({ provider: p, configured: false, installPath: null })),
           installations: [],
           links: [],
@@ -198,7 +198,8 @@ export async function linkChannel(deps: ActionDeps, c: ConnectorDeps, input: z.i
     attempt(async () => {
       const store = c.store();
       const inst = await store.getInstallation(v.installationId);
-      if (!inst || inst.status !== "active") return failWith("not_found");
+      // Someone else's installation is "not found": its channels are never looked up for this user.
+      if (!inst || inst.status !== "active" || inst.installedByProfileId !== actor.profileId) return failWith("not_found");
       const adapter = await c.adapter(inst.provider);
       const channel = await adapter.describeChannel(c.adapterContext(), inst, v.externalChannelId);
       if (!channel) return failWith("not_found", { message: "Baton can't see that channel. Check the app's access and try again." });
@@ -238,7 +239,7 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
         await ingestEvent(store, {
           provider: inst.provider, deliveryId: `history:${link.id}:${link.consentedAt}`, eventType: "history_import",
           externalAccountId: inst.externalAccountId, externalChannelId: link.externalChannelId, messages,
-        });
+        }, undefined, { filter: onlyLink(link.id) });
       }
       await adapter.announceCapture?.(ctx, inst, link, "started").catch(() => {}); // a notice failure never blocks consent
       return ok(linkSummary((await store.getLink(link.id)) ?? link, new Map([[inst.id, inst]])));
@@ -277,7 +278,10 @@ export async function setCapturePaused(deps: ActionDeps, c: ConnectorDeps, input
       const store = c.store();
       const link = await store.setLinkState({ kind: "user", profileId: actor.profileId }, v.linkId, v.paused ? "paused" : "capturing");
       const inst = await store.getInstallation(link.installationId);
-      if (inst) await (await c.adapter(inst.provider)).announceCapture?.(c.adapterContext(), inst, link, v.paused ? "paused" : "started").catch(() => {});
+      const adapter = inst ? await c.adapter(inst.provider) : null;
+      // Resuming a pull-based link starts from now: nothing sent while it was paused is captured.
+      if (!v.paused && adapter?.cursorAt) await store.setPullCursor(link.id, adapter.cursorAt(c.now()));
+      if (inst && adapter) await adapter.announceCapture?.(c.adapterContext(), inst, link, v.paused ? "paused" : "started").catch(() => {});
       return ok(linkSummary(link, new Map(inst ? [[inst.id, inst]] : [])));
     }),
   );
@@ -369,6 +373,9 @@ export async function linkFromIntent(deps: ActionDeps, c: ConnectorDeps, input: 
       const p = check.payload;
       const store = c.store();
       const user = { kind: "user", profileId: actor.profileId } as const;
+      // Only the handover's creator may use an intent: checked BEFORE a Telegram installation is created, so nobody
+      // else can claim a group by opening its link first.
+      await store.listLinksForHandover(user, v.handoverId);
       let inst = await store.findInstallation(p.p, p.account);
       if ((!inst || inst.status === "revoked") && p.p === "telegram") {
         inst = await store.upsertInstallation(user, { provider: "telegram", externalAccountId: p.account, accountLabel: createInputMasker().text(p.accountLabel), scopes: [], credentials: null });

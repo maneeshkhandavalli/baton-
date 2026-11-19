@@ -132,19 +132,41 @@ describe("telegram ingest through the webhook", () => {
 });
 
 describe("telegram /handover command", () => {
-  it("a group admin gets a webhook-reply with a signed intent naming the chat; nothing is linked or stored", async () => {
-    const f = fakeFetch([[`POST ${API}/getChatMember`, { json: { ok: true, result: { status: "administrator" } } }]]);
+  it("a group admin gets the signed intent in a PRIVATE message; the group only sees a pointer; nothing is linked or stored", async () => {
+    const f = fakeFetch([[`POST ${API}/getChatMember`, { json: { ok: true, result: { status: "administrator" } } }], [`POST ${API}/sendMessage`, { json: { ok: true, result: { message_id: 9 } } }]]);
     const { deps, store } = makeDeps({ fetch: f.fetch });
     const res = await handleTelegramWebhook(post({ update_id: 400, message: message({ text: "/handover@BatonHandoverBot" }) }), deps);
     const body = (await res.json()) as { method: string; chat_id: string; text: string };
     assert.equal(body.method, "sendMessage");
     assert.equal(body.chat_id, CHAT);
-    const url = body.text.match(/https:\/\/\S+/)?.[0] ?? "";
+    assert.match(body.text, /private message/);
+    assert.doesNotMatch(body.text, /intent=/);
+    const dm = JSON.parse(f.calls.find((c) => c.url.endsWith("/sendMessage"))?.body ?? "{}") as { chat_id: number; text: string };
+    assert.equal(dm.chat_id, asha.id);
+    const url = dm.text.match(/https:\/\/\S+/)?.[0] ?? "";
     const check = verifyConnectorState(STATE_SECRET, new URL(url).searchParams.get("intent"), NOW);
     assert.ok(check.ok && check.payload.t === "intent" && check.payload.p === "telegram" && check.payload.account === CHAT && check.payload.channel === CHAT);
     assert.equal(store.events.length, 0);
     assert.equal(await store.findInstallation("telegram", CHAT), null);
     assert.doesNotMatch(JSON.stringify(f.calls.map((c) => c.body)), /telegram-synthetic-token/);
+  });
+
+  it("when the bot can't message the admin privately, the group gets instructions, never the link", async () => {
+    const f = fakeFetch([[`POST ${API}/getChatMember`, { json: { ok: true, result: { status: "creator" } } }], [`POST ${API}/sendMessage`, { status: 403, json: { ok: false, error_code: 403, description: "Forbidden: bot can't initiate conversation with a user" } }]]);
+    const { deps } = makeDeps({ fetch: f.fetch });
+    const body = (await (await handleTelegramWebhook(post({ update_id: 402, message: message({ text: "/handover" }) }), deps)).json()) as { text: string };
+    assert.match(body.text, /press Start/);
+    assert.doesNotMatch(body.text, /intent=/);
+  });
+
+  it("an anonymous admin is asked to turn off anonymity; no link anywhere", async () => {
+    const f = fakeFetch([]);
+    const { deps } = makeDeps({ fetch: f.fetch });
+    const anon = message({ text: "/handover", from: { id: 1087968824, is_bot: true, first_name: "Group" }, sender_chat: { id: Number(CHAT), type: "supergroup", title: "Robotics core" } });
+    const body = (await (await handleTelegramWebhook(post({ update_id: 403, message: anon }), deps)).json()) as { text: string };
+    assert.match(body.text, /Remain anonymous/);
+    assert.doesNotMatch(body.text, /intent=/);
+    assert.equal(f.calls.length, 0);
   });
 
   it("a member who is not an admin is told to ask an admin", async () => {

@@ -3,14 +3,17 @@
  *
  *   GET  /api/connectors/telegram/install  → https://t.me/<bot>?startgroup=baton (add the bot to a group)
  *   POST /api/connectors/telegram/webhook  → X-Telegram-Bot-Api-Secret-Token first, then the Update:
- *        `/handover` → reply in the group (webhook-reply sendMessage) with the signed intent or a status;
+ *        `/handover` → a group admin (not anonymous) gets the signed intent in a PRIVATE message; the group only
+ *        sees a pointer (Telegram has no ephemeral replies, and a link posted in the group could be opened by any
+ *        member, who would then own the group's Baton connection). A status when already capturing;
  *        messages / edits → ingestEvent (consent gate, de-dup by `tg:<update_id>`);
  *        my_chat_member left/kicked → installation revoked (lifecycle).
  */
 
 import { httpStatusFor, ingestEvent } from "../../ingest";
 import { verifyTelegramSecret } from "../../verify";
-import { handoverCommandReply, isConfigured, json, logCode, logOutcome, notFound, parseJson, readRawBody, redirectExternal, text, type BotRouteDeps } from "../bots/shared";
+import { handoverCommand, isConfigured, json, logCode, logOutcome, notFound, parseJson, readRawBody, redirectExternal, text, type BotRouteDeps } from "../bots/shared";
+import { telegramCall } from "./api";
 import { isGroupAdmin, parseTelegramUpdate } from "./server";
 
 export async function handleTelegramInstall(_request: Request, deps: BotRouteDeps): Promise<Response> {
@@ -34,8 +37,22 @@ export async function handleTelegramWebhook(request: Request, deps: BotRouteDeps
   if (parsed.kind === "command") {
     let reply: string;
     if (!parsed.isGroup) reply = "Add me to a group, then send /handover in that group to connect it to a Baton handover.";
-    else if (!(await isGroupAdmin(deps, parsed.chatId, parsed.fromId, parsed.anonymousAdmin))) reply = "Only a group admin can connect this group to a Baton handover.";
-    else reply = await handoverCommandReply(deps.store, deps.env, deps.now(), { provider: "telegram", account: parsed.chatId, accountLabel: parsed.chatTitle, channel: parsed.chatId, channelLabel: parsed.chatTitle });
+    else if (parsed.anonymousAdmin || !parsed.fromId) reply = "Baton sends the connect link privately, so it can't answer an anonymous admin. Turn off “Remain anonymous” for yourself, then send /handover again.";
+    else if (!(await isGroupAdmin(deps, parsed.chatId, parsed.fromId, false))) reply = "Only a group admin can connect this group to a Baton handover.";
+    else {
+      const cmd = await handoverCommand(deps.store, deps.env, deps.now(), { provider: "telegram", account: parsed.chatId, accountLabel: parsed.chatTitle, channel: parsed.chatId, channelLabel: parsed.chatTitle });
+      if (!cmd.hasLink) reply = cmd.text;
+      else {
+        const bot = (deps.env.TELEGRAM_BOT_USERNAME ?? "").replace(/^@/, "");
+        try {
+          await telegramCall(deps, "sendMessage", { chat_id: Number(parsed.fromId), text: `For the group “${parsed.chatTitle}”:\n${cmd.text}`, link_preview_options: { is_disabled: true } });
+          reply = "I've sent you the link to connect this group in a private message. Nothing is saved until the handover's creator confirms in Baton.";
+        } catch {
+          logCode(deps, "telegram", "command", "private_message_failed");
+          reply = `I can't message you privately yet. Open a chat with @${bot}, press Start, then send /handover here again.`;
+        }
+      }
+    }
     // Webhook reply: Telegram performs this sendMessage itself.
     return json({
       method: "sendMessage",

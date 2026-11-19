@@ -4,9 +4,12 @@ Status: code implemented and tested with synthetic data. **Nothing below has bee
 Steps marked **[needs your credentials/approval]** must be done by the owner.
 
 How it works: one Baton bot serves every group. A group admin adds the bot to a group and sends `/handover`; the bot
-replies (in the group: Telegram bots cannot answer privately) with a Baton link valid for 30 minutes. The handover
-creator opens it, picks the handover and confirms the capture statement. The first person to link a group becomes
-its installer in Baton; nobody else can link it while that is active. Telegram pushes updates to Baton's webhook.
+sends that admin a Baton link valid for 30 minutes in a PRIVATE message (the group only sees "I've sent you the
+link"), so no other group member can open it first. The admin must have pressed Start in a private chat with the bot
+once; otherwise the group reply says so. Anonymous admins are asked to turn off "Remain anonymous". The handover
+creator opens the link, picks the handover and confirms the capture statement; only a handover's creator can use it,
+checked before anything is stored. That person becomes the group's installer in Baton; nobody else can link it while
+that is active. Telegram pushes updates to Baton's webhook.
 
 ## 1. Shared variables
 
@@ -68,7 +71,8 @@ Webhooks need public HTTPS: use a tunnel and a **separate development bot** whos
 
 1. In the panel (Telegram card) click **Add the Baton bot to your group** (opens `t.me/<bot>?startgroup=baton`) and add
    it to a test group where you are an admin.
-2. In the group send `/handover`. The bot replies with a link (only admins get one).
+2. Open a private chat with the bot and press **Start** (once). In the group send `/handover`. The bot sends you the
+   link privately (only admins get one; the group sees a short pointer).
 3. Open it signed in as the handover's creator → choose the handover → **Continue** → read and tick → **Start saving
    messages**. The bot posts the capture notice in the group.
 4. Post a message as a person. The panel shows "1 message waiting to be added".
@@ -85,6 +89,6 @@ Webhooks need public HTTPS: use a tunnel and a **separate development bot** whos
 ## Security notes
 
 * The webhook accepts a request only when `X-Telegram-Bot-Api-Secret-Token` equals `TELEGRAM_WEBHOOK_SECRET`.
-* The `/handover` link is visible to everyone in the group for 30 minutes. It names only the group; it links nothing
-  by itself, needs a signed-in Baton handover creator, and capture starts only after their explicit consent, which the
-  bot announces in the group.
+* The `/handover` link goes only to the admin who asked, privately, for 30 minutes. It names only the group; it links
+  nothing by itself, needs a signed-in Baton handover creator, and capture starts only after their explicit consent,
+  which the bot announces in the group.

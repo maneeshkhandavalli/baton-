@@ -7,9 +7,17 @@
 import { flushDueLinks, type SourceWriter } from "./flush";
 import { ingestEvent } from "./ingest";
 import { ProviderError, type AdapterContext, type ProviderServerAdapter } from "./providers/adapter";
-import { CONNECTOR_MESSAGE_LIMITS, CONNECTOR_PROVIDERS, type ChannelLinkRecord, type ConnectorProvider, type ConnectorStore } from "./types";
+import { CONNECTOR_MESSAGE_LIMITS, CONNECTOR_PROVIDERS, type ChannelLinkRecord, type ConnectorMessage, type ConnectorProvider, type ConnectorStore } from "./types";
 
 /** Pulls one capturing link once (no-op for push providers). Returns the number of messages buffered. */
+/**
+ * Pulled pages and history imports belong to ONE link: other links of the same channel have their own consent
+ * (start time, history days) and their own cursor, so they must never receive these messages.
+ */
+export function onlyLink(linkId: string) {
+  return (l: ChannelLinkRecord, m: ConnectorMessage[]) => (l.id === linkId ? m : []);
+}
+
 export async function pullLink(store: ConnectorStore, adapter: ProviderServerAdapter, ctx: AdapterContext, link: ChannelLinkRecord): Promise<number> {
   if (!adapter.pullNew || link.state !== "capturing") return 0;
   const inst = await store.getInstallation(link.installationId);
@@ -36,7 +44,7 @@ export async function pullLink(store: ConnectorStore, adapter: ProviderServerAda
     externalAccountId: inst.externalAccountId,
     externalChannelId: link.externalChannelId,
     messages: page.messages,
-  });
+  }, undefined, { filter: onlyLink(link.id) });
   // advance the cursor only when the messages are safely buffered (or were already, as a duplicate)
   if ((outcome.status === "processed" || outcome.status === "duplicate") && page.cursor) await store.setPullCursor(link.id, page.cursor);
   return outcome.status === "processed" ? outcome.buffered : 0;

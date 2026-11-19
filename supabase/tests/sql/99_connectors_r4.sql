@@ -144,6 +144,7 @@ begin
   perform tests.eq(v -> 'messages' -> 0 ->> 'provider_message_id', '1', 'oldest first');
   perform tests.eq(v ->> 'actor_profile_id', tests.id('ann')::text, 'batch names the actor');
   select array_agg((m ->> 'buffer_id')::uuid) into v_ids from jsonb_array_elements(v -> 'messages') m;
+  perform tests.ok(public.connector_take_flush_batch(v_link, 5000) is null, 'a second flush cannot take the batch while the first holds the lease');
   perform tests.as_owner();
 
   v_wa := tests.source('h', 'wa');
@@ -205,3 +206,18 @@ begin
 end $$;
 
 select 'connectors r4: ok';
+
+-- ── 7. deleting an account revokes the installations that person connected ───
+do $$
+declare
+  v_inst uuid;
+begin
+  perform tests.as_service();
+  v_inst := (public.connector_upsert_installation('user', tests.id('mal'), 'slack', 'T9', 'Mal workspace', '{}', 'c1.iv.tag.ct') ->> 'id')::uuid;
+  perform tests.as_owner();
+  update public.profiles set deleted_at = now() where id = tests.id('mal');
+  perform tests.as_service();
+  perform tests.eq((public.connector_get_installation(v_inst)) ->> 'status', 'revoked', 'account deletion revokes the installation');
+  perform tests.ok(public.connector_installation_credentials(v_inst) is null, 'and deletes its sealed credentials');
+  perform tests.as_owner();
+end $$;

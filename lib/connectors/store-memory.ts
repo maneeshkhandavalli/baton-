@@ -64,6 +64,8 @@ export class MemoryConnectorStore implements ConnectorStore {
   readonly audit: MemoryAuditRow[] = [];
   private readonly installations = new Map<string, InstallationRecord & { credentials: string | null }>();
   private readonly links = new Map<string, ChannelLinkRecord>();
+  /** linkId → lease expiry (ms): a flush in progress (mirrors connector_channel_links.flush_lease_until). */
+  private readonly flushLeases = new Map<string, number>();
   private readonly buffer: BufferRow[] = [];
   private seq = 0;
   private ids = 0;
@@ -317,6 +319,9 @@ export class MemoryConnectorStore implements ConnectorStore {
       .sort((a, b) => a.sentAt.localeCompare(b.sentAt) || a.seq - b.seq)
       .slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush);
     if (rows.length === 0) return null;
+    const lease = this.flushLeases.get(linkId);
+    if (lease !== undefined && lease > this.now()) return null; // another flush holds this link
+    this.flushLeases.set(linkId, this.now() + 120_000);
     return {
       linkId, handoverId: l.handoverId, actorProfileId: l.consentedByProfileId, sourceId: l.sourceId, channelLabel: l.channelLabel, provider: l.provider,
       messages: rows.map(({ linkId: _l, seq: _s, ...m }) => (void _l, void _s, { ...m })),
@@ -325,6 +330,8 @@ export class MemoryConnectorStore implements ConnectorStore {
 
   async completeFlush(linkId: string, bufferIds: readonly string[], sourceId: string): Promise<void> {
     const l = this.requireLink(linkId);
+    this.flushLeases.delete(linkId);
+    if (l.state === "revoked") throw new ConnectorStoreError("not_found");
     const ids = new Set(bufferIds);
     for (let i = this.buffer.length - 1; i >= 0; i--) if (this.buffer[i].linkId === linkId && ids.has(this.buffer[i].bufferId)) this.buffer.splice(i, 1);
     l.bufferedCount = this.buffer.filter((b) => b.linkId === linkId).length;
@@ -334,6 +341,7 @@ export class MemoryConnectorStore implements ConnectorStore {
 
   async recordFlushError(linkId: string, code: string): Promise<void> {
     const l = this.requireLink(linkId);
+    this.flushLeases.delete(linkId);
     Object.assign(l, { lastFlushError: code, updatedAt: this.iso() });
   }
 

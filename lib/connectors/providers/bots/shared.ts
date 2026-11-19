@@ -201,6 +201,11 @@ export function intentUrl(env: AdapterContext["env"], nowMs: number, c: CommandC
  * connect it. The command itself links and captures nothing.
  */
 export async function handoverCommandReply(store: ConnectorStore, env: AdapterContext["env"], nowMs: number, c: CommandContext): Promise<string> {
+  return (await handoverCommand(store, env, nowMs, c)).text;
+}
+
+/** Same as handoverCommandReply, and says whether the text carries a connect link (so it can be sent privately). */
+export async function handoverCommand(store: ConnectorStore, env: AdapterContext["env"], nowMs: number, c: CommandContext): Promise<{ text: string; hasLink: boolean }> {
   let capturing = 0;
   try {
     capturing = (await store.capturingLinks(c.provider, c.account, c.channel)).length;
@@ -208,10 +213,10 @@ export async function handoverCommandReply(store: ConnectorStore, env: AdapterCo
     capturing = 0;
   }
   if (capturing > 0) {
-    return `Baton is saving messages in this channel for ${capturing === 1 ? "a handover" : `${capturing} handovers`}. A channel admin or the handover’s creator can pause or stop it in Baton.`;
+    return { hasLink: false, text: `Baton is saving messages in this channel for ${capturing === 1 ? "a handover" : `${capturing} handovers`}. A channel admin or the handover’s creator can pause or stop it in Baton.` };
   }
   const minutes = Math.round(LINK_INTENT_TTL_S / 60);
-  return `To save this channel’s messages to a Baton handover, the handover’s creator opens this link within ${minutes} minutes and confirms there: ${intentUrl(env, nowMs, c)}\nNothing is saved until they confirm.`;
+  return { hasLink: true, text: `To save this channel’s messages to a Baton handover, the handover’s creator opens this link within ${minutes} minutes and confirms there: ${intentUrl(env, nowMs, c)}\nNothing is saved until they confirm.` };
 }
 
 // ── Capture notices ─────────────────────────────────────────────────────────

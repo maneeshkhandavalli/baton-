@@ -262,6 +262,36 @@ describe("scheduled sync: pull-based providers and flush", () => {
     assert.equal(writes.length, 1);
   });
 
+  it("a pulled page goes only to the link that pulled it, never to another link of the same channel", async () => {
+    const { store, user, inst, link } = await setup();
+    const H2 = "00000000-0000-4000-8000-0000000000h2".replace("h2", "b2");
+    store.handovers.set(H2, { id: H2, creatorProfileId: CREATOR, state: "draft" });
+    const other = await store.linkChannel(user, { installationId: inst.id, handoverId: H2, externalChannelId: "C1", channelLabel: "#core-team" });
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await store.recordCaptureConsent(user, other.id, "connector-capture-v1");
+    const { pullLink } = await import("../sync");
+    const adapter = {
+      provider: "slack" as const,
+      async listChannels() { return []; },
+      async describeChannel() { return null; },
+      async pullNew() { return { messages: [msg("old1", "2026-11-01T09:00:00.000Z")], cursor: "c1" }; },
+    };
+    assert.equal(await pullLink(store, adapter, {} as never, (await store.getLink(link.id))!), 1);
+    assert.equal(store.bufferedFor(link.id).length, 1);
+    assert.equal(store.bufferedFor(other.id).length, 0);
+  });
+
+  it("a second flush cannot take a link's batch while the first holds it", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await ingestEvent(store, event("E-lease", [msg("m1", "2026-11-19T09:00:00.000Z")]));
+    const first = await store.takeFlushBatch(link.id);
+    assert.equal(first?.messages.length, 1);
+    assert.equal(await store.takeFlushBatch(link.id), null);
+    await store.recordFlushError(link.id, "internal");
+    assert.equal((await store.takeFlushBatch(link.id))?.messages.length, 1, "released by the error");
+  });
+
   it("losing access pauses the link instead of retrying forever", async () => {
     const { store, user, link } = await setup();
     await store.recordCaptureConsent(user, link.id, "connector-capture-v1");

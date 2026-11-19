@@ -125,6 +125,10 @@ export const discordAdapter: ProviderServerAdapter = {
     return channelChoice(ctx, installation, externalChannelId);
   },
 
+  cursorAt(nowMs) {
+    return snowflakeForTime(nowMs);
+  },
+
   async pullNew(ctx, installation, link, limit) {
     ensureDiscordChannel(installation, link.externalChannelId);
     const start = link.pullCursor && isSnowflake(link.pullCursor) ? link.pullCursor : initialCursor(link, ctx.now());

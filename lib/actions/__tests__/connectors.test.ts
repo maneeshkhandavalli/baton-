@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { linkChannel, listHandoverConnectors, type ConnectorDeps } from "../core/connectors";
-import { fakeDeps, H } from "./helpers";
+import { ACTOR, fakeDeps, H } from "./helpers";
 
 const throwingStore = new Proxy({}, { get: () => () => { throw new Error("store must not be used"); } });
 
@@ -57,7 +57,7 @@ describe("linkChannel with Slack private channels off", () => {
   it("refuses a channel the adapter marks private_channel before anything is stored", async () => {
     const { deps } = fakeDeps();
     let linked = 0;
-    const inst = { id: "00000000-0000-4000-8000-0000000000a1", provider: "slack", status: "active", accountLabel: "CodeCell" };
+    const inst = { id: "00000000-0000-4000-8000-0000000000a1", provider: "slack", status: "active", accountLabel: "CodeCell", installedByProfileId: ACTOR.profileId };
     const store = { getInstallation: async () => inst, linkChannel: async () => { linked++; throw new Error("must not link"); } };
     const adapter = { provider: "slack", describeChannel: async () => ({ id: "C7", label: "#leads", blockedReason: "private_channel" }) };
     const r = await linkChannel(deps, { ...connectorDeps({}), store: () => store as never, adapter: async () => adapter as never }, { installationId: inst.id, handoverId: H, externalChannelId: "C7" });

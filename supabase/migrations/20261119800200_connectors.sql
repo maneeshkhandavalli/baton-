@@ -56,6 +56,9 @@ create table public.connector_channel_links (
   last_event_at timestamptz,
   last_flush_at timestamptz,
   last_flush_error text check (last_flush_error is null or last_flush_error ~ '^[a-z0-9_]{1,60}$'),
+  -- A flush in progress holds this short lease, so a scheduled sweep and "Bring in new messages" never write the
+  -- same buffered messages into two sources. Cleared on completion or error; expires on its own if a flush dies.
+  flush_lease_until timestamptz,
   created_by_profile_id uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -413,6 +416,31 @@ begin
                         jsonb_build_object('status', v_i.status), jsonb_build_object('reason', p_reason, 'by', p_actor_kind));
 end $$;
 
+-- Deleting an account (profiles.deleted_at set by delete_account_data) revokes every connector installation the
+-- person connected: links revoked, buffered messages and sealed credentials deleted, so nothing keeps capturing
+-- on behalf of a person who left. The provider-side app is left for workspace admins to remove.
+create function public._connector_revoke_on_account_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+begin
+  for v_id in select id from public.connector_installations where installed_by_profile_id = new.id and status <> 'revoked' loop
+    perform public.connector_revoke_installation('system', null, v_id, 'account_deleted');
+  end loop;
+  return new;
+end $$;
+
+revoke all on function public._connector_revoke_on_account_delete() from public, anon, authenticated;
+
+create trigger connector_revoke_on_account_delete
+  after update of deleted_at on public.profiles
+  for each row when (old.deleted_at is null and new.deleted_at is not null)
+  execute function public._connector_revoke_on_account_delete();
+
 create function public.connector_list_installations_for_profile(p_profile_id uuid)
 returns jsonb
 language sql
@@ -691,19 +719,21 @@ $$;
 
 -- The next batch of a link, oldest first, with the CURRENT version of the link's source lineage (a version activated
 -- since the last flush supersedes the id stored on the link) and the consenting creator the flush acts as.
+-- Takes the link's flush lease when there is something to flush; null while another flush holds it.
 create function public.connector_take_flush_batch(p_link_id uuid, p_limit int)
 returns jsonb
 language plpgsql
-stable
 security definer
 set search_path = ''
 as $$
 declare
   v_l public.connector_channel_links;
   v_source uuid;
+  v_messages jsonb;
 begin
-  select * into v_l from public.connector_channel_links where id = p_link_id;
+  select * into v_l from public.connector_channel_links where id = p_link_id for update;
   if not found or v_l.state = 'revoked' or v_l.consented_by_profile_id is null then return null; end if;
+  if v_l.flush_lease_until is not null and v_l.flush_lease_until > now() then return null; end if;
   if v_l.source_id is not null then
     select coalesce(
       (select c.id from public.sources s join public.sources c on c.lineage_id = s.lineage_id
@@ -711,16 +741,20 @@ begin
         limit 1),
       v_l.source_id) into v_source;
   end if;
-  return jsonb_build_object(
-    'handover_id', v_l.handover_id, 'actor_profile_id', v_l.consented_by_profile_id, 'source_id', v_source,
-    'channel_label', v_l.channel_label,
-    'provider', (select i.provider from public.connector_installations i where i.id = v_l.installation_id),
-    'messages', coalesce((
+  v_messages := coalesce((
       select jsonb_agg(jsonb_build_object('buffer_id', b.id, 'provider_message_id', b.provider_message_id, 'sent_at', b.sent_at,
                                           'author_label', b.author_label, 'kind', b.kind, 'text', b.body,
                                           'reply_to_id', b.reply_to_id, 'edited_at', b.edited_at) order by b.sent_at, b.created_at)
         from (select * from public.connector_buffered_messages where link_id = v_l.id
-               order by sent_at, created_at limit least(greatest(p_limit, 1), 5000)) b), '[]'::jsonb));
+               order by sent_at, created_at limit least(greatest(p_limit, 1), 5000)) b), '[]'::jsonb);
+  if jsonb_array_length(v_messages) > 0 then
+    update public.connector_channel_links set flush_lease_until = now() + interval '2 minutes' where id = v_l.id;
+  end if;
+  return jsonb_build_object(
+    'handover_id', v_l.handover_id, 'actor_profile_id', v_l.consented_by_profile_id, 'source_id', v_source,
+    'channel_label', v_l.channel_label,
+    'provider', (select i.provider from public.connector_installations i where i.id = v_l.installation_id),
+    'messages', v_messages);
 end $$;
 
 create function public.connector_complete_flush(p_link_id uuid, p_buffer_ids uuid[], p_source_id uuid)
@@ -733,13 +767,17 @@ declare
   v_l public.connector_channel_links := public._connector_lock_link(p_link_id);
   v_n int;
 begin
+  if v_l.state = 'revoked' then
+    -- disconnected while the flush ran: the buffer is already gone; never point a revoked link at a source
+    raise exception 'connection not found' using errcode = 'BTNF0';
+  end if;
   if not exists (select 1 from public.sources s where s.id = p_source_id and s.handover_id = v_l.handover_id and s.kind = 'chat_import') then
     raise exception 'source not found' using errcode = 'BTNF0';
   end if;
   delete from public.connector_buffered_messages where link_id = v_l.id and id = any (p_buffer_ids);
   get diagnostics v_n = row_count;
   update public.connector_channel_links
-     set source_id = p_source_id, last_flush_at = now(), last_flush_error = null
+     set source_id = p_source_id, last_flush_at = now(), last_flush_error = null, flush_lease_until = null
    where id = v_l.id;
   perform public._audit(v_l.handover_id, null, null, 'connector.flushed', 'connector_link', v_l.id, null,
                         jsonb_build_object('sourceId', p_source_id, 'messages', v_n));
@@ -752,7 +790,7 @@ security definer
 set search_path = ''
 as $$
 begin
-  update public.connector_channel_links set last_flush_error = p_code where id = p_link_id;
+  update public.connector_channel_links set last_flush_error = p_code, flush_lease_until = null where id = p_link_id;
   if not found then
     raise exception 'connection not found' using errcode = 'BTNF0';
   end if;
