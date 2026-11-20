@@ -61,7 +61,7 @@ export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4" role="group" aria-labelledby={`${id}-title`}>
+    <div className="space-y-4 rounded-xl border border-border bg-card p-4" role="group" aria-labelledby={`${id}-title`}>
       <div className="space-y-1">
         <h4 id={`${id}-title`} className="text-sm font-semibold">
           Start saving messages from {PROVIDER_LABEL[link.provider]} {link.channelLabel}?
