@@ -24,7 +24,7 @@ interface StepperProps {
 
 /**
  * Horizontal step indicator for multi-step flows (new handover wizard).
- * ≥ sm: numbered steps with labels joined by a rule. < sm: "Step 2 of 4 · Sources" + a bar.
+ * ≥ sm: one bordered pill rail (the tab rail's language); the current step is the ink pill. < sm: "Step 2 of 4 · Sources" + a bar.
  */
 export function Stepper({ steps, current, onStepClick, label = "Progress", className }: StepperProps) {
   const safe = Math.min(Math.max(current, 0), steps.length - 1);
@@ -44,7 +44,7 @@ export function Stepper({ steps, current, onStepClick, label = "Progress", class
       </div>
 
       {/* ≥ sm: full list */}
-      <ol className="hidden items-center gap-3 sm:flex">
+      <ol className="hidden w-fit max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 sm:flex">
         {steps.map((s, i) => {
           const state = stepState(i, safe);
           const clickable = state === "complete" && !!onStepClick;
@@ -54,34 +54,31 @@ export function Stepper({ steps, current, onStepClick, label = "Progress", class
                 aria-hidden="true"
                 className={cn(
                   "flex size-6 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold transition-colors",
-                  state === "complete" && "border-primary bg-primary text-primary-foreground",
-                  state === "current" && "border-primary bg-card text-foreground ring-4 ring-foreground/10",
+                  state === "complete" && "border-transparent bg-success-soft text-success-fg",
+                  state === "current" && "border-background/40 bg-transparent text-background",
                   state === "upcoming" && "border-border-strong bg-card text-muted-foreground",
                 )}
               >
                 {state === "complete" ? <Check className="size-3.5" /> : i + 1}
               </span>
-              <span className={cn("text-sm whitespace-nowrap", state === "upcoming" ? "text-muted-foreground" : "font-medium text-foreground")}>
+              <span className={cn("text-sm whitespace-nowrap", state === "upcoming" ? "text-muted-foreground" : state === "current" ? "font-semibold text-background" : "font-medium text-foreground")}>
                 {s.label}
               </span>
               <span className="sr-only">{state === "complete" ? " (done)" : state === "current" ? " (current step)" : ""}</span>
             </>
           );
           return (
-            <li key={s.id} aria-current={state === "current" ? "step" : undefined} className="flex min-w-0 items-center gap-3">
+            <li key={s.id} aria-current={state === "current" ? "step" : undefined} className={cn("flex h-9 shrink-0 items-center rounded-full px-3 transition-colors duration-150", state === "current" && "bg-foreground")}>
               {clickable ? (
                 <button
                   type="button"
                   onClick={() => onStepClick(i)}
-                  className="-m-1 flex items-center gap-2 rounded-md p-1 transition-colors outline-none hover:bg-muted focus-ring"
+                  className="-mx-3 flex h-9 items-center gap-2 rounded-full px-3 transition-colors outline-none hover:bg-muted focus-ring"
                 >
                   {content}
                 </button>
               ) : (
                 <span className="flex items-center gap-2">{content}</span>
-              )}
-              {i < steps.length - 1 && (
-                <span aria-hidden="true" className={cn("h-px w-6 shrink-0 lg:w-10", i < safe ? "bg-primary/50" : "bg-border-strong")} />
               )}
             </li>
           );

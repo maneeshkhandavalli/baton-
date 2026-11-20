@@ -18,8 +18,9 @@ export function SharedLinkShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="border-b border-border/70 bg-background">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
+        {/* App redesign 2026-11-20: the landing's (and Loopsii's) floating pill header, as on the workspace below lg. */}
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 rounded-full border border-foreground/40 bg-background/85 pr-2 pl-5 backdrop-blur-md">
           <BatonLogo size="sm" />
           <div className="flex min-w-0 items-center gap-2">
             <p className="flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-caption text-muted-foreground">
