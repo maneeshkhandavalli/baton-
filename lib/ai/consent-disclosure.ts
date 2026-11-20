@@ -12,11 +12,15 @@ import "server-only";
  * New Handover page to that stale module: "{imported module ./lib/ai/config.ts}.getConsentDisclosure is not a
  * function" on the first render of /handover/new. Every caller (pages and lib/actions/deps.ts) imports it from
  * here, so the binding is always to the module that owns the code. Wording and statement versions are unchanged.
+ *
+ * 2026-11-20: production Omega (profile "omega-owner-approved") → kind "omega_owner_approved", which states that
+ * Omega's retention and training terms are undocumented. Every other kind and version is unchanged.
  */
 
 import { consentDisclosure, type ConsentDisclosure } from "../contracts/consent";
 import { aiDataGovernanceProfile, getAiConfiguration, type AiEnv } from "./config";
 import { GEMINI_PROVIDER_ID } from "./providers/gemini";
+import { OMEGA_PROVIDER_ID } from "./providers/omega";
 
 /** `env` defaults to the server environment (read only by config.ts, the env reader). */
 export function getConsentDisclosure(env?: AiEnv): ConsentDisclosure {
@@ -28,6 +32,8 @@ export function getConsentDisclosure(env?: AiEnv): ConsentDisclosure {
     case "evaluation":
       return consentDisclosure("evaluation", config.provider.displayName);
     case "production":
+      // Omega is "production" only under the owner-approved profile (config.ts): its own, plainer wording
+      if (config.provider.id === OMEGA_PROVIDER_ID) return consentDisclosure("omega_owner_approved");
       if (config.provider.id !== GEMINI_PROVIDER_ID) return consentDisclosure("not_configured");
       // the paid tier only under the approved profile; otherwise (development with a key) it is the free tier
       return aiDataGovernanceProfile(env) === "gemini-paid-dpa" ? consentDisclosure("gemini_paid") : consentDisclosure("gemini_free");

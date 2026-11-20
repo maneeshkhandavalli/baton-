@@ -27,7 +27,24 @@ describe("AI data governance gate", () => {
     assert.ok(c.ok);
     assert.equal(c.mode, "production");
     assert.equal(JSON.stringify(c).includes(KEY), false);
-    assert.deepEqual(Object.keys(APPROVED_AI_DATA_GOVERNANCE), ["gemini-paid-dpa"]);
+    assert.deepEqual(Object.keys(APPROVED_AI_DATA_GOVERNANCE), ["gemini-paid-dpa", "omega-owner-approved"]);
+  });
+
+  it("the Omega owner-approved profile is bound to provider omega and never enables Gemini", () => {
+    assert.equal(APPROVED_AI_DATA_GOVERNANCE["omega-owner-approved"].provider, "omega");
+    assert.match(APPROVED_AI_DATA_GOVERNANCE["omega-owner-approved"].description, /owner accepted/);
+    assert.match(APPROVED_AI_DATA_GOVERNANCE["omega-owner-approved"].description, /retention, training use/);
+    assert.deepEqual(getAiConfiguration({ ...PROD, AI_DATA_GOVERNANCE: "omega-owner-approved" }), {
+      ok: false,
+      reason: "provider_not_configured",
+      detail: "data_governance_unapproved",
+    });
+    assert.equal(dataGovernanceApproved({ NODE_ENV: "production", AI_DATA_GOVERNANCE: "omega-owner-approved" }, "gemini"), false);
+  });
+
+  it("Gemini under the paid profile still builds the Gemini adapter", () => {
+    const p = getAiProvider({ ...PROD, AI_DATA_GOVERNANCE: "gemini-paid-dpa" });
+    assert.ok(p.ok && p.data.id === "gemini");
   });
 
   it("development and test builds are unchanged (synthetic data only)", () => {

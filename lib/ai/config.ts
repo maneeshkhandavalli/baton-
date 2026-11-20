@@ -24,14 +24,20 @@ import "server-only";
  *     Processing Addendum; prompts and responses still logged for a limited period for abuse monitoring).
  *     Setting it is the operator's attestation that the key belongs to such a project. Owner approval is
  *     still required (docs/round3/privacy-and-data-protection.md §Provider).
+ *   - "omega-owner-approved": Omega Plus in production, by the owner's explicit decision of 2026-11-20 (see below).
  * Development and tests are unchanged (synthetic data only).
  *
  * R3 Task 03 (provider evaluation): `AI_PROVIDER=omega` selects the Omega Plus Anthropic-compatible gateway
- * (lib/ai/providers/omega.ts). It is an EVALUATION provider and is never production-approved:
- *   - accepted only when NODE_ENV is exactly "development" or "test" AND `BATON_ALLOW_EVAL_PROVIDER === "1"`
+ * (lib/ai/providers/omega.ts). It is accepted in exactly two ways:
+ *   - EVALUATION (unchanged): NODE_ENV exactly "development" or "test" AND `BATON_ALLOW_EVAL_PROVIDER === "1"`
  *     (the operator's statement that only synthetic, pseudonymised data is processed; .env.local may point
- *     at a real database, so dev mode alone is not enough). Any other NODE_ENV refuses it with
- *     `data_governance_unapproved`, whatever `AI_DATA_GOVERNANCE` says: no profile exists for it;
+ *     at a real database, so dev mode alone is not enough) → mode "evaluation". Checked first;
+ *   - PRODUCTION, OWNER-APPROVED (2026-11-20): `AI_DATA_GOVERNANCE` (trimmed) is exactly "omega-owner-approved"
+ *     → mode "production", in any NODE_ENV. The profile records that the owner ACCEPTED the vendor's
+ *     undocumented retention, training-use and sub-processor terms for the public site; it is an explicit,
+ *     auditable opt-in, never a default, and the uploader's consent statement says so
+ *     (docs/round3/ai-extraction-and-verification.md §9a).
+ *   Anything else is refused with `data_governance_unapproved` (including the Gemini profile);
  *   - `OMEGA_API_KEY` is required (server-side only); `OMEGA_API_BASE_URL` defaults to the vendor host and
  *     must be https;
  *   - `AI_MODEL_EXTRACT` and `AI_MODEL_VERIFY` are REQUIRED fixed model ids (no default), and dynamic
@@ -48,8 +54,9 @@ import { createGeminiProvider, GEMINI_DEFAULT_MODEL, GEMINI_DISPLAY_NAME, GEMINI
 import {
   createOmegaProvider,
   OMEGA_DEFAULT_BASE_URL,
-  OMEGA_DISPLAY_NAME,
+  OMEGA_EVALUATION_DISPLAY_NAME,
   OMEGA_OUTPUT_MODES,
+  OMEGA_PRODUCTION_DISPLAY_NAME,
   OMEGA_PROVIDER_ID,
   omegaRunConfig,
   type OmegaOutputMode,
@@ -67,7 +74,15 @@ export const APPROVED_AI_DATA_GOVERNANCE: Readonly<Record<string, { provider: st
     provider: GEMINI_PROVIDER_ID,
     description: "Gemini API, Cloud project with active billing (Paid Services, Google Data Processing Addendum)",
   },
+  "omega-owner-approved": {
+    provider: OMEGA_PROVIDER_ID,
+    description:
+      "Omega Plus API (third-party Anthropic-compatible gateway). The owner accepted (2026-11-20) that the vendor does not document prompt retention, training use, upstream sub-processors or data location, and that model names do not guarantee the upstream model",
+  },
 });
+
+/** The profile that enables Omega in production (owner decision 2026-11-20). */
+export const OMEGA_OWNER_APPROVED_PROFILE = "omega-owner-approved";
 
 /** True when this environment may call a real provider with organisational data. */
 export function dataGovernanceApproved(env: AiEnv, provider: string): boolean {
@@ -132,6 +147,11 @@ function evaluationAllowed(env: AiEnv): boolean {
   return env.NODE_ENV !== undefined && FAKE_NODE_ENVS.has(env.NODE_ENV) && env.BATON_ALLOW_EVAL_PROVIDER === "1";
 }
 
+/** Omega in production: only the exact owner-approved profile (trimmed, case-sensitive), in any NODE_ENV. */
+function omegaOwnerApproved(env: AiEnv): boolean {
+  return aiDataGovernanceProfile(env) === OMEGA_OWNER_APPROVED_PROFILE;
+}
+
 export function getAiConfiguration(env: AiEnv = process.env): AiConfiguration {
   if (env.AI_PROVIDER === OMEGA_PROVIDER_ID) {
     const extract = omegaModel(env.AI_MODEL_EXTRACT);
@@ -139,11 +159,20 @@ export function getAiConfiguration(env: AiEnv = process.env): AiConfiguration {
     const base = omegaBaseUrl(env.OMEGA_API_BASE_URL);
     const mode = omegaOutputMode(env.OMEGA_OUTPUT_MODE);
     if (!omegaApiKey(env) || !extract || !verify || !base || !mode) return { ok: false, reason: "provider_not_configured" };
-    if (!evaluationAllowed(env)) return { ok: false, reason: "provider_not_configured", detail: "data_governance_unapproved" };
+    if (evaluationAllowed(env)) {
+      return {
+        ok: true,
+        mode: "evaluation",
+        provider: { id: OMEGA_PROVIDER_ID, displayName: OMEGA_EVALUATION_DISPLAY_NAME },
+        runConfig: omegaRunConfig({ extract, verify }, mode),
+      };
+    }
+    if (!omegaOwnerApproved(env)) return { ok: false, reason: "provider_not_configured", detail: "data_governance_unapproved" };
     return {
       ok: true,
-      mode: "evaluation",
-      provider: { id: OMEGA_PROVIDER_ID, displayName: OMEGA_DISPLAY_NAME },
+      mode: "production",
+      provider: { id: OMEGA_PROVIDER_ID, displayName: OMEGA_PRODUCTION_DISPLAY_NAME },
+      // same provenance as evaluation: provider "omega", adapterVersion "omega-anthropic@1+<output mode>"
       runConfig: omegaRunConfig({ extract, verify }, mode),
     };
   }
@@ -195,24 +224,30 @@ export function getAiProviderForRun(runConfig: AiRunConfig, env: AiEnv = process
   return { ok: true, data: provider };
 }
 
+/**
+ * Builds the adapter by PROVIDER ID, never by mode: "production" is Gemini under `gemini-paid-dpa` OR Omega under
+ * `omega-owner-approved`. getAiConfiguration has already checked the key, models, host and output mode.
+ * An id it never returns throws (programming error), so an unknown provider can never fall through to another.
+ */
 function providerFor(config: Extract<AiConfiguration, { ok: true }>, env: AiEnv): AiProvider {
-  switch (config.mode) {
-    case "fake":
+  switch (config.provider.id) {
+    case FAKE_PROVIDER_ID:
       return createFakeProvider();
-    case "evaluation":
-      // getAiConfiguration returns evaluation mode only for Omega with a key, fixed models and a valid host.
+    case OMEGA_PROVIDER_ID:
       return createOmegaProvider({
         apiKey: omegaApiKey(env) as string,
         baseUrl: omegaBaseUrl(env.OMEGA_API_BASE_URL) as string,
         models: { extract: config.runConfig.extract.model, verify: config.runConfig.verify.model },
         outputMode: omegaOutputMode(env.OMEGA_OUTPUT_MODE) as OmegaOutputMode,
+        displayName: config.provider.displayName,
       });
-    case "production":
-      // getAiConfiguration returns production mode only for Gemini with a key present.
+    case GEMINI_PROVIDER_ID:
       return createGeminiProvider({
         apiKey: geminiApiKey(env) as string,
         models: { extract: config.runConfig.extract.model, verify: config.runConfig.verify.model },
       });
+    default:
+      throw new Error("unknown AI provider id");
   }
 }
 

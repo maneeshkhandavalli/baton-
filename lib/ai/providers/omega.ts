@@ -3,10 +3,14 @@ import "server-only";
 /**
  * Omega Plus API adapter, Anthropic-compatible `POST /v1/messages` (R3 Task 03, provider evaluation).
  *
- * STATUS: EVALUATION ONLY. Never production-approved. lib/ai/config.ts accepts `AI_PROVIDER=omega` only with
- * NODE_ENV exactly "development"/"test" AND `BATON_ALLOW_EVAL_PROVIDER=1` (the operator's statement that
- * only synthetic data is processed), and never with a data-governance profile: the vendor's retention,
- * upstream processing and no-training terms are unknown (docs/round3/ai-extraction-and-verification.md).
+ * STATUS: two modes, both decided by lib/ai/config.ts (docs/round3/ai-extraction-and-verification.md §8, §9, §9a):
+ *   - EVALUATION: NODE_ENV exactly "development"/"test" AND `BATON_ALLOW_EVAL_PROVIDER=1` (the operator's
+ *     statement that only synthetic data is processed);
+ *   - PRODUCTION, OWNER-APPROVED (2026-11-20): only with `AI_DATA_GOVERNANCE=omega-owner-approved`, the owner's
+ *     explicit acceptance that the vendor does NOT document prompt retention, training use, upstream
+ *     sub-processors or data location, and that model names do not guarantee the upstream model. The uploader
+ *     is told exactly that in the consent statement (lib/contracts/consent.ts, kind `omega_owner_approved`).
+ * The adapter itself is identical in both modes; only the display name differs.
  *
  * Why raw `fetch` and not the Anthropic SDK: this is a third-party gateway, not Anthropic. Like the Gemini
  * adapter, the host is pinned by Baton's own configuration and nothing is taken from process-wide defaults
@@ -38,7 +42,11 @@ import { EXTRACT_PROMPT_VERSION, EXTRACT_SCHEMA_VERSION, SUPPORT_PROMPT_VERSION,
 import type { AiCallResult, AiProvenance, AiProvider, AiRunConfig, ExtractRequest, VerifySupportRequest } from "../provider";
 
 export const OMEGA_PROVIDER_ID = "omega";
+/** Evaluation mode (development/test, synthetic data only). */
 export const OMEGA_DISPLAY_NAME = "Omega Plus API (Anthropic-compatible gateway) - evaluation only, synthetic data only";
+export const OMEGA_EVALUATION_DISPLAY_NAME = OMEGA_DISPLAY_NAME;
+/** Production mode under the owner-approved data-governance profile (2026-11-20). */
+export const OMEGA_PRODUCTION_DISPLAY_NAME = "Omega Plus API (Anthropic-compatible gateway)";
 export const OMEGA_DEFAULT_BASE_URL = "https://api.omegaplusapi.com";
 export const OMEGA_ANTHROPIC_VERSION = "2023-06-01";
 export const OMEGA_OUTPUT_MODES = ["json_schema", "prompt"] as const;
@@ -77,6 +85,8 @@ export interface OmegaProviderOptions {
   baseUrl: string;
   models: OmegaModels;
   outputMode: OmegaOutputMode;
+  /** Public name for this mode (config.ts); defaults to the evaluation name. Never affects provenance. */
+  displayName?: string;
   /** Tests only. Production uses the global fetch. */
   fetch?: OmegaFetch;
 }
@@ -261,7 +271,7 @@ export function createOmegaProvider(opts: OmegaProviderOptions): AiProvider {
 
   return {
     id: OMEGA_PROVIDER_ID,
-    displayName: OMEGA_DISPLAY_NAME,
+    displayName: opts.displayName ?? OMEGA_EVALUATION_DISPLAY_NAME,
     extract: (req: ExtractRequest, o) => call(buildExtractPrompt(req), "extract", o?.signal),
     verifySupport: (req: VerifySupportRequest, o) => call(buildSupportPrompt(req), "verify", o?.signal),
   };
