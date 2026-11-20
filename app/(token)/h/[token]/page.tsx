@@ -58,12 +58,12 @@ function InvitationPanel({
   children?: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby="invitation-title" className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8">
+    <section aria-labelledby="invitation-title" className="mx-auto w-full max-w-lg rounded-2xl border border-border bg-card p-6 sm:p-8">
       <div
         aria-hidden="true"
         className={cn(
           "flex size-11 items-center justify-center rounded-xl border shadow-xs [&_svg]:size-5",
-          tone === "error" ? "border-destructive/20 bg-destructive-soft text-destructive-fg" : "border-primary/15 bg-primary-soft text-primary-fg",
+          tone === "error" ? "border-destructive/20 bg-destructive-soft text-destructive-fg" : "border-border bg-muted text-foreground",
         )}
       >
         {icon}

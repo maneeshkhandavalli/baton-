@@ -162,7 +162,7 @@ function TelegramSteps({ href }: { href: string | null }) {
     <ol className="list-decimal space-y-1 pl-5 text-caption text-muted-foreground">
       <li>
         {href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary-fg underline underline-offset-4">
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
             Add the Baton bot to your group
           </a>
         ) : (
@@ -292,7 +292,7 @@ function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSum
   if (channels.length === 0) return <p className="text-caption text-muted-foreground">Baton can&apos;t see any channels in this {ACCOUNT_NOUN[inst.provider]}.</p>;
 
   return (
-    <fieldset className="space-y-2 rounded-xl border border-border p-3">
+    <fieldset className="space-y-2 rounded-2xl border border-border p-3">
       <legend className="px-1 text-caption font-medium">Choose a channel for this handover</legend>
       <ul className="max-h-72 space-y-1 overflow-y-auto">
         {channels.map((c) => {

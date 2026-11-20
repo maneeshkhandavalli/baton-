@@ -44,10 +44,10 @@ export function ProgressIndicator({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percent}
-          className="h-1 w-full overflow-hidden rounded-full bg-muted"
+          className="h-1 w-full overflow-hidden rounded-full bg-track"
         >
           <div
-            className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out motion-reduce:transition-none"
+            className="h-full rounded-full bg-foreground transition-[width] duration-500 ease-out motion-reduce:transition-none"
             style={{ width: `${percent}%` }}
           />
         </div>

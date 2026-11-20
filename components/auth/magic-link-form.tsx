@@ -60,7 +60,7 @@ export function MagicLinkForm({
 
   if (state === "sent") {
     return (
-      <section className="rounded-xl border border-border bg-card p-8 shadow-soft" aria-live="polite">
+      <section className="rounded-3xl border border-border bg-card p-8" aria-live="polite">
         <MailCheck aria-hidden="true" className="size-8 text-status-sourced" />
         <h1 className="mt-4 type-section-title">Check your inbox</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -74,7 +74,7 @@ export function MagicLinkForm({
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card p-8 shadow-soft">
+    <section className="rounded-3xl border border-border bg-card p-8">
       <h1 className="type-section-title">{title}</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
       <form

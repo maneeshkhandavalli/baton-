@@ -31,7 +31,7 @@ export default function DemoWorkspacePage({ searchParams }: { searchParams: Prom
         <h1 className="type-page-title">Handing over the technical lead role</h1>
       </header>
       <noscript>
-        <p className="rounded-xl border border-border bg-card p-4 text-sm">
+        <p className="rounded-2xl border border-border bg-card p-4 text-sm">
           The interactive demo needs JavaScript. You can still <Link href={routes.demo}>browse the read-only demo</Link>.
         </p>
       </noscript>

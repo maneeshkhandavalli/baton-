@@ -129,7 +129,7 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
                   onClick={() => go(s.id)}
                   className={cn(
                     "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-sm whitespace-nowrap transition-colors focus-ring",
-                    current ? "border-primary bg-primary-soft font-medium text-primary-fg" : "border-border bg-card text-foreground/85 hover:bg-muted",
+                    current ? "border-foreground bg-muted font-medium text-foreground" : "border-border bg-card text-foreground/85 hover:bg-muted",
                   )}
                 >
                   <span aria-hidden="true" className="type-numeric text-caption text-muted-foreground">
@@ -169,7 +169,7 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
 
       {nav}
 
-      <section aria-labelledby="demo-step-title" className="grid gap-4 rounded-xl border border-border bg-card p-4 shadow-soft sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-8">
+      <section aria-labelledby="demo-step-title" className="grid gap-4 rounded-2xl border border-border bg-card p-4 sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-8">
         <div className="space-y-2">
           <p className="type-eyebrow text-muted-foreground">
             Step {stepNumber(step)} of {DEMO_STEPS.length} · as {guide.as}
@@ -201,7 +201,7 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
         {!session || !view ? (
           <WorkspaceSkeleton label="Opening the demo…" />
         ) : !view.ok ? (
-          <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">{view.message}</p>
+          <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">{view.message}</p>
         ) : (
           <DemoScreenView screen={guide.screen} view={view.view} pending={pending} dispatch={dispatch} onNext={next ? () => go(next) : null} />
         )}

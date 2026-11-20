@@ -35,14 +35,14 @@ export default function PreviewIndexPage() {
         title="Design previews"
         description="The real page components rendered from synthetic data, for screenshots at 1440, 1024 and 390. No sign-in, no database, and no actions."
       />
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         {PREVIEW_PAGES.map((p) => (
           <li key={p.href} className="space-y-2 p-4 sm:p-5">
             <h2 className="type-heading">{p.label}</h2>
             <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {VARIANTS[p.label].map((v) => (
                 <li key={v.href}>
-                  <Link href={v.href} className="font-medium text-primary-fg underline-offset-4 hover:underline">
+                  <Link href={v.href} className="font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
                     {v.label}
                   </Link>
                 </li>

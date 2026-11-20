@@ -18,7 +18,7 @@ export function AccountDetails({ overview, handovers }: AccountDetailsProps) {
   const password = overview.hasPassword;
 
   return (
-    <section aria-labelledby="account-details-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 sm:p-6">
+    <section aria-labelledby="account-details-heading" className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
       <h2 id="account-details-heading" className="type-heading">
         Account details
       </h2>

@@ -96,7 +96,7 @@ function SourcesScreen({ view }: { view: DemoView }) {
         const masked = Object.entries(s.maskingCounts ?? {}).filter(([, n]) => (n ?? 0) > 0);
         const Icon = s.kind === "whatsapp_export" ? MessageCircle : FileText;
         return (
-          <li key={s.id} className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-soft">
+          <li key={s.id} className="space-y-3 rounded-2xl border border-border bg-card p-4">
             <p className="flex items-start gap-2 text-sm font-medium [overflow-wrap:anywhere]">
               <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               {s.title}
@@ -186,7 +186,7 @@ function PointList({ view, points, readOnly, pending, dispatch }: { view: DemoVi
       </ul>
       {/* ≥ xl the evidence sits beside the list; below that the card's “Evidence” button opens it. */}
       <aside aria-label="Evidence" className="hidden xl:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-xl border border-border bg-card shadow-soft">{panel}</div>
+        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">{panel}</div>
       </aside>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto p-0 xl:hidden">
@@ -203,7 +203,7 @@ function PointList({ view, points, readOnly, pending, dispatch }: { view: DemoVi
 
 function ReadinessSummary({ readiness, decided, total }: { readiness: ReadinessReport | null; decided: number; total: number }) {
   return (
-    <section aria-labelledby="demo-readiness" className="h-fit space-y-3 rounded-xl border border-border bg-card p-4 shadow-soft">
+    <section aria-labelledby="demo-readiness" className="h-fit space-y-3 rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center gap-3">
         <ReadinessRing value={readiness?.score ?? 0} />
         <div>
@@ -244,7 +244,7 @@ function PublishScreen({ view, pending, dispatch, onNext }: { view: DemoView; pe
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <ReadinessSummary readiness={view.readiness} decided={decidedCount(view.points)} total={view.points.length} />
-      <section aria-labelledby="demo-publish" className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-soft">
+      <section aria-labelledby="demo-publish" className="space-y-4 rounded-2xl border border-border bg-card p-5">
         <h3 id="demo-publish" className="type-subheading">
           {published ? `Published · version ${published.version}` : "Publish the handover"}
         </h3>
@@ -294,7 +294,7 @@ function ReceiveScreen({ view, pending, dispatch }: { view: DemoView; pending: b
     <div className="space-y-8">
       {published ? (
         <>
-          <section aria-labelledby="demo-ack" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+          <section aria-labelledby="demo-ack" className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 id="demo-ack" className="type-subheading">
                 {published.viewerAcknowledgedAt ? "Neha acknowledged the handover" : "Acknowledge as Neha"}
@@ -321,7 +321,7 @@ function ReceiveScreen({ view, pending, dispatch }: { view: DemoView; pending: b
           </div>
         </>
       ) : (
-        <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Nothing is published yet. Go back to Publish first.</p>
+        <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">Nothing is published yet. Go back to Publish first.</p>
       )}
 
       {view.changes.length > 0 && <ChangesSection view={view} pending={pending} dispatch={dispatch} />}
@@ -341,7 +341,7 @@ function ReceiveScreen({ view, pending, dispatch }: { view: DemoView; pending: b
             </li>
           ))}
           {toReview.map(({ question, answer }) => (
-            <li key={answer.id} className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-soft">
+            <li key={answer.id} className="space-y-3 rounded-2xl border border-border bg-card p-4">
               <p className="text-sm font-medium">{question.question}</p>
               <blockquote className="rounded-r-lg border-l-2 border-l-primary/40 bg-muted/45 px-3 py-2 text-sm">
                 <MaskedText text={answer.text} />
@@ -368,7 +368,7 @@ function GapAnswerForm({ questionId, question, context, pending, dispatch }: { q
   const id = `gap-${questionId}`;
   return (
     <form
-      className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-soft"
+      className="space-y-3 rounded-2xl border border-border bg-card p-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (!text.trim()) return;
@@ -451,7 +451,7 @@ function ChangeDecisionCard({ item, handoverId, pending, dispatch }: { item: Cha
   }
 
   return (
-    <article className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-soft">
+    <article className="space-y-3 rounded-2xl border border-border bg-card p-4">
       <p className="type-eyebrow text-muted-foreground">
         {t.label}
         {item.state === "investigating" && " · investigating"}

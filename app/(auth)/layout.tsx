@@ -24,7 +24,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </main>
       <p className="mt-8 text-center text-caption text-muted-foreground">
         Want to look around first?{" "}
-        <Link href={routes.demo} className="rounded-sm font-medium text-primary-fg underline-offset-4 hover:underline">
+        <Link href={routes.demo} className="rounded-sm font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
           Try the demo
         </Link>
         , no sign-in needed.

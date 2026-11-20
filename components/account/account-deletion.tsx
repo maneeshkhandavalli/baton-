@@ -72,7 +72,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
   }
 
   return (
-    <section aria-labelledby="delete-account-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 sm:p-6">
+    <section aria-labelledby="delete-account-heading" className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
       <div className="space-y-1">
         <h2 id="delete-account-heading" className="type-heading">
           Delete your account

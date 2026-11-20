@@ -26,7 +26,7 @@ function HeaderBlock({ wide = false }: { wide?: boolean }) {
 }
 
 function Sheet({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return <div className={cn("rounded-xl border border-border bg-card p-5", className)}>{children}</div>;
+  return <div className={cn("rounded-2xl border border-border bg-card p-5", className)}>{children}</div>;
 }
 
 /** Dashboard: header + a row list + card grid. */

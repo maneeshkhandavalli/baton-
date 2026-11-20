@@ -38,7 +38,7 @@ export function Stepper({ steps, current, onStepClick, label = "Progress", class
         </p>
         <div aria-hidden="true" className="flex gap-1">
           {steps.map((s, i) => (
-            <span key={s.id} className={cn("h-1 flex-1 rounded-full transition-colors duration-300", i <= safe ? "bg-primary" : "bg-border")} />
+            <span key={s.id} className={cn("h-1 flex-1 rounded-full transition-colors duration-300", i <= safe ? "bg-foreground" : "bg-track")} />
           ))}
         </div>
       </div>
@@ -55,7 +55,7 @@ export function Stepper({ steps, current, onStepClick, label = "Progress", class
                 className={cn(
                   "flex size-6 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold transition-colors",
                   state === "complete" && "border-primary bg-primary text-primary-foreground",
-                  state === "current" && "border-primary bg-card text-primary-fg ring-4 ring-primary/12",
+                  state === "current" && "border-primary bg-card text-foreground ring-4 ring-foreground/10",
                   state === "upcoming" && "border-border-strong bg-card text-muted-foreground",
                 )}
               >
