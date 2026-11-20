@@ -14,6 +14,9 @@ export const PROVIDER_ORDER: readonly ConnectorProvider[] = ["slack", "discord",
 
 export const PROVIDER_LABEL: Record<ConnectorProvider, string> = { github: "GitHub", discord: "Discord", slack: "Slack", telegram: "Telegram" };
 
+/** What one linkable place is called for each provider (GitHub links repositories, not channels). */
+export const CHANNEL_NOUN: Record<ConnectorProvider, string> = { github: "repository", discord: "channel", slack: "channel", telegram: "group" };
+
 /** What one installation of a provider is called. */
 export const ACCOUNT_NOUN: Record<ConnectorProvider, string> = { github: "account", discord: "server", slack: "workspace", telegram: "group" };
 
@@ -176,7 +179,7 @@ export function groupSummary(g: ProviderGroup): string {
   if (!g.configured) return "Not set up on this server.";
   const links = g.installations.flatMap((i) => i.links);
   if (g.installations.length === 0) return g.provider === "telegram" ? "Add the Baton bot to a group to start." : "Not added yet.";
-  if (links.length === 0) return "No channel linked to this handover yet.";
+  if (links.length === 0) return `No ${CHANNEL_NOUN[g.provider]} linked to this handover yet.`;
   const capturing = links.filter((l) => l.state === "capturing").length;
   const pending = links.filter((l) => l.state === "pending_consent").length;
   const paused = links.filter((l) => l.state === "paused").length;

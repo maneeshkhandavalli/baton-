@@ -133,3 +133,10 @@ describe("connected channels: reasons and messages", () => {
     assert.deepEqual(historyOptions(7), [0, 1, 7]);
   });
 });
+
+describe("connectors: what a linkable place is called", () => {
+  it("GitHub links repositories, Telegram groups, Slack and Discord channels", async () => {
+    const { CHANNEL_NOUN } = await import("../../connectors/view-model");
+    assert.deepEqual(CHANNEL_NOUN, { github: "repository", discord: "channel", slack: "channel", telegram: "group" });
+  });
+});

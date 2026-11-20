@@ -7,6 +7,7 @@ import { ConsentStep } from "@/components/connectors/consent-step";
 import { PROVIDER_SETTINGS } from "@/components/connectors/provider-settings";
 import {
   ACCOUNT_NOUN,
+  CHANNEL_NOUN,
   blockedReasonText,
   groupSummary,
   installationStatus,
@@ -200,7 +201,7 @@ function InstallationBlock({ inst, api }: { inst: ConnectorInstallationSummary &
         <div className="flex flex-wrap gap-2">
           {inst.status === "active" && inst.provider !== "telegram" && (
             <Button size="sm" className="max-sm:h-10" variant="outline" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
-              <Hash aria-hidden="true" /> {picking ? "Close" : "Link a channel"}
+              <Hash aria-hidden="true" /> {picking ? "Close" : `Link a ${CHANNEL_NOUN[inst.provider]}`}
             </Button>
           )}
           {inst.status !== "revoked" && (
