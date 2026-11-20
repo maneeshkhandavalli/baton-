@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import type { ConnectorLinkSummary, HandoverConnectorsView } from "../../../lib/contracts/connectors";
 import {
   blockedReasonText,
+  captureWords,
   FLUSH_ERROR_TEXT,
   flushErrorText,
   groupSummary,
@@ -138,5 +139,28 @@ describe("connectors: what a linkable place is called", () => {
   it("GitHub links repositories, Telegram groups, Slack and Discord channels", async () => {
     const { CHANNEL_NOUN } = await import("../../connectors/view-model");
     assert.deepEqual(CHANNEL_NOUN, { github: "repository", discord: "channel", slack: "channel", telegram: "group" });
+  });
+});
+
+// Owner feedback 21 Nov: a GitHub repository showed chat wording ("Start saving messages", "this channel").
+describe("capture wording per provider", () => {
+  it("chats keep 'messages'; GitHub says 'activity' and counts 'items'", () => {
+    for (const p of ["slack", "discord", "telegram"] as const) assert.deepEqual(captureWords(p), { item: "message", items: "messages", content: "messages" });
+    assert.deepEqual(captureWords("github"), { item: "item", items: "items", content: "activity" });
+  });
+  it("a GitHub link's status facts never mention messages", () => {
+    const waiting = linkStatus(link({ provider: "github", bufferedCount: 2, lastEventAt: "2026-11-19T10:05:00.000Z" }), { timeZone: "UTC" });
+    assert.ok(waiting.facts.includes("2 items waiting to be added"));
+    assert.ok(waiting.facts.some((f) => f.startsWith("Last activity received 19 Nov 2026")));
+    const idle = linkStatus(link({ provider: "github", bufferedCount: 0, lastEventAt: null }));
+    assert.ok(idle.facts.includes("No new activity yet"));
+    for (const f of [...waiting.facts, ...idle.facts]) assert.doesNotMatch(f, /message/i, f);
+  });
+  it("the consent step and the panel take their words from captureWords (no hard-coded 'messages')", async () => {
+    const { readFileSync } = await import("node:fs");
+    const consent = readFileSync(new URL("../../connectors/consent-step.tsx", import.meta.url), "utf8");
+    const panel = readFileSync(new URL("../../connectors/connected-channels.tsx", import.meta.url), "utf8");
+    for (const s of ["Start saving messages", "Also bring in earlier messages", "No, only new messages", "this channel and this handover"]) assert.ok(!consent.includes(s), s);
+    for (const s of ['"Bring in new messages"', "Disconnect channel"]) assert.ok(!panel.includes(s), s);
   });
 });

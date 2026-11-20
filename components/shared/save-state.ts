@@ -71,3 +71,26 @@ export function describeSave(state: SaveState, now: Date = new Date()): SaveDesc
       };
   }
 }
+
+/**
+ * Codes that mean the write did not reach the database or failed there for reasons unrelated to the item itself:
+ * the draft may not be saved. Anything else is the server turning down one item (a rejected file, a stale exclusion).
+ */
+const SAVE_FAILURE_CODES: ReadonlySet<string> = new Set(["internal", "unauthenticated", "rate_limited", "processing_failed"]);
+
+/**
+ * Round 4 audit B1: the save state after a server write. A success is "saved". A rejected file (wrong format, empty,
+ * no chat messages, too large) is an answer from a reachable server about that file, not a failure to save the
+ * draft, so the indicator goes back to what it said before the write instead of "Couldn't save · Check your
+ * connection". Only real failures (unreachable, internal, signed out, rate limited) become an error.
+ */
+export function settleSave(
+  before: SaveState,
+  result: { ok: true } | { ok: false; error?: { code?: string; retryable?: boolean } | null },
+  now: Date = new Date(),
+): SaveState {
+  if (result.ok) return { kind: "saved", at: now };
+  const code = result.error?.code;
+  if (!code || SAVE_FAILURE_CODES.has(code) || result.error?.retryable) return { kind: "error" };
+  return before.kind === "saving" || before.kind === "dirty" ? { kind: "saved", at: now } : before;
+}

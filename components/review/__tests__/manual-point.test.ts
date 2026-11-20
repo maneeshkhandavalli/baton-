@@ -70,3 +70,16 @@ describe("buildManualPointInput", () => {
     assert.equal(built.input.accessOverride, "leads_only");
   });
 });
+
+import { fieldErrorSummary } from "../manual-point";
+
+describe("missing required name (Round 4 audit C2)", () => {
+  it("a contact without a name fails on the name field and the summary names it", () => {
+    const built = buildManualPointInput("00000000-0000-4000-8000-000000000001", { ...blankManualForm("contact"), title: "Dean office", statement: "Call Mrs K", fields: { nameLabel: "  " } });
+    assert.equal(built.ok, false);
+    if (built.ok) return;
+    assert.deepEqual(Object.keys(built.fieldErrors), ["attr.nameLabel"]);
+    assert.equal(fieldErrorSummary(built.fieldErrors, (k) => (k === "nameLabel" ? "Name" : k)), "Check this field: Name.");
+  });
+  it("no summary without errors", () => assert.equal(fieldErrorSummary({}, (k) => k), null));
+});

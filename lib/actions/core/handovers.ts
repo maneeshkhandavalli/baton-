@@ -31,6 +31,7 @@ import * as mutations from "../../db/mutations";
 import { getParseExclusions } from "../../db/pipeline";
 import { deleteHandoverRawObjects, loadRawSourceForPreview } from "../../db/storage";
 import { createInputMasker } from "./mask";
+import { refuseDemoContent } from "./demo-guard";
 import { action, failWith, ok, parseInput } from "./run";
 import type { ActionDeps } from "./types";
 
@@ -48,16 +49,32 @@ export const nothingToProcessMessage = (titles: readonly string[]) =>
   `Nothing is left to read in ${titles.length === 1 ? titles[0] : `${titles.length} chats`} after what was left out. Include at least one conversation, or remove that chat from the handover.`;
 
 /**
- * Chats about to be read for the first time (uploaded, raw kept) that keep NO message once their recorded
- * exclusions are applied: a run would spend an AI call on nothing. The same parse as the wizard's preview.
+ * startProcessing refused: a chat's dates could be day/month or month/day and nobody chose yet (the wizard's
+ * "Needs your answer"). The run would only fail with date_format_ambiguous.
+ */
+export const DATE_ORDER_REQUIRED_REASON = "date_order_required";
+export const dateOrderRequiredMessage = (titles: readonly string[]) =>
+  titles.length === 1
+    ? `Answer the date order question for ${titles[0]} first. Baton can't tell if its dates are day/month or month/day.`
+    : `Answer the date order question for ${titles.length} chats first. Baton can't tell if their dates are day/month or month/day.`;
+
+/**
+ * Chats about to be read for the first time (uploaded, raw kept), checked with the same parse as the wizard's
+ * preview: `empty` keep NO message once their recorded exclusions are applied (a run would spend an AI call on
+ * nothing); `dateOrder` can't be read until the creator says whether dates are day/month or month/day.
  * Best effort: a source that cannot be checked here is left to the run (its parse job reports the problem).
  */
-async function chatsWithNothingToRead(deps: ActionDeps, actor: Parameters<typeof loadRawSourceForPreview>[2], sources: readonly SourceSummary[]): Promise<SourceSummary[]> {
-  const candidates = sources.filter((s) => isChatSourceKind(s.kind) && s.state === "uploaded" && s.rawDeletedAt === null);
-  if (candidates.length === 0) return [];
-  const pepper = deps.verifiedPepper();
-  if (!pepper.ok) return [];
+async function checkChatsBeforeRun(
+  deps: ActionDeps,
+  actor: Parameters<typeof loadRawSourceForPreview>[2],
+  sources: readonly SourceSummary[],
+): Promise<{ empty: SourceSummary[]; dateOrder: SourceSummary[] }> {
   const empty: SourceSummary[] = [];
+  const dateOrder: SourceSummary[] = [];
+  const candidates = sources.filter((s) => isChatSourceKind(s.kind) && s.state === "uploaded" && s.rawDeletedAt === null);
+  if (candidates.length === 0) return { empty, dateOrder };
+  const pepper = deps.verifiedPepper();
+  if (!pepper.ok) return { empty, dateOrder };
   for (const s of candidates) {
     try {
       const db = deps.adminDb();
@@ -72,11 +89,12 @@ async function chatsWithNothingToRead(deps: ActionDeps, actor: Parameters<typeof
         identityPepper: pepper.data.pepper,
       });
       if (preview.ok && preview.data.stats.messagesKept === 0) empty.push(s);
+      else if (!preview.ok && "parserCode" in preview.error.details && preview.error.details.parserCode === "date_format_ambiguous") dateOrder.push(s);
     } catch {
       // not checkable here: the run's own parse decides
     }
   }
-  return empty;
+  return { empty, dateOrder };
 }
 
 /**
@@ -86,6 +104,8 @@ async function chatsWithNothingToRead(deps: ActionDeps, actor: Parameters<typeof
  */
 export async function createHandover(deps: ActionDeps, input: CreateHandoverInput): Promise<Result<HandoverSummary>> {
   return action(deps, createHandoverInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const m = createInputMasker();
     const masked = parseInput(createHandoverInput, {
       ...v,
@@ -140,6 +160,8 @@ export async function updateHandoverDetails(deps: ActionDeps, input: UpdateHando
  */
 export async function startProcessing(deps: ActionDeps, input: { handoverId: string }): Promise<Result<{ runId: string }>> {
   return action(deps, handoverIdInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const sources = await deps.queries.listSources(v.handoverId);
     if (!sources.ok) return sources;
     const ai = deps.aiRunConfig();
@@ -164,7 +186,13 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
     });
     if (!plan.ok) return plan;
     const inRun = sources.data.filter(isCurrentSourceVersion).filter((s) => scope.mode !== "scoped" || scope.sourceIds.includes(s.id));
-    const empty = await chatsWithNothingToRead(deps, actor, inRun);
+    const { empty, dateOrder } = await checkChatsBeforeRun(deps, actor, inRun);
+    if (dateOrder.length > 0) {
+      return failWith("precondition_failed", {
+        message: dateOrderRequiredMessage(dateOrder.map((s) => s.title)),
+        details: { reason: DATE_ORDER_REQUIRED_REASON, sourceId: dateOrder[0].id, sources: dateOrder.length },
+      });
+    }
     if (empty.length > 0) {
       return failWith("validation_failed", {
         message: nothingToProcessMessage(empty.map((s) => s.title)),
@@ -287,6 +315,8 @@ export async function publishHandover(deps: ActionDeps, input: PublishHandoverIn
 
 export async function startRevision(deps: ActionDeps, input: { handoverId: string }): Promise<Result<HandoverSummary>> {
   return action(deps, handoverIdInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     await mutations.startRevision(deps.adminDb(), actor, v.handoverId);
     return deps.queries.getHandover(v.handoverId);
   });
@@ -299,6 +329,8 @@ export async function startRevision(deps: ActionDeps, input: { handoverId: strin
  */
 export async function deleteHandover(deps: ActionDeps, input: { handoverId: string }): Promise<Result<null>> {
   return action(deps, handoverIdInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const db = deps.adminDb();
     await mutations.deleteHandover(db, actor, v.handoverId);
     try {

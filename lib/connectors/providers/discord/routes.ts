@@ -27,6 +27,7 @@ import {
   text,
   type BotRouteDeps,
 } from "../bots/shared";
+import { discordMemberIsChannelAdmin, helpText, parseCommandAction, pauseChannel, statusText, unknownActionText, type BotCommandAction } from "../bots/commands";
 import { DISCORD_AUTHORIZE_URL, DISCORD_BOT_PERMISSIONS, DISCORD_SCOPES, discordBotRequest, exchangeDiscordCode, isSnowflake } from "./api";
 
 /** Interaction types / response types (Discord API). */
@@ -37,6 +38,16 @@ const CHANNEL_MESSAGE = 4;
 const EPHEMERAL = 1 << 6;
 
 export const DISCORD_COMMAND_NAME = "handover";
+/** The optional string option of /handover (registered by scripts/connectors/discord-register-commands.mjs). */
+export const DISCORD_ACTION_OPTION = "action";
+
+/** The /handover action from the interaction's options (absent = connect). */
+export function discordCommandAction(data: Record<string, unknown>): BotCommandAction | null {
+  const options = Array.isArray(data.options) ? data.options : [];
+  const opt = options.find((o) => isObject(o) && o.name === DISCORD_ACTION_OPTION);
+  if (!opt) return "connect";
+  return isObject(opt) && typeof opt.value === "string" ? parseCommandAction(opt.value) : null;
+}
 
 export async function handleDiscordInstall(request: Request, deps: BotRouteDeps): Promise<Response> {
   const start = await beginInstall("discord", request, deps);
@@ -89,10 +100,29 @@ export async function handleDiscordWebhook(request: Request, deps: BotRouteDeps)
   if (body.type !== APPLICATION_COMMAND || !isObject(body.data) || body.data.name !== DISCORD_COMMAND_NAME) {
     return json({ type: CHANNEL_MESSAGE, data: { content: "Baton doesn't know that command.", flags: EPHEMERAL } });
   }
+  const action = discordCommandAction(body.data);
+  if (action === "help") return json({ type: CHANNEL_MESSAGE, data: { content: helpText("discord"), flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
+  if (action === null) return json({ type: CHANNEL_MESSAGE, data: { content: unknownActionText("discord"), flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
   const guildId = str(body.guild_id);
   const channelId = str(body.channel_id) ?? (isObject(body.channel) ? str(body.channel.id) : null);
   if (!guildId || !isSnowflake(guildId) || !channelId || !isSnowflake(channelId)) {
     return json({ type: CHANNEL_MESSAGE, data: { content: "Use /handover in a server channel to connect it to a Baton handover.", flags: EPHEMERAL } });
+  }
+  if (action === "status") {
+    // Same rule as /handover: any member, answered privately (ephemeral).
+    const content = await statusText(deps.store, "discord", guildId, channelId);
+    return json({ type: CHANNEL_MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
+  }
+  if (action === "pause") {
+    // Channel admins only (permissions come from Discord's signed interaction, never from the person's text).
+    const permissions = isObject(body.member) ? body.member.permissions : null;
+    if (!discordMemberIsChannelAdmin(permissions)) {
+      return json({ type: CHANNEL_MESSAGE, data: { content: "Only a channel admin (Manage Channels) can pause Baton here. The handover's creator can also pause it in Baton.", flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
+    }
+    const r = await pauseChannel(deps.store, "discord", guildId, channelId);
+    if (r.paused > 0) logCode(deps, "discord", "command", "paused_by_channel_admin");
+    // A real pause is announced publicly, like the capture notices; anything else stays private.
+    return json({ type: CHANNEL_MESSAGE, data: { content: r.text, ...(r.paused > 0 ? {} : { flags: EPHEMERAL }), allowed_mentions: { parse: [] } } });
   }
   const installation = await deps.store.findInstallation("discord", guildId).catch(() => null);
   const channelName = isObject(body.channel) ? str(body.channel.name) : null;

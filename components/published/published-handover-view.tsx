@@ -8,6 +8,7 @@ import { attributeRows } from "@/components/handover/attributes";
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS, categoryLabel, memberRoleLabel, type HandoverSectionId } from "@/components/handover/labels";
 import { EvidenceQuote } from "@/components/review/evidence-quote";
+import { inferredBasis } from "@/components/review/testimony-label";
 import { KEY_FACT_LABELS, keyFacts } from "@/components/shared/key-facts";
 import { KeyFactsStrip } from "@/components/shared/key-facts-strip";
 import { MaskedText } from "@/components/shared/masked-text";
@@ -252,7 +253,9 @@ function PublishedPoint({ point }: { point: Point }) {
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted-foreground">{k}</dt>
-              <dd className="min-w-0 break-words">{v}</dd>
+              <dd className="min-w-0 break-words">
+                <MaskedText text={v} />
+              </dd>
             </div>
           ))}
         </dl>
@@ -262,7 +265,7 @@ function PublishedPoint({ point }: { point: Point }) {
         <p className="mt-3 flex items-start gap-2 rounded-lg bg-status-inferred-soft px-3 py-2 text-sm text-status-inferred-fg">
           <Lightbulb aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>
-            No source states this outright.
+            <MaskedText text={inferredBasis(evidence)} />
             {c.inferredConfirmation ? ` Confirmed by ${c.inferredConfirmation.byLabel} on ${formatDate(c.inferredConfirmation.at)}.` : " Treat it as unconfirmed."}
           </span>
         </p>
@@ -301,6 +304,7 @@ function PublishedPoint({ point }: { point: Point }) {
                   authorLabel={e.authorLabel}
                   sentAt={e.sentAt}
                   sourceTitle={e.sourceTitle}
+                  testimonyLabel="Answer"
                   tone={e.stance === "contradicts" ? "contradicts" : "supports"}
                 />
               ))}
@@ -394,8 +398,8 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
                     >
                       <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} className="mt-0.5 size-4 shrink-0 accent-[var(--success)] outline-none" />
                       <span className="min-w-0">
-                        <span className={cn("block leading-snug", checked && "line-through")}>{item.title}</span>
-                        {item.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{item.detail}</span>}
+                        <MaskedText text={item.title} className={cn("block leading-snug", checked && "line-through")} />
+                        {item.detail && <MaskedText text={item.detail} className="mt-0.5 block text-sm text-muted-foreground" />}
                       </span>
                     </label>
                   </li>

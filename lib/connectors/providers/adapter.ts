@@ -49,6 +49,31 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Server misconfiguration reasons that are safe to name (2026-11-21 audit, GitHub 9.3 P3): a code only, never the
+ * value of a variable. Used to tell "GITHUB_APP_ID holds the Client ID" apart from "the private key does not parse",
+ * which both used to read as the generic "isn't set up on this server yet".
+ */
+export const PROVIDER_CONFIG_REASONS = [
+  "github_app_id_missing",
+  "github_app_id_is_client_id",
+  "github_app_id_not_numeric",
+  "github_private_key_missing",
+  "github_private_key_unparsable",
+  "github_private_key_not_rsa",
+] as const;
+export type ProviderConfigReason = (typeof PROVIDER_CONFIG_REASONS)[number];
+
+/** A `not_configured` ProviderError that also says which setting is wrong (a fixed code, never the value). */
+export class ProviderConfigError extends ProviderError {
+  readonly reason: ProviderConfigReason;
+  constructor(reason: ProviderConfigReason) {
+    super("not_configured");
+    this.name = "ProviderConfigError";
+    this.reason = reason;
+  }
+}
+
 export interface ProviderServerAdapter {
   provider: ConnectorProvider;
   /** Channels/repositories of an installation the creator may link (the picker). */

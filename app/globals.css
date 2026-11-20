@@ -447,6 +447,42 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Scrollbars: thin, rounded and quiet everywhere (light and dark follow --foreground). Scrolling is unchanged. */
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+  }
+  /* Browsers without scrollbar-color (older WebKit) */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+    background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+  /* Inner scroll panels (e.g. the sticky review columns): the bar appears only on hover or keyboard focus,
+     so nothing sits beside the content at rest. Wheel, touch and keyboard scrolling still work. */
+  .scroll-quiet {
+    scrollbar-color: transparent transparent;
+  }
+  .scroll-quiet:hover,
+  .scroll-quiet:focus-within {
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+  }
+  .scroll-quiet::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+  .scroll-quiet:hover::-webkit-scrollbar-thumb,
+  .scroll-quiet:focus-within::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
   }
   html {
     @apply font-sans;

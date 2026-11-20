@@ -44,6 +44,7 @@ that provider's variables are set.
 | BotFather | `/setprivacy` → **Disable** (then remove and re-add the bot to the test group), `/setjoingroups` → Enable, `/setcommands` → `handover - Connect this group to a Baton handover` |
 | Env | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME=BatonProjectContextBot`, `TELEGRAM_WEBHOOK_SECRET` (`A-Z a-z 0-9 _ -`, generate as above) |
 | Script (after 0.3–0.4, preview running) | `node scripts/connectors/telegram-set-webhook.mjs` with `BATON_SITE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` in the environment; `--info` only checks. Prints host, pending updates, last error and "can read all group messages". |
+| Command menu (2026-11-21) | `TELEGRAM_BOT_TOKEN=... node scripts/connectors/telegram-set-commands.mjs` (setMyCommands: `/handover`, `/status`, `/pause`, `/help` in groups; `/help` in private chats). Replaces the manual BotFather `/setcommands`. |
 | Note | One bot has one webhook. While it points at `<TUNNEL>` it is your development bot; production later needs the script re-run (or a second bot). |
 
 ## 2. Discord — application "Baton" (exists)
@@ -57,7 +58,7 @@ that provider's variables are set.
 | Privileged intent | **MESSAGE CONTENT INTENT: on** (others off). No Gateway connection is used: Baton pulls messages over REST. |
 | Installation → Install Link | None (Baton builds its own signed link) |
 | Env | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` (General Information), `DISCORD_CLIENT_SECRET` (OAuth2), `DISCORD_BOT_TOKEN` (Bot → Reset Token) |
-| Script | `node scripts/connectors/discord-register-commands.mjs` with `DISCORD_APPLICATION_ID` + `DISCORD_BOT_TOKEN` → registers global `/handover` (guild channels only; may take minutes to appear) |
+| Script | `node scripts/connectors/discord-register-commands.mjs` with `DISCORD_APPLICATION_ID` + `DISCORD_BOT_TOKEN` → registers global `/handover` (guild channels only; may take minutes to appear). Since 2026-11-21 it has an optional `action` choice: connect, status, pause (Manage Channels only), help |
 | Capture | pulled on **Bring in new messages** and on `POST /api/connectors/sync` (`CONNECTOR_SYNC_SECRET` bearer); there is no automatic schedule in the local preview |
 
 ## 3. Slack — app "baton", installed in midnight labs (exists; needs changes)
@@ -75,7 +76,21 @@ that provider's variables are set.
 | In Slack | `/invite @baton` in the test channel before linking it |
 | Manifest | minimal YAML in `slack.md` §2 (replace `<BATON_SITE_URL>` with `<TUNNEL>`) |
 
-## 4. GitHub — App (not yet registered)
+## 4. GitHub App: registered, installed and authorised on production
+
+**Status 2026-11-21 (replaces "not yet registered"; source: the 20 Nov production audit, Section C).** The private App
+"Baton Handover by Maneesh" exists and was installed and authorised on production on 20 Nov at 22:44 IST
+(`connector_installations` row `active`, permissions `contents, issues, metadata, pull_requests`). Still open:
+
+| Item | Status | Owner step |
+|---|---|---|
+| Webhook deliveries reaching production | **Not yet**: 0 GitHub deliveries recorded (URL or secret mismatch) | `OWNER_STEPS_2026-11-21.md` §1 steps 1 and 4 |
+| `GITHUB_APP_ID` is the numeric App ID | **Unverified**: "Link a repository" failed on 20 Nov before the key-parser fix; Baton now names a Client ID or key problem instead of the generic message | §1 step 2 |
+| A throwaway test repository linked and captured | **Not yet** | §1 steps 5 to 8 |
+| HMAC signature and duplicate redelivery | **Tested locally** (`github/__tests__/webhook-verification.test.ts`); production 401 on unsigned requests | §1 step 4 (Redeliver twice) |
+
+The table below is the registration reference (production values: replace `<TUNNEL>` with
+`https://baton-seven-alpha.vercel.app`).
 
 | Field | Value |
 |---|---|

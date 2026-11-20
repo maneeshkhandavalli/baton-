@@ -123,7 +123,7 @@ function Verification({ e }: { e: EvidenceItem }) {
       </CheckRow>
       {!e.isCurrentRevisionVerdict && e.supportVerdict !== "unchecked" && (
         <CheckRow ok={false} warn>
-          Checked against an earlier wording; re-checking the current revision
+          Checked against an earlier wording, not the current one
         </CheckRow>
       )}
     </ul>
@@ -161,7 +161,9 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
             {rows.map(([k, v]) => (
               <div key={k} className="contents">
                 <dt className="text-muted-foreground">{k}</dt>
-                <dd className="text-foreground">{v}</dd>
+                <dd className="text-foreground">
+                  <MaskedText text={v} />
+                </dd>
               </div>
             ))}
           </dl>

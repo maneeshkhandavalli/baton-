@@ -33,12 +33,25 @@ describe("deleteAccount (real wiring)", () => {
     const { w, mine, theirs, jar } = world();
     w.adminDb.returns("check_account_deletion", { purgeHandoverIds: [mine] });
     w.adminDb.returns("delete_own_account", { purgedHandovers: 1, memberships: 2 });
+    // R4 C (21 Nov): connector credentials are read before the purge and revoked after it; the account's other
+    // sessions and refresh tokens are revoked once the account is marked deleted.
+    w.adminDb.returns("connector_list_installations_for_profile", []);
+    w.adminDb.returns("revoke_deleted_account_sessions", { sessions: 1, refreshTokens: 1 });
 
     const r = await account.deleteAccount({ confirm: "DELETE", purgeHandoverIds: [mine] });
     assert.deepEqual(r, { ok: true, data: null });
 
-    assert.deepEqual(w.adminDb.fns(), ["check_account_deletion", "delete_own_account"]);
-    for (const c of w.adminDb.calls) assert.equal((c.args as Record<string, unknown>).p_actor_profile_id, ACTOR);
+    assert.deepEqual(w.adminDb.fns(), [
+      "check_account_deletion",
+      "connector_list_installations_for_profile",
+      "delete_own_account",
+      "revoke_deleted_account_sessions",
+    ]);
+    // every call is scoped to the actor (the connector store names its parameter p_profile_id)
+    for (const c of w.adminDb.calls) {
+      const a = c.args as Record<string, unknown>;
+      assert.equal(a.p_actor_profile_id ?? a.p_profile_id, ACTOR, `${c.fn} is scoped to the actor`);
+    }
     assert.deepEqual(w.userDb.calls, [], "no user-scoped write");
 
     const remaining = [...w.adminStorage.objects.keys()];

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { LegalLinks } from "@/components/legal/legal-links";
 import { BatonLogo } from "@/components/shared/baton-logo";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { routes } from "@/lib/routes";
@@ -76,6 +77,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </Link>
           , no sign-in needed.
         </p>
+        <LegalLinks className="mt-4 justify-center" />
       </div>
     </div>
   );

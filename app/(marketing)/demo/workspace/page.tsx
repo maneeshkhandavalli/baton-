@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { DemoWorkspace } from "@/components/demo/demo-workspace";
-import { initialStepFromQuery } from "@/components/demo/demo-guide";
+import { initialStepFromQuery, isUnknownStepQuery } from "@/components/demo/demo-guide";
 import { WorkspaceSkeleton } from "@/components/shared/skeletons";
 import { routes } from "@/lib/routes";
 
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 /**
  * The interactive demo (R3 Task 06, frozen contract §2.2). Public: no session, no database, no server function.
  * The whole demo runs in the visitor's tab (components/demo/demo-workspace.tsx on lib/demo/engine). `?step=` opens
- * a step directly; anything else starts at the beginning.
+ * a step directly (by id or number); anything else starts at the beginning and says so.
  */
 export default function DemoWorkspacePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   return (
@@ -44,5 +44,5 @@ export default function DemoWorkspacePage({ searchParams }: { searchParams: Prom
 
 async function Workspace({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams;
-  return <DemoWorkspace initialStep={initialStepFromQuery(query.step)} />;
+  return <DemoWorkspace initialStep={initialStepFromQuery(query.step)} unknownStep={isUnknownStepQuery(query.step)} />;
 }

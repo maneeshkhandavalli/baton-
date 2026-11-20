@@ -75,7 +75,8 @@ describe("drain loop", () => {
     const r = await run();
     assert.equal(r.succeeded, 1);
     assert.deepEqual(completion(db), [
-      { p_job_id: IDS.job, p_attempt: 2, p_outcome: "succeeded", p_attempt_record: null, p_error_code: null, p_error_message: null, p_next_attempt_at: null, p_progress_done: 1, p_progress_total: 1 },
+      // S5 (migration 20261121100200): the claim generation is passed too, so the generation-checked twin runs
+      { p_job_id: IDS.job, p_attempt: 2, p_claim_generation: 2, p_outcome: "succeeded", p_attempt_record: null, p_error_code: null, p_error_message: null, p_next_attempt_at: null, p_progress_done: 1, p_progress_total: 1 },
     ]);
   });
 

@@ -187,7 +187,7 @@ function ChangeCard({ handoverId, item, canDecide }: { handoverId: string; item:
         </span>
       </div>
       <h3 id={headingId} className="mt-3 type-subheading">
-        {item.kind === "new_information" ? (item.point?.title ?? "New point") : (item.base?.title ?? item.point?.title ?? "Point")}
+        <MaskedText text={item.kind === "new_information" ? (item.point?.title ?? "New point") : (item.base?.title ?? item.point?.title ?? "Point")} />
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">{t.explain}</p>
       {detail && <p className="mt-1 text-caption text-muted-foreground">{detail}</p>}

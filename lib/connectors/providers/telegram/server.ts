@@ -10,6 +10,7 @@
 
 import type { ConnectorMessage, InstallationRecord, NormalizedEvent } from "../../types";
 import { ProviderError, type AdapterContext, type ChannelChoice, type ProviderServerAdapter } from "../adapter";
+import { parseCommandAction, type BotCommandAction } from "../bots/commands";
 import { captureNotice, isObject, isoFromSeconds, str } from "../bots/shared";
 import { getMe, telegramCall } from "./api";
 
@@ -24,7 +25,7 @@ export function botIdFromToken(token: string | undefined): string | null {
 }
 
 export type TelegramParsed =
-  | { kind: "command"; chatId: string; chatTitle: string; isGroup: boolean; messageId: number | null; fromId: string | null; anonymousAdmin: boolean }
+  | { kind: "command"; action: BotCommandAction | null; chatId: string; chatTitle: string; isGroup: boolean; messageId: number | null; fromId: string | null; anonymousAdmin: boolean }
   | { kind: "event"; event: NormalizedEvent }
   | { kind: "invalid" };
 
@@ -60,14 +61,27 @@ export function mapTelegramMessage(m: Record<string, unknown>, botToken: string 
   };
 }
 
-const COMMAND_RE = /^\/(handover|start)(?:@([A-Za-z0-9_]{1,64}))?(?=\s|$)/i;
+const COMMAND_RE = /^\/(handover|start|status|pause|help)(?:@([A-Za-z0-9_]{1,64}))?(?=\s|$)([\s\S]*)$/i;
 
-/** True when `text` is our `/handover` (or `/start`) command, addressed to no bot or to ours. */
+/** True when `text` is one of our commands (/handover, /start, /status, /pause, /help), addressed to no bot or to ours. */
 export function isOurCommand(text: unknown, botUsername: string | undefined): boolean {
-  if (typeof text !== "string") return false;
+  return ourCommandAction(text, botUsername) !== undefined;
+}
+
+/**
+ * The action of our command: /handover and /start connect (or take an argument: "/handover status"); /status,
+ * /pause and /help name theirs. undefined = not our command (captured like any message once consented); null = our
+ * /handover with an unknown argument.
+ */
+export function ourCommandAction(text: unknown, botUsername: string | undefined): BotCommandAction | null | undefined {
+  if (typeof text !== "string") return undefined;
   const m = text.match(COMMAND_RE);
-  if (!m) return false;
-  return !m[2] || (!!botUsername && m[2].toLowerCase() === botUsername.replace(/^@/, "").toLowerCase());
+  if (!m) return undefined;
+  if (m[2] && !(!!botUsername && m[2].toLowerCase() === botUsername.replace(/^@/, "").toLowerCase())) return undefined;
+  const name = m[1].toLowerCase();
+  if (name === "start") return "connect";
+  if (name === "handover") return parseCommandAction(m[3]);
+  return name as BotCommandAction;
 }
 
 /** A Telegram Update → a bot command, a NormalizedEvent for ingest, or invalid (pure). */
@@ -95,9 +109,10 @@ export function parseTelegramUpdate(update: unknown, env: Record<string, string 
   if (!chatId) return { kind: "invalid" };
   const isGroup = GROUP_TYPES.has(String(chat.type));
 
-  if (!edited && isOurCommand(m.text, env.TELEGRAM_BOT_USERNAME)) {
+  const action = edited ? undefined : ourCommandAction(m.text, env.TELEGRAM_BOT_USERNAME);
+  if (action !== undefined) {
     return {
-      kind: "command", chatId, chatTitle: str(chat.title) ?? "Telegram group", isGroup, messageId: typeof m.message_id === "number" ? m.message_id : null,
+      kind: "command", action, chatId, chatTitle: str(chat.title) ?? "Telegram group", isGroup, messageId: typeof m.message_id === "number" ? m.message_id : null,
       fromId: isObject(m.from) ? str(m.from.id) : null,
       anonymousAdmin: isObject(m.sender_chat) && m.sender_chat.id === chat.id,
     };

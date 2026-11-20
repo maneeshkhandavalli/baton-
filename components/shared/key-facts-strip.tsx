@@ -3,6 +3,8 @@ import { CalendarDays, CircleDot, Info, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import type { FactKind, KeyFact } from "./key-facts";
+import { maskedTextToPlain } from "./mask-tokens";
+import { MaskedText } from "./masked-text";
 
 const ICONS: Record<FactKind, typeof UserRound> = { person: UserRound, date: CalendarDays, status: CircleDot, info: Info };
 
@@ -31,9 +33,9 @@ export function KeyFactsStrip({ facts, className }: { facts: KeyFact[]; classNam
                 "min-w-0 truncate font-medium",
                 f.tone === "danger" ? "text-destructive-fg" : f.tone === "warning" ? "text-warning-fg" : "text-foreground",
               )}
-              title={f.value}
+              title={maskedTextToPlain(f.value)}
             >
-              {f.value}
+              <MaskedText text={f.value} />
             </dd>
           </div>
         );

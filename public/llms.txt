@@ -1,0 +1,41 @@
+# Baton
+
+> Baton turns a team's chats and documents into a handover for the next person. Every decision, owner, task and risk in the handover links back to the exact message it came from, and a person reviews everything before it is shared.
+
+Baton is built for student clubs, project teams and volunteer groups that rotate people often. The outgoing person adds sources (WhatsApp exports, documents, or a connected Telegram, Discord, Slack or GitHub channel with consent). Baton masks private details, uses AI to extract points with quotes, checks each quote word for word, and labels every point Sourced, Inferred, Conflicting or Missing. The creator reviews, fills gaps, publishes, and invites the incoming person, who reads the handover and acknowledges it. When sources change, Baton processes only what changed and shows the differences before a new version is published (Living Handover).
+
+## Try it
+
+- [Landing page](https://baton-seven-alpha.vercel.app/): what Baton does
+- [Interactive demo, no sign-in](https://baton-seven-alpha.vercel.app/demo): a fictional college coding club handover, end to end, with no AI calls
+- [Sign in](https://baton-seven-alpha.vercel.app/login): the "Judging Baton?" panel offers one-click demo accounts (a handover creator and an incoming member) with synthetic data. Do not upload real personal data to shared demo accounts.
+
+## Main screens (signed in)
+
+- Dashboard: your handovers, their state and the next step
+- New handover: sources, consent, scope (choose conversations), processing
+- Review: approve, edit, reject or add points; every point shows its evidence and quote checks
+- Gaps: questions for missing information; a shareable Gap Interview link that works without an account
+- Changes: differences found when a source gets a new version
+- Published: the versioned handover the incoming person reads, with a First 7 Days plan and acknowledgement
+- Timeline: published points in the order things happened, by the date of their evidence
+- Settings: members, invitations, access levels, source versions, connected channels
+
+## How it works
+
+- Privacy: phone numbers, emails, payment and ID numbers, passwords and keys are masked before storage; participant names are replaced with placeholders before any AI call, and the name mapping is encrypted.
+- AI: extraction and verification run through the configured provider (Omega Plus, Anthropic-compatible) with separate extraction and verification models; outputs are schema-validated and every quote is checked against the stored source.
+- Access: row level security on every table; incoming members only see published content at their clearance.
+- Stack: Next.js (App Router), React, TypeScript, Supabase (Postgres, Auth, Storage), Vercel.
+
+## Source and documentation
+
+- [Repository](https://github.com/maneeshkhandavalli/baton-)
+- [README: what Baton is and how to run it locally](https://github.com/maneeshkhandavalli/baton-/blob/master/README.md)
+- [Documentation index](https://github.com/maneeshkhandavalli/baton-/blob/master/docs/README.md)
+- [Submission summary](https://github.com/maneeshkhandavalli/baton-/blob/master/docs/submission/SUBMISSION.md)
+
+## Known limits
+
+- On the free hosting plan, processing advances while a Processing page is open; a full sample run can take tens of minutes.
+- Connected channels (GitHub, Discord, Telegram) are configured on the live site; Slack credentials are pending. The bots capture messages with consent; they do not answer questions yet.

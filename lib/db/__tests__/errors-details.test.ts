@@ -31,3 +31,23 @@ describe("toAppError details passthrough (QA-R3-16)", () => {
     assert.deepEqual(toAppError(e, "req-1").details, { requestId: "req-1" });
   });
 });
+
+// Bug C (20261121400200): a Baton function can name WHICH conflict it is with a snake_case HINT.
+describe("DbError.fromRpc: a reason token in HINT", () => {
+  it("passes a snake_case hint as details.reason; the message stays the fixed safe one", () => {
+    const e = DbError.fromRpc({ code: "BTCF0", message: "this person already has an open invitation", hint: "invite_pending" });
+    assert.equal(e.code, "conflict");
+    assert.deepEqual(e.details, { reason: "invite_pending" });
+    const app = toAppError(e);
+    assert.deepEqual(app.details, { reason: "invite_pending" });
+    assert.ok(!app.message.includes("open invitation"));
+  });
+
+  it("ignores Postgres' own sentence hints, empty and missing hints", () => {
+    for (const hint of ["No function matches the given name and argument types.", "", null, undefined, "Invite_Pending", "x".repeat(65)]) {
+      const e = DbError.fromRpc({ code: "BTCF0", message: "m", hint });
+      assert.equal(e.details, undefined, String(hint));
+      assert.equal(toAppError(e).details, undefined);
+    }
+  });
+});

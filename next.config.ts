@@ -11,7 +11,12 @@ const nextConfig: NextConfig = {
   // R3 Task 06 (security): Next logs every Server Function call WITH ITS ARGUMENTS during development by default.
   // Those arguments include passwords (signInWithPassword) and invitation tokens (acceptInvitation), which must
   // never reach a log. Keep it off.
-  logging: { serverFunctions: false },
+  // R4 (21 Nov): the dev request log printed OAuth callback URLs in full, including the one-time authorization
+  // `code` (seen for /api/email/google/callback). Never log the OAuth callbacks (Gmail and the connectors).
+  logging: {
+    serverFunctions: false,
+    incomingRequests: { ignore: [/\/api\/(?:email\/google|connectors\/[a-z]+)\/callback(?:[/?]|$)/] },
+  },
   // Development only: Next's floating dev badge sat on top of the sidebar's Help and Sign out controls.
   devIndicators: false,
   partialPrefetching: true,
@@ -36,6 +41,13 @@ const nextConfig: NextConfig = {
           dev: process.env.NODE_ENV !== "production",
         }),
       },
+      // Performance audit 21 Nov: these two small render-blocking scripts were served with max-age=0, so every page
+      // view revalidated them before first paint. An hour of caching (plus a day of stale-while-revalidate) is safe:
+      // they change only with a deploy, and a stale copy for an hour only affects the theme/splash pre-paint logic.
+      ...["/theme-init.js", "/intro-splash-init.js"].map((source) => ({
+        source,
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      })),
     ];
   },
 };

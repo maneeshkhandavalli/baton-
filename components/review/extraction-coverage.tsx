@@ -19,11 +19,12 @@ import type {
   ExtractionReport,
   PointReviewFlag,
   SourceExtractionCoverage,
-  SourceExtractionState,
   UnreviewedSignalMessage,
 } from "@/lib/contracts/extraction";
 import { unsettledSourceUpdates } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
+
+import { coverageHeadline, coverageIncomplete, showCoverageCounts, sourceCoverageOk, sourceStateText } from "./coverage-labels";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -38,17 +39,8 @@ export const extractionBlockerLabel: Record<ExtractionBlockerKind, (n: number) =
   coverage_unavailable: (n) => `Coverage was not recorded for ${plural(n, "source")}`,
 };
 
-const stateLabel: Record<SourceExtractionState, string> = {
-  not_processed: "Not analysed",
-  in_progress: "Analysing",
-  complete: "Fully analysed",
-  complete_with_skips: "Analysed, some messages skipped",
-  partial: "Partly analysed",
-  failed: "Not analysed (failed)",
-};
-
 function SourceLine({ s }: { s: SourceExtractionCoverage }) {
-  const ok = s.state === "complete";
+  const ok = sourceCoverageOk(s);
   const bad = s.state === "partial" || s.state === "failed";
   const Icon = ok ? CircleCheck : bad ? CircleAlert : CircleDashed;
   return (
@@ -58,14 +50,20 @@ function SourceLine({ s }: { s: SourceExtractionCoverage }) {
         <Icon aria-hidden="true" className={cn("mt-0.5 size-3.5 shrink-0", ok && "text-success-fg", bad && "text-warning-fg")} />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           {s.title ?? "Source"}
-          <span className={cn("block font-normal", bad ? "text-warning-fg" : "text-muted-foreground")}>{stateLabel[s.state]}</span>
+          <span className={cn("block font-normal", bad ? "text-warning-fg" : "text-muted-foreground")}>{sourceStateText(s)}</span>
         </span>
       </p>
       <p className="pl-5 text-caption text-muted-foreground tabular-nums">
-        {s.chunksTotal > 0 && `${s.chunksDone} of ${s.chunksTotal} parts · `}
-        {plural(s.messagesInspected, "message")} inspected · {s.messagesWithSignals} with signals ({s.signalMessagesLinked} used, {s.signalMessagesUnreviewed} unreviewed)
-        {s.oversizeSkipped > 0 && ` · ${s.oversizeSkipped} too long`}
-        {s.candidatesDiscarded > 0 && ` · ${s.candidatesDiscarded} discarded`}
+        {showCoverageCounts(s) ? (
+          <>
+            {s.chunksTotal > 0 && `${s.chunksDone} of ${s.chunksTotal} parts · `}
+            {plural(s.messagesInspected, "message")} inspected · {s.messagesWithSignals} with signals ({s.signalMessagesLinked} used, {s.signalMessagesUnreviewed} unreviewed)
+            {s.oversizeSkipped > 0 && ` · ${s.oversizeSkipped} too long`}
+            {s.candidatesDiscarded > 0 && ` · ${s.candidatesDiscarded} discarded`}
+          </>
+        ) : (
+          "Coverage not recorded"
+        )}
       </p>
     </li>
   );
@@ -76,7 +74,7 @@ export function ExtractionCoverageSummary({ report, className }: { report: Extra
   if (!report?.available || report.completion === "none") return null;
   // R3 Task 05D: a newer version not yet processed or checked, or with changes to decide, is never "fully analysed"
   const unsettled = unsettledSourceUpdates(report);
-  const incomplete = report.completion === "partial" || report.completion === "failed" || unsettled.length > 0;
+  const incomplete = coverageIncomplete(report.completion, unsettled.length);
   return (
     <section aria-labelledby="coverage-heading" className={cn("rounded-2xl border border-border bg-card p-4", className)}>
       <div className="flex items-center gap-1">
@@ -86,12 +84,7 @@ export function ExtractionCoverageSummary({ report, className }: { report: Extra
         <ContextualHelp topic="source_coverage" label="What is source coverage?" />
       </div>
       <p className={cn("mt-1 text-xs", incomplete ? "font-medium text-warning-fg" : "text-muted-foreground")}>
-        {report.completion === "complete" && unsettled.length === 0 && "Every source was fully analysed."}
-        {report.completion === "complete" && unsettled.length > 0 &&
-          `Every source processed so far was fully analysed, but ${unsettled.length === 1 ? "a source update still needs" : `${unsettled.length} source updates still need`} processing, checking or a decision.`}
-        {report.completion === "in_progress" && "Analysis is still running."}
-        {report.completion === "partial" && "Not everything was analysed. Points may be missing."}
-        {report.completion === "failed" && "No source could be analysed."}
+        {coverageHeadline(report.completion, unsettled.length)}
       </p>
       <ul className="mt-3 space-y-2">
         {report.sources.filter((s) => s.state !== "not_processed").map((s) => (

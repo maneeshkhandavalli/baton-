@@ -20,6 +20,7 @@ import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { isWellFormedToken } from "../../db/tokens";
 import { routes } from "../../routes";
+import { refuseDemoContent } from "./demo-guard";
 import { createInputMasker } from "./mask";
 import { absoluteUrl, action, failWith, ok, parseInput, siteOriginOrFail, withActor, withoutActor } from "./run";
 import type { ActionDeps } from "./types";
@@ -36,6 +37,8 @@ import type { ActionDeps } from "./types";
  */
 export async function createGapQuestion(deps: ActionDeps, input: CreateGapQuestionInput): Promise<Result<GapQuestionSummary>> {
   return action(deps, createGapQuestionInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // owner decision 21 Nov: judges' additions would show to every later judge
+    if (demo) return demo;
     const m = createInputMasker();
     const masked = parseInput(createGapQuestionInput, { ...v, question: m.text(v.question), context: m.optional(v.context) });
     if (!masked.ok) return masked;

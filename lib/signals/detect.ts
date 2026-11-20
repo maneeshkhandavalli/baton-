@@ -97,7 +97,7 @@ const DECISION_RE =
   /\b(?:we(?:'ve| have)? decided|decided (?:to|that|on)|decision(?: is|:)|final(?:ised|ized)?:|(?:it'?s|its|that'?s) final|finali[sz]ed|agreed (?:to|on|that)|we(?:'re| are) going with|let'?s go with|going ahead with|we will go with|settled on|voted (?:to|for)|approved|is confirmed|has been confirmed|confirmed:|decide (?:kiya|ho gaya)|final hai|pakka)(?=\W|$)/giu;
 
 const REVERSAL_RE =
-  /\b(?:actually|change of plans?|plans? changed?|instead(?: of)?|no longer|not anymore|cancel(?:l?ed|ling)?|called off|moved to|moving it to|postponed|rescheduled|pushed to|scratch that|ignore (?:my|the) (?:last|previous)|correction:|changed (?:to|from)|revert(?:ed|ing)?|switch(?:ed|ing) to|won'?t be (?:happening|needed))(?=\W|$)/giu;
+  /\b(?:actually|change of plans?|plans? changed?|instead(?: of)?|no longer|not anymore|cancel(?:l?ed|ling)?|called off|moved to|moving it to|postponed|rescheduled|pushed to|scratch that|ignore (?:my|the) (?:last|previous)|correction:|changed (?:to|from)|revert(?:ed|ing)?|switch(?:ed|ing) to|moves to|shift(?:ed|ing) to|replaced (?:by|with)|from now on|won'?t be (?:happening|needed))(?=\W|$)/giu;
 
 const COMMITMENT_STRONG_RE =
   /\b(?:i'?ll|i will|i shall|i can take|i'?m on it|will do|i promise|promise to|leave it (?:to|with) me|count on me|i'?ll make sure|main kar (?:dunga|dungi|lunga|lungi)|kar dunga|kar dungi|bhej dunga|bhej dungi)\b/giu;

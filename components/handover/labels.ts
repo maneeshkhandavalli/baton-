@@ -27,7 +27,7 @@ export const handoverStateMeta: Record<HandoverState, { label: string; tone: "ne
   draft: { label: "Draft", tone: "neutral", description: "Being set up. Nothing has been processed yet." },
   processing: { label: "Processing", tone: "primary", description: "Baton is reading the sources." },
   in_review: { label: "In review", tone: "warning", description: "Points are waiting for review before publishing." },
-  approved: { label: "Approved", tone: "success", description: "Published to the incoming member." },
+  approved: { label: "Published", tone: "success", description: "Published to the incoming member." },
   acknowledged: { label: "Acknowledged", tone: "inverse", description: "The incoming member has acknowledged the handover." },
 };
 

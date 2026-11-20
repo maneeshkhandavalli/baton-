@@ -11,9 +11,11 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedText } from "@/components/shared/masked-text";
+import { usePeopleNames } from "@/components/shared/person-token";
 import type { PointDetail } from "@/lib/contracts/dto";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
 
+import { editDraftFor, editedValues } from "./edit-draft";
 import { EvidenceQuote } from "./evidence-quote";
 
 export type ReviewDialogState =
@@ -59,9 +61,12 @@ function DialogBody({ state, onClose, onSubmit, pending, fieldErrors }: ReviewDi
 
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [title, setTitle] = useState(point.title);
-  const [statement, setStatement] = useState(point.statement);
-  const [attributes, setAttributes] = useState<Record<string, unknown>>({ ...(point.attributes as Record<string, unknown>) });
+  // Edit: pre-filled with the text the card shows (names this viewer may see, not [PERSON_n]); taken once when the dialog opens.
+  const names = usePeopleNames();
+  const [initial] = useState(() => editDraftFor(point, names));
+  const [title, setTitle] = useState(initial.title);
+  const [statement, setStatement] = useState(initial.statement);
+  const [attributes, setAttributes] = useState<Record<string, unknown>>(() => ({ ...initial.attributes }));
 
   async function submit(input: ReviewPointInput) {
     const ok = await onSubmit(input);
@@ -212,9 +217,10 @@ function DialogBody({ state, onClose, onSubmit, pending, fieldErrors }: ReviewDi
 
   // edit
   const editable = Object.entries(attributes).filter(([k]) => k !== "directContact");
+  // Untouched fields go back exactly as stored; only changed fields carry what was typed.
   const input: ReviewPointInput | null =
     title.trim() && statement.trim() && note.trim()
-      ? { action: "edit", pointId: point.id, expectedRevisionId: point.currentRevisionId, title: title.trim(), statement: statement.trim(), attributes, editReason: note.trim() }
+      ? { action: "edit", pointId: point.id, expectedRevisionId: point.currentRevisionId, ...editedValues(point, initial, { title, statement, attributes }, names), editReason: note.trim() }
       : null;
 
   return (

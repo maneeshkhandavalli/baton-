@@ -171,3 +171,45 @@ describe("tour card placement", () => {
     assert.equal(placeTourCard({ top: 0, left: 20, width: 350, height: 800 }, wide, phone, [action]).side, "bottom-sheet");
   });
 });
+
+// Round 4 audit 1.8 (incoming tour, previously unverified): every step can be reached and has its anchor on the page.
+describe("incoming tour, stepped through", () => {
+  it("every incoming step anchor exists in the published view or the help menu", () => {
+    const view = readFileSync(path.join(ROOT, "components/published/published-handover-view.tsx"), "utf8");
+    const help = readFileSync(path.join(ROOT, "components/onboarding/help-menu.tsx"), "utf8");
+    for (const s of INCOMING_TOUR) {
+      const found = view.includes(`data-tour="${s.anchor}"`) || view.includes(`"${s.anchor}"`) || help.includes(`data-tour="${s.anchor}"`);
+      assert.ok(found, `anchor ${s.anchor} is rendered`);
+    }
+  });
+
+  it("an incoming member steps from the header to help and finishes; back and dismiss work", () => {
+    const resolved = resolveTourSteps("incoming", { focusHandoverId: "h1", published: true, acknowledges: true }, PATHS);
+    let s = tourReducer(IDLE_TOUR, { type: "start", role: "incoming", steps: resolved });
+    const seen: string[] = [];
+    while (s.status === "running") {
+      seen.push(currentStep(s)!.id);
+      s = tourReducer(s, { type: "next" });
+    }
+    assert.deepEqual(seen, INCOMING_TOUR.map((x) => x.id));
+    assert.deepEqual(s, { status: "finished", role: "incoming", outcome: "completed" });
+
+    let t = tourReducer(IDLE_TOUR, { type: "start", role: "incoming", steps: resolved });
+    t = tourReducer(t, { type: "next" });
+    t = tourReducer(t, { type: "back" });
+    assert.equal(currentStep(t)?.id, "published-header");
+    assert.deepEqual(tourReducer(t, { type: "dismiss" }), { status: "finished", role: "incoming", outcome: "dismissed" });
+  });
+
+  it("missing optional sections (no first week, no open questions) are skipped, never stuck", () => {
+    const resolved = resolveTourSteps("incoming", { focusHandoverId: "h1", published: true, acknowledges: true }, PATHS);
+    let s = tourReducer(IDLE_TOUR, { type: "start", role: "incoming", steps: resolved });
+    s = tourReducer(s, { type: "prune", stepIds: ["first-week", "open-questions"] });
+    const seen: string[] = [];
+    while (s.status === "running") {
+      seen.push(currentStep(s)!.id);
+      s = tourReducer(s, { type: "next" });
+    }
+    assert.deepEqual(seen, ["published-header", "sections", "acknowledge", "help"]);
+  });
+});

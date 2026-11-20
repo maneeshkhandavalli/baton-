@@ -13,7 +13,7 @@
 
 import { createPrivateKey, sign, type KeyObject } from "node:crypto";
 
-import { ProviderError } from "../adapter";
+import { ProviderConfigError, ProviderError, type ProviderConfigReason } from "../adapter";
 import { githubRequest, type GithubHttp } from "./api";
 
 const b64u = (v: Buffer | string) => Buffer.from(v).toString("base64url");
@@ -33,20 +33,36 @@ export function normalizePrivateKey(raw: string | undefined): string | null {
 }
 
 function loadKey(raw: string | undefined): KeyObject {
+  if (!raw || raw.trim() === "") throw new ProviderConfigError("github_private_key_missing");
   const pem = normalizePrivateKey(raw);
-  if (!pem) throw new ProviderError("not_configured");
+  if (!pem) throw new ProviderConfigError("github_private_key_unparsable");
+  let key: KeyObject;
   try {
-    const key = createPrivateKey(pem);
-    if (key.asymmetricKeyType !== "rsa") throw new Error("not rsa");
-    return key;
+    key = createPrivateKey(pem);
   } catch {
-    throw new ProviderError("not_configured"); // never echo the key or the parser's message
+    throw new ProviderConfigError("github_private_key_unparsable"); // never echo the key or the parser's message
   }
+  if (key.asymmetricKeyType !== "rsa") throw new ProviderConfigError("github_private_key_not_rsa");
+  return key;
+}
+
+/**
+ * Why a GITHUB_APP_ID value cannot be used, as a fixed code (never the value), or null when it is a numeric App ID.
+ * GitHub shows two ids on the app page: the numeric "App ID" (what a JWT's `iss` needs) and the "Client ID"
+ * (`Iv1.` followed by hex, or `Iv23` and letters on newer apps). Pasting the Client ID is the usual mistake.
+ */
+export function githubAppIdProblem(appId: string | undefined): ProviderConfigReason | null {
+  const v = appId?.trim() ?? "";
+  if (v === "") return "github_app_id_missing";
+  if (/^\d{1,20}$/.test(v)) return null;
+  if (/^Iv\d*[.A-Za-z0-9]/.test(v)) return "github_app_id_is_client_id";
+  return "github_app_id_not_numeric";
 }
 
 /** JWT that authenticates as the GitHub App (≤ 10 min). */
 export function createAppJwt(appId: string | undefined, privateKey: string | undefined, nowMs: number): string {
-  if (!appId || !/^\d{1,20}$/.test(appId.trim())) throw new ProviderError("not_configured");
+  const problem = githubAppIdProblem(appId);
+  if (problem || !appId) throw new ProviderConfigError(problem ?? "github_app_id_missing");
   const key = loadKey(privateKey);
   const now = Math.floor(nowMs / 1000);
   const header = b64u(JSON.stringify({ alg: "RS256", typ: "JWT" }));

@@ -39,7 +39,7 @@ export const SYNTHETIC_EMAIL = "someone@example.test";
 
 export const ACTOR = Object.freeze({ profileId: ACTOR_ID, email: "member@example.test", emailConfirmed: true }) as VerifiedActor;
 
-type RpcResponse = { data?: unknown; error?: { code?: string; message: string } };
+type RpcResponse = { data?: unknown; error?: { code?: string; message: string; hint?: string | null } };
 export type RpcHandler = RpcResponse | ((args: Record<string, unknown> | undefined) => RpcResponse);
 
 export interface Call {

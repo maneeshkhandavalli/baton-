@@ -739,6 +739,44 @@ describe("startProcessing (I3)", () => {
     assert.deepEqual(await handovers.startProcessing(h.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });
   });
 
+  it("a chat still waiting for its date order answer is refused before any run starts, with a reason the wizard can act on", async () => {
+    const chat = { id: S, kind: "whatsapp_export", title: "chat.txt", state: "uploaded", rawDeletedAt: null };
+    const ambiguous = async () => ({
+      ok: false as const,
+      error: { code: "parse_failed" as const, message: "m", retryable: false, details: { parserCode: "date_format_ambiguous" as const, line: 1 } },
+    });
+    const f = startDeps({
+      queries: { listSources: okResult([chat]) },
+      storage: { download: new Blob([RAW_BYTES]) },
+      rpc: { start_processing: { data: NEW_ID }, source_preview_target: { data: PREVIEW_TARGET }, parse_exclusion_rules: { data: RULES } },
+      previewParser: ambiguous,
+    });
+    const r = await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.ok(!r.ok);
+    assert.equal(r.error.code, "precondition_failed");
+    assert.equal(r.error.details?.reason, handovers.DATE_ORDER_REQUIRED_REASON);
+    assert.equal(handovers.DATE_ORDER_REQUIRED_REASON, "date_order_required", "components/wizard/draft-state.ts uses the same literal");
+    assert.equal(r.error.details?.sourceId, S);
+    assert.equal(r.error.message, "Answer the date order question for chat.txt first. Baton can't tell if its dates are day/month or month/day.");
+    assert.ok(!f.events.includes("start_processing"), "no run");
+    assert.ok(!f.events.includes("scheduleDrain"), "no drain");
+
+    // once the creator answered (the parse succeeds), or after the chat was removed, the run starts
+    const answered = startDeps({
+      queries: { listSources: okResult([chat]) },
+      storage: { download: new Blob([RAW_BYTES]) },
+      rpc: { start_processing: { data: NEW_ID }, source_preview_target: { data: PREVIEW_TARGET }, parse_exclusion_rules: { data: RULES } },
+      previewParser: async () => ({ ok: true, data: PREVIEW }),
+    });
+    assert.deepEqual(await handovers.startProcessing(answered.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });
+    const removed = startDeps({
+      queries: { listSources: okResult([{ ...chat, state: "removed" }]) },
+      rpc: { start_processing: { data: NEW_ID } },
+      previewParser: ambiguous,
+    });
+    assert.deepEqual(await handovers.startProcessing(removed.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });
+  });
+
   it("a throwing scheduleDrain never fails a started run", async () => {
     const f = startDeps({ scheduleDrainThrows: true });
     assert.deepEqual(await handovers.startProcessing(f.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });

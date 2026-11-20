@@ -93,7 +93,17 @@ export const DEMO_STEP_IDS: readonly DemoStepId[] = DEMO_STEPS.map((s) => s.id);
 
 /** `?step=` value → a known step, or null. */
 export function parseStepParam(value: unknown): DemoStepId | null {
-  return typeof value === "string" && (DEMO_STEP_IDS as readonly string[]).includes(value) ? (value as DemoStepId) : null;
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase();
+  if ((DEMO_STEP_IDS as readonly string[]).includes(v)) return v as DemoStepId;
+  // Round 4 audit F1: a step number ("?step=3") opens that step too
+  if (/^[1-9]$/.test(v)) return DEMO_STEP_IDS[Number(v) - 1] ?? null;
+  return null;
+}
+
+/** Round 4 audit F1: a `?step=` value that names no step; the demo says so instead of silently starting over. */
+export function isUnknownStepQuery(value: unknown): boolean {
+  return value !== undefined && parseStepParam(value) === null;
 }
 
 /**

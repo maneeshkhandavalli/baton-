@@ -75,13 +75,21 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
 
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => router.refresh(), POLL_MS);
+    // Re-reading the page only matters while someone can see it (performance audit 21 Nov: ~8 round trips per tick,
+    // also in background tabs). Hidden: skip; visible again: refresh at once. The nudge below keeps running so
+    // processing still moves forward in a background tab.
+    const refresh = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const t = setInterval(refresh, POLL_MS);
+    document.addEventListener("visibilitychange", refresh);
     // Fire-and-forget: schedules one more fenced drain on the server; errors are ignored (the next tick retries).
     const nudge = () => void continueProcessing({ handoverId }).catch(() => undefined);
     const n = setInterval(nudge, NUDGE_MS);
     return () => {
       clearInterval(t);
       clearInterval(n);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [active, router, handoverId]);
 

@@ -913,7 +913,7 @@ export async function inviteMember(input: InviteMemberInput): Promise<Result<Cre
     return fail("conflict", "That person is already a member.");
   }
   if (store.tokens.some((t) => t.handoverId === c.h.id && t.purpose === "member_invite" && t.recipientEmail === email && tokenStatus(t) === "active")) {
-    return fail("conflict", "That person already has a pending invitation. Turn it off first to send a new one.");
+    return fail("conflict", "This person already has an open invitation. Use \"Send a new link\" on it below, or revoke it first.");
   }
   const clearance =
     v.data.role === "outgoing" || v.data.role === "reviewer" ? "reviewer_only" : v.data.clearance ?? (v.data.role === "lead" ? "leads_only" : "everyone");

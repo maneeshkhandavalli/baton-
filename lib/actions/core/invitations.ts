@@ -19,6 +19,7 @@ import type { VerifiedActor } from "../../db/actor-rules";
 import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { consumeInviteSendLimits } from "../../db/rate-limit";
+import { isDemoAccountEmail } from "../../demo-accounts";
 import { renderInvitationEmail } from "../../email/core";
 import { routes } from "../../routes";
 import { absoluteUrl, action, failWith, guarded, ok, siteOriginOrFail, type Failure } from "./run";
@@ -136,6 +137,12 @@ export async function acceptInvitation(deps: ActionDeps, input: unknown): Promis
  * Emails a freshly created invitation link to the invited address, when this server has a transport. Never fails the
  * invitation: every outcome is a delivery value, and the creator always has the copyable link (D6). The outcome is
  * recorded (status only; never the address, link or provider text).
+ *
+ * Round 4 (Gmail):
+ *   * exactly ONE send attempt per created token; a failure never creates, revokes or reissues a token, so the link
+ *     the creator copies keeps working (expiry, email match and single use are unchanged: they live in SQL);
+ *   * `not_connected` (Gmail has no usable refresh token) is recorded and returned like "email not configured";
+ *   * shared demo accounts never send email (F3): the link is still created and returned for copying.
  */
 export async function deliverInvitation(
   deps: ActionDeps,
@@ -149,6 +156,11 @@ export async function deliverInvitation(
       deps.logIssue("invitation_delivery_not_recorded", { tokenId: link.tokenId, status });
     }
   };
+
+  if (isDemoAccountEmail(actor.email)) {
+    await record("not_sent", null, null);
+    return { status: "not_sent", reason: "demo" };
+  }
 
   const transport = deps.email();
   if (!transport.configured) {
@@ -184,6 +196,10 @@ export async function deliverInvitation(
     return { status: "sent" };
   }
   deps.logIssue("invitation_email_failed", { tokenId: link.tokenId, kind: sent.kind });
+  if (sent.kind === "not_connected") {
+    await record("not_sent", "email_not_configured", null);
+    return { status: "not_sent", reason: "email_not_configured" };
+  }
   await record("failed", sent.kind === "rate_limited" ? "rate_limited" : "provider_failed", null);
   return { status: "not_sent", reason: "provider_failed" };
 }

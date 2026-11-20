@@ -63,6 +63,32 @@ describe("H2: secrets next to punctuation are masked", () => {
     const text = "See https://example.org/handover/notes for the internationalisation-requirements.";
     assert.equal(maskText({ text }).text, text);
   });
+  // Found live on 21 Nov: a linked GitHub repository's name showed as [SECRET].
+  it("word slugs and repository paths are not masked as secrets", () => {
+    for (const text of [
+      "asha-raoverma/my-first-portfolio-site",
+      "See https://github.com/asha-raoverma/my-first-portfolio-site/issues/12 for details.",
+      "Branch feature/volunteer-roster-shift-plan-2026 is merged.",
+      "docs/connectors/OWNER_STEPS/README-setup-guide",
+    ]) assert.equal(maskText({ text }).text, text, text);
+  });
+  it("tokens that look like slugs but mix letters and digits stay masked", () => {
+    for (const token of [
+      "gh" + "p_" + "Zx9qL2mN8vB4kR7tY1wE5uI3oP6aS0dF",
+      "s" + "k-proj-" + "Ab3dEf6hIj9kLm2nOp5qRsT8uVw1XyZ4",
+      // built at runtime so no token-shaped literal sits in the repository (GitHub push protection)
+      ["xox" + "b", "1234567890", "0987654321", "Zx9qL2mN8vB4kR7tY1wE"].join("-"),
+      "Zx9q/L2mN+8vB4kR7tY1wE5uI3oP6aS0dF==",
+      // audit 21 Nov: these got through the first version of the slug rule
+      "Purple-Monkey-Dishwasher-Elephant-Galaxy-Rocket",
+      "ABCDEFGHJKLMNPQRSTUVWXYZABCDEFGH-KLMN",
+      "QWHZKXPMRTVBNLJDFGSYCW-ueokqzmxbtrfplahs",
+      "xkqzvbnmwplrtyhgfdsa-ueokqzmxbtrfplahs-qq",
+    ]) {
+      const out = maskText({ text: `use ${token} here` }).text;
+      assert.ok(!out.includes(token.slice(-10)), `${token} survived: ${out}`);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------------------------

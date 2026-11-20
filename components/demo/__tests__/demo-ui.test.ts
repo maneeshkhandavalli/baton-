@@ -264,3 +264,23 @@ describe("demo UI on the real engine", () => {
     assert.match(demoResultText(out.result, "x").text, /isn't part of the demo/);
   });
 });
+
+import { isUnknownStepQuery } from "../demo-guide";
+
+describe("demo ?step= fallback (Round 4 audit F1)", () => {
+  it("accepts step numbers and case variants, and flags values that name no step", () => {
+    assert.equal(parseStepParam("3"), DEMO_STEPS[2].id);
+    assert.equal(parseStepParam(" Review "), "review");
+    assert.equal(parseStepParam("0"), null);
+    assert.equal(parseStepParam("9"), null);
+    assert.equal(initialStepFromQuery("bogus"), DEMO_STEPS[0].id);
+    assert.equal(isUnknownStepQuery("bogus"), true);
+    assert.equal(isUnknownStepQuery(undefined), false);
+    assert.equal(isUnknownStepQuery("2"), false);
+  });
+
+  it("the workspace page tells the visitor when the step is unknown", () => {
+    const page = readFileSync(path.join(ROOT, "app/(marketing)/demo/workspace/page.tsx"), "utf8");
+    assert.match(page, /unknownStep=\{isUnknownStepQuery\(query\.step\)\}/);
+  });
+});

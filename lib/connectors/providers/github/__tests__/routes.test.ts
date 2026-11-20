@@ -313,6 +313,84 @@ describe("github callback route", () => {
     assert.equal(malformed.gh.calls.length, 0);
   });
 
+  // Found live on 21 Nov: the app was already installed on the account, so GitHub's page became "Configure" and
+  // returned setup_action=update with the installation id and our state but NO code → "invalid_request".
+  describe("app already installed on the account (no code on return)", () => {
+    const withInst = (inst: string) =>
+      signConnectorState(ENV.CONNECTOR_STATE_SECRET, { t: "oauth", p: "github", profileId: CREATOR, handoverId: HANDOVER, nonce: "n2", exp: NOW / 1000 + 600, inst });
+
+    it("sends the user through GitHub's authorization step once, carrying the installation in a fresh signed state", async () => {
+      const { res, store, gh, location } = await run({ setup_action: "update", installation_id: "990001", state: state() });
+      assert.equal(res.status, 303);
+      assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+      const to = new URL(location!);
+      assert.equal(to.origin + to.pathname, "https://github.com/login/oauth/authorize");
+      assert.equal(to.searchParams.get("client_id"), ENV.GITHUB_APP_CLIENT_ID);
+      assert.equal(to.searchParams.get("redirect_uri"), `${SITE}/api/connectors/github/callback`);
+      const next = verifyConnectorState(ENV.CONNECTOR_STATE_SECRET, to.searchParams.get("state"), NOW);
+      assert.ok(next.ok && next.payload.t === "oauth");
+      assert.deepEqual([next.payload.p, next.payload.profileId, next.payload.handoverId, next.payload.inst], ["github", CREATOR, HANDOVER, "990001"]);
+      assert.equal(gh.calls.length, 0, "no GitHub API call before the user authorizes");
+      assert.equal(await store.findInstallation("github", "990001"), null, "nothing stored yet");
+      assert.doesNotMatch(location!, new RegExp(ENV.GITHUB_APP_CLIENT_SECRET), "client secret never in the URL");
+    });
+
+    it("on return with a code, proves access to the installation from the state and connects it", async () => {
+      const { store, gh, location } = await run({ code: SECRETS.code, state: withInst("990001") });
+      assert.equal(location, settings("connected"));
+      const inst = await store.findInstallation("github", "990001");
+      assert.ok(inst);
+      assert.equal(inst.installedByProfileId, CREATOR);
+      assert.ok(gh.calls.some((c) => c.method === "DELETE" && c.url.endsWith("/token")), "user token revoked");
+    });
+
+    it("the signed installation wins over a swapped query parameter, and access is still checked", async () => {
+      const { store, location } = await run({ code: SECRETS.code, installation_id: "555", state: withInst("990001") });
+      assert.equal(location, settings("connected"));
+      assert.equal(await store.findInstallation("github", "555"), null);
+      const refused = await run({ code: SECRETS.code, state: withInst("555") });
+      assert.equal(refused.location, settings("installation_not_accessible"));
+      assert.equal(await refused.store.findInstallation("github", "555"), null);
+    });
+
+    it("a second return without a code is refused (no redirect loop)", async () => {
+      const { location, gh } = await run({ setup_action: "update", installation_id: "990001", state: withInst("990001") });
+      assert.equal(location, settings("invalid_request"));
+      assert.equal(gh.calls.length, 0);
+    });
+
+    it("never redirects to GitHub with an empty client id: unavailable, logged as install_misconfigured", async () => {
+      // An empty client id is already a 404 (connectorConfigured)...
+      const { store } = await setupStore();
+      const gated = await handleGithubCallback(
+        new Request(callbackUrl({ setup_action: "update", installation_id: "990001", state: state() })),
+        routeDeps(store, { env: { ...ENV, GITHUB_APP_CLIENT_ID: "" } }).deps,
+      );
+      assert.equal(gated.status, 404);
+      // ...and the authorize branch checks again. Simulated drift: the configuration gate (connectorConfigured, two
+      // reads) sees a client id, the value read when building the link is blank.
+      let reads = 0;
+      const env = { ...ENV } as Record<string, string>;
+      Object.defineProperty(env, "GITHUB_APP_CLIENT_ID", { enumerable: true, get: () => (++reads <= 2 ? ENV.GITHUB_APP_CLIENT_ID : " ") });
+      const gh = github();
+      const r = routeDeps(store, { env, fetch: gh.fetch });
+      const res = await handleGithubCallback(new Request(callbackUrl({ setup_action: "update", installation_id: "990001", state: state() })), r.deps);
+      const location = res.headers.get("location");
+      assert.equal(location, settings("unavailable"));
+      assert.doesNotMatch(location!, /login\/oauth\/authorize/);
+      assert.equal(gh.calls.length, 0);
+      assert.ok(r.lines.some((l) => l.includes("install_misconfigured") && l.includes("client_id_missing")), r.lines.join("\n"));
+      assert.equal(await store.findInstallation("github", "990001"), null);
+    });
+
+    it("someone else's state, or no installation id at all, never starts the authorization step", async () => {
+      const other = await run({ setup_action: "update", installation_id: "990001", state: state({ profileId: OTHER }) });
+      assert.equal(other.location, `${SITE}/dashboard?connector=github&status=invalid_state`);
+      const none = await run({ setup_action: "update", state: state() });
+      assert.equal(none.location, settings("invalid_request"));
+    });
+  });
+
   it("404 when not configured", async () => {
     const { store } = await setupStore();
     const res = await handleGithubCallback(new Request(callbackUrl({ state: state() })), routeDeps(store, { env: { ...ENV, GITHUB_APP_CLIENT_SECRET: "" } }).deps);

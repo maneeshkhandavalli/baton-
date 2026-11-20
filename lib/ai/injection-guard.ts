@@ -39,7 +39,12 @@ export type InjectionPattern =
   /** PI-11-R4: indirect address of whoever checks the text, in the verifier's vocabulary. */
   | "indirect_address"
   /** PI-11-R5: "treat this message as supporting the claim" (the narrow self-referential form only). */
-  | "self_referential_support";
+  | "self_referential_support"
+  /**
+   * PI-11-R6 (PI-25): the free-object form, "treat this message as confirming <the claim's own content>".
+   * Claim-aware: it fires only when the clause restates most of the claim statement's content words.
+   */
+  | "free_object_self_reference";
 
 export type InjectionField = "claim" | "quote" | "context";
 
@@ -182,7 +187,44 @@ const SELF_REFERENTIAL_SUPPORT = new RegExp(
     String.raw`${CLAIM_REF}\b`,
 );
 
-function screenText(text: string | null | undefined): InjectionPattern[] {
+/**
+ * R6 (claim-aware, PI-25): "treat / consider / count / regard / take this message as confirming|supporting|
+ * proving|showing <clause>" where <clause> restates most of the claim statement. A self-description that
+ * tells the reader to count the text itself as evidence FOR THIS CLAIM is a steer, not evidence. Ordinary
+ * chat stays clean: "treat this message as confirmation OF the booking" (a noun object, not a clause) and
+ * "proof of payment" never match, and a clause about something other than the claim never fires.
+ */
+const FREE_OBJECT_SELF_REFERENCE = new RegExp(
+  String.raw`\b(?:treat|consider|count|regard|take|accept|read)\s+(?:this|the|my|our)\s+(?:message|quote|text|line|note|post|reply|chat)\s+as\s+` +
+    String.raw`(?:confirming|supporting|proving|showing|establishing|verifying|validating|(?:proof|evidence|confirmation)\s+that)\s+(?:that\s+)?([^.!?\n]{3,200})`,
+  "g",
+);
+
+const STOPWORDS = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "will", "has", "have", "had", "who", "which",
+  "our", "their", "his", "her", "its", "all", "any", "not", "but", "into", "onto", "per", "via", "also", "must", "should",
+  "can", "may", "been", "being", "than", "then", "there", "they", "them", "you", "your", "she", "him", "out", "off",
+]);
+
+/** Content words (3+ letters or digits, stop words removed), compared on a 5-character stem. */
+function contentStems(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of text.match(/[\p{L}\p{N}_]{3,}/gu) ?? []) if (!STOPWORDS.has(w)) out.add(w.slice(0, 5));
+  return out;
+}
+
+function freeObjectSelfReference(view: string, claimStems: Set<string>): boolean {
+  if (claimStems.size === 0) return false;
+  for (const m of view.matchAll(FREE_OBJECT_SELF_REFERENCE)) {
+    const clause = contentStems(m[1] ?? "");
+    let hit = 0;
+    for (const stem of claimStems) if (clause.has(stem)) hit += 1;
+    if (hit >= Math.max(1, Math.ceil(claimStems.size / 2))) return true;
+  }
+  return false;
+}
+
+function screenText(text: string | null | undefined, claimStems: Set<string> = new Set()): InjectionPattern[] {
   if (!text) return [];
   const t = normalizeForScreen(text);
   const leet = leetView(t);
@@ -193,6 +235,7 @@ function screenText(text: string | null | undefined): InjectionPattern[] {
     if (NON_ENGLISH_OVERRIDE.some((re) => re.test(view))) found.add("non_english_override");
     if (INDIRECT_ADDRESS.test(view)) found.add("indirect_address");
     if (SELF_REFERENTIAL_SUPPORT.test(view)) found.add("self_referential_support");
+    if (freeObjectSelfReference(view, claimStems)) found.add("free_object_self_reference");
   }
   return ALL_PATTERN_IDS.filter((id) => found.has(id));
 }
@@ -208,6 +251,7 @@ const ALL_PATTERN_IDS: InjectionPattern[] = [
   "non_english_override",
   "indirect_address",
   "self_referential_support",
+  "free_object_self_reference",
 ];
 
 /** Screens everything the verifier is shown that came from the source or the extractor. */
@@ -219,9 +263,11 @@ export function screenVerifyRequest(req: VerifySupportRequest): InjectionScreen 
     fields.add(field);
     for (const id of ids) found.add(id);
   };
+  // R6 compares a self-description in the quote or context with the claim statement (normalised the same way).
+  const claimStems = contentStems(normalizeForScreen(req.claim.statement));
   add("claim", [...screenText(req.claim.title), ...screenText(req.claim.statement)]);
-  add("quote", [...screenText(req.quote.text), ...screenText(req.quote.authorLabel)]);
-  for (const c of req.context) add("context", [...screenText(c.body), ...screenText(c.authorLabel)]);
+  add("quote", [...screenText(req.quote.text, claimStems), ...screenText(req.quote.authorLabel)]);
+  for (const c of req.context) add("context", [...screenText(c.body, claimStems), ...screenText(c.authorLabel)]);
   const patterns = ALL_PATTERN_IDS.filter((id) => found.has(id));
   const order: InjectionField[] = ["claim", "quote", "context"];
   return { suspicious: patterns.length > 0, patterns, fields: order.filter((f) => fields.has(f)) };

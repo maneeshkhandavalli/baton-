@@ -11,7 +11,7 @@ import type { HelpTopicId } from "@/components/shared/help-topics";
 import { identityKindLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { SaveIndicator } from "@/components/shared/save-indicator";
-import type { SaveState } from "@/components/shared/save-state";
+import { settleSave, type SaveState } from "@/components/shared/save-state";
 import { Stepper } from "@/components/shared/stepper";
 import { phaseForError } from "@/components/shared/upload-status";
 import { Alert } from "@/components/ui/alert";
@@ -33,8 +33,23 @@ import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 import { routes } from "@/lib/routes";
 import { createSupabaseUploadClient } from "@/lib/supabase/client";
 
-import { blankSource, confirmFailure, fromSummary, maxStepFor, NO_CHAT_MESSAGES, phaseOf, signedTarget, TOO_LARGE_MESSAGE, txtUploadKind, type DraftSource } from "./draft-state";
+import {
+  blankSource,
+  confirmFailure,
+  DATE_ORDER_REQUIRED_REASON,
+  fromSummary,
+  maxStepFor,
+  needsAnswerReason,
+  NO_CHAT_MESSAGES,
+  phaseOf,
+  signedTarget,
+  sourcesNeedingAnswer,
+  TOO_LARGE_MESSAGE,
+  txtUploadKind,
+  type DraftSource,
+} from "./draft-state";
 import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import { consentDraftKey, parseConsentDraft, serializeConsentDraft } from "./consent-state";
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import type { DetailsValues } from "./details-save";
 import { chatsWithNothingSelected, nothingSelectedReason } from "./conversation-selection";
@@ -54,6 +69,7 @@ export const STEPS = [
 const LAST_STEP = STEPS.length - 1;
 
 const MAX_SOURCES = 10; // D15
+const DATE_ORDER_QUESTION = "Baton can't tell whether these dates are day/month or month/day. Which is it?";
 
 export interface Details {
   title: string;
@@ -194,6 +210,10 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [handoverId, setHandoverId] = useState<string | null>(initial?.handoverId ?? null);
+  const handoverIdRef = useRef(handoverId);
+  useEffect(() => {
+    handoverIdRef.current = handoverId;
+  }, [handoverId]);
   const [invites, setInvites] = useState<Array<{ label: string; url: string }>>([]);
   const [sources, setSources] = useState<DraftSource[]>(() => (initial?.sources ?? []).map((s) => fromSummary(s, initialConsented)));
   // Latest list for async handlers (the sample-data action reads it after an await).
@@ -204,11 +224,41 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   const sampleBusy = useRef(false);
   const [addingSample, setAddingSample] = useState(false);
   // A consent already recorded for this draft's sources was given on this checklist; re-ask otherwise.
-  const [consent, setConsent] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
+  const [consent, setConsentState] = useState(() => (initialConsented ? { informed: true, provider: true, optout: true } : emptyConsent()));
+  // Round 4 audit A3: ticks survive a reload as draft UI state in this tab (sessionStorage), never recorded server-side
+  // until a source is uploaded with the full checklist (unchanged).
+  const setConsent = useCallback(
+    (next: Record<keyof ReturnType<typeof emptyConsent>, boolean>) => {
+      setConsentState(next);
+      if (!handoverIdRef.current) return;
+      try {
+        const raw = serializeConsentDraft(next);
+        if (raw) window.sessionStorage.setItem(consentDraftKey(handoverIdRef.current), raw);
+        else window.sessionStorage.removeItem(consentDraftKey(handoverIdRef.current));
+      } catch {
+        // storage unavailable (private mode): the ticks just aren't kept across a reload
+      }
+    },
+    [],
+  );
+  // Restore this draft's unsent ticks after a reload (client only, after hydration).
+  useEffect(() => {
+    if (initialConsented || !initial?.handoverId) return;
+    let stored: ReturnType<typeof parseConsentDraft> = null;
+    try {
+      stored = parseConsentDraft(window.sessionStorage.getItem(consentDraftKey(initial.handoverId)));
+    } catch {
+      stored = null;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from browser storage after hydration
+    if (stored) setConsentState(stored);
+  }, [initialConsented, initial?.handoverId]);
   const [submitting, setSubmitting] = useState(false);
   /** Why the last "Start processing" didn't go through, kept on the page (the toast disappears). */
   const [startError, setStartError] = useState<string | null>(null);
   const [savingScope, setSavingScope] = useState(false);
+  /** A source whose question the creator is sent back to answer (Continue or Start pressed too early). */
+  const [attention, setAttention] = useState<{ localId: string; nonce: number } | null>(null);
   const [save, setSave] = useState<SaveState>(() => (initial ? { kind: "saved", at: initial.updatedAt } : { kind: "unsaved" }));
   const [skipped, setSkipped] = useState(0);
   /** Identity decisions recorded with confirmIdentityMatch in this session (§6.8.1). */
@@ -258,11 +308,18 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
 
   const update = useCallback((id: string, patch: Partial<DraftSource>) => setSources((list) => list.map((s) => (s.localId === id ? { ...s, ...patch } : s))), []);
 
+  // The save state before the current write, so a rejected file restores it instead of "Couldn't save" (audit B1).
+  const saveRef = useRef(save);
+  useEffect(() => {
+    if (save.kind !== "saving") saveRef.current = save;
+  }, [save]);
+
   /** Wraps a server write so the save indicator is truthful. */
   const saving = useCallback(async <R extends { ok: boolean }>(work: () => Promise<R>): Promise<R> => {
+    const before = saveRef.current;
     setSave({ kind: "saving" });
     const r = await work();
-    setSave(r.ok ? { kind: "saved", at: new Date() } : { kind: "error" });
+    setSave(settleSave(before, r as unknown as Parameters<typeof settleSave>[1]));
     return r;
   }, []);
 
@@ -280,7 +337,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
       if (!preview.ok) {
         const parserCode = typeof preview.error.details?.parserCode === "string" ? preview.error.details.parserCode : undefined;
         if (parserCode === "date_format_ambiguous") {
-          return update(localId, { status: "error", needsDateOrder: true, errorPhase: "needs_input", error: "Baton can't tell whether these dates are day/month or month/day. Which is it?" });
+          return update(localId, { status: "error", needsDateOrder: true, errorPhase: "needs_input", error: DATE_ORDER_QUESTION });
         }
         return update(localId, { status: "error", errorPhase: phaseForError({ code: preview.error.code, parserCode }), error: preview.error.message });
       }
@@ -585,6 +642,15 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
 
   const ready = sources.filter((s) => s.status === "ready");
   const busy = sources.some((s) => s.status !== "ready" && s.status !== "error");
+  // A chat whose date order isn't chosen would only fail in processing: hold Continue and Start until it is answered (or removed).
+  const unanswered = sourcesNeedingAnswer(sources);
+
+  /** Back to Sources, with the first unanswered question in view and focused. */
+  function showUnanswered(localId = unanswered[0]?.localId) {
+    if (!localId) return;
+    if (shownStep !== 2) setStep(2);
+    setAttention((a) => ({ localId, nonce: (a?.nonce ?? 0) + 1 }));
+  }
 
   // ── Scope: save people left out, then refresh every preview (D33) ─
   // Participant exclusions are saved first, because a handover-wide opt-out changes what the other chats'
@@ -653,6 +719,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   // ── Finish: remaining exclusions, final access levels on the consent record, start processing ─
   async function finish() {
     if (!handoverId) return;
+    if (unanswered.length > 0) return showUnanswered();
     // Nothing is recorded (no exclusion, no run) while a chat has nothing selected; Start is disabled then too.
     const empty = nothingSelectedReason(nothingSelected);
     if (empty) {
@@ -705,7 +772,11 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
       const started = await run(() => startProcessing({ handoverId }), {
         success: "Processing started",
         onError: (e) => {
-          setStartError(e.message);
+          // The server found a chat still waiting for its date order: show that question instead of a dead end.
+          const waiting = e.details?.reason === DATE_ORDER_REQUIRED_REASON ? sources.find((s) => s.sourceId === e.details?.sourceId) : undefined;
+          if (!waiting) return setStartError(e.message);
+          update(waiting.localId, { status: "error", needsDateOrder: true, errorPhase: "needs_input", error: DATE_ORDER_QUESTION });
+          showUnanswered(waiting.localId);
         },
       });
       if (started.ok) router.push(routes.handover.processing(handoverId));
@@ -742,13 +813,15 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
       ? "Tick every statement to continue. Without consent, nothing can be uploaded."
       : shownStep === 2 && busy
         ? "Wait for uploads to finish."
-        : shownStep === 2 && ready.length === 0
-          ? "Add at least one file that's ready."
-          : shownStep === 3 && matches.length > 0
-            ? "Answer each “same person?” question first."
-            : shownStep === 3
-              ? nothingSelectedReason(nothingSelected)
-              : null;
+        : shownStep >= 2 && unanswered.length > 0
+          ? needsAnswerReason(unanswered, shownStep === 2 ? "" : " in Sources")
+          : shownStep === 2 && ready.length === 0
+            ? "Add at least one file that's ready."
+            : shownStep === 3 && matches.length > 0
+              ? "Answer each “same person?” question first."
+              : shownStep === 3
+                ? nothingSelectedReason(nothingSelected)
+                : null;
 
   return (
     <div className="space-y-8">
@@ -826,6 +899,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
                 onSwitchKind={(s, k) => void switchKind(s, k)}
                 full={sources.length >= MAX_SOURCES}
                 {...(SAMPLE_DATA_ENABLED && handoverId ? { onUseSample: () => void addSampleSources(), addingSample } : {})}
+                attention={attention}
               />
             </div>
           )}
@@ -861,7 +935,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
           <div className="flex min-w-0 items-center gap-3">
             {blockedReason && <p className="hidden text-right text-caption text-muted-foreground md:block">{blockedReason}</p>}
             {shownStep < LAST_STEP ? (
-              <Button size="lg" className="max-sm:h-10" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
+              <Button size="lg" className="max-sm:h-10" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : shownStep === 2 && unanswered.length > 0 ? showUnanswered() : setStep(shownStep + 1))}>
                 {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft" : "Continue"}
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>

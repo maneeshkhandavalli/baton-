@@ -140,3 +140,15 @@ function messageFor(key: string, code: string): string {
   if (key.startsWith("attr.")) return code === "too_small" ? "Required for this kind of point." : "Check this value.";
   return "Check the form.";
 }
+
+/**
+ * Round 4 audit C2: one line under the form naming what still needs filling in, so a missing required field (e.g. a
+ * contact's name) is never a silent "nothing happened". Null when there are no errors.
+ */
+export function fieldErrorSummary(fieldErrors: Record<string, string[]>, labelFor: (attributeKey: string) => string): string | null {
+  const names = Object.keys(fieldErrors)
+    .filter((k) => k !== "form" && fieldErrors[k]?.length)
+    .map((k) => (k.startsWith("attr.") ? labelFor(k.slice(5)) : k === "title" ? "Title" : k === "statement" ? "Statement" : k === "testimony" ? "How you know this" : k));
+  if (names.length === 0) return null;
+  return `Check ${names.length === 1 ? "this field" : "these fields"}: ${names.join(", ")}.`;
+}

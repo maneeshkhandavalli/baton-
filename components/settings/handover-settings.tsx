@@ -337,7 +337,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                     <p className="text-xs text-muted-foreground">
                       Version {s.version?.versionNumber}
                       {earlier > 0 && ` · ${earlier === 1 ? "1 earlier version" : `${earlier} earlier versions`} kept with their evidence`}
-                      {s.version?.updateState && ` · ${sourceUpdateStateLabel(s.version.updateState, s.version.updateError ?? null)}`}
+                      {s.version?.updateState && ` · ${sourceUpdateStateLabel(s.version.updateState, s.version.updateError ?? null, s.version.openReviews ?? 0)}`}
                     </p>
                   )}
                   {pending && (

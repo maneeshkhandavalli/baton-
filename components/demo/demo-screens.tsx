@@ -186,7 +186,7 @@ function PointList({ view, points, readOnly, pending, dispatch }: { view: DemoVi
       </ul>
       {/* ≥ xl the evidence sits beside the list; below that the card's “Evidence” button opens it. */}
       <aside aria-label="Evidence" className="hidden xl:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">{panel}</div>
+        <div className="scroll-quiet sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">{panel}</div>
       </aside>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto p-0 xl:hidden">

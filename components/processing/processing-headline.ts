@@ -29,7 +29,9 @@ export function processingHeadline(i: HeadlineInput): { title: string; descripti
   if (i.active) {
     return {
       title: "Processing your sources",
-      description: `You can leave this page. Baton keeps working and the review opens when it's done.${i.startedAt ? ` Started ${i.startedAt}.` : ""}`,
+      // F2 (21 Nov): on the current hosting plan processing only advances while a Processing page is open (no
+      // scheduler yet; see docs/operations/scheduling-2026-11-21.md). Don't promise background work.
+      description: `Keep this page open while Baton reads your sources: it moves forward while the page is open, and the review opens when it's done.${i.startedAt ? ` Started ${i.startedAt}.` : ""}`,
     };
   }
   const candidates = i.pendingCandidates ?? 0;

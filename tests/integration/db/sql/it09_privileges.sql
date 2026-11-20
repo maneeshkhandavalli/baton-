@@ -103,6 +103,7 @@ select tests.eq((select array_agg(sig order by sig) from it_fns
                       'list_access_tokens', 'api_get_source',
                       -- R3 Task 03 read API (SECURITY INVOKER, RLS)
                       'api_get_extraction_report', 'api_list_unreviewed_signals', 'api_list_point_flags', 'api_list_change_review_items', 'api_get_change_reviews', -- R3 Task 05D/05E
+                      'api_list_publication_versions', 'api_get_publication_version', -- R4 B: version history, SECURITY INVOKER (RLS)
                       -- R3 Task 04: pure, table-free helpers of the extraction report
                       'extraction_gap_state', 'extraction_coverage_fingerprint',
                       -- R3 Task 05C: pure, table-free helper of the same report

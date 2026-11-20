@@ -52,6 +52,16 @@ export function PeopleProvider({ children }: { children: ReactNode }) {
 
 const EMPTY: ReadonlyMap<number, string> = new Map();
 
+/** Names already resolved elsewhere (server-side renders and tests); same chip behaviour as PeopleProvider. */
+export function PeopleNames({ names, children }: { names: ReadonlyMap<number, string>; children?: ReactNode }) {
+  return <PeopleContext.Provider value={names}>{children}</PeopleContext.Provider>;
+}
+
+/** The names this viewer may see (the same map PersonToken renders from); empty without a provider. */
+export function usePeopleNames(): ReadonlyMap<number, string> {
+  return useContext(PeopleContext);
+}
+
 export function PersonToken({ ordinal }: { ordinal: number | null }) {
   const names = useContext(PeopleContext);
   const name = ordinal === null ? undefined : names.get(ordinal);

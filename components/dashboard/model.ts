@@ -7,6 +7,7 @@
 
 import type { GapQuestionSummary, HandoverSummary, MemberSummary, ProcessingStatus, ReadinessReport } from "@/lib/contracts/dto";
 import type { HandoverState, MemberRole } from "@/lib/contracts/enums";
+import { stageLabel } from "@/components/handover/labels";
 
 /** Where each kind of destination lives (each a function of the handover id). Production passes real routes; previews pass /preview/* routes. */
 export interface DashboardLinks {
@@ -106,6 +107,20 @@ export function stageOf(state: HandoverState): Stage {
   }
 }
 
+/**
+ * The dashboard's one-line processing status, named after the stage that is actually running (Round 4 audit F10): the
+ * first stage that is running, else the first one not finished yet. "Starting" before any stage has been planned.
+ */
+export function processingStatusLine(stages: NonNullable<ProcessingStatus["run"]>["stages"]): string {
+  if (!stages.length) return "Starting processing";
+  const finished = (s: (typeof stages)[number]) => s.status === "succeeded" || s.status === "partial" || s.status === "failed" || s.status === "cancelled";
+  const running = stages.findIndex((s) => s.status === "running");
+  const current = running !== -1 ? running : stages.findIndex((s) => !finished(s));
+  if (current === -1) return "Finishing up";
+  const label = stageLabel[stages[current].stage]?.label ?? "Processing";
+  return `${label} · stage ${current + 1} of ${stages.length}`;
+}
+
 export const isReviewRole = (r: MemberRole) => r === "outgoing" || r === "reviewer";
 
 function blocker(readiness: ReadinessReport | null | undefined, kind: ReadinessReport["blockers"][number]["kind"]): number {
@@ -174,7 +189,7 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
       health = "running";
       const stages = run?.stages ?? [];
       const done = stages.filter((s) => s.status === "succeeded" || s.status === "partial").length;
-      status = stages.length ? `Reading sources · stage ${Math.min(done + 1, stages.length)} of ${stages.length}` : "Reading sources";
+      status = processingStatusLine(stages);
       progress = stages.length ? done / stages.length : null;
       progressLabel = stages.length ? `${done} of ${stages.length} stages done` : null;
       cta = "View progress";
@@ -262,6 +277,11 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
   attention.sort((a, b) => a.rank - b.rank);
   if (attention.length && health === "ok") health = "attention";
   return { id: h.id, title: h.title, team: h.teamName, role: h.viewerRole, isCreator: h.viewerIsCreator, side, stage, status, health, progress, progressLabel, people, attention, cta, href, updatedAt: h.updatedAt };
+}
+
+/** True while any handover on the dashboard is processing, so the page keeps its status line current. */
+export function hasRunningProcessing(rows: readonly DashboardRow[]): boolean {
+  return rows.some((r) => r.stage === "processing" && r.health === "running");
 }
 
 /* ── Filtering ─────────────────────────────────────────────────────────────── */

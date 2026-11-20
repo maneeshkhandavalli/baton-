@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { AccountDeletion, type OutgoingOffer } from "@/components/account/account-deletion";
 import { AccountDetails } from "@/components/account/account-details";
 import { CreatorOffers } from "@/components/account/creator-offers";
+import { DisplayNameForm } from "@/components/account/display-name-form";
 import { PageContainer } from "@/components/layout/page-container";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
@@ -11,6 +12,7 @@ import { getAccountDeletionBlockers } from "@/lib/actions/account";
 import { getQueries } from "@/lib/data";
 import { isDemoAccountEmail } from "@/lib/demo-accounts";
 import { getAccountOverview } from "@/lib/supabase/account-auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Account" };
@@ -31,6 +33,7 @@ async function AccountContent() {
   const queries = getQueries(); // per-request: everything here depends on the signed-in user
   const [offers, handovers, overview] = await Promise.all([queries.listMyCreatorTransferOffers(), queries.listMyHandovers(), getAccountOverview()]);
   const blockers = await getAccountDeletionBlockers();
+  const displayName = await readOwnDisplayName();
   const counts = handovers.ok
     ? { created: handovers.data.filter((h) => h.viewerIsCreator).length, memberOf: handovers.data.filter((h) => !h.viewerIsCreator).length }
     : null;
@@ -56,6 +59,14 @@ async function AccountContent() {
       ) : (
         <p className="text-sm text-muted-foreground">Your account details couldn&rsquo;t be loaded. Try signing in again.</p>
       )}
+      {overview && (
+        <section aria-labelledby="display-name-heading" className="space-y-4 rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <h2 id="display-name-heading" className="type-heading">
+            Your name
+          </h2>
+          <DisplayNameForm current={displayName} demoAccount={isDemoAccountEmail(overview.email)} />
+        </section>
+      )}
       {offers.ok ? (
         <CreatorOffers offers={offers.data} />
       ) : (
@@ -68,4 +79,17 @@ async function AccountContent() {
       )}
     </div>
   );
+}
+
+/** Round 4 audit D1: the viewer's own display name (RLS: profiles_select_own). Null when it can't be read. */
+async function readOwnDisplayName(): Promise<string | null> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: user } = await supabase.auth.getUser();
+    if (!user.user) return null;
+    const { data } = await supabase.from("profiles").select("display_name").eq("id", user.user.id).maybeSingle();
+    return typeof data?.display_name === "string" ? data.display_name : null;
+  } catch {
+    return null;
+  }
 }

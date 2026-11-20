@@ -22,7 +22,13 @@ export const SOURCE_EXTRACTION_STATES = [
 ] as const;
 export type SourceExtractionState = (typeof SOURCE_EXTRACTION_STATES)[number];
 
-export const RUN_EXTRACTION_COMPLETIONS = ["none", "in_progress", "complete", "partial", "failed"] as const;
+/**
+ * Run-level headline. `in_progress` while the run is queued or running (even when every extract job is done:
+ * later stages can still fail or change coverage). `complete` only when every processed source is complete AND
+ * its coverage was recorded. `unrecorded` (audit 4.8): every source finished, but at least one has no recorded
+ * coverage, so Baton cannot say it was fully analysed (and never shows those missing counts as zero coverage).
+ */
+export const RUN_EXTRACTION_COMPLETIONS = ["none", "in_progress", "complete", "partial", "failed", "unrecorded"] as const;
 export type RunExtractionCompletion = (typeof RUN_EXTRACTION_COMPLETIONS)[number];
 
 export const EXTRACTION_BLOCKERS = [
@@ -256,12 +262,14 @@ export function buildExtractionReport(raw: RawExtractionReport | null | undefine
   };
 
   const processed = sources.filter((s) => s.state !== "not_processed");
+  const runActive = raw?.runStatus === "queued" || raw?.runStatus === "running";
   let completion: RunExtractionCompletion;
-  if (processed.length === 0) completion = "none";
-  else if (processed.some((s) => s.state === "in_progress")) completion = "in_progress";
+  if (processed.length === 0) completion = runActive ? "in_progress" : "none";
+  else if (runActive || processed.some((s) => s.state === "in_progress")) completion = "in_progress";
   else if (processed.every((s) => s.state === "failed")) completion = "failed";
-  else if (processed.every((s) => s.state === "complete")) completion = "complete";
-  else completion = "partial";
+  else if (processed.some((s) => s.state === "partial" || s.state === "failed" || s.state === "complete_with_skips")) completion = "partial";
+  else if (processed.every((s) => s.coverageRecorded)) completion = "complete";
+  else completion = "unrecorded";
 
   const blockers: ExtractionBlocker[] = [];
   const add = (kind: ExtractionBlockerKind, severity: ExtractionBlockerSeverity, list: SourceExtractionCoverage[], count: number) => {

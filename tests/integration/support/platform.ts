@@ -40,6 +40,8 @@ export interface PasswordStub {
   signUpSession?: boolean;
   reset?: StubAuthError;
   update?: StubAuthError;
+  /** the current-password check on the throwaway supabase-js client: an error, or "throw" (unreachable) */
+  current?: StubAuthError | "throw";
 }
 
 interface PlatformState {
@@ -50,6 +52,8 @@ interface PlatformState {
   oauth?: { url?: string; error?: { message: string; status?: number; code?: string } } | null;
   /** password-auth stub results: an error per call, and whether signUp returns a session. */
   password?: PasswordStub | null;
+  /** the session's JWT `amr` claim reported by getClaims() (undefined: none). */
+  amr?: unknown;
   /** exchangeCodeForSession stub error (null: success). */
   exchangeError?: StubAuthError | null;
   headers?: Record<string, string>;
@@ -140,6 +144,11 @@ export function signInAs(id: string, email = `${id.slice(0, 8)}@example.test`, c
   state().user = user;
   state().authError = false;
   return user;
+}
+
+/** The `amr` claim of the current session (how and when it signed in), e.g. a recovery-link sign-in. */
+export function setSessionAmr(amr: unknown): void {
+  state().amr = amr;
 }
 
 export function signOut(): void {

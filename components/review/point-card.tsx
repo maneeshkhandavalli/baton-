@@ -18,9 +18,9 @@ import { cn } from "@/lib/utils";
 
 import { statementRepeatsTitle, verificationNeedsAttention } from "./card-evidence";
 import { EvidenceQuote } from "./evidence-quote";
-import { isStaleEvidence } from "./evidence-state";
+import { canConfirmTestimony, isStaleEvidence, staleEvidenceNote } from "./evidence-state";
 
-export type PointAction = "approve" | "edit" | "reject" | "resolve" | "reopen" | "ask_gap" | "details";
+export type PointAction = "approve" | "edit" | "reject" | "resolve" | "reopen" | "ask_gap" | "details" | "confirm_testimony";
 
 interface PointCardProps {
   point: PointDetail;
@@ -165,7 +165,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
               <MaskedText text={point.inferenceRationale} />
             </p>
           )}
-          {stale && <p className="text-sm text-warning-fg">Edited since its quotes were checked. Re-verifying against the new wording…</p>}
+          {stale && <p className="text-sm text-warning-fg">{staleEvidenceNote(point)}</p>}
           {point.inferredConfirmation && (
             <p className="text-sm text-muted-foreground">
               Inferred · confirmed by <span className="font-medium text-foreground">{point.inferredConfirmation.by}</span>
@@ -214,6 +214,18 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
                 Reject
                 <Kbd className="ml-0.5 hidden sm:inline-flex">R</Kbd>
               </Button>
+              {canConfirmTestimony(point) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={stop(() => onAction("confirm_testimony"))}
+                  title="Confirm that the statement or accepted answer supports the current wording, then approve"
+                >
+                  <Check aria-hidden="true" data-icon="inline-start" />
+                  Confirm answer &amp; approve
+                </Button>
+              )}
               <Button size="sm" variant="success" disabled={pending} onClick={stop(() => onAction("approve"))}>
                 <Check aria-hidden="true" data-icon="inline-start" />
                 {approveLabel}

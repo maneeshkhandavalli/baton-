@@ -29,6 +29,9 @@ const BY_SQLSTATE: Readonly<Record<string, DbErrorCode>> = {
   PGRST301: "unauthenticated", // PostgREST: JWT expired / invalid
 };
 
+/** A HINT that is a reason token (Baton functions only: Postgres' own hints are sentences and never match). */
+const SAFE_REASON = /^[a-z][a-z_]{0,63}$/;
+
 /** SQLSTATEs worth retrying after a short, jittered wait (§5.5 item 7). */
 const RETRYABLE = new Set(["40001", "40P01", "55P03"]);
 
@@ -54,6 +57,11 @@ export class DbError extends Error implements DbErrorShape {
   readonly retryable: boolean;
   /** SQLSTATE, for server logs only. */
   readonly sqlState: string | undefined;
+  /**
+   * A structural reason a database function chose to expose with `HINT` (a snake_case token such as
+   * 'invite_pending'); passed to the client as details.reason by toAppError. Never free text.
+   */
+  details?: { reason: string };
 
   constructor(code: DbErrorCode, sqlState?: string, retryable = false) {
     super(SAFE_MESSAGES[code]);
@@ -66,7 +74,9 @@ export class DbError extends Error implements DbErrorShape {
   static fromRpc(error: DbRpcError): DbError {
     const state = error.code;
     const code = (state !== undefined && Object.hasOwn(BY_SQLSTATE, state) && BY_SQLSTATE[state]) || "internal";
-    return new DbError(code, state, state !== undefined && RETRYABLE.has(state));
+    const out = new DbError(code, state, state !== undefined && RETRYABLE.has(state));
+    if (typeof error.hint === "string" && SAFE_REASON.test(error.hint)) out.details = { reason: error.hint };
+    return out;
   }
 }
 

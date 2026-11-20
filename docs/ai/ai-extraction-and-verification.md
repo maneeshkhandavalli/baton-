@@ -404,3 +404,17 @@ is a claim about a real model.
 - Tests: `supabase/tests/sql/99_extraction_reliability.sql`, `lib/signals/__tests__`, `lib/pipeline/__tests__/coverage-stages.test.ts`,
   `lib/contracts/__tests__/extraction.test.ts`, `lib/actions/__tests__/extraction-actions.test.ts`, `lib/ai/__tests__/omega.test.ts`,
   `lib/eval/__tests__/eval.test.ts`
+
+## 9b. Update, 21 Nov 2026: `support@2` and guard rule R6 (local, not deployed)
+
+- **Support prompt `support@2`** (pinned hash updated):
+  - an instruction to the checker inside a quote makes the verdict `irrelevant`;
+  - instructions that appear only in context messages are ignored;
+  - a clearer `supports` vs `partial` rubric.
+  Nothing is ever forced to Sourced, and human approval of inferred points is unchanged.
+- **Injection guard rule R6** (`lib/ai/injection-guard.ts`) closes the PI-25 self-reference form. No existing rule was loosened.
+- **Offline replay** of the recorded 20 Nov Omega answers (`lib/eval/injection-replay.ts`):
+  - safe outcome 13/13 on the verifier cases;
+  - 13/13 even if every model answer were `supports`.
+- **Strict live gate: UNVERIFIED.** The recorded live run is strict 20/25, safe 25/25. A paid live re-run with `support@2` is needed before claiming the strict gate passes, or that the share of inferred points dropped. That run needs owner approval.
+- **Deploy effect:** runs started before this deploy fail their verify step with `ai_config_changed` (the run config is snapshotted). Restart them.

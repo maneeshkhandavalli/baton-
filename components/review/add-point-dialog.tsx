@@ -17,7 +17,7 @@ import type { PointDetail } from "@/lib/contracts/dto";
 import { ACCESS_LEVELS, POINT_CATEGORIES, type AccessLevel } from "@/lib/contracts/enums";
 import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 
-import { blankManualForm, buildManualPointInput, isPointCategory, MANUAL_FIELDS, type ManualPointForm } from "./manual-point";
+import { blankManualForm, buildManualPointInput, fieldErrorSummary, isPointCategory, MANUAL_FIELDS, type ManualPointForm } from "./manual-point";
 import { sampleForm, wouldOverwriteUserContent } from "./sample-point";
 
 const ACCESS_LABEL: Record<AccessLevel, string> = {
@@ -102,13 +102,20 @@ function AddPointBody({
   async function submit() {
     const built = buildManualPointInput(handoverId, form);
     if (!built.ok) {
-      setErrors(built.fieldErrors);
+      showErrors(built.fieldErrors);
       return;
     }
     setErrors({});
     const serverErrors = await onSubmit(built.input);
-    if (serverErrors) setErrors(serverErrors);
+    if (serverErrors) showErrors(serverErrors);
   }
+
+  // Round 4 audit C2: show the errors and move focus to the first invalid field, so it is never missed.
+  function showErrors(next: Record<string, string[]>) {
+    setErrors(next);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[role="dialog"] [aria-invalid="true"]')?.focus());
+  }
+  const summary = fieldErrorSummary(errors, attributeLabel);
 
   const err = (key: string) =>
     errors[key]?.[0] ? (
@@ -274,6 +281,11 @@ function AddPointBody({
         </div>
 
         {err("form")}
+        {summary && (
+          <p role="alert" className="text-caption font-medium text-destructive-fg">
+            {summary}
+          </p>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>

@@ -7,9 +7,10 @@ import { SectionHeading } from "@/components/shared/section-heading";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { DashboardAutoRefresh } from "./dashboard-auto-refresh";
 import { DraftRow } from "./draft-row";
 import { HandoverCard, type HandoverCardData } from "./handover-card";
-import { attentionByHandover, attentionQueue, type AttentionKind, type DashboardRow } from "./model";
+import { attentionByHandover, attentionQueue, hasRunningProcessing, type AttentionKind, type DashboardRow } from "./model";
 import type { DashboardResult } from "./load";
 
 const KIND_ICON: Record<AttentionKind, typeof Scale> = {
@@ -168,8 +169,11 @@ export function DashboardView({ result, newHandover, demoHref, preview = false }
   const upNext = upNextItems(cards);
   const totalAttention = attentionByHandover(attentionQueue(cards.map((c) => c.row).filter((r): r is DashboardRow => !!r))).length;
 
+  const processingNow = hasRunningProcessing(cards.map((c) => c.row).filter((r): r is DashboardRow => !!r));
+
   return (
     <div className="space-y-10 lg:space-y-12">
+      {!preview && <DashboardAutoRefresh active={processingNow} />}
       <UpNext items={upNext} total={totalAttention} />
       {drafts.length > 0 && (
         <section aria-labelledby="drafts" className="space-y-4">

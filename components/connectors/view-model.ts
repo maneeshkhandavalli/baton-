@@ -17,6 +17,15 @@ export const PROVIDER_LABEL: Record<ConnectorProvider, string> = { github: "GitH
 /** What one linkable place is called for each provider (GitHub links repositories, not channels). */
 export const CHANNEL_NOUN: Record<ConnectorProvider, string> = { github: "repository", discord: "channel", slack: "channel", telegram: "group" };
 
+/**
+ * What a link captures, in words. Chats save "messages"; a GitHub repository saves its "activity" (issues, pull
+ * requests, reviews, commit messages and releases), counted as "items". Owner feedback 21 Nov: chat wording on a
+ * repository read wrong.
+ */
+export function captureWords(provider: ConnectorProvider): { item: string; items: string; content: string } {
+  return provider === "github" ? { item: "item", items: "items", content: "activity" } : { item: "message", items: "messages", content: "messages" };
+}
+
 /** What one installation of a provider is called. */
 export const ACCOUNT_NOUN: Record<ConnectorProvider, string> = { github: "account", discord: "server", slack: "workspace", telegram: "group" };
 
@@ -79,9 +88,10 @@ export function linkStatus(link: ConnectorLinkSummary, opts: { pullBased?: boole
   const facts: string[] = [];
   const waiting = link.bufferedCount;
   if (link.state !== "pending_consent") {
-    if (waiting > 0) facts.push(`${plural(waiting, "message")} waiting to be added`);
-    else if (link.state === "capturing") facts.push(opts.pullBased ? "No new messages fetched yet" : "No new messages yet");
-    if (link.lastEventAt) facts.push(`Last message received ${when(link.lastEventAt)}`);
+    const w = captureWords(link.provider);
+    if (waiting > 0) facts.push(`${plural(waiting, w.item, w.items)} waiting to be added`);
+    else if (link.state === "capturing") facts.push(opts.pullBased ? `No new ${w.content} fetched yet` : `No new ${w.content} yet`);
+    if (link.lastEventAt) facts.push(`Last ${w.content === "activity" ? "activity" : "message"} received ${when(link.lastEventAt)}`);
     if (link.lastFlushAt) facts.push(`Last added to the handover ${when(link.lastFlushAt)}`);
   }
   switch (link.state) {

@@ -30,6 +30,7 @@ import {
   type PointReviewFlag,
   type UnreviewedSignalMessage,
 } from "@/lib/contracts/extraction";
+import { confirmTestimonyAndApprove } from "@/lib/actions/change-reviews";
 import { createGapQuestion } from "@/lib/actions/gaps";
 import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
@@ -46,6 +47,8 @@ import { ReadinessPanel, type SectionFilter } from "./readiness-panel";
 import { ReviewDialogs, type ReviewDialogState } from "./review-dialogs";
 import { sampleForm } from "./sample-point";
 import { directApproveInput } from "./evidence-state";
+import { gapFilterModel } from "./gap-filter";
+import { testimonyContext, withTestimonyLabels } from "./testimony-label";
 
 interface ReviewWorkspaceProps {
   handover: HandoverSummary;
@@ -67,6 +70,8 @@ interface ReviewWorkspaceProps {
    * but nothing calls a server action; a toast says so instead.
    */
   preview?: boolean;
+  /** Round 4 audit C2: the viewer's member label ("Your statement" on their own testimony). */
+  viewerLabel?: string | null;
 }
 
 type ReviewFilter = "all" | ReviewState;
@@ -75,7 +80,7 @@ const REQUIRED_GAP_CATEGORIES: PointCategory[] = ["owner", "account_access", "op
 
 export function ReviewWorkspace({
   handover,
-  points,
+  points: rawPoints,
   readiness,
   gapQuestions,
   sources,
@@ -87,7 +92,10 @@ export function ReviewWorkspace({
   gapsHref,
   publishedHref,
   preview = false,
+  viewerLabel = null,
 }: ReviewWorkspaceProps) {
+  // Round 4 audit C2: each testimony says whether it is a Gap Interview answer or a (your) reviewer statement
+  const points = useMemo(() => withTestimonyLabels(rawPoints, testimonyContext(gapQuestions, viewerLabel)), [rawPoints, gapQuestions, viewerLabel]);
   const extractionGaps = extraction ? blockingExtractionGaps(extraction) : [];
   // R3 Task 05C: a source update not processed and checked yet; it cannot be acknowledged away
   const updateBlocks = extraction ? blockingSourceUpdates(extraction) : [];
@@ -109,11 +117,13 @@ export function ReviewWorkspace({
   const cardRefs = useRef(new Map<string, HTMLElement>());
 
   const gapByPoint = useMemo(() => new Map(gapQuestions.filter((q) => q.pointId).map((q) => [q.pointId!, q])), [gapQuestions]);
+  // Round 4 audit C3: the Gaps filter shows the same gaps the readiness blocker counts
+  const gapModel = useMemo(() => gapFilterModel(points, gapQuestions, readiness), [points, gapQuestions, readiness]);
 
   const visible = useMemo(() => {
     return points.filter((p) => {
       if (section === "conflicts" && p.evidenceStatus !== "conflicting") return false;
-      if (section === "gaps" && p.evidenceStatus !== "missing") return false;
+      if (section === "gaps" && !gapModel.pointIds.has(p.id)) return false;
       if (section !== "all" && section !== "conflicts" && section !== "gaps") {
         const s = HANDOVER_SECTIONS.find((x) => x.id === section)!;
         if (!(s.categories as readonly PointCategory[]).includes(p.category)) return false;
@@ -122,7 +132,7 @@ export function ReviewWorkspace({
       if (review !== "all" && p.reviewState !== review) return false;
       return true;
     });
-  }, [points, section, status, review]);
+  }, [points, section, status, review, gapModel]);
 
   const selected = visible.find((p) => p.id === selectedId) ?? visible[0] ?? null;
   const toReview = points.filter((p) => p.reviewState === "pending").length;
@@ -217,6 +227,20 @@ export function ReviewWorkspace({
       case "details":
         setSheetOpen(true);
         break;
+      case "confirm_testimony":
+        // Round 4 (B): the reviewer confirms the point's own testimony supports the current wording, then approves
+        void run(() => confirmTestimonyAndApprove({ pointId: point.id, expectedRevisionId: point.currentRevisionId }), {
+          success: "Confirmed and approved",
+          onSuccess: () => {
+            advanceFrom(point.id);
+            router.refresh();
+          },
+          onError: (e) => {
+            if (e.code === "conflict") router.refresh();
+            return false;
+          },
+        });
+        break;
     }
   }
 
@@ -248,7 +272,14 @@ export function ReviewWorkspace({
     setStatus("all");
     setReview("all");
     if (kind === "unresolved_conflicts") setSection("conflicts");
-    else if (kind === "open_required_gaps") setSection("gaps");
+    else if (kind === "open_required_gaps") {
+      // Required questions with no point on this page are answered in the Gap Interview: go there instead of an empty filter
+      if (gapModel.pointIds.size === 0 && gapsHref) {
+        if (!preview) router.push(gapsHref);
+        return;
+      }
+      setSection("gaps");
+    }
     else if (kind === "unconfirmed_inferred") {
       setSection("all");
       setStatus("inferred");
@@ -302,6 +333,9 @@ export function ReviewWorkspace({
       onSection={setSection}
       onBlocker={onBlocker}
       gapsHref={gapsHref}
+      gapPointIds={gapModel.pointIds}
+      unattachedRequiredGaps={gapModel.unattachedRequired}
+      published={handover.state === "approved" || handover.state === "acknowledged"}
       canPublish={!!readiness?.canPublish}
       onPublish={canPublishNow ? () => (preview ? toast.info("Preview only: publishing is turned off.") : setPublishOpen(true)) : null}
       publishNote={!canPublishNow && !readOnly && handover.state === "in_review" ? "Only the creator can publish. They'll see it's ready." : undefined}
@@ -318,7 +352,7 @@ export function ReviewWorkspace({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[14rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[15.5rem_minmax(0,1fr)_26rem]">
       {/* Left: readiness, sections, conflicts and gaps */}
       <aside aria-label="Readiness and sections" className="hidden lg:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
+        <div className="scroll-quiet sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
       </aside>
       <details className="group rounded-2xl border border-border bg-card lg:hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
@@ -453,7 +487,7 @@ export function ReviewWorkspace({
 
       {/* Right: source context and verification */}
       <aside aria-label="Point details" className="hidden xl:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">
+        <div className="scroll-quiet sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">
           {detail ?? <p className="p-5 text-sm text-muted-foreground">Select a point to see its evidence.</p>}
         </div>
       </aside>

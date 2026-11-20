@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 
-import { historyOptions, PROVIDER_LABEL } from "@/components/connectors/view-model";
+import { captureWords, CHANNEL_NOUN, historyOptions, PROVIDER_LABEL } from "@/components/connectors/view-model";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -17,11 +17,12 @@ interface ConsentStepProps {
 
 /**
  * Capture consent for one linked channel. Shows the server's versioned statement VERBATIM (getCaptureConsent) and
- * needs an explicit checkbox before "Start saving messages". Nothing is captured before this is confirmed.
+ * needs an explicit checkbox before the start button. Nothing is captured before this is confirmed.
  */
 export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
   const actions = useConnectorActions();
   const id = useId();
+  const words = captureWords(link.provider);
   const [historyDays, setHistoryDays] = useState(0);
   const [consent, setConsent] = useState<CaptureConsentDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -64,9 +65,9 @@ export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
     <div className="space-y-4 rounded-2xl border border-border bg-card p-4" role="group" aria-labelledby={`${id}-title`}>
       <div className="space-y-1">
         <h4 id={`${id}-title`} className="text-sm font-semibold">
-          Start saving messages from {PROVIDER_LABEL[link.provider]} {link.channelLabel}?
+          Start saving {words.content} from {PROVIDER_LABEL[link.provider]} {link.channelLabel}?
         </h4>
-        <p className="text-caption text-muted-foreground">Read this before you confirm. It applies to this channel and this handover only.</p>
+        <p className="text-caption text-muted-foreground">Read this before you confirm. It applies to this {CHANNEL_NOUN[link.provider]} and this handover only.</p>
       </div>
 
       {loadError && (
@@ -79,14 +80,14 @@ export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
         <>
           {consent.historyAvailable && (
             <div className="space-y-1.5">
-              <Label htmlFor={`${id}-history`}>Also bring in earlier messages</Label>
+              <Label htmlFor={`${id}-history`}>Also bring in earlier {words.content}</Label>
               <NativeSelect id={`${id}-history`} value={String(historyDays)} onChange={(e) => {
                   setHistoryDays(Number(e.target.value));
                   setAgreed(false); // the statement changes with the history choice: confirm it again
                 }} disabled={pending}>
                 {historyOptions(consent.maxHistoryDays).map((d) => (
                   <option key={d} value={d}>
-                    {d === 0 ? "No, only new messages" : `The last ${d} ${d === 1 ? "day" : "days"}`}
+                    {d === 0 ? `No, only new ${words.content}` : `The last ${d} ${d === 1 ? "day" : "days"}`}
                   </option>
                 ))}
               </NativeSelect>
@@ -112,7 +113,7 @@ export function ConsentStep({ link, onDone, onCancel }: ConsentStepProps) {
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={confirm} disabled={!consent || !agreed || pending}>
-          {pending ? "Starting…" : "Start saving messages"}
+          {pending ? "Starting…" : `Start saving ${words.content}`}
         </Button>
         {onCancel && (
           <Button size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
