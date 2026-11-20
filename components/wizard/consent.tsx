@@ -90,7 +90,7 @@ export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, num
             <span>{maskKindLabel[k].label}</span>
             <code className="hidden font-mono text-2xs text-muted-foreground sm:block">{maskKindLabel[k].token}</code>
             <span className="text-right font-mono text-xs tabular-nums">
-              {counts ? (counts[k] ?? 0) : "—"}
+              {counts ? (counts[k] ?? 0) : "…"}
               {counts && <span className="sr-only"> found</span>}
             </span>
           </li>
@@ -104,7 +104,7 @@ export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, num
 }
 
 export function GroupNotice({ teamName }: { teamName: string }) {
-  const text = `Hi all — I'm preparing a handover for ${teamName || "our team"} using Baton. It will read this chat to pull out decisions, owners and open tasks, with quotes as evidence. Phone numbers, emails and payment details are masked first, and the original export is deleted after processing. If you'd rather your messages were left out, reply here or message me in the next few days, before I start processing.`;
+  const text = `Hi all, I'm preparing a handover for ${teamName || "our team"} using Baton. It will read this chat to pull out decisions, owners and open tasks, with quotes as evidence. Phone numbers, emails and payment details are masked first, and the original export is deleted after processing. If you'd rather your messages were left out, reply here or message me in the next few days, before I start processing.`;
   const [copied, setCopied] = useState(false);
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">

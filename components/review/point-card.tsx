@@ -139,7 +139,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
                 {gapQuestion ? (
                   <>
                     <span className="font-medium">Knowledge gap · in the Gap Interview</span>
-                    {" — "}
+                    {": "}
                     {gapQuestion.status === "open" ? "waiting for an answer" : gapQuestion.status === "answered" ? "answer waiting for review" : "waived"}
                   </>
                 ) : (

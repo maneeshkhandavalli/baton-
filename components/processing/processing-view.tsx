@@ -404,8 +404,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
       <aside className="divide-y divide-border self-start overflow-hidden rounded-xl border border-border bg-card shadow-soft">
         <dl className="grid grid-cols-3 gap-2 p-4">
           <Stat label="Sources" value={formatCount(sources.length)} />
-          <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "—"} />
-          <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "—"} />
+          <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "0"} />
+          <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "0"} />
         </dl>
 
         <section aria-labelledby="sources-heading">

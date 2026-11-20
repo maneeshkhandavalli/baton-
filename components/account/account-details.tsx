@@ -43,10 +43,10 @@ export function AccountDetails({ overview, handovers }: AccountDetailsProps) {
         </dd>
 
         <dt className="text-muted-foreground">Account created</dt>
-        <dd>{overview.createdAt ? <time dateTime={overview.createdAt}>{formatDate(overview.createdAt)}</time> : "—"}</dd>
+        <dd>{overview.createdAt ? <time dateTime={overview.createdAt}>{formatDate(overview.createdAt)}</time> : "Unknown"}</dd>
 
         <dt className="text-muted-foreground">Last sign-in</dt>
-        <dd>{overview.lastSignInAt ? <time dateTime={overview.lastSignInAt}>{formatDate(overview.lastSignInAt)}</time> : "—"}</dd>
+        <dd>{overview.lastSignInAt ? <time dateTime={overview.lastSignInAt}>{formatDate(overview.lastSignInAt)}</time> : "Unknown"}</dd>
 
         {handovers ? (
           <>

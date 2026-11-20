@@ -110,7 +110,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
           <dt className="text-muted-foreground">Team</dt>
           <dd>{h.teamName}</dd>
           <dt className="text-muted-foreground">Role</dt>
-          <dd>{h.roleTitle ?? "—"}</dd>
+          <dd>{h.roleTitle ?? "Not set"}</dd>
           <dt className="text-muted-foreground">Created</dt>
           <dd>{formatDate(h.createdAt)}</dd>
           <dt className="text-muted-foreground">Your access</dt>
