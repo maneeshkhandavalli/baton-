@@ -10,9 +10,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { sessionCookieOptions } from "./cookie-options";
 import { getSupabasePublicEnv, isSupabaseConfigured } from "./env";
 
-export async function updateSession(request: NextRequest): Promise<{ response: NextResponse; userId: string | null }> {
+export interface ProxySessionUser {
+  email: string | null;
+  emailConfirmed: boolean;
+}
+
+export async function updateSession(request: NextRequest): Promise<{ response: NextResponse; userId: string | null; user: ProxySessionUser | null }> {
   let response = NextResponse.next({ request });
-  if (!isSupabaseConfigured()) return { response, userId: null };
+  if (!isSupabaseConfigured()) return { response, userId: null, user: null };
 
   const { url, anonKey } = getSupabasePublicEnv();
   const supabase = createServerClient(url, anonKey, {
@@ -32,5 +37,10 @@ export async function updateSession(request: NextRequest): Promise<{ response: N
   // getUser() asks the Auth server to validate the JWT (getSession() would trust the cookie). Do not run
   // other code between creating the client and this call: it is what refreshes an expired session.
   const { data } = await supabase.auth.getUser();
-  return { response, userId: data.user?.id ?? null };
+  const u = data.user;
+  return {
+    response,
+    userId: u?.id ?? null,
+    user: u ? { email: u.email ?? null, emailConfirmed: typeof u.email_confirmed_at === "string" && u.email_confirmed_at.length > 0 } : null,
+  };
 }

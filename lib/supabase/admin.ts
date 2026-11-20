@@ -20,3 +20,8 @@ export function createSupabaseAdminClient() {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
+
+/** Presence only (for the owner self-check page): true when a service key is configured. Never returns the key. */
+export function isSupabaseAdminConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean((env.SUPABASE_SERVICE_ROLE_KEY ?? env.SUPABASE_SECRET_KEY ?? "").trim());
+}
