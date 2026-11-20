@@ -158,6 +158,33 @@ function TileArt({ kind }: { kind: string }) {
   );
 }
 
+/** The Baton disc with the orbit of what a handover carries. `inFlow` is the copy shown in the intro below 1024px. */
+function CarriesCluster({ inFlow = false }: { inFlow?: boolean }) {
+  return (
+    <>
+      <div className="lp-orbit" {...(inFlow ? { "data-orbit-flow": "" } : { "data-orbit": "" })}>
+        {CARRIES.map((c, i) => (
+          <span
+            key={c.label}
+            className={`lp-orbit__item ${c.s}`}
+            style={{ "--c": c.c, "--a": `${(360 / CARRIES.length) * i}deg`, "--tilt": c.tilt } as CSSProperties}
+          >
+            <c.Icon strokeWidth={2.25} />
+          </span>
+        ))}
+      </div>
+      <div className="lp-disc" {...(inFlow ? {} : { "data-disc": "" })}>
+        <span className="lp-disc__mark">
+          <span className="bg-status-sourced" />
+          <span className="bg-status-inferred" />
+          <span className="bg-status-conflicting" />
+          <span className="bg-status-missing" />
+        </span>
+      </div>
+    </>
+  );
+}
+
 export default function HomePage() {
   return (
     <div className="lp">
@@ -204,28 +231,11 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* The Baton disc + the orbit of what a handover carries (sticky: rides from the hero into the intro). */}
+        {/* The Baton disc + the orbit of what a handover carries (sticky from 1024px: rides from the hero into the intro).
+            Below 1024px the disc stays in the hero's centre cell and the intro shows its own in-flow cluster instead. */}
         <div aria-hidden="true" className="lp-stage">
           <div className="lp-stage__center">
-            <div className="lp-orbit" data-orbit>
-              {CARRIES.map((c, i) => (
-                <span
-                  key={c.label}
-                  className={`lp-orbit__item ${c.s}`}
-                  style={{ "--c": c.c, "--a": `${(360 / CARRIES.length) * i}deg`, "--tilt": c.tilt } as CSSProperties}
-                >
-                  <c.Icon strokeWidth={2.25} />
-                </span>
-              ))}
-            </div>
-            <div className="lp-disc" data-disc>
-              <span className="lp-disc__mark">
-                <span className="bg-status-sourced" />
-                <span className="bg-status-inferred" />
-                <span className="bg-status-conflicting" />
-                <span className="bg-status-missing" />
-              </span>
-            </div>
+            <CarriesCluster />
           </div>
         </div>
 
@@ -239,6 +249,12 @@ export default function HomePage() {
               <p className="lp-statement max-w-[30ch]">
                 The next lead inherits months of group chat and a few half-finished documents. The answers are in there somewhere, scattered across replies.
               </p>
+            </div>
+          </div>
+          {/* Phones and tablets: the cluster gets its own block between the statement and the list, so it never sits on text. */}
+          <div aria-hidden="true" className="lp-cluster lg:hidden">
+            <div className="lp-stage__center">
+              <CarriesCluster inFlow />
             </div>
           </div>
           <div className="lp-intro__side lp-wrap">

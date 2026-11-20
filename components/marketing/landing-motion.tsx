@@ -14,7 +14,8 @@ import { useEffect } from "react";
  * or unmount restores that layout too.
  *
  *  hero      headline lines rise, lede and CTAs fade up, tiles pop in from the centre; on exit the mosaic grows
- *  intro     the Baton disc (sticky) grows; the orbit of what a handover carries scrubs out and turns
+ *  intro     the Baton disc (sticky) grows; the orbit of what a handover carries scrubs out and turns (below 1024px
+ *            the disc stays in the hero and an in-flow copy of the orbit unfolds between the statement and the list)
  *  problem   the dark panel's clip opens to full bleed while the intro blurs; pills pop in; the panel lifts off
  *  receipt   the lime headline shrinks and rises as the product window comes up over it
  *  steps     each stacked card shrinks and dims as the next one covers it (desktop)
@@ -63,9 +64,9 @@ export function LandingMotion() {
             scrollTrigger: { trigger: hero, start: "top top", end: "bottom top", scrub: true },
           });
         }
-        if (intro && disc && orbit) {
+        if (intro && disc && orbit && desktop) {
           gsap.fromTo(disc, { "--disc-scale": 1 }, {
-            "--disc-scale": desktop ? 1.6 : 1.5,
+            "--disc-scale": 1.6,
             ease: "none",
             scrollTrigger: { trigger: intro, start: "top bottom", end: "top 20%", scrub: true },
           });
@@ -75,6 +76,21 @@ export function LandingMotion() {
             { "--orbit-out": 1, "--orbit-o": 1, ease: "power2.out", scrollTrigger: { trigger: "[data-intro-head]", start: "top 75%", end: "top 20%", scrub: true } },
           );
           gsap.fromTo(orbit, { "--orbit-rot": "-40deg" }, { "--orbit-rot": "50deg", ease: "none", scrollTrigger: { trigger: intro, start: "top bottom", end: "bottom top", scrub: true } });
+        }
+        // Below 1024px the disc is not sticky: it grows with the mosaic's centre cell and leaves with the hero, and the
+        // intro's own in-flow cluster (between the statement and the list, never over text) unfolds as it scrolls in.
+        const flowOrbit = one("[data-orbit-flow]");
+        if (!desktop && hero && disc) {
+          gsap.fromTo(disc, { "--disc-scale": 1 }, { "--disc-scale": 1.18, ease: "none", scrollTrigger: { trigger: hero, start: "top top", end: "bottom top", scrub: true } });
+        }
+        if (!desktop && flowOrbit) {
+          const block = flowOrbit.closest(".lp-cluster") ?? flowOrbit;
+          gsap.fromTo(
+            flowOrbit,
+            { "--orbit-out": 0, "--orbit-o": 0 },
+            { "--orbit-out": 1, "--orbit-o": 1, ease: "power2.out", scrollTrigger: { trigger: block, start: "top 95%", end: "center 55%", scrub: true } },
+          );
+          gsap.fromTo(flowOrbit, { "--orbit-rot": "-40deg" }, { "--orbit-rot": "50deg", ease: "none", scrollTrigger: { trigger: block, start: "top bottom", end: "bottom top", scrub: true } });
         }
 
         // ── Problem: the dark panel ──
