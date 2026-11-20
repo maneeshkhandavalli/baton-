@@ -19,7 +19,7 @@ import type { VerifiedActor } from "../../db/actor-rules";
 import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { consumeInviteSendLimits } from "../../db/rate-limit";
-import { isDemoAccountEmail } from "../../demo-accounts";
+import { DEMO_ACCOUNTS_FULL_ACCESS, isDemoAccountEmail } from "../../demo-accounts";
 import { renderInvitationEmail } from "../../email/core";
 import { routes } from "../../routes";
 import { absoluteUrl, action, failWith, guarded, ok, siteOriginOrFail, type Failure } from "./run";
@@ -157,7 +157,7 @@ export async function deliverInvitation(
     }
   };
 
-  if (isDemoAccountEmail(actor.email)) {
+  if (!DEMO_ACCOUNTS_FULL_ACCESS && isDemoAccountEmail(actor.email)) {
     await record("not_sent", null, null);
     return { status: "not_sent", reason: "demo" };
   }

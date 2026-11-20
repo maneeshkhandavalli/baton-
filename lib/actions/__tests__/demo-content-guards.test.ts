@@ -13,6 +13,9 @@ import * as handovers from "../core/handovers";
 import * as review from "../core/review";
 import * as sources from "../core/sources";
 import { ACTOR, ACTOR_ID, H, fakeDeps } from "./helpers";
+import { DEMO_ACCOUNTS_FULL_ACCESS } from "../../demo-accounts";
+
+const SKIP_F3 = DEMO_ACCOUNTS_FULL_ACCESS ? "judges have full access (owner decision 21 Nov); restores with DEMO_ACCOUNTS_FULL_ACCESS = false" : false;
 
 const S = "44444444-4444-4444-8444-444444444444";
 const SHA = "a".repeat(64);
@@ -63,7 +66,7 @@ const GUARDED: Array<[string, (deps: ReturnType<typeof fakeDeps>["deps"]) => Pro
   ["createGapQuestion", (d) => gaps.createGapQuestion(d, { handoverId: H, question: "Who has the hall keys?", priority: "required" })],
 ];
 
-describe("F3: shared demo accounts can't add content or start paid AI work", () => {
+describe("F3: shared demo accounts can't add content or start paid AI work", { skip: SKIP_F3 }, () => {
   for (const [name, call] of GUARDED) {
     it(`${name} refuses both demo accounts before any database, Storage or AI call`, async () => {
       for (const actor of [DEMO, PUBLIC_DEMO]) {

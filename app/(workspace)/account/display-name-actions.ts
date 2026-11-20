@@ -10,7 +10,7 @@ import { serverDb } from "@/lib/db";
 import { getVerifiedActor } from "@/lib/db/actor";
 import { isDbError } from "@/lib/db/errors";
 import { callRpc } from "@/lib/db/rpc";
-import { DEMO_ACCOUNT_REFUSAL, isDemoAccountEmail } from "@/lib/demo-accounts";
+import { DEMO_ACCOUNT_REFUSAL, DEMO_ACCOUNTS_FULL_ACCESS, isDemoAccountEmail } from "@/lib/demo-accounts";
 
 export type DisplayNameResult = { ok: true; name: string } | { ok: false; message: string };
 
@@ -19,7 +19,7 @@ export async function updateDisplayName(raw: string): Promise<DisplayNameResult>
   if (!checked.ok) return checked;
   const actor = await getVerifiedActor();
   if (!actor) return { ok: false, message: "Your session has ended. Sign in again." };
-  if (isDemoAccountEmail(actor.email)) return { ok: false, message: DEMO_ACCOUNT_REFUSAL };
+  if (!DEMO_ACCOUNTS_FULL_ACCESS && isDemoAccountEmail(actor.email)) return { ok: false, message: DEMO_ACCOUNT_REFUSAL };
   try {
     const name = await callRpc(serverDb(), "set_own_display_name", { p_actor_profile_id: actor.profileId, p_display_name: checked.name });
     return { ok: true, name: typeof name === "string" ? name : checked.name };

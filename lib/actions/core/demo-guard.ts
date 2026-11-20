@@ -4,7 +4,7 @@
  * details.reason "demo_account".
  */
 
-import { DEMO_ACCOUNT_REFUSAL, DEMO_CONTENT_REFUSAL, isDemoAccountEmail } from "../../demo-accounts";
+import { DEMO_ACCOUNT_REFUSAL, DEMO_ACCOUNTS_FULL_ACCESS, DEMO_CONTENT_REFUSAL, isDemoAccountEmail } from "../../demo-accounts";
 import type { VerifiedActor } from "../../db/actor-rules";
 import { failWith, type Failure } from "./run";
 
@@ -22,6 +22,6 @@ export function refuseDemoAccount(actor: VerifiedActor): Failure | null {
  * upload, new source version, source consent, processing, revision, deletion), otherwise null.
  */
 export function refuseDemoContent(actor: VerifiedActor): Failure | null {
-  if (!isDemoAccountEmail(actor.email)) return null;
+  if (DEMO_ACCOUNTS_FULL_ACCESS || !isDemoAccountEmail(actor.email)) return null; // judges have full access (21 Nov)
   return failWith("forbidden", { message: DEMO_CONTENT_REFUSAL, retryable: false, details: { reason: DEMO_CONTENT_REASON } });
 }

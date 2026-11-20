@@ -11,6 +11,9 @@ import type { ConnectorStore } from "../../../types";
 import { createAppJwt, githubAppIdProblem } from "../app-auth";
 import { handleGithubCallback, handleGithubInstall, handleGithubWebhook, type GithubRouteDeps } from "../routes";
 import { basePayload, CREATOR, ENV, HANDOVER, issue, NOW, SECRETS, setupStore, sign, TEST_PRIVATE_PEM } from "./helpers";
+import { DEMO_ACCOUNTS_FULL_ACCESS } from "../../../../demo-accounts";
+
+const SKIP_F3 = DEMO_ACCOUNTS_FULL_ACCESS ? "judges have full access (owner decision 21 Nov); restores with DEMO_ACCOUNTS_FULL_ACCESS = false" : false;
 
 const SITE = ENV.BATON_SITE_URL;
 
@@ -122,7 +125,7 @@ describe("GitHub App ID vs Client ID diagnostic", () => {
   });
 });
 
-describe("F3: shared demo accounts can't install or bind the GitHub App", () => {
+describe("F3: shared demo accounts can't install or bind the GitHub App", { skip: SKIP_F3 }, () => {
   const KEYS = ["BATON_DEMO_EMAILS", "NEXT_PUBLIC_BATON_DEMO_CREATOR_EMAIL", "NEXT_PUBLIC_BATON_DEMO_INCOMING_EMAIL"] as const;
   let saved: Record<string, string | undefined> = {};
   beforeEach(() => {

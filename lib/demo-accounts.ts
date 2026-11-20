@@ -31,6 +31,14 @@ export interface DemoAccountEnv {
 export const DEMO_ACCOUNT_REFUSAL = "This is a shared demo account, so this action is turned off.";
 
 /**
+ * Owner decision 21 Nov (judging): the judge demo accounts can do everything an ordinary account can (upload,
+ * process with AI, create and delete handovers, connect Slack/Discord/Telegram/GitHub, add points and questions,
+ * email invitations, set a display name). Only the two shared-account safety blocks stay: changing the password
+ * and deleting the account, so one judge can't lock the others out. Set to false to restore the F3 content limits.
+ */
+export const DEMO_ACCOUNTS_FULL_ACCESS = true;
+
+/**
  * F3 (21 Nov): the shared demo accounts are public, so they may explore, review, publish and acknowledge the seeded
  * handovers, but may not add content or spend on AI: no new handovers, uploads, new source versions, consent to new
  * sources, processing runs, revisions, or deletions. Enforced in the server actions (all writes go through them;
