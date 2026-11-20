@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Gap Interview" };
 
 export default function ContributorGapsPage({ params }: PageProps<"/g/[token]">) {
   return (
-    <PageContainer width="prose" className="space-y-8">
+    <PageContainer width="prose" align="center" className="space-y-8">
       <PageHeader eyebrow="Gap Interview" title="Help fill the gaps" description="A few questions only you can answer, so the next person starts with what matters." />
       <Suspense fallback={<ListSkeleton label="Opening your questions…" rows={1} />}>
         <InterviewContent params={params} />

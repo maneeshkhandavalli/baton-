@@ -111,9 +111,9 @@ export function ConnectedChannels({ handoverId }: { handoverId: string }) {
       <p className="text-caption text-muted-foreground">
         Messages are saved only from channels you link here and confirm. New messages wait in Baton until you bring them in; they then appear in Sources, where you give the usual consent before anything is processed.
       </p>
-      <ul className="space-y-3">
+      <ul className="divide-y divide-border border-y border-border">
         {providerGroups(view).map((g) => (
-          <li key={g.provider}>
+          <li key={g.provider} className="py-4">
             <ProviderCard group={g} api={api} />
           </li>
         ))}
@@ -125,10 +125,10 @@ export function ConnectedChannels({ handoverId }: { handoverId: string }) {
 function ProviderCard({ group: g, api }: { group: ProviderGroup; api: PanelApi }) {
   const headingId = useId();
   return (
-    <section aria-labelledby={headingId} className="space-y-3 rounded-lg border border-border bg-card p-4">
+    <section aria-labelledby={headingId} className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 id={headingId} className="text-sm font-semibold">
+          <h3 id={headingId} className="text-sm font-medium">
             {g.name}
           </h3>
           <p className="text-caption text-muted-foreground">{groupSummary(g)}</p>
@@ -185,25 +185,29 @@ function InstallationBlock({ inst, api }: { inst: ConnectorInstallationSummary &
   const waiting = inst.links.reduce((n, l) => n + l.bufferedCount, 0);
 
   return (
-    <div className="space-y-3 border-t border-border pt-3">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{inst.accountLabel}</span>
-          <Badge tone={status.tone === "danger" ? "danger" : status.tone} size="sm">
-            {status.label}
-          </Badge>
+          {status.tone === "info" ? (
+            <span className="text-caption text-muted-foreground">{status.label}</span>
+          ) : (
+            <Badge tone={status.tone} size="sm">
+              {status.label}
+            </Badge>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {inst.status === "active" && inst.provider !== "telegram" && (
-            <Button size="sm" variant="outline" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
-              <Hash aria-hidden /> {picking ? "Close" : "Link a channel"}
+            <Button size="sm" className="max-sm:h-10" variant="outline" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
+              <Hash aria-hidden="true" /> {picking ? "Close" : "Link a channel"}
             </Button>
           )}
           {inst.status !== "revoked" && (
             <ConfirmDialog
               trigger={
-                <Button size="sm" variant="destructive-ghost" disabled={api.busy !== null}>
-                  <Unplug aria-hidden /> Disconnect {noun}
+                <Button size="sm" className="max-sm:h-10" variant="destructive-ghost" disabled={api.busy !== null}>
+                  <Unplug aria-hidden="true" /> Disconnect {noun}
                 </Button>
               }
               title={`Disconnect ${inst.accountLabel}?`}
@@ -242,9 +246,9 @@ function InstallationBlock({ inst, api }: { inst: ConnectorInstallationSummary &
       )}
 
       {inst.links.length > 0 && (
-        <ul className="space-y-2" aria-label={`Channels linked from ${inst.accountLabel}`}>
+        <ul className="divide-y divide-border" aria-label={`Channels linked from ${inst.accountLabel}`}>
           {inst.links.map((l) => (
-            <li key={l.id}>
+            <li key={l.id} className="py-3 first:pt-0 last:pb-0">
               <LinkRow link={l} api={api} />
             </li>
           ))}
@@ -288,7 +292,7 @@ function ChannelPicker({ inst, api, onLinked }: { inst: ConnectorInstallationSum
   if (channels.length === 0) return <p className="text-caption text-muted-foreground">Baton can&apos;t see any channels in this {ACCOUNT_NOUN[inst.provider]}.</p>;
 
   return (
-    <fieldset className="space-y-2 rounded-lg border border-border p-3">
+    <fieldset className="space-y-2 rounded-xl border border-border p-3">
       <legend className="px-1 text-caption font-medium">Choose a channel for this handover</legend>
       <ul className="max-h-72 space-y-1 overflow-y-auto">
         {channels.map((c) => {
@@ -343,7 +347,7 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
   const busy = api.busy !== null;
 
   return (
-    <div className="space-y-2 rounded-md border border-border p-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{link.channelLabel}</span>
@@ -374,7 +378,7 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
 
       <div className="flex flex-wrap gap-2">
         {s.needsConsent && !consenting && (
-          <Button size="sm" onClick={() => setConsenting(true)}>
+          <Button size="sm" className="max-sm:h-10" onClick={() => setConsenting(true)}>
             Review and start
           </Button>
         )}
@@ -391,22 +395,22 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
               )
             }
           >
-            <RefreshCw aria-hidden /> {api.busy === `sync:${link.id}` ? "Bringing in…" : "Bring in new messages"}
+            <RefreshCw aria-hidden="true" /> {api.busy === `sync:${link.id}` ? "Bringing in…" : "Bring in new messages"}
           </Button>
         )}
         {s.canPause && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => api.act(`pause:${link.id}`, () => actions.setCapturePaused({ linkId: link.id, paused: true }), () => `Paused ${link.channelLabel}.`)}>
-            <Pause aria-hidden /> Pause
+          <Button size="sm" className="max-sm:h-10" variant="ghost" disabled={busy} onClick={() => api.act(`pause:${link.id}`, () => actions.setCapturePaused({ linkId: link.id, paused: true }), () => `Paused ${link.channelLabel}.`)}>
+            <Pause aria-hidden="true" /> Pause
           </Button>
         )}
         {s.canResume && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => api.act(`resume:${link.id}`, () => actions.setCapturePaused({ linkId: link.id, paused: false }), () => `Resumed ${link.channelLabel}.`)}>
-            <Play aria-hidden /> Resume
+          <Button size="sm" className="max-sm:h-10" variant="ghost" disabled={busy} onClick={() => api.act(`resume:${link.id}`, () => actions.setCapturePaused({ linkId: link.id, paused: false }), () => `Resumed ${link.channelLabel}.`)}>
+            <Play aria-hidden="true" /> Resume
           </Button>
         )}
         <ConfirmDialog
           trigger={
-            <Button size="sm" variant="destructive-ghost" disabled={busy}>
+            <Button size="sm" className="max-sm:h-10" variant="destructive-ghost" disabled={busy}>
               Disconnect channel
             </Button>
           }

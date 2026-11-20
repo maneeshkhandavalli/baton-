@@ -3,11 +3,11 @@
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Clock, Crown, FileText, MessageCircle, RotateCcw, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { Check, Crown, FileText, MessageCircle, RotateCcw, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 
 import { ContextualHelp } from "@/components/shared/contextual-help";
-import { AccessBadge, HandoverStateBadge } from "@/components/handover/badges";
+import { HandoverStateBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDate, formatDateRange } from "@/components/handover/format";
 import { ConnectedChannels } from "@/components/connectors/connected-channels";
 import { AccessLinks } from "@/components/settings/access-links";
@@ -49,17 +49,9 @@ interface HandoverSettingsProps {
 }
 
 /**
- * One settings group. Groups are separated by hairlines and space, not boxed; only the danger
- * zone gets a frame, so destructive actions are set apart from everyday settings.
+ * One settings group. Groups are separated by hairlines and space, not boxed.
  */
 function Panel({ children, id }: { children: React.ReactNode; id?: string }) {
-  if (id === "danger") {
-    return (
-      <section id={id} className="space-y-5 rounded-xl border border-destructive/25 bg-card p-5 shadow-soft sm:p-6">
-        {children}
-      </section>
-    );
-  }
   return (
     <section id={id} className="space-y-5 border-t border-border pt-8 first:border-t-0 first:pt-0">
       {children}
@@ -101,22 +93,22 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
   return (
     <div className="space-y-10">
       <Panel>
-        <SectionHeading title="Handover" description="Lifecycle and basic details." />
-        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
+        <SectionHeading title="Handover" />
+        <dl className="grid grid-cols-[7rem_1fr] items-baseline gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-muted-foreground">Status</dt>
-          <dd>
+          <dd className="flex items-center">
             <HandoverStateBadge state={h.state} />
           </dd>
           <dt className="text-muted-foreground">Team</dt>
           <dd>{h.teamName}</dd>
           <dt className="text-muted-foreground">Role</dt>
-          <dd>{h.roleTitle ?? "—"}</dd>
+          <dd>{h.roleTitle ?? "Not set"}</dd>
           <dt className="text-muted-foreground">Created</dt>
           <dd>{formatDate(h.createdAt)}</dd>
           <dt className="text-muted-foreground">Your access</dt>
           <dd>
             {memberRoleLabel[h.viewerRole]}
-            {creator && " · creator"} · <AccessBadge level={h.viewerClearance} className="align-middle" />
+            {creator && " · creator"} · {accessLevelMeta[h.viewerClearance].label}
           </dd>
         </dl>
         {offerIsForMe && offer && (
@@ -139,9 +131,9 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
           </div>
         )}
         {creator && (h.state === "approved" || h.state === "acknowledged") && (
-          <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">The published version stays readable while you revise. Publishing again asks the incoming member to re-acknowledge.</p>
-            <Button variant="outline" disabled={isPending} onClick={() => run(() => startRevision({ handoverId: h.id }), { success: "Revision started", onSuccess: () => router.push(routes.handover.review(h.id)) })}>
+            <Button variant="outline" className="max-sm:h-10" disabled={isPending} onClick={() => run(() => startRevision({ handoverId: h.id }), { success: "Revision started", onSuccess: () => router.push(routes.handover.review(h.id)) })}>
               <RotateCcw aria-hidden="true" data-icon="inline-start" />
               Start a revision
             </Button>
@@ -157,13 +149,13 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               <ContextualHelp topic="invitations" label="How do invitations work?" />
             </span>
           }
-          description={creator ? "Clearance decides which points each person can see. Outgoing and reviewer members always see everything." : "Only the creator can invite people or change access."}
+          description={creator ? undefined : "Only the creator can invite people or change access."}
         />
-        <ul className="divide-y divide-border rounded-lg border border-border">
+        <ul className="divide-y divide-border border-y border-border">
           {members.map((m) => {
             const fixed = m.role === "outgoing" || m.role === "reviewer";
             return (
-              <li key={m.id} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center">
+              <li key={m.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">
                     {m.displayName}
@@ -197,7 +189,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                       <ConfirmDialog
                         trigger={
                           <Button size="icon-sm" variant="ghost" aria-label={`Remove ${m.displayName}`}>
-                            <UserMinus />
+                            <UserMinus aria-hidden="true" />
                           </Button>
                         }
                         title={`Remove ${m.displayName}?`}
@@ -219,7 +211,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
 
         {creator && (
           <form
-            className="space-y-3 border-t border-border pt-5"
+            className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
               setInviteError(null);
@@ -246,7 +238,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               );
             }}
           >
-            <p className="text-sm font-medium">Invite someone</p>
+            <h3 className="text-sm font-medium">Invite someone</h3>
             <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
               <Label htmlFor="invite-email" className="sr-only">
                 Email
@@ -272,7 +264,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                   </option>
                 ))}
               </NativeSelect>
-              <Button type="submit" disabled={isPending || !invite.email}>
+              <Button type="submit" className="max-sm:h-10" disabled={isPending || !invite.email}>
                 <UserPlus aria-hidden="true" data-icon="inline-start" />
                 Invite
               </Button>
@@ -291,7 +283,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
         <Panel id="links">
           <SectionHeading
             title={creator ? "Invitations and links" : "Gap Interview links"}
-            description="Links are shown only once, when they're created. Turn one off here if it was shared by mistake."
+            description="Links are shown only once, when created."
           />
           <AccessLinks tokens={tokens} creator={creator} />
         </Panel>
@@ -306,14 +298,14 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                 <ContextualHelp topic="living_handover" label="What are source versions?" />
               </span>
             }
-            description="Access is set per source when consent is recorded. Points inherit the strictest level of their evidence. When a chat continues, upload the newer export as a new version."
+            description="Points inherit the strictest access level of their evidence."
           />
-          <ul className="divide-y divide-border rounded-lg border border-border">
+          <ul className="divide-y divide-border border-y border-border">
             {currentSources.map((s) => {
               const pending = pendingFor(s);
               const earlier = earlierCount(s);
               return (
-              <li key={s.id} className="flex flex-wrap items-start gap-3 px-3 py-3">
+              <li key={s.id} className="flex flex-wrap items-start gap-3 py-3">
                 {isChatSourceKind(s.kind) ? <MessageCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : <FileText aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{s.title}</p>
@@ -325,6 +317,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                   <p className="text-xs text-muted-foreground">
                     {s.consentRecordedAt ? `Consent recorded ${formatDate(s.consentRecordedAt)}` : "No consent yet"}
                     {s.rawDeletedAt ? ` · raw upload deleted ${formatDate(s.rawDeletedAt)}` : ""}
+                    {` · Access: ${accessLevelMeta[s.accessLevel].label}`}
                   </p>
                   {(s.version?.versionNumber ?? 1) > 1 && (
                     <p className="text-xs text-muted-foreground">
@@ -356,13 +349,12 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                     </div>
                   )}
                 </div>
-                <AccessBadge level={s.accessLevel} />
                 {canAddVersion && !pending && isUserUploadSourceKind(s.kind) && (s.state === "uploaded" || s.state === "parsed" || s.state === "failed") && <SourceVersionUpload source={s} consentDisclosure={consentDisclosure} />}
                 {canManageSources && h.state !== "processing" && (
                   <ConfirmDialog
                     trigger={
                       <Button size="icon-sm" variant="ghost" aria-label={`Remove ${s.title}`}>
-                        <Trash2 />
+                        <Trash2 aria-hidden="true" />
                       </Button>
                     }
                     title={`Remove ${s.title}?`}
@@ -394,16 +386,15 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                 <ContextualHelp topic="source_connections" label="What are sources and connected channels?" />
               </span>
             }
-            description="Bring messages from Slack, Discord, Telegram or GitHub into this handover, with your consent per channel." />
+          />
           <ConnectedChannels handoverId={h.id} />
         </Panel>
       )}
 
       <Panel id="privacy">
-        <SectionHeading title="Privacy" description="What Baton keeps, and how people can opt out." />
-        <ul className="space-y-3 text-sm">
-          <li className="flex gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
+        <SectionHeading title="Privacy" />
+        <ul className="list-disc space-y-2 pl-5 text-sm marker:text-muted-foreground">
+          <li>
             <span>
               Personal and financial details were masked before storage
               {Object.keys(masking).length > 0 && (
@@ -420,12 +411,10 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               . Masked values are never revealed.
             </span>
           </li>
-          <li className="flex gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
+          <li>
             <span>Raw uploads are deleted as soon as processing succeeds. Only masked, permitted evidence is kept.</span>
           </li>
-          <li className="flex gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
+          <li>
             <span>
               <span className="font-medium">Late opt-outs.</span> If someone asks to be removed after processing, the creator can erase them as a participant. Their
               messages and quotes are deleted, affected points go to privacy review, and published versions are redacted.
@@ -433,7 +422,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
           </li>
         </ul>
         {review && (
-          <div className="border-t border-border pt-5">
+          <div>
             <ParticipantsPanel handoverId={h.id} participants={participants} exclusions={exclusions} sources={sources} creator={creator} />
           </div>
         )}
@@ -441,10 +430,9 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
 
       {creator && (
         <Panel id="danger">
-          <SectionHeading title="Danger zone" description="Ownership and deletion. Only the creator can do these." className="[&_h2]:text-destructive-fg" />
+          <SectionHeading title="Danger zone" />
           {offer && (
-            <p className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-sm">
-              <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
               <span>
                 Creatorship offered to {offeredTo?.displayName ?? "a member"} on {formatDate(offer.offeredAt)}. You stay the creator until they accept. Offers lapse after 14
                 days; sending a new one replaces it.
@@ -471,13 +459,13 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
               {offer ? "Replace offer" : "Send offer"}
             </Button>
           </div>
-          <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               Deleting removes the handover for everyone and turns off every link straight away. It&rsquo;s removed permanently after 30 days, and there&rsquo;s no undo.
             </p>
             <ConfirmDialog
               trigger={
-                <Button variant="destructive">
+                <Button variant="destructive" className="max-sm:h-10">
                   <Trash2 aria-hidden="true" data-icon="inline-start" />
                   Delete handover
                 </Button>

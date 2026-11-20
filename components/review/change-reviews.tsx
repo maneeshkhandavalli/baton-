@@ -144,7 +144,7 @@ function FilterChip({ active, onClick, count, children }: { active: boolean; onC
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors focus-ring",
+        "inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-sm max-sm:min-h-10 transition-colors focus-ring",
         active ? "border-primary bg-primary-soft text-primary-fg" : "border-border bg-card text-foreground/85 hover:bg-muted",
       )}
     >
@@ -194,8 +194,8 @@ function ChangeCard({ handoverId, item, canDecide }: { handoverId: string; item:
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {item.kind !== "new_information" && (
-          <section className="space-y-2 rounded-lg border border-border p-3">
-            <h4 className="text-caption font-semibold tracking-wide text-muted-foreground uppercase">
+          <section className="space-y-2 rounded-lg bg-muted/40 p-3">
+            <h4 className="text-caption font-medium text-muted-foreground">
               Before: published point{item.base ? ` (revision ${item.base.revisionNumber})` : ""}
             </h4>
             <p className="text-sm">{item.base?.statement ? <MaskedText text={item.base.statement} /> : <span className="text-muted-foreground">Hidden</span>}</p>
@@ -212,8 +212,8 @@ function ChangeCard({ handoverId, item, canDecide }: { handoverId: string; item:
             )}
           </section>
         )}
-        <section className={cn("space-y-2 rounded-lg border border-border p-3", item.kind === "new_information" && "md:col-span-2")}>
-          <h4 className="text-caption font-semibold tracking-wide text-muted-foreground uppercase">After: version {item.toVersion}</h4>
+        <section className={cn("space-y-2 rounded-lg bg-muted/40 p-3", item.kind === "new_information" && "md:col-span-2")}>
+          <h4 className="text-caption font-medium text-muted-foreground">After: version {item.toVersion}</h4>
           {item.kind === "evidence_missing" && (
             <p className="text-sm">
               The quoted words aren&apos;t in version {item.toVersion}. This is not proof that the point is false.

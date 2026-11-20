@@ -72,16 +72,16 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
   }
 
   return (
-    <section aria-labelledby="delete-account-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-6">
+    <section aria-labelledby="delete-account-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 sm:p-6">
       <div className="space-y-1">
-        <h2 id="delete-account-heading" className="text-base font-semibold">
+        <h2 id="delete-account-heading" className="type-heading">
           Delete your account
         </h2>
-        <p className="text-sm text-muted-foreground">Deleting your account is permanent. Here is exactly what happens.</p>
+        <p className="text-sm text-muted-foreground">Deleting your account is permanent.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3">
+        <div className="space-y-2">
           <p className="text-sm font-medium text-destructive-fg">Permanently deleted</p>
           <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
             <li>Your sign-in: email address, Google link and password</li>
@@ -90,7 +90,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
             <li>Invitation and gap-interview links you created (revoked)</li>
           </ul>
         </div>
-        <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+        <div className="space-y-2">
           <p className="text-sm font-medium">Kept, as &ldquo;Former member&rdquo;</p>
           <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
             <li>Answers, approvals and reviews you made in other people&rsquo;s handovers, so they stay traceable</li>
@@ -109,7 +109,7 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
               its settings, or must be deleted permanently with your account.
             </span>
           </p>
-          <ul className="divide-y divide-border rounded-lg border border-border">
+          <ul className="divide-y divide-border border-y border-border">
             {created.map((h) => {
               const checked = purge.includes(h.id);
               const offer = offers[h.id];

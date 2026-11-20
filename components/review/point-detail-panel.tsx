@@ -52,7 +52,7 @@ const reviewActionLabel: Record<string, string> = {
 function Section({ title, children, className, help }: { title: string; children: React.ReactNode; className?: string; help?: React.ReactNode }) {
   return (
     <section className={cn("space-y-3 border-t border-border px-5 py-4", className)}>
-      <h3 className="flex items-center gap-1 type-eyebrow text-muted-foreground">
+      <h3 className="flex items-center gap-1 text-sm font-semibold">
         {title}
         {help}
       </h3>
@@ -197,7 +197,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                   />
                   <Verification e={e} />
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <AccessBadge level={e.accessLevel} />
+                    <AccessBadge level={e.accessLevel} showEveryone={false} />
                     {e.excluded && (
                       <span className="text-xs text-muted-foreground">
                         Excluded{e.exclusionReason && (
@@ -238,10 +238,10 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
             {relatedSources.map((s) => {
               const masked = Object.entries(s.maskingCounts ?? {}).filter(([, n]) => (n ?? 0) > 0) as Array<[MaskKind, number]>;
               return (
-                <li key={s.id} className="rounded-lg border border-border bg-muted/40 p-3">
+                <li key={s.id} className="rounded-lg bg-muted/40 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium">{s.title}</p>
-                    <AccessBadge level={s.accessLevel} />
+                    <AccessBadge level={s.accessLevel} showEveryone={false} />
                   </div>
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                     <dt className="text-muted-foreground">Type</dt>

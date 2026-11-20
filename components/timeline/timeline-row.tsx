@@ -120,7 +120,7 @@ function ConflictNote({ entry }: { entry: TimelineEntry }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <div className="mt-3 flex items-start gap-2 rounded-lg border border-status-conflicting/20 bg-status-conflicting-soft/50 px-3 py-2 text-sm">
+    <div className="mt-3 flex items-start gap-2 rounded-lg bg-status-conflicting-soft/50 px-3 py-2 text-sm">
       <Scale aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-conflicting" />
       <div className="min-w-0 space-y-0.5">
         <p className="font-medium text-status-conflicting-fg">Sources disagree</p>

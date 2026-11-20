@@ -6,7 +6,6 @@ import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, 
 import { useEffect, useState } from "react";
 
 import { ContextualHelp } from "@/components/shared/contextual-help";
-import { AccessBadge } from "@/components/handover/badges";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
 import { CONSENT_REQUIRED_REASON, runReasonText, sourcesNeedingConsent, stageStatusMeta } from "@/components/shared/run-status";
@@ -182,16 +181,12 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
         </p>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
-            <p className="type-eyebrow text-muted-foreground">
-              {active ? (
-                <span className="inline-flex items-center gap-1.5 text-primary-fg">
-                  <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
-                  Live · updates every few seconds
-                </span>
-              ) : (
-                "Processing"
-              )}
-            </p>
+            {active && (
+              <p className="inline-flex items-center gap-1.5 text-caption font-medium text-primary-fg">
+                <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
+                Live · updates every few seconds
+              </p>
+            )}
             <div className="flex items-center gap-1">
               <h2 id="run-heading" className="type-section-title">
                 {title}
@@ -273,7 +268,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                       {stageLabel[s.stage].label}
                       <span className="sr-only">: {meta.label}</span>
                     </p>
-                    <p className="text-caption text-muted-foreground">{stageLabel[s.stage].description}</p>
+                    {s.status !== "succeeded" && <p className="text-caption text-muted-foreground">{stageLabel[s.stage].description}</p>}
                     {(s.status === "partial" || s.status === "failed") && (
                       <p aria-hidden="true" className={cn("mt-1 text-caption font-medium", s.status === "partial" ? "text-warning-fg" : "text-destructive-fg")}>
                         {meta.label}
@@ -386,7 +381,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
           </div>
         )}
 
-        <ExtractionCoverageSummary report={extraction} className="shadow-none" />
+        <ExtractionCoverageSummary report={extraction} className="rounded-none border-0 border-t bg-transparent px-0 pt-5 pb-0 shadow-none" />
 
         {r?.status === "succeeded" && (
           <div className="flex flex-wrap gap-2 border-t border-border pt-5">
@@ -404,8 +399,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
       <aside className="divide-y divide-border self-start overflow-hidden rounded-xl border border-border bg-card shadow-soft">
         <dl className="grid grid-cols-3 gap-2 p-4">
           <Stat label="Sources" value={formatCount(sources.length)} />
-          <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "—"} />
-          <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "—"} />
+          <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "0"} />
+          <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "0"} />
         </dl>
 
         <section aria-labelledby="sources-heading">
@@ -445,7 +440,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col-reverse text-center">
-      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dt className="text-caption text-muted-foreground">{label}</dt>
       <dd className="font-display text-2xl leading-tight tabular-nums">{value}</dd>
     </div>
   );
@@ -458,7 +453,6 @@ function SourceRow({ s }: { s: SourceSummary }) {
       <div className="flex items-start gap-2">
         <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{s.title}</p>
-        <AccessBadge level={s.accessLevel} showEveryone={false} />
       </div>
       <p className="pl-6 text-caption text-muted-foreground">
         {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} ·{" "}
@@ -478,7 +472,7 @@ function SourceRow({ s }: { s: SourceSummary }) {
 function SourceFailure({ code }: { code: string | null }) {
   const { text, reference } = sourceErrorText(code);
   return (
-    <div className="ml-6 flex items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive-soft/60 px-2.5 py-2 text-caption text-destructive-fg">
+    <div className="ml-6 flex items-start gap-1.5 rounded-md bg-destructive-soft/60 px-2.5 py-2 text-caption text-destructive-fg">
       <AlertTriangle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
       <p className="min-w-0 [overflow-wrap:anywhere]">
         <span className="sr-only">Why it failed: </span>

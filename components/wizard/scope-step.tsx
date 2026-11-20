@@ -33,7 +33,7 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
         const keptConversations = p?.conversations.filter((c) => !s.excludedConversations.includes(c.localId)) ?? [];
         const KindIcon = isChatSourceKind(s.kind) ? MessageCircle : FileText;
         return (
-          <section key={s.localId} className="overflow-hidden rounded-xl border border-border bg-card shadow-soft" aria-labelledby={`${s.localId}-name`}>
+          <section key={s.localId} className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby={`${s.localId}-name`}>
             <header className="flex items-center gap-2.5 border-b border-border bg-muted/40 px-4 py-3 sm:px-5">
               <KindIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
               <h3 id={`${s.localId}-name`} className="min-w-0 truncate type-subheading" title={s.name}>

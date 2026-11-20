@@ -78,7 +78,7 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
               {readyCount} ready{problems > 0 ? ` · ${problems} need${problems === 1 ? "s" : ""} attention` : ""}
             </p>
           </div>
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft" aria-label="Added files">
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" aria-label="Added files">
             {sources.map((s) => (
               <FileRow key={s.localId} s={s} onRemove={onRemove} onRetry={onRetry} onDateOrder={onDateOrder} onSwitchKind={onSwitchKind} />
             ))}
@@ -156,7 +156,7 @@ function FileRow({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
             {s.sample && (
-              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px text-2xs font-semibold tracking-wide text-primary-fg uppercase" title="Invented demo data (prototype)">
+              <span className="shrink-0 text-caption text-muted-foreground" title="Invented demo data (prototype)">
                 Sample
               </span>
             )}
@@ -165,7 +165,7 @@ function FileRow({
             </p>
             <span
               className={cn(
-                "text-2xs font-semibold tracking-wide uppercase",
+                "text-caption font-medium",
                 meta.tone === "success" && "text-success-fg",
                 meta.tone === "warning" && "text-warning-fg",
                 meta.tone === "danger" && "text-destructive-fg",
@@ -311,9 +311,8 @@ function SampleDataCard({ sources, onUseSample, adding, full }: { sources: Draft
   ).length;
   const allAdded = missing === 0;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 gap-3">
-        <FlaskConical aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary-fg" />
         <div className="min-w-0 space-y-0.5">
           <p className="text-sm font-semibold">Try Baton with sample data</p>
           <p className="text-caption text-muted-foreground">

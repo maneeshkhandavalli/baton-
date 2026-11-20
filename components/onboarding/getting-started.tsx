@@ -8,25 +8,57 @@
  */
 
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, ChevronDown, Circle, CircleAlert, CircleDashed, Clock3, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  CircleAlert,
+  CircleDashed,
+  Clock3,
+  Loader2,
+} from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
-import type { Checklist, ChecklistItem, ChecklistStatus } from "@/lib/onboarding/checklist";
+import type {
+  Checklist,
+  ChecklistItem,
+  ChecklistStatus,
+} from "@/lib/onboarding/checklist";
 import { cn } from "@/lib/utils";
 
 import { useGuidance } from "./guidance";
 
 const COLLAPSED_KEY = "baton.gettingStarted.collapsed";
 
-const STATUS: Record<ChecklistStatus, { label: string; icon: typeof Circle; className: string }> = {
+const STATUS: Record<
+  ChecklistStatus,
+  { label: string; icon: typeof Circle; className: string }
+> = {
   done: { label: "Done", icon: CheckCircle2, className: "text-success-fg" },
-  in_progress: { label: "In progress", icon: Loader2, className: "text-primary-fg" },
-  attention: { label: "Needs attention", icon: CircleAlert, className: "text-warning-fg" },
+  in_progress: {
+    label: "In progress",
+    icon: Loader2,
+    className: "text-primary-fg",
+  },
+  attention: {
+    label: "Needs attention",
+    icon: CircleAlert,
+    className: "text-warning-fg",
+  },
   todo: { label: "To do", icon: Circle, className: "text-muted-foreground" },
-  waiting: { label: "Waiting for the team", icon: Clock3, className: "text-muted-foreground" },
-  locked: { label: "Not available yet", icon: CircleDashed, className: "text-muted-foreground/70" },
+  waiting: {
+    label: "Waiting for the team",
+    icon: Clock3,
+    className: "text-muted-foreground",
+  },
+  locked: {
+    label: "Not available yet",
+    icon: CircleDashed,
+    className: "text-muted-foreground/70",
+  },
 };
 
 function readCollapsed(): boolean {
@@ -40,33 +72,74 @@ function readCollapsed(): boolean {
 function ItemRow({ item, isNext }: { item: ChecklistItem; isNext: boolean }) {
   const s = STATUS[item.status];
   const Icon = s.icon;
+  const muted = item.status === "done" || item.status === "locked";
   return (
-    <li className={cn("flex items-start gap-3 px-4 py-3 sm:px-5", isNext && "bg-primary-soft/40")} aria-current={isNext ? "step" : undefined}>
-      <Icon aria-hidden="true" className={cn("mt-0.5 size-4 shrink-0", s.className, item.status === "in_progress" && "animate-spin motion-reduce:animate-none")} />
+    <li
+      className={cn(
+        "flex items-start gap-2.5 px-4 py-2.5",
+        isNext && "bg-primary-soft/40",
+      )}
+      aria-current={isNext ? "step" : undefined}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 size-4 shrink-0",
+          s.className,
+          item.status === "in_progress" &&
+            "animate-spin motion-reduce:animate-none",
+        )}
+      />
       <div className="min-w-0 flex-1">
-        <p className={cn("text-sm font-medium", item.status === "done" && "text-muted-foreground", item.status === "locked" && "text-muted-foreground")}>
+        <p
+          className={cn(
+            "text-sm font-medium",
+            muted && "text-muted-foreground",
+          )}
+        >
           {item.label}
           <span className="sr-only">. {s.label}.</span>
         </p>
-        <p className="text-caption text-muted-foreground">{item.detail}</p>
+        <p className="text-caption text-muted-foreground">
+          {item.status === "done" && (
+            <span aria-hidden="true" className="font-medium text-success-fg">
+              Done.{" "}
+            </span>
+          )}
+          {item.detail}
+        </p>
+        {item.href && item.cta && item.status !== "done" && (
+          <Link
+            href={item.href}
+            className={cn(
+              buttonVariants({
+                size: "sm",
+                variant: isNext ? "default" : "outline",
+              }),
+              "mt-2 max-sm:h-10",
+            )}
+            // the tour card never covers the one next action
+            data-tour-avoid={isNext ? "" : undefined}
+            aria-label={`${item.cta}: ${item.label}`}
+          >
+            {item.cta}
+            {isNext && <ArrowRight aria-hidden="true" data-icon="inline-end" />}
+          </Link>
+        )}
       </div>
-      {item.href && item.cta && item.status !== "done" && (
-        <Link
-          href={item.href}
-          className={cn(buttonVariants({ size: "sm", variant: isNext ? "default" : "outline" }), "shrink-0 self-center")}
-          // the tour card never covers the one next action
-          data-tour-avoid={isNext ? "" : undefined}
-          aria-label={`${item.cta}: ${item.label}`}
-        >
-          {item.cta}
-          {isNext && <ArrowRight aria-hidden="true" data-icon="inline-end" />}
-        </Link>
-      )}
     </li>
   );
 }
 
-export function GettingStartedView({ checklist, forced = false, onDismiss }: { checklist: Checklist; forced?: boolean; onDismiss?: () => void }) {
+export function GettingStartedView({
+  checklist,
+  forced = false,
+  onDismiss,
+}: {
+  checklist: Checklist;
+  forced?: boolean;
+  onDismiss?: () => void;
+}) {
   const listId = useId();
   const headingId = useId();
   const [collapsed, setCollapsed] = useState(false);
@@ -85,18 +158,57 @@ export function GettingStartedView({ checklist, forced = false, onDismiss }: { c
       return !c;
     });
   };
-  const pct = checklist.total ? Math.round((checklist.done / checklist.total) * 100) : 0;
+  const pct = checklist.total
+    ? Math.round((checklist.done / checklist.total) * 100)
+    : 0;
 
   return (
-    <section id="getting-started" data-tour="checklist" aria-labelledby={headingId} className="scroll-mt-20 rounded-xl border border-border bg-card shadow-soft">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <h2 id={headingId} className="type-heading">
-            Getting started
-          </h2>
-          <p className="text-caption text-muted-foreground">
-            {checklist.complete ? "All done. You can hide this list." : `${checklist.done} of ${checklist.total} done · ticks itself as you go`}
-          </p>
+    <section
+      id="getting-started"
+      aria-labelledby={headingId}
+      className="scroll-mt-20 rounded-xl border border-border bg-card"
+    >
+      <div data-tour="checklist" className="rounded-t-xl">
+        <div className="flex items-center gap-2 px-4 pt-3 pb-2.5">
+          <div className="min-w-0 flex-1">
+            <h2 id={headingId} className="type-heading">
+              Getting started
+            </h2>
+            <p className="text-caption text-muted-foreground">
+              {checklist.complete
+                ? "All done. You can hide this list."
+                : `${checklist.done} of ${checklist.total} done`}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground max-sm:h-10"
+            aria-expanded={!collapsed}
+            aria-controls={listId}
+            onClick={toggle}
+          >
+            {collapsed ? "Show" : "Hide"}
+            <span className="sr-only"> steps</span>
+            <ChevronDown
+              aria-hidden="true"
+              data-icon="inline-end"
+              className={cn(
+                "motion-safe:transition-transform",
+                !collapsed && "rotate-180",
+              )}
+            />
+          </Button>
+          {onDismiss && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground max-sm:h-10"
+              onClick={onDismiss}
+            >
+              {forced && checklist.complete ? "Close" : "Dismiss"}
+            </Button>
+          )}
         </div>
         <div
           role="progressbar"
@@ -104,20 +216,15 @@ export function GettingStartedView({ checklist, forced = false, onDismiss }: { c
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          className="hidden h-1.5 w-28 overflow-hidden rounded-full bg-muted ring-1 ring-border/60 ring-inset sm:block"
+          className="mx-4 mb-3 h-1 overflow-hidden rounded-full bg-muted"
         >
-          <div className={cn("h-full rounded-full", checklist.complete ? "bg-success" : "bg-primary")} style={{ width: `${pct}%` }} />
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" aria-expanded={!collapsed} aria-controls={listId} onClick={toggle}>
-            {collapsed ? "Show steps" : "Hide steps"}
-            <ChevronDown aria-hidden="true" data-icon="inline-end" className={cn("motion-safe:transition-transform", !collapsed && "rotate-180")} />
-          </Button>
-          {onDismiss && (
-            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={onDismiss}>
-              {forced && checklist.complete ? "Close" : "Dismiss"}
-            </Button>
-          )}
+          <div
+            className={cn(
+              "h-full rounded-full",
+              checklist.complete ? "bg-success" : "bg-primary",
+            )}
+            style={{ width: `${pct}%` }}
+          />
         </div>
       </div>
       {collapsed ? (
@@ -129,9 +236,16 @@ export function GettingStartedView({ checklist, forced = false, onDismiss }: { c
           </div>
         )
       ) : (
-        <ol id={listId} className="divide-y divide-border border-t border-border">
+        <ol
+          id={listId}
+          className="divide-y divide-border border-t border-border"
+        >
           {checklist.items.map((item) => (
-            <ItemRow key={item.id} item={item} isNext={checklist.next?.id === item.id} />
+            <ItemRow
+              key={item.id}
+              item={item}
+              isNext={checklist.next?.id === item.id}
+            />
           ))}
         </ol>
       )}
@@ -143,7 +257,15 @@ export function GettingStartedView({ checklist, forced = false, onDismiss }: { c
 /** Fired by Help → "Getting started checklist" so a list hidden in this tab shows again. */
 export const SHOW_CHECKLIST_EVENT = "baton:show-checklist";
 
-export function GettingStarted({ checklist, dismissed, forced }: { checklist: Checklist; dismissed: boolean; forced: boolean }) {
+export function GettingStarted({
+  checklist,
+  dismissed,
+  forced,
+}: {
+  checklist: Checklist;
+  dismissed: boolean;
+  forced: boolean;
+}) {
   const g = useGuidance();
   const [hidden, setHidden] = useState(false);
   useEffect(() => {

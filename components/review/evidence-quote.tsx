@@ -62,10 +62,10 @@ function VerificationChip({
     <>
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
-          quoteOk && "bg-status-sourced-soft text-status-sourced-fg",
-          quoteBad && "bg-status-conflicting-soft text-status-conflicting-fg",
-          !quoteOk && !quoteBad && "bg-muted text-muted-foreground",
+          "inline-flex items-center gap-1 font-medium",
+          quoteOk && "text-status-sourced-fg",
+          quoteBad && "text-status-conflicting-fg",
+          !quoteOk && !quoteBad && "text-muted-foreground",
         )}
       >
         <QuoteIcon aria-hidden="true" className="size-3 shrink-0" />
@@ -75,11 +75,11 @@ function VerificationChip({
       {aiLabel && (
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
-            layers.ai === "guarded" && "bg-warning-soft text-warning-fg",
-            aiGood && "bg-muted text-foreground/80",
-            aiBad && "bg-status-conflicting-soft text-status-conflicting-fg",
-            !aiGood && !aiBad && layers.ai !== "guarded" && "bg-muted text-muted-foreground",
+            "inline-flex items-center gap-1 font-medium",
+            layers.ai === "guarded" && "text-warning-fg",
+            aiGood && "text-foreground/80",
+            aiBad && "text-status-conflicting-fg",
+            !aiGood && !aiBad && layers.ai !== "guarded" && "text-muted-foreground",
           )}
         >
           {layers.ai === "guarded" ? <ShieldAlert aria-hidden="true" className="size-3 shrink-0" /> : <Sparkles aria-hidden="true" className="size-3 shrink-0" />}

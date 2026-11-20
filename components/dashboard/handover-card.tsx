@@ -74,7 +74,7 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
   return (
     <article className="group relative flex h-full flex-col rounded-xl border border-border bg-card p-4 shadow-soft transition-[box-shadow,border-color,transform] duration-200 ease-emphasized has-focus-visible:ring-3 has-focus-visible:ring-ring/30 hover:-translate-y-px hover:border-border-strong hover:shadow-raised motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 truncate type-eyebrow text-muted-foreground" title={h.teamName}>
+        <p className="min-w-0 truncate text-caption text-muted-foreground" title={h.teamName}>
           {h.teamName}
         </p>
         <HandoverStateBadge state={h.state} size="sm" />

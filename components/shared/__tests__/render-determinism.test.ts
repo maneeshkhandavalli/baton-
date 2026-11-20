@@ -34,8 +34,8 @@ describe("date formatting is identical on every runtime", () => {
   });
 
   it("keeps the empty and invalid fallbacks", () => {
-    assert.equal(formatDate(null), "—");
-    assert.equal(formatDateTime(undefined), "—");
+    assert.equal(formatDate(null), "Not set");
+    assert.equal(formatDateTime(undefined), "Not set");
     assert.equal(formatDate("not a date"), "not a date");
     assert.equal(formatDateRange("2026-03-01T04:00:00.000Z", "2026-09-28T12:00:00.000Z"), "1 Mar – 28 Sep 2026");
   });

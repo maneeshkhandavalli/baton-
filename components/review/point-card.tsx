@@ -110,7 +110,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
       {!rejected && (
         <div className="mt-4 space-y-2.5">
           {status === "conflicting" ? (
-            <section aria-label="Sources disagree" className="rounded-lg border border-status-conflicting/25 bg-status-conflicting-soft/60 p-3">
+            <section aria-label="Sources disagree" className="rounded-lg bg-status-conflicting-soft/60 p-3">
               <p className="flex items-center gap-1.5 text-caption font-medium text-status-conflicting-fg">
                 <Scale aria-hidden="true" className="size-3.5" />
                 {point.conflictResolution ? "Sources disagreed · resolved" : "Sources disagree · decide what is true now"}
@@ -133,13 +133,13 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
               </div>
             </section>
           ) : status === "missing" ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-status-missing/45 bg-status-missing-soft/60 px-3 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 rounded-lg bg-status-missing-soft/60 px-3 py-3 sm:flex-row sm:items-center">
               <CircleHelp aria-hidden="true" className="size-4 shrink-0 text-status-missing-fg" />
               <p className="flex-1 text-sm text-status-missing-fg">
                 {gapQuestion ? (
                   <>
                     <span className="font-medium">Knowledge gap · in the Gap Interview</span>
-                    {" — "}
+                    {": "}
                     {gapQuestion.status === "open" ? "waiting for an answer" : gapQuestion.status === "answered" ? "answer waiting for review" : "waived"}
                   </>
                 ) : (

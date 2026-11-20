@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Connect a channel" };
  */
 export default function ConnectPage({ searchParams }: PageProps<"/connect">) {
   return (
-    <PageContainer width="narrow" className="lg:py-8">
+    <PageContainer width="narrow" frameClassName="lg:py-8">
       <Suspense fallback={<FormSkeleton label="Loading…" fields={2} />}>
         <ConnectContent searchParams={searchParams} />
       </Suspense>

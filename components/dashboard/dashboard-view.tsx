@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, FileUp, Inbox, MessageCircleQuestion, Scale, ShieldAlert, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, Inbox, MessageCircleQuestion, Scale, ShieldAlert, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -57,8 +57,8 @@ export function upNextItems(cards: readonly HandoverCardData[], limit = 3): UpNe
 function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
   if (!items.length) return null;
   return (
-    <section aria-labelledby="up-next" data-tour="up-next" className="rounded-xl border border-border bg-card shadow-soft">
-      <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+    <section aria-labelledby="up-next" className="rounded-xl border border-border bg-card shadow-soft">
+      <div data-tour="up-next" className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
         <h2 id="up-next" className="type-heading">
           Up next
         </h2>
@@ -67,12 +67,7 @@ function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
       <ul className="divide-y divide-border">
         {items.map((it) => (
           <li key={it.key} className="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
-            <span
-              aria-hidden="true"
-              className={cn("hidden size-8 shrink-0 items-center justify-center rounded-md border sm:flex", it.danger ? "border-destructive/25 bg-destructive-soft text-destructive-fg" : "border-border bg-muted/60 text-muted-foreground")}
-            >
-              <it.icon className="size-4" />
-            </span>
+            <it.icon aria-hidden="true" className={cn("hidden size-4 shrink-0 sm:block", it.danger ? "text-destructive-fg" : "text-muted-foreground")} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{it.title}</p>
               <p className={cn("text-caption", it.danger ? "text-destructive-fg" : "text-muted-foreground")}>{it.reason}</p>
@@ -91,7 +86,7 @@ function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
 
 function CardGrid({ cards }: { cards: HandoverCardData[] }) {
   return (
-    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 min-[1680px]:grid-cols-4">
+    <ul className="grid gap-4 sm:grid-cols-2 min-[1600px]:grid-cols-3">
       {cards.map((c) => (
         <li key={c.handover.id}>
           <HandoverCard data={c} />
@@ -101,38 +96,22 @@ function CardGrid({ cards }: { cards: HandoverCardData[] }) {
   );
 }
 
-/** First-run: what Baton does in three plain steps, one way in, one way to look around. */
+/**
+ * First-run: one line on what a handover is, one way in, one way to look around. (UI polish: the three step cards
+ * repeated the Getting Started checklist shown beside this.)
+ */
 function FirstRun({ newHandover, demoHref }: { newHandover: ReactNode; demoHref: string }) {
-  const steps = [
-    { icon: FileUp, title: "Add the record", text: "Upload the team's WhatsApp exports and documents. Personal details are masked first." },
-    { icon: Sparkles, title: "Baton drafts it", text: "Decisions, owners, open work and risks, each linked to the message it came from." },
-    { icon: UsersRound, title: "People check it", text: "You review every point, fill the gaps, then hand it over to whoever comes next." },
-  ];
   return (
     <EmptyState
       icon={<Inbox />}
       title="No handovers yet"
       description="A handover gathers what your team knows into something the next person can trust."
       action={
-        <div className="flex w-full flex-col items-center gap-8">
-          <ol className="grid w-full max-w-3xl gap-4 text-left sm:grid-cols-3">
-            {steps.map((s, i) => (
-              <li key={s.title} className="rounded-lg border border-border bg-card p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <span className="type-numeric text-caption text-muted-foreground">{i + 1}</span>
-                  <s.icon aria-hidden="true" className="size-4 text-muted-foreground" />
-                  {s.title}
-                </p>
-                <p className="mt-1.5 text-caption text-muted-foreground">{s.text}</p>
-              </li>
-            ))}
-          </ol>
-          <div className="flex flex-wrap justify-center gap-2">
-            {newHandover}
-            <Link href={demoHref} className={buttonVariants({ size: "lg", variant: "outline" })}>
-              Explore the demo
-            </Link>
-          </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          {newHandover}
+          <Link href={demoHref} className={buttonVariants({ size: "lg", variant: "outline" })}>
+            Explore the demo
+          </Link>
         </div>
       }
     />
@@ -177,7 +156,7 @@ export function DashboardView({ result, newHandover, demoHref, preview = false }
       <UpNext items={upNext} total={totalAttention} />
       {drafts.length > 0 && (
         <section aria-labelledby="drafts" className="space-y-4">
-          <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} description="Saved as you go. Continue from the step you reached." />
+          <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} />
           <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
             {drafts.map((c) => (
               <DraftRow key={c.handover.id} data={c} preview={preview} />
@@ -187,13 +166,13 @@ export function DashboardView({ result, newHandover, demoHref, preview = false }
       )}
       {preparing.length > 0 && (
         <section aria-labelledby="preparing" className="space-y-4">
-          <SectionHeading id="preparing" title="Preparing and reviewing" count={preparing.length} description="Handovers you're writing or checking. Those that need you come first." />
+          <SectionHeading id="preparing" title="Preparing and reviewing" count={preparing.length} />
           <CardGrid cards={preparing} />
         </section>
       )}
       {receiving.length > 0 && (
         <section aria-labelledby="receiving" className="space-y-4">
-          <SectionHeading id="receiving" title="Handed over to you" count={receiving.length} description="Read the handover, work through the first week, and acknowledge it." />
+          <SectionHeading id="receiving" title="Handed over to you" count={receiving.length} />
           <CardGrid cards={receiving} />
         </section>
       )}

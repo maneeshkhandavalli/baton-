@@ -315,7 +315,7 @@ export function ReviewWorkspace({
   );
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[15.5rem_minmax(0,1fr)_23rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[14rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[15.5rem_minmax(0,1fr)_26rem]">
       {/* Left: readiness, sections, conflicts and gaps */}
       <aside aria-label="Readiness and sections" className="hidden lg:block">
         <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
@@ -580,7 +580,7 @@ function FilterChip({ active, className, ...props }: React.ComponentProps<"butto
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium max-sm:h-10 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+        "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium max-sm:h-10 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
         active ? "border-foreground/25 bg-card text-foreground shadow-xs ring-1 ring-foreground/10" : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}

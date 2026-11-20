@@ -19,12 +19,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function NewHandoverPage({ searchParams }: PageProps<"/handover/new">) {
   return (
-    <PageContainer width="narrow" className="space-y-8 pb-0 lg:pb-0">
+    <PageContainer width="narrow" className="space-y-8" frameClassName="pb-0 lg:pb-0">
       <PageHeader
         back={{ href: routes.dashboard, label: "Dashboard" }}
-        eyebrow="New handover"
         title="Start a handover"
-        description="Who is involved, consent, the chats and documents that hold the knowledge, and what Baton may read. Your draft saves as you go."
         divider={false}
       />
       <Suspense fallback={<FormSkeleton label="Opening your draft…" />}>

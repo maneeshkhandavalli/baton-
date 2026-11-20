@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Account" };
 export default function AccountPage() {
   return (
     <PageContainer width="narrow" className="space-y-8">
-      <PageHeader eyebrow="Workspace" title="Account" description="Your sign-in details, creatorship offers and account deletion." />
+      <PageHeader title="Account" />
       <Suspense fallback={<ListSkeleton label="Loading your account…" rows={3} />}>
         <AccountContent />
       </Suspense>

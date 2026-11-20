@@ -80,7 +80,7 @@ function TimelineGroups({ groups }: { groups: TimelineModel["groups"] }) {
         return (
           <section key={g.key} aria-labelledby={headingId} className="space-y-3" data-timeline-group={g.key}>
             <div className="space-y-1">
-              <h3 id={headingId} className="type-eyebrow text-muted-foreground">
+              <h3 id={headingId} className="text-sm font-medium text-muted-foreground">
                 {g.label}
                 <span className="sr-only">
                   {", "}

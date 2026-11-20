@@ -13,11 +13,27 @@
  */
 
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, X } from "lucide-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { Button } from "@/components/ui/button";
-import { IDLE_TOUR, currentStep, onStepPage, placeTourCard, stepProgress, type Placement, type Rect, type TourStep } from "@/lib/onboarding/tour";
+import {
+  IDLE_TOUR,
+  currentStep,
+  onStepPage,
+  placeTourCard,
+  stepProgress,
+  type Placement,
+  type Rect,
+  type TourStep,
+} from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
 
 import { useGuidance } from "./guidance";
@@ -31,17 +47,28 @@ function visible(el: Element): boolean {
   if (!(el instanceof HTMLElement)) return false;
   if (el.closest("[hidden], [inert]")) return false;
   const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+  return (
+    r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden"
+  );
 }
 
 function findAnchor(anchor: string): HTMLElement | null {
-  const all = document.querySelectorAll<HTMLElement>(`[data-tour="${CSS.escape(anchor)}"]`);
+  const all = document.querySelectorAll<HTMLElement>(
+    `[data-tour="${CSS.escape(anchor)}"]`,
+  );
   for (const el of all) if (visible(el)) return el;
   return null;
 }
 
-const toRect = (r: DOMRect): Rect => ({ top: r.top, left: r.left, width: r.width, height: r.height });
-const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const toRect = (r: DOMRect): Rect => ({
+  top: r.top,
+  left: r.left,
+  width: r.width,
+  height: r.height,
+});
+const reducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function TourOverlay() {
   const g = useGuidance();
@@ -60,9 +87,19 @@ export function TourOverlay() {
   });
 
   // The element found for a step (keyed by step id, so a new step never shows the previous step's element).
-  const [found, setFound] = useState<{ stepId: string; el: HTMLElement } | null>(null);
-  const anchorEl = step && onPage && found?.stepId === step.id && found.el.isConnected ? found.el : null;
-  const [measured, setMeasured] = useState<{ el: HTMLElement; rect: Rect; place: Placement } | null>(null);
+  const [found, setFound] = useState<{
+    stepId: string;
+    el: HTMLElement;
+  } | null>(null);
+  const anchorEl =
+    step && onPage && found?.stepId === step.id && found.el.isConnected
+      ? found.el
+      : null;
+  const [measured, setMeasured] = useState<{
+    el: HTMLElement;
+    rect: Rect;
+    place: Placement;
+  } | null>(null);
   const rect = measured && measured.el === anchorEl ? measured.rect : null;
   const place = measured && measured.el === anchorEl ? measured.place : null;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -70,7 +107,10 @@ export function TourOverlay() {
   const returnFocus = useRef<HTMLElement | null>(null);
   const focusedStep = useRef<string | null>(null);
   // Off the step's page for a moment (navigation in flight) vs. really elsewhere: show "paused" only after a delay.
-  const [offPageSince, setOffPageSince] = useState<{ stepId: string; long: boolean } | null>(null);
+  const [offPageSince, setOffPageSince] = useState<{
+    stepId: string;
+    long: boolean;
+  } | null>(null);
   const titleId = useId();
   const bodyId = useId();
 
@@ -78,10 +118,17 @@ export function TourOverlay() {
   useEffect(() => {
     if (tour.status === "running" && !returnFocus.current) {
       const active = document.activeElement;
-      returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
+      returnFocus.current =
+        active instanceof HTMLElement && active !== document.body
+          ? active
+          : null;
     }
     if (tour.status === "finished") {
-      record?.({ type: "tour_finished", role: tour.role, status: tour.outcome });
+      record?.({
+        type: "tour_finished",
+        role: tour.role,
+        status: tour.outcome,
+      });
       dispatch?.({ type: "reset" });
       const back = returnFocus.current;
       returnFocus.current = null;
@@ -97,7 +144,8 @@ export function TourOverlay() {
   useEffect(() => {
     if (!step || !onPage || !dispatch) return;
     let cancelled = false;
-    const deadline = Date.now() + (step.optional ? WAIT_OPTIONAL_MS : WAIT_REQUIRED_MS);
+    const deadline =
+      Date.now() + (step.optional ? WAIT_OPTIONAL_MS : WAIT_REQUIRED_MS);
     const look = () => {
       if (cancelled) return;
       const el = findAnchor(step.anchor);
@@ -106,7 +154,8 @@ export function TourOverlay() {
         if (r.top < 64 || r.bottom > window.innerHeight - 64) {
           const behavior = reducedMotion() ? "auto" : "smooth";
           // a tall element starts just below the sticky headers, so its heading stays visible
-          if (r.height > window.innerHeight * 0.55) window.scrollTo({ top: window.scrollY + r.top - 120, behavior });
+          if (r.height > window.innerHeight * 0.55)
+            window.scrollTo({ top: window.scrollY + r.top - 120, behavior });
           else el.scrollIntoView({ block: "center", behavior });
         }
         setFound({ stepId: step.id, el });
@@ -116,13 +165,17 @@ export function TourOverlay() {
         if (running.status === "running") {
           const absent = running.steps
             .slice(running.index + 1)
-            .filter((s) => s.optional && s.href === step.href && !findAnchor(s.anchor))
+            .filter(
+              (s) =>
+                s.optional && s.href === step.href && !findAnchor(s.anchor),
+            )
             .map((s) => s.id);
           if (absent.length > 0) dispatch({ type: "prune", stepIds: absent });
         }
         return;
       }
-      if (Date.now() > deadline) dispatch({ type: "anchor_missing", stepId: step.id });
+      if (Date.now() > deadline)
+        dispatch({ type: "anchor_missing", stepId: step.id });
       else timer = window.setTimeout(look, 120);
     };
     let timer = window.setTimeout(look, 0);
@@ -134,7 +187,10 @@ export function TourOverlay() {
 
   useEffect(() => {
     if (!step || onPage) return;
-    const t = window.setTimeout(() => setOffPageSince({ stepId: step.id, long: true }), PAUSED_PILL_DELAY_MS);
+    const t = window.setTimeout(
+      () => setOffPageSince({ stepId: step.id, long: true }),
+      PAUSED_PILL_DELAY_MS,
+    );
     return () => window.clearTimeout(t);
   }, [step, onPage]);
 
@@ -143,10 +199,33 @@ export function TourOverlay() {
     if (!anchorEl || !anchorEl.isConnected) return;
     const r = toRect(anchorEl.getBoundingClientRect());
     const card = cardRef.current;
-    const size = { width: card?.offsetWidth || Math.min(352, window.innerWidth - 24), height: card?.offsetHeight || 200 };
-    const avoid = [...document.querySelectorAll("[data-tour-avoid]")].filter(visible).map((el) => toRect(el.getBoundingClientRect()));
-    const padded = { top: r.top - PAD, left: r.left - PAD, width: r.width + 2 * PAD, height: r.height + 2 * PAD };
-    setMeasured({ el: anchorEl, rect: r, place: placeTourCard(padded, size, { width: window.innerWidth, height: window.innerHeight }, avoid) });
+    const size = {
+      width: card?.offsetWidth || Math.min(320, window.innerWidth - 32),
+      height: card?.offsetHeight || 200,
+    };
+    const avoid = [...document.querySelectorAll("[data-tour-avoid]")]
+      .filter(visible)
+      .map((el) => toRect(el.getBoundingClientRect()));
+    // A target taller than half the screen: keep clear of its top part (the heading people read first); the rest
+    // scrolls past under the card.
+    const h =
+      r.height > window.innerHeight * 0.55 ? Math.min(r.height, 140) : r.height;
+    const padded = {
+      top: r.top - PAD,
+      left: r.left - PAD,
+      width: r.width + 2 * PAD,
+      height: h + 2 * PAD,
+    };
+    setMeasured({
+      el: anchorEl,
+      rect: r,
+      place: placeTourCard(
+        padded,
+        size,
+        { width: window.innerWidth, height: window.innerHeight },
+        avoid,
+      ),
+    });
   }, [anchorEl]);
 
   useLayoutEffect(() => {
@@ -196,7 +275,8 @@ export function TourOverlay() {
     if (tour.status !== "running" || !dispatch) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
-      if (document.querySelector("[role=dialog][data-open], [role=menu]")) return; // a modal or menu is open: it closes first
+      if (document.querySelector("[role=dialog][data-open], [role=menu]"))
+        return; // a modal or menu is open: it closes first
       dispatch({ type: "dismiss" });
     };
     document.addEventListener("keydown", onKey);
@@ -206,7 +286,8 @@ export function TourOverlay() {
   const go = useCallback(
     (target: TourStep | undefined, event: "next" | "back") => {
       dispatch?.({ type: event });
-      if (target?.href && !onStepPage(target, pathname)) router.push(target.href);
+      if (target?.href && !onStepPage(target, pathname))
+        router.push(target.href);
     },
     [dispatch, pathname, router],
   );
@@ -221,14 +302,27 @@ export function TourOverlay() {
   if (!onPage) {
     if (!(offPageSince?.stepId === step.id && offPageSince.long)) return null;
     return (
-      <div className="fixed bottom-4 left-4 z-[60] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-border bg-popover py-1.5 pr-1.5 pl-4 text-sm shadow-overlay">
-        <span className="truncate text-muted-foreground">Tour paused · {progress.label}</span>
+      <div className="fixed bottom-4 left-4 z-[60] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-xl border border-border bg-popover py-1.5 pr-1.5 pl-3 text-sm shadow-raised">
+        <span className="truncate text-muted-foreground">
+          Tour paused ({progress.label})
+        </span>
         {step.href && (
-          <Button size="sm" variant="outline" className="rounded-full" onClick={() => router.push(step.href!)}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="max-sm:h-10"
+            onClick={() => router.push(step.href!)}
+          >
             Continue
           </Button>
         )}
-        <Button size="icon-sm" variant="ghost" className="rounded-full" aria-label="End the tour" onClick={() => dispatch({ type: "dismiss" })}>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="max-sm:size-10"
+          aria-label="End the tour"
+          onClick={() => dispatch({ type: "dismiss" })}
+        >
           <X aria-hidden="true" />
         </Button>
       </div>
@@ -244,8 +338,13 @@ export function TourOverlay() {
         <div
           aria-hidden="true"
           data-testid="tour-highlight"
-          className="pointer-events-none fixed z-[60] rounded-[10px] ring-2 ring-primary shadow-[0_0_0_6px_color-mix(in_srgb,var(--primary)_18%,transparent)] motion-safe:transition-[top,left,width,height] motion-safe:duration-200"
-          style={{ top: rect.top - PAD, left: rect.left - PAD, width: rect.width + 2 * PAD, height: rect.height + 2 * PAD }}
+          className="pointer-events-none fixed z-[60] rounded-lg ring-2 ring-primary motion-safe:transition-[top,left,width,height] motion-safe:duration-200"
+          style={{
+            top: rect.top - PAD,
+            left: rect.left - PAD,
+            width: rect.width + 2 * PAD,
+            height: rect.height + 2 * PAD,
+          }}
         />
       )}
       <div
@@ -256,38 +355,59 @@ export function TourOverlay() {
         aria-describedby={bodyId}
         data-testid="tour-card"
         className={cn(
-          "fixed z-[61] w-[22rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-overlay",
+          "fixed z-[61] w-80 rounded-xl border border-border bg-popover p-3.5 text-popover-foreground shadow-raised max-sm:w-[calc(100vw-2rem)]",
           !(anchorEl && place) && "invisible",
         )}
-        style={place ? { top: place.top, left: place.left } : { top: 0, left: 0 }}
+        style={
+          place ? { top: place.top, left: place.left } : { top: 0, left: 0 }
+        }
       >
-        <div className="flex items-center justify-between gap-3">
-          <p className="type-eyebrow text-muted-foreground">
-            Tour · <span className="tabular-nums">{progress.label}</span>
+        <div className="flex items-start justify-between gap-3">
+          <h2
+            id={titleId}
+            ref={headingRef}
+            tabIndex={-1}
+            className="type-heading outline-none"
+          >
+            {step.title}
+          </h2>
+          <p className="shrink-0 pt-px text-caption tabular-nums text-muted-foreground">
+            <span className="sr-only">Step </span>
+            {progress.label}
           </p>
-          <Button size="sm" variant="ghost" className="-mr-2 h-8 text-muted-foreground" onClick={() => dispatch({ type: "dismiss" })}>
-            Skip tour
-          </Button>
         </div>
-        <h2 id={titleId} ref={headingRef} tabIndex={-1} className="mt-1 type-subheading outline-none">
-          {step.title}
-        </h2>
-        <p id={bodyId} className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+        <p
+          id={bodyId}
+          className="mt-1 text-sm leading-relaxed text-muted-foreground"
+        >
           {step.body}
         </p>
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <Button size="sm" variant="ghost" disabled={index === 0} onClick={() => go(steps[index - 1], "back")}>
-            <ArrowLeft aria-hidden="true" data-icon="inline-start" />
-            Back
+        <div className="mt-3 flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="-ml-2 mr-auto text-muted-foreground max-sm:h-10"
+            onClick={() => dispatch({ type: "dismiss" })}
+          >
+            Skip
+            <span className="sr-only"> tour</span>
           </Button>
-          <div className="flex items-center gap-1.5" aria-hidden="true">
-            {steps.map((s, i) => (
-              <span key={s.id} className={cn("size-1.5 rounded-full", i === index ? "bg-primary" : "bg-border-strong")} />
-            ))}
-          </div>
-          <Button size="sm" onClick={() => go(steps[index + 1], "next")}>
+          {index > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="max-sm:h-10"
+              onClick={() => go(steps[index - 1], "back")}
+            >
+              Back
+            </Button>
+          )}
+          <Button
+            size="sm"
+            className="max-sm:h-10"
+            onClick={() => go(steps[index + 1], "next")}
+          >
             {last ? "Done" : (step.nextLabel ?? "Next")}
-            {!last && <ArrowRight aria-hidden="true" data-icon="inline-end" />}
           </Button>
         </div>
       </div>
