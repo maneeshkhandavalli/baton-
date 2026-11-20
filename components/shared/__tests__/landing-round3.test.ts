@@ -83,7 +83,7 @@ describe("landing: calls to action, anchors and the marketing header", () => {
   });
   it("the header keeps the skip link, the theme toggle, and one session-aware action streamed in Suspense", () => {
     assert.match(header, /href="#main"/);
-    assert.match(header, /<ThemeToggle \/>/);
+    assert.match(header, /<ThemeToggle( className="[^"]*")? \/>/);
     assert.match(header, /<Suspense fallback=\{<MarketingHeaderActionsFallback \/>\}>\s*<MarketingHeaderActions \/>/);
     assert.doesNotMatch(header, /href=\{routes\.dashboard\}/,"the header itself never hard-codes the workspace action");
   });
