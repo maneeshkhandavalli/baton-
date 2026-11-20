@@ -140,6 +140,7 @@ tunnel origin), with `BATON_SITE_URL` = tunnel origin in `.env.local` only. Neve
 ## What is captured
 
 * Top-level messages and thread replies (as replies) of linked channels, after consent; edits replace the saved
-  text; deletions are recorded as deleted. Files without text become "media omitted". Bot messages, joins and leaves
+  text (only edits made in the same capture window as the message); deletions are recorded as deleted (contentless,
+  applied even when the deletion happened during a pause and was delivered after resuming). Files without text become "media omitted". Bot messages, joins and leaves
   are skipped. Author = Slack display name (or real name).
 * Slack expects an answer within 3 seconds; Baton only looks up display names for channels that are capturing.

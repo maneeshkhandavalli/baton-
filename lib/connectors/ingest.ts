@@ -49,7 +49,9 @@ export function sanitizeMessages(messages: readonly ConnectorMessage[]): Connect
       kind: m.kind,
       text: m.kind === "media_omitted" || m.kind === "deleted" ? "" : text,
       replyToId: typeof m.replyToId === "string" && m.replyToId.length <= L.providerMessageIdChars ? m.replyToId : null,
-      editedAt: typeof m.editedAt === "string" && ISO_RE.test(m.editedAt) ? new Date(m.editedAt).toISOString() : null,
+      // A deletion is a privacy tombstone: it carries no edit time, so the capture-window check uses only the original
+      // send time and a deletion is never refused because of an earlier edit made in another window or a pause.
+      editedAt: m.kind !== "deleted" && typeof m.editedAt === "string" && ISO_RE.test(m.editedAt) ? new Date(m.editedAt).toISOString() : null,
     });
   }
   return out;

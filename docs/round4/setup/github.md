@@ -75,8 +75,8 @@ Tick exactly these (they appear once the matching permission is selected; `insta
 |---|---|
 | Installation (`installation`) | Lifecycle: `deleted` → the connection is revoked in Baton (buffered messages deleted); `suspend` / `unsuspend` → capture stops / resumes. Always delivered. |
 | Installation repositories (`installation_repositories`) | `removed` → every capturing link of a removed repository is paused. Always delivered. |
-| Issues | Opened, edited (replaces the earlier text), closed (incl. "as not planned"), reopened. |
-| Issue comment | Comments on issues and pull requests: created, edited (replaces), deleted (marked deleted). |
+| Issues | Opened, edited (replaces the earlier text), closed (incl. "as not planned"), reopened. Edits count only when made in the same capture window the issue or PR was opened in (an edit after a pause, or of an item opened before consent, is not captured); closing or reopening an older item is captured with its current title. |
+| Issue comment | Comments on issues and pull requests: created, edited (replaces), deleted (marked deleted). New comments on issues opened before consent are captured on their own (without the issue body). |
 | Pull request | Opened (incl. draft), edited, merged, closed without merging, reopened, ready for review. |
 | Pull request review | Approved, changes requested, and review summaries with text. Inline code comments are not captured. |
 | Push | Commit messages pushed to the **default branch only**, one message per commit (≤ 100 per push), merge-commit noise skipped, emails removed from trailers such as `Co-authored-by`. |

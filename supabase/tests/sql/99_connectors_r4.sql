@@ -333,3 +333,48 @@ begin
   perform tests.throws('select public._connector_backfill_capture_windows()', '42501', 'the backfill is not callable by API roles');
   perform tests.as_owner();
 end $$;
+
+-- ── 11. deletions are privacy tombstones (2026-11-20 review) ──────────────────
+-- The app sends a deletion as kind 'deleted', empty body and NO edited_at (lib/connectors/ingest.ts sanitizeMessages),
+-- so the database checks only the original send time: a tombstone for a message from an earlier authorised window is
+-- applied while capturing, and a tombstone for a message sent outside every window creates nothing.
+create function tests.tomb(p_link uuid, p_id text, p_sent text, p_edited text default null) returns jsonb
+language sql as $$
+  select public.connector_buffer_messages(p_link, jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+    'provider_message_id', p_id, 'sent_at', p_sent, 'edited_at', p_edited, 'author_label', 'Asha', 'kind', 'deleted', 'text', ''))))
+$$;
+grant execute on function tests.tomb(uuid, text, text, text) to service_role;
+create function tests.buf_kind(p_msg text) returns text language sql security definer as
+  $$ select kind from public.connector_buffered_messages where provider_message_id = p_msg $$;
+grant execute on function tests.buf_kind(text) to service_role;
+do $$
+declare
+  v_inst uuid;
+  v_link uuid;
+begin
+  perform tests.as_service();
+  v_inst := (public.connector_upsert_installation('user', tests.id('ann'), 'slack', 'T0TOMB', 'Tombstone QA', '{}', null) ->> 'id')::uuid;
+  v_link := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), 'C0TOMB', '#tomb', '{}') ->> 'id')::uuid;
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link, 'connector-capture-v1');
+  perform tests.as_owner();
+  delete from public.connector_capture_windows where link_id = v_link;
+  insert into public.connector_capture_windows (link_id, opened_at, closed_at)
+  values (v_link, '2031-01-01T08:00:00Z', '2031-01-01T09:00:00Z'), (v_link, '2031-01-01T10:00:00Z', null);
+
+  perform tests.as_service();
+  perform tests.eq(tests.wbuf(v_link, 'tA', '2031-01-01T08:30:00Z', null, 'deleted later') ->> 'inserted', '1', 'window-A message buffered');
+  perform tests.eq(tests.tomb(v_link, 'tA', '2031-01-01T08:30:00Z') ->> 'updated', '1',
+                   'a tombstone for a window-A message, delivered in window B, is applied');
+  perform tests.eq(tests.buf_kind('tA'), 'deleted', 'the row is now a tombstone');
+  perform tests.eq(tests.buf_body('tA'), '', 'the deleted text is gone');
+  perform tests.eq(tests.tomb(v_link, 'tP', '2031-01-01T09:30:00Z') ->> 'outside_window', '1', 'a tombstone for a message sent during the pause creates nothing');
+  perform tests.eq(tests.tomb(v_link, 'tC', '2031-01-01T07:30:00Z') ->> 'outside_window', '1', 'a tombstone for a message sent before consent creates nothing');
+  perform tests.eq(tests.tomb(v_link, 'tN', '2031-01-01T08:40:00Z') ->> 'inserted', '1',
+                   'a tombstone for an authorised message no longer buffered is a contentless marker');
+  perform tests.eq(tests.buf_body('tN'), '', 'the marker has no body');
+  -- defence in depth: the database itself still window-checks an edited_at if one is supplied (the app never sends one)
+  perform tests.eq(tests.tomb(v_link, 'tA', '2031-01-01T08:30:00Z', '2031-01-01T10:30:00Z') ->> 'outside_window', '1',
+                   'a tombstone that carries a cross-window edit time is refused by the database');
+  perform tests.eq(tests.buf_count(v_link), 2, 'only tA and tN exist');
+  perform tests.as_owner();
+end $$;

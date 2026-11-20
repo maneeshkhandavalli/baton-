@@ -78,6 +78,24 @@ possible while the handover is draft/in review; otherwise messages stay buffered
   Bot/self messages are skipped by the adapter (`bot_or_self_message`).
 * ≤100 messages per event (`sanitizeMessages` trims; adapters should trim earlier, e.g. pushes).
 
+### 4a. Capture windows (consent boundary, migration `20261120800300`)
+
+* Consent opens a window, pause and disconnect close it, resume and re-consent open a new one. Only the FIRST window
+  is back-dated, by the consented history days (max 30). Boundaries are `[opened, closed)` at second precision.
+* A message is stored only when its original send time lies in a window; an **edit** only when its edit time lies in
+  the SAME window. Edits of objects created before consent, during a pause or in an earlier window are refused and
+  never overwrite what was captured (privacy-first limitation; e.g. a GitHub issue edited after a pause keeps its
+  earlier captured text). Refusals are ledgered as `outside_capture_window`.
+* **Deletions are privacy tombstones.** `kind: "deleted"` always has an empty body and **no edit time**
+  (`sanitizeMessages` drops it), so only the original send time is checked: a deletion of a message from any
+  authorised window is applied whenever it is delivered while the link is capturing, even if the deletion happened
+  during a pause or after an edit in another window. A deletion of a message sent outside every window creates
+  nothing. A deletion of an authorised message that is no longer buffered (already added) leaves a contentless
+  `deleted` marker; it cannot retract a version already added to the handover.
+* **Known gap:** a deletion delivered while the link is **paused** is dropped like every other event of a
+  non-capturing link, so the buffered original remains until the next flush. (Tests:
+  `lib/connectors/__tests__/capture-windows-deletions.test.ts`, SQL `99_connectors_r4.sql` §9–§11.)
+
 ## 5. Fixed routes and ownership
 
 | Path | Owner | Notes |
