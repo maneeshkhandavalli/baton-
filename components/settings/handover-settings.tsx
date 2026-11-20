@@ -133,10 +133,20 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
         {creator && (h.state === "approved" || h.state === "acknowledged") && (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">The published version stays readable while you revise. Publishing again asks the incoming member to re-acknowledge.</p>
-            <Button variant="outline" className="max-sm:h-10" disabled={isPending} onClick={() => run(() => startRevision({ handoverId: h.id }), { success: "Revision started", onSuccess: () => router.push(routes.handover.review(h.id)) })}>
-              <RotateCcw aria-hidden="true" data-icon="inline-start" />
-              Start a revision
-            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button variant="outline" className="max-sm:h-10" disabled={isPending}>
+                  <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                  Start a revision
+                </Button>
+              }
+              title="Start a revision?"
+              description="The handover moves from Published to In review. The published version stays readable while you revise, and publishing again asks the incoming member to re-acknowledge."
+              confirmLabel="Start revision"
+              onConfirm={async () => {
+                await run(() => startRevision({ handoverId: h.id }), { success: "Revision started", onSuccess: () => router.push(routes.handover.review(h.id)) });
+              }}
+            />
           </div>
         )}
       </Panel>
