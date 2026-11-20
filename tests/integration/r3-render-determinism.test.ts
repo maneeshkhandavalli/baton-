@@ -228,7 +228,7 @@ describe("Decision timeline renders deterministically, in date order", async () 
     assert.match(html, /<time[^>]*dateTime="2026-03-31T18:45:00Z"[^>]*>1 Apr<\/time>/, "the midnight quote is dated in India time");
     assert.match(html, /Sources disagree/);
     assert.match(html, /Supported 2 Apr · Contradicted 5 Apr/);
-    assert.match(html, /<dt[^>]*>Due<\/dt><dd[^>]*>15 Mar 2026<\/dd>/, "the due date is a label");
+    assert.match(html, /<dt[^>]*>Due<\/dt><dd[^>]*>(?:<span>)*15 Mar 2026(?:<\/span>)*<\/dd>/, "the due date is a label");
     assert.match(html, /No date/, "undated rows say so in text");
     assert.doesNotMatch(html, /e999/, "redacted evidence leaves no trace");
     assert.match(html, /aria-expanded="false"/, "evidence is a closed disclosure until asked for");

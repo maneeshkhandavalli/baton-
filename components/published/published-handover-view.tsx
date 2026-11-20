@@ -252,7 +252,9 @@ function PublishedPoint({ point }: { point: Point }) {
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted-foreground">{k}</dt>
-              <dd className="min-w-0 break-words">{v}</dd>
+              <dd className="min-w-0 break-words">
+                <MaskedText text={v} />
+              </dd>
             </div>
           ))}
         </dl>
@@ -394,8 +396,8 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
                     >
                       <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} className="mt-0.5 size-4 shrink-0 accent-[var(--success)] outline-none" />
                       <span className="min-w-0">
-                        <span className={cn("block leading-snug", checked && "line-through")}>{item.title}</span>
-                        {item.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{item.detail}</span>}
+                        <MaskedText text={item.title} className={cn("block leading-snug", checked && "line-through")} />
+                        {item.detail && <MaskedText text={item.detail} className="mt-0.5 block text-sm text-muted-foreground" />}
                       </span>
                     </label>
                   </li>
