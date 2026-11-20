@@ -25,6 +25,7 @@ import { ExtractionCoverageSummary } from "@/components/review/extraction-covera
 import type { ExtractionReport } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
+import { newSourcesAwaitingProcessing, processingControls } from "./processing-controls";
 import { processingHeadline } from "./processing-headline";
 import { sourceErrorText } from "./source-error";
 
@@ -89,6 +90,21 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   }, {});
   const totalMasked = Object.values(masking).reduce((a, b) => a + (b ?? 0), 0);
   const needsConsent = sourcesNeedingConsent(sources, reconsentAll);
+  // 2026-11-20: sources ADDED since the last succeeded run (first versions, e.g. a connector's chat_import) also
+  // keep the consent checklist and the start button visible; they are not "updates" (processing-controls.ts).
+  const newSources = newSourcesAwaitingProcessing(sources, r?.status ?? null);
+  const controls = processingControls({
+    active,
+    canStart,
+    handoverState,
+    runStatus: r?.status ?? null,
+    sourceCount: sources.length,
+    pendingUpdates: pendingUpdates.length,
+    newSources: newSources.length,
+    needsConsent: needsConsent.length,
+    consentComplete: consentComplete(consent),
+    isPending,
+  });
   const failedSources = sources.filter((s) => s.state === "failed");
   const reason = r?.status === "failed" ? runReasonText(r.error?.message) : null;
   const currentStage = stages.find((s) => s.status === "running");
@@ -99,6 +115,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
     startedAt: r?.startedAt ? formatDateTime(r.startedAt) : null,
     finishedAt: r?.finishedAt ? formatDateTime(r.finishedAt) : null,
     pendingUpdates: pendingUpdates.length,
+    newSources: newSources.length,
     openReviews,
     handoverState,
   });
@@ -278,9 +295,9 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
           </ul>
         )}
 
-        {!active && canStart && (handoverState === "draft" || handoverState === "in_review") && (r?.status !== "succeeded" || pendingUpdates.length > 0) && (
+        {controls.showStart && (
           <div className="space-y-4 border-t border-border pt-5">
-            {needsConsent.length > 0 && (
+            {controls.showConsent && (
               <div className="space-y-3">
                 <div className="space-y-1">
                   <h3 className="type-subheading">Confirm consent first</h3>
@@ -299,21 +316,19 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
               </Alert>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="lg" aria-busy={isPending} disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
+              <Button size="lg" aria-busy={isPending} disabled={controls.startDisabled} onClick={start}>
                 {isPending ? (
                   <>
                     <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
                     Starting…
                   </>
-                ) : pendingUpdates.length > 0 && handoverState === "in_review" ? (
-                  pendingUpdates.length === 1 ? "Process the new version" : "Process the new versions"
-                ) : r ? (
+                ) : controls.label === "Try again" ? (
                   <>
                     <RotateCcw aria-hidden="true" data-icon="inline-start" />
                     Try again
                   </>
                 ) : (
-                  "Start processing"
+                  controls.label
                 )}
               </Button>
               {handoverState === "draft" &&
@@ -329,6 +344,13 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                   </Link>
                 ))}
             </div>
+            {newSources.length > 0 && pendingUpdates.length === 0 && (
+              // A source added in review is processed with the others (the scoped run is for version updates only);
+              // extraction matches points it already found instead of duplicating them.
+              <p className="text-caption text-muted-foreground">
+                Baton processes every source again, including the ones already processed. Points it already found are matched, not duplicated.
+              </p>
+            )}
             {sources.length === 0 ? (
               <p className="text-caption text-muted-foreground">This handover has no sources yet. Add at least one to start.</p>
             ) : (

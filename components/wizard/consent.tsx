@@ -9,6 +9,8 @@ import { MASK_KINDS, type MaskKind } from "@/lib/contracts/enums";
 import { consentDisclosure, type ConsentDisclosure } from "@/lib/contracts/consent";
 import { cn } from "@/lib/utils";
 
+import { type ConsentItemId } from "./consent-state";
+
 /**
  * R3 Task 05D: the AI-processing statement is decided by the SERVER from the actual configuration
  * (lib/ai/consent-disclosure.ts → ConsentDisclosure) and passed down: a local fake adapter is never presented as
@@ -20,8 +22,7 @@ export const DEFAULT_CONSENT_DISCLOSURE: ConsentDisclosure = consentDisclosure("
 /** @deprecated the statement version depends on the configuration: use `disclosure.statementVersion`. */
 export const CONSENT_STATEMENT_VERSION = consentDisclosure("gemini_free").statementVersion;
 
-export const CONSENT_ITEM_IDS = ["informed", "provider", "optout"] as const;
-export type ConsentItemId = (typeof CONSENT_ITEM_IDS)[number];
+export { CONSENT_ITEM_IDS, consentComplete, emptyConsent, type ConsentItemId } from "./consent-state";
 
 export function consentItems(disclosure: ConsentDisclosure): ReadonlyArray<{ id: ConsentItemId; label: string }> {
   return [
@@ -75,8 +76,6 @@ export function ConsentChecklist({
   );
 }
 
-export const emptyConsent = (): Record<ConsentItemId, boolean> => ({ informed: false, provider: false, optout: false });
-export const consentComplete = (v: Record<ConsentItemId, boolean>) => CONSENT_ITEM_IDS.every((id) => v[id]);
 
 export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, number>> }) {
   return (
