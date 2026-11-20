@@ -67,12 +67,7 @@ function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
       <ul className="divide-y divide-border">
         {items.map((it) => (
           <li key={it.key} className="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
-            <span
-              aria-hidden="true"
-              className={cn("hidden size-8 shrink-0 items-center justify-center rounded-md border sm:flex", it.danger ? "border-destructive/25 bg-destructive-soft text-destructive-fg" : "border-border bg-muted/60 text-muted-foreground")}
-            >
-              <it.icon className="size-4" />
-            </span>
+            <it.icon aria-hidden="true" className={cn("hidden size-4 shrink-0 sm:block", it.danger ? "text-destructive-fg" : "text-muted-foreground")} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{it.title}</p>
               <p className={cn("text-caption", it.danger ? "text-destructive-fg" : "text-muted-foreground")}>{it.reason}</p>
@@ -91,7 +86,7 @@ function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
 
 function CardGrid({ cards }: { cards: HandoverCardData[] }) {
   return (
-    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 min-[1680px]:grid-cols-4">
+    <ul className="grid gap-4 sm:grid-cols-2 min-[1600px]:grid-cols-3">
       {cards.map((c) => (
         <li key={c.handover.id}>
           <HandoverCard data={c} />
@@ -177,7 +172,7 @@ export function DashboardView({ result, newHandover, demoHref, preview = false }
       <UpNext items={upNext} total={totalAttention} />
       {drafts.length > 0 && (
         <section aria-labelledby="drafts" className="space-y-4">
-          <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} description="Saved as you go. Continue from the step you reached." />
+          <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} />
           <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
             {drafts.map((c) => (
               <DraftRow key={c.handover.id} data={c} preview={preview} />
@@ -187,13 +182,13 @@ export function DashboardView({ result, newHandover, demoHref, preview = false }
       )}
       {preparing.length > 0 && (
         <section aria-labelledby="preparing" className="space-y-4">
-          <SectionHeading id="preparing" title="Preparing and reviewing" count={preparing.length} description="Handovers you're writing or checking. Those that need you come first." />
+          <SectionHeading id="preparing" title="Preparing and reviewing" count={preparing.length} />
           <CardGrid cards={preparing} />
         </section>
       )}
       {receiving.length > 0 && (
         <section aria-labelledby="receiving" className="space-y-4">
-          <SectionHeading id="receiving" title="Handed over to you" count={receiving.length} description="Read the handover, work through the first week, and acknowledge it." />
+          <SectionHeading id="receiving" title="Handed over to you" count={receiving.length} />
           <CardGrid cards={receiving} />
         </section>
       )}

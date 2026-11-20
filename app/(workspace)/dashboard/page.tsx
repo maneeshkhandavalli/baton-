@@ -53,14 +53,22 @@ export default function DashboardPage({ searchParams }: PageProps<"/dashboard">)
 
   return (
     <PageContainer width="wide" className="space-y-8 lg:space-y-10">
-      <PageHeader title="Your handovers" description="What needs you comes first. Drafts, reviews and handovers you've received are below." actions={newHandoverLink} />
-      {/* Round 4: Getting Started, from the user's real handover state (nothing while it loads). */}
-      <Suspense fallback={null}>
-        <GettingStartedSection searchParams={searchParams} />
-      </Suspense>
-      <Suspense fallback={<DashboardBodySkeleton />}>
-        <HandoverList newHandoverLink={newHandoverLink} />
-      </Suspense>
+      <PageHeader title="Your handovers" actions={newHandoverLink} />
+      {/* Wide screens: the handover list and, beside it, Getting Started (UI polish: no empty side gutters).
+          Below xl the checklist comes first, full width. The aside collapses when the checklist renders nothing. */}
+      <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:gap-10">
+        {/* Round 4: Getting Started, from the user's real handover state (nothing while it loads). */}
+        <aside aria-label="Getting started" className="empty:hidden xl:order-last xl:w-[22rem] xl:shrink-0">
+          <Suspense fallback={null}>
+            <GettingStartedSection searchParams={searchParams} />
+          </Suspense>
+        </aside>
+        <div className="min-w-0 flex-1">
+          <Suspense fallback={<DashboardBodySkeleton />}>
+            <HandoverList newHandoverLink={newHandoverLink} />
+          </Suspense>
+        </div>
+      </div>
     </PageContainer>
   );
 }

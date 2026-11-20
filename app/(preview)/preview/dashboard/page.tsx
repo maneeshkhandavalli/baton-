@@ -53,7 +53,7 @@ export default function PreviewDashboardPage({ searchParams }: { searchParams: P
   );
   return (
     <PageContainer width="wide" className="space-y-8 lg:space-y-10">
-      <PageHeader title="Your handovers" description="What needs you comes first. Drafts, reviews and handovers you've received are below." actions={newHandoverLink} />
+      <PageHeader title="Your handovers" actions={newHandoverLink} />
       <Suspense fallback={<DashboardBodySkeleton />}>
         <Content searchParams={searchParams} newHandoverLink={newHandoverLink} />
       </Suspense>
