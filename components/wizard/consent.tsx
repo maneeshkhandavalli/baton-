@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
 import { maskKindLabel } from "@/components/handover/labels";
@@ -50,7 +50,7 @@ export function ConsentChecklist({
       {items.map((item) => (
         <label
           key={item.id}
-          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm leading-relaxed shadow-xs transition-colors hover:border-border-strong has-checked:border-success/40 has-checked:bg-success-soft/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35"
+          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm leading-relaxed transition-colors hover:border-border-strong has-checked:border-success/40 has-checked:bg-success-soft/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35"
         >
           <input
             type="checkbox"
@@ -60,8 +60,7 @@ export function ConsentChecklist({
           />
           <span className="min-w-0">
             {item.id === "provider" && (
-              <span aria-hidden="true" className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold tracking-wide text-warning-fg uppercase">
-                <Sparkles className="size-3" />
+              <span aria-hidden="true" className="mb-1 block text-caption font-medium text-warning-fg">
                 {disclosure.badge}
               </span>
             )}
@@ -79,9 +78,8 @@ export function ConsentChecklist({
 
 export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, number>> }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
-        <ShieldCheck aria-hidden="true" className="size-4 text-success" />
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-4 py-3">
         <p className="type-subheading">Masked before anything is stored or sent to AI</p>
       </div>
       <ul className="divide-y divide-border text-sm">
@@ -107,7 +105,7 @@ export function GroupNotice({ teamName }: { teamName: string }) {
   const text = `Hi all, I'm preparing a handover for ${teamName || "our team"} using Baton. It will read this chat to pull out decisions, owners and open tasks, with quotes as evidence. Phone numbers, emails and payment details are masked first, and the original export is deleted after processing. If you'd rather your messages were left out, reply here or message me in the next few days, before I start processing.`;
   const [copied, setCopied] = useState(false);
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="type-subheading">Tell the group first</p>
@@ -116,6 +114,7 @@ export function GroupNotice({ teamName }: { teamName: string }) {
         <Button
           size="sm"
           variant="outline"
+          className="max-sm:h-10"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(text);

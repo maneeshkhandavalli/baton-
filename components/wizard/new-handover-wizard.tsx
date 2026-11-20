@@ -760,9 +760,6 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
             />
           )}
         </div>
-        {handoverId && (
-          <p className="text-caption text-muted-foreground">Everything is saved as you go. Leave any time and continue from the dashboard.</p>
-        )}
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
@@ -819,7 +816,7 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
               <StepHeading
                 index={3}
                 title="Choose what Baton reads"
-                description="Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and decide who may see evidence from each source."
+                description="Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and set who may see each source."
               />
               {(matches.length > 0 || decisions.length > 0) && (
                 <MatchesSection matches={matches} decisions={decisions.filter((d) => ready.some((s) => s.sourceId === d.sourceId))} onAnswer={answerMatch} disabled={isPending} />
@@ -839,19 +836,19 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
 
       <div data-tour-avoid className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">
-          <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
+          <Button variant="ghost" className="max-sm:h-10" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
             <ArrowLeft aria-hidden="true" data-icon="inline-start" />
             Back
           </Button>
           <div className="flex min-w-0 items-center gap-3">
             {blockedReason && <p className="hidden text-right text-caption text-muted-foreground md:block">{blockedReason}</p>}
             {shownStep < LAST_STEP ? (
-              <Button size="lg" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
+              <Button size="lg" className="max-sm:h-10" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
                 {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft" : "Continue"}
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>
             ) : (
-              <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
+              <Button size="lg" className="max-sm:h-10" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
                 {submitting || savingScope ? "Saving…" : pendingPeople ? "Save and review" : "Start processing"}
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>
@@ -870,7 +867,7 @@ const focusNextStep = { current: false };
 export function StepHeading({ index, title, description, help }: { index: number; title: string; description: string; help?: HelpTopicId }) {
   return (
     <header className="space-y-2">
-      <p className="type-eyebrow text-muted-foreground">
+      <p className="sr-only">
         Step {index + 1} of {STEPS.length}
       </p>
       <h2
@@ -1101,7 +1098,7 @@ export function MatchesSection({
       {matches.length > 0 && (
         <ul className="space-y-2" aria-label="Waiting for your answer">
           {matches.map((m) => (
-            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-xs sm:flex-row sm:items-center">
+            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{m.label}</span> <span className="text-muted-foreground">in {m.sourceName}</span>
                 <span className="block text-caption text-muted-foreground">{identityKindLabel[m.kind].label} match · no decision yet</span>
