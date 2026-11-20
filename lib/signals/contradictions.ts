@@ -4,7 +4,9 @@
  * Until now a point became `conflicting` only when one of ITS OWN cited quotes was judged to contradict
  * it. This module looks beyond the cited messages: for each point it ranks the messages that came AFTER
  * the point's newest cited message and share something with it (people, dates, amounts, topic words),
- * boosted by reversal markers ("actually", "postponed", "moved to") and decision markers.
+ * boosted by reversal markers ("actually", "postponed", "moved to") and decision markers. A message that shares
+ * only ONE topic word with the point must also share a person, a date or an amount with it: a marker shows that
+ * something changed, not that this point's subject did.
  *
  * The result is a list of "possible contradiction" candidates for a reviewer. Nothing here changes a
  * point's status, its evidence or its verdicts: earlier evidence is never overwritten, and a candidate is
@@ -28,6 +30,11 @@ export interface RetrievalPoint {
   statement: string | null;
   attributes: Record<string, unknown> | null;
   citedMessageIds: readonly string[];
+  /**
+   * Round 4 B (audit 4.12): the point's category. When given, two DECISION points on the same subject are compared
+   * with each other (a later decision may supersede an earlier one); without it the behaviour is unchanged.
+   */
+  category?: string | null;
 }
 
 export const CONTRADICTION_REASONS = [
@@ -134,12 +141,17 @@ export function findContradictionCandidates(
     const words = topicWords(`${claimText}\n${citedText}`);
     const citedIds = new Set(p.citedMessageIds);
 
-    const ranked: ContradictionCandidate[] = [];
+    const ranked: ContradictionCandidate[] = supersedingDecisions(p, anchor, claim, points, byId, msgFacts, limits.minScore);
     for (const m of messages) {
       if (citedIds.has(m.id) || !isNewer(m, anchor)) continue;
       const f = msgFacts.get(m.id)!;
       const sharedWords = [...f.words].filter((w) => words.has(w)).length;
       if (sharedWords === 0) continue; // not on topic: never a candidate
+      const msgPeople = new Set([...f.people, ...(m.authorLabel ? [m.authorLabel] : [])]);
+      // One shared topic word ("sponsor") is not the same subject. Markers ("replaced by", "from now on") say that
+      // SOMETHING changed, not that this point did, so with a single shared word the message must also share a
+      // concrete fact with the point (a person, a date or an amount); otherwise it is never a candidate.
+      if (sharedWords < 2 && !intersects(msgPeople, people) && !intersects(f.dates, dates) && !intersects(f.amounts, amounts)) continue;
       const reasons: ContradictionReason[] = ["newer"];
       let score = 0;
       if (sharedWords >= 2) {
@@ -156,7 +168,6 @@ export function findContradictionCandidates(
         reasons.push("decision_marker");
         score += 1;
       }
-      const msgPeople = new Set([...f.people, ...(m.authorLabel ? [m.authorLabel] : [])]);
       if (intersects(msgPeople, people)) {
         reasons.push("shared_participant");
         score += 1;
@@ -179,10 +190,82 @@ export function findContradictionCandidates(
           score += 2;
         }
       }
-      if (score >= limits.minScore) ranked.push({ pointId: p.pointId, messageId: m.id, score, reasons });
+      if (score < limits.minScore) continue;
+      const already = ranked.find((r) => r.messageId === m.id);
+      if (already) {
+        if (score > already.score) Object.assign(already, { score, reasons });
+      } else ranked.push({ pointId: p.pointId, messageId: m.id, score, reasons });
     }
     ranked.sort((a, b) => b.score - a.score || (a.messageId < b.messageId ? -1 : 1));
     out.push(...ranked.slice(0, limits.perPoint));
+  }
+  return out;
+}
+
+type Facts = ReturnType<typeof entities> & { words: Set<string> };
+
+const differs = <T>(a: ReadonlySet<T>, b: ReadonlySet<T>) => a.size > 0 && b.size > 0 && !intersects(a, b);
+
+/**
+ * Round 4 B (audit 4.12, decision-vs-decision supersession). A LATER decision point on the same subject may supersede
+ * this decision even when its message uses no listed reversal word ("the expo is in the seminar hall" after "the
+ * expo is in the main hall"). Conservative: both points are decisions, their claims (title and statement only) share
+ * at least two topic words without being the same claim, the later point's newest cited message is strictly newer
+ * than this point's newest cited message and is not cited by this point, and that message carries a decision or
+ * reversal marker or the two claims name different dates or amounts. The candidate points at that message, like any
+ * other: a pointer for the reviewer, never a status change.
+ */
+function supersedingDecisions(
+  p: RetrievalPoint,
+  anchor: RetrievalMessage,
+  claim: ReturnType<typeof entities>,
+  points: readonly RetrievalPoint[],
+  byId: ReadonlyMap<string, RetrievalMessage>,
+  msgFacts: ReadonlyMap<string, Facts>,
+  minScore: number,
+): ContradictionCandidate[] {
+  if (p.category !== "decision") return [];
+  const citedIds = new Set(p.citedMessageIds);
+  const ownWords = topicWords([p.title ?? "", p.statement ?? ""].join("\n"));
+  const ownStatement = (p.statement ?? "").trim().toLowerCase();
+  const out: ContradictionCandidate[] = [];
+  for (const q of points) {
+    if (q.pointId === p.pointId || q.category !== "decision" || q.statement === null) continue;
+    if (q.statement.trim().toLowerCase() === ownStatement) continue; // the same claim twice is a duplicate, not a change
+    const qCited = q.citedMessageIds.map((id) => byId.get(id)).filter((m): m is RetrievalMessage => m !== undefined);
+    if (qCited.length === 0) continue;
+    const later = qCited.reduce((a, b) => (isNewer(b, a) ? b : a));
+    if (citedIds.has(later.id) || !isNewer(later, anchor)) continue;
+    const shared = [...topicWords([q.title ?? "", q.statement].join("\n"))].filter((w) => ownWords.has(w)).length;
+    if (shared < 2) continue;
+    const f = msgFacts.get(later.id);
+    if (!f) continue;
+    const other = entities(`${q.title ?? ""}\n${q.statement}`);
+    const changedDate = differs(other.dates, claim.dates);
+    const changedAmount = differs(other.amounts, claim.amounts);
+    const reversal = f.kinds.has("reversal");
+    const decision = f.kinds.has("decision");
+    if (!reversal && !decision && !changedDate && !changedAmount) continue;
+    const reasons: ContradictionReason[] = ["newer", "shared_topic"];
+    let score = (shared >= 3 ? 3 : 2) + 2; // same subject, later decision
+    if (reversal) {
+      reasons.push("reversal_marker");
+      score += 3;
+    }
+    if (decision) {
+      reasons.push("decision_marker");
+      score += 1;
+    }
+    if (changedDate) {
+      reasons.push("changed_date");
+      score += 2;
+    }
+    if (changedAmount) {
+      reasons.push("changed_amount");
+      score += 2;
+    }
+    if (score < minScore || out.some((c) => c.messageId === later.id)) continue;
+    out.push({ pointId: p.pointId, messageId: later.id, score, reasons });
   }
   return out;
 }

@@ -20,6 +20,21 @@ export function createClient(url, key, options) {
       throw new Error("@supabase/supabase-js stub: direct table access is not part of Baton (every write is a SQL function)");
     },
     auth: {
+      // The current-password check (app/(workspace)/account/password/actions.ts) signs in on a throwaway client:
+      // recorded with the password replaced, never sent. `globalThis.__batonIt.password.current` shapes it: an
+      // error object, or "throw" (the check can't be done).
+      async signInWithPassword(args) {
+        const s = (globalThis.__batonIt ??= {});
+        (s.authCalls ??= []).push({ client: "probe", name: "signInWithPassword", args: { email: args?.email, password: args?.password ? "[set]" : "" } });
+        const current = s.password?.current ?? null;
+        if (current === "throw") throw new Error("stub: network down");
+        return current ? { data: { session: null }, error: current } : { data: { session: { access_token: "stub" } }, error: null };
+      },
+      async signOut() {
+        const s = (globalThis.__batonIt ??= {});
+        (s.authCalls ??= []).push({ client: "probe", name: "signOut" });
+        return { error: null };
+      },
       // Only deleteUser is emulated (account deletion): recorded, never sent. `globalThis.__batonIt.authAdmin`
       // ({ deleteUserError }) makes it fail. Every other admin call still throws.
       admin: new Proxy({}, {

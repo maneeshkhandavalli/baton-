@@ -308,3 +308,51 @@ describe("requestInvitationSignInLink", () => {
     assert.deepEqual(sent, [TOKEN]);
   });
 });
+
+// Browser verification (bug C): re-inviting an address that has an open invitation must not create a second usable link.
+// The database refuses it (20261121400200, BTCF0 with hint 'invite_pending'); the action explains it.
+describe("inviteMember: one open invitation per address (bug C)", () => {
+  const input = { handoverId: H, email: "x@local.test", role: "incoming" as const };
+  const refused = (hint: string | null): RpcHandler => ({ error: { code: "BTCF0", message: "raw SQL detail", hint } });
+
+  it("an open invitation: conflict/invite_pending with a pointer to Send a new link; no link, no email, no delivery record", async () => {
+    const f = fakeDeps({ rpc: { invite_member: refused("invite_pending") }, email: transport() });
+    const r = await members.inviteMember(f.deps, input);
+    assert.equal(!r.ok && r.error.code, "conflict");
+    assert.equal(!r.ok && r.error.details?.reason, "invite_pending");
+    assert.equal(!r.ok && r.error.message, members.INVITE_PENDING_MESSAGE);
+    assert.match(members.INVITE_PENDING_MESSAGE, /Send a new link/);
+    assert.ok(!/[–—]/.test(members.INVITE_PENDING_MESSAGE), "plain copy, no dashes");
+    assert.deepEqual(f.fns(), ["consume_rate_limit", "consume_rate_limit", "invite_member"]);
+    assert.deepEqual(f.emails, []);
+  });
+
+  it("already a member: conflict/already_member", async () => {
+    const f = fakeDeps({ rpc: { invite_member: refused("already_member") } });
+    const r = await members.inviteMember(f.deps, input);
+    assert.equal(!r.ok && r.error.code, "conflict");
+    assert.equal(!r.ok && r.error.details?.reason, "already_member");
+    assert.equal(!r.ok && r.error.message, "This person is already a member.");
+  });
+
+  it("a conflict without a reason (or with a non-token hint) stays the generic conflict and leaks nothing", async () => {
+    for (const hint of [null, "You might need to add explicit type casts."]) {
+      const f = fakeDeps({ rpc: { invite_member: refused(hint) } });
+      const r = await members.inviteMember(f.deps, input);
+      assert.equal(!r.ok && r.error.code, "conflict");
+      assert.equal(!r.ok && r.error.details, undefined);
+      assert.ok(!JSON.stringify(r).includes("raw SQL") && !JSON.stringify(r).includes("casts"));
+    }
+  });
+
+  it("the first invitation is created and emailed exactly once", async () => {
+    const f = fakeDeps({
+      rpc: { invite_member: { data: NEW_ID }, get_member_invite_details: { data: PENDING }, record_invitation_delivery: { data: P } },
+      email: transport(),
+    });
+    const r = await members.inviteMember(f.deps, input);
+    assert.ok(r.ok);
+    assert.equal(f.emails.length, 1);
+    assert.equal(f.fns().filter((n) => n === "invite_member").length, 1);
+  });
+});

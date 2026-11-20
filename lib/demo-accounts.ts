@@ -30,6 +30,15 @@ export interface DemoAccountEnv {
 
 export const DEMO_ACCOUNT_REFUSAL = "This is a shared demo account, so this action is turned off.";
 
+/**
+ * F3 (21 Nov): the shared demo accounts are public, so they may explore, review, publish and acknowledge the seeded
+ * handovers, but may not add content or spend on AI: no new handovers, uploads, new source versions, consent to new
+ * sources, processing runs, revisions, or deletions. Enforced in the server actions (all writes go through them;
+ * the authenticated role has no table write grants). Remove together with the demo panel after judging.
+ */
+export const DEMO_CONTENT_REFUSAL =
+  "Demo accounts can explore, review and publish the sample handovers, but can't add files, points or questions, start AI processing or create new handovers. Create your own account to try that, or use the no-sign-in demo.";
+
 const clean = (v: string | undefined): string => (typeof v === "string" ? v.trim() : "");
 
 /** The demo accounts to offer, in order (creator first). An account needs an email with "@" and a password. */

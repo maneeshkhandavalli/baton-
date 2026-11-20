@@ -8,6 +8,11 @@
  *   owner explicitly allows it (BATON_ALLOW_LEGACY_IDENTITY_SOURCES=1).
  * - `findsIdentity` is the output guard: model text that names a known participant, or an excluded person
  *   (found by hash, excluded-discovery.ts), is refused.
+ * - `createPayloadPseudonymizer` (R4, audit 3.4): for strings sent to the AI after parsing (human edits,
+ *   Gap Interview answers, team and role titles, model claims): known names, then their joined-honorific,
+ *   nickname and transliteration forms, then any other name found locally (name-detect.ts) as the unnumbered
+ *   `[PERSON]`. It always runs, also for a handover without known people (document-only), so it is never a
+ *   no-op.
  * Nothing here logs names, labels or keys.
  */
 
@@ -15,6 +20,7 @@ import { listHandoverPeopleForJob, type SealedPerson } from "../db/pipeline";
 import { compileExclusions, type CompiledExclusions } from "../privacy/exclusions";
 import { discoverExcludedNames, hasExcludedNameRules } from "../privacy/excluded-discovery";
 import { getIdentityMapKey, openLabel, type IdentityMapKey, type IdentityMapKeyResult } from "../privacy/identity-vault";
+import { createFuzzyKnownMatcher, createUnknownNamePseudonymizer, type TextTransform } from "../privacy/name-detect";
 import { createPseudonymizer, type KnownPerson, type Pseudonymizer } from "../privacy/pseudonymize";
 import { claimOf, type StageContext } from "./stage-context";
 import { failure, type PipelineFailure } from "./types";
@@ -42,6 +48,8 @@ export function legacySourcesAllowed(env: Record<string, string | undefined> = p
 
 export interface JobIdentity {
   detector: Pseudonymizer;
+  /** Joined-honorific, nickname and transliteration forms of the known names (R4). */
+  fuzzy: TextTransform;
   /** True when the job's source predates pseudonymisation (only reachable with the owner's override). */
   legacySource: boolean;
 }
@@ -69,7 +77,28 @@ export async function loadJobIdentity(
     }
     key = k.key;
   }
-  return { ok: true, identity: { detector: createPseudonymizer(openPeople(key, ctx.job.job.handoverId, people)), legacySource } };
+  const known = openPeople(key, ctx.job.job.handoverId, people);
+  return { ok: true, identity: { detector: createPseudonymizer(known), fuzzy: createFuzzyKnownMatcher(known), legacySource } };
+}
+
+/**
+ * The pseudonymiser for one AI request built after parsing. Names are discovered across ALL of `texts`
+ * (the request's strings) so a name is replaced the same way in the claim, the quote and the context.
+ * Never a no-op: unknown names are replaced even when the handover has no known people.
+ */
+export function createPayloadPseudonymizer(
+  identity: { detector?: Pseudonymizer | null; fuzzy?: TextTransform | null } | null,
+  texts: readonly string[],
+): (text: string) => string {
+  const detector = identity?.detector ?? null;
+  const fuzzy = identity?.fuzzy ?? null;
+  const known = (text: string): string => {
+    let t = detector && !detector.isEmpty ? detector.apply(text).text : text;
+    if (fuzzy && !fuzzy.isEmpty) t = fuzzy.apply(t).text;
+    return t;
+  };
+  const unknown = createUnknownNamePseudonymizer(texts.map(known));
+  return (text: string) => (text === "" ? text : unknown.apply(known(text)).text);
 }
 
 /** Excluded-name guard material: the source's apply rules (compiled) and the pepper, or null when not needed. */

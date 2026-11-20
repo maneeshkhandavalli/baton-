@@ -11,7 +11,7 @@ export function botRouteDeps(): BotRouteDeps {
     ...adapterContext(),
     async getActor() {
       const actor = await getVerifiedActor();
-      return actor ? { profileId: actor.profileId } : null;
+      return actor ? { profileId: actor.profileId, email: actor.email } : null; // email: F3 demo-account check only
     },
   };
 }

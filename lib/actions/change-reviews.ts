@@ -12,3 +12,10 @@ export async function decideChangeReview(
 ): Promise<Result<{ outcome: "decided" | "unchanged"; state: string; item: ChangeReviewItem | null }>> {
   return core.decideChangeReview(actionDeps(), input);
 }
+
+/** Round 4 B (audit F4): "Confirm & approve" a point backed by reviewer testimony. */
+export async function confirmTestimonyAndApprove(
+  input: core.ConfirmTestimonyInput,
+): Promise<Result<{ pointId: string; evidenceStatus: "sourced"; reviewState: "approved" }>> {
+  return core.confirmTestimonyAndApprove(actionDeps(), input);
+}

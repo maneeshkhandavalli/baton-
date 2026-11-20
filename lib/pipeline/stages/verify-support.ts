@@ -15,6 +15,10 @@
  * - R3 Task 02 (PRIV-1): every string sent (claim, quote, context, author labels) is pseudonymised with the
  *   handover's known people first, so a name a reviewer typed into a point never reaches the verifier, and a
  *   rationale that names a known participant is not stored (the verdict is kept).
+ * - R4 (audit 3.4): the request is also pseudonymised for names that are NOT known people (joined honorifics,
+ *   nicknames, transliterations, and names a reviewer or a Gap Interview respondent typed that never appear
+ *   as a sender), found locally and replaced by `[PERSON]`. This runs for every handover, including
+ *   document-only ones without known people.
  */
 
 import { verifyRequestWithinLimits } from "../../ai/limits";
@@ -23,7 +27,8 @@ import type { PointAttributes } from "../../contracts/schemas";
 import { DbError } from "../../db/errors";
 import { listLinksNeedingSupport, recordSupportVerdict, type LinkNeedingSupport } from "../../db/pipeline";
 import { mapAiFailure } from "../ai";
-import { findsIdentity, loadJobIdentity } from "../identity";
+import { collectStrings, createPayloadPseudonymizer, findsIdentity, loadJobIdentity } from "../identity";
+import type { TextTransform } from "../../privacy/name-detect";
 import type { Pseudonymizer } from "../../privacy/pseudonymize";
 import { claimOf, type StageContext } from "../stage-context";
 import { failure, type AttemptRecord, type StageOutcome } from "../types";
@@ -48,8 +53,17 @@ function mapStrings<T>(value: T, f: (s: string) => string): T {
  * The request for one link, with context trimmed to the limits; null when even the bare pair is too large.
  * `detector` (R3 Task 02) pseudonymises every string before the limits are applied.
  */
-export function buildVerifyRequest(link: LinkNeedingSupport, detector?: Pseudonymizer): VerifySupportRequest | null {
-  const p = (text: string): string => (detector && !detector.isEmpty ? detector.apply(text).text : text);
+export function buildVerifyRequest(link: LinkNeedingSupport, detector?: Pseudonymizer | null, fuzzy?: TextTransform | null): VerifySupportRequest | null {
+  const context = link.context.slice(0, 3);
+  const texts = [
+    link.claim.title,
+    link.claim.statement,
+    ...collectStrings(link.claim.attributes),
+    link.quote.text,
+    ...(link.quote.authorLabel === null ? [] : [link.quote.authorLabel]),
+    ...context.flatMap((c) => (c.authorLabel === null ? [c.body] : [c.authorLabel, c.body])),
+  ];
+  const p = createPayloadPseudonymizer({ detector: detector ?? null, fuzzy: fuzzy ?? null }, texts);
   const pn = (text: string | null): string | null => (text === null ? null : p(text));
   const req: VerifySupportRequest = {
     claim: {
@@ -59,7 +73,7 @@ export function buildVerifyRequest(link: LinkNeedingSupport, detector?: Pseudony
       attributes: mapStrings(link.claim.attributes as PointAttributes, p),
     },
     quote: { text: p(link.quote.text), authorLabel: pn(link.quote.authorLabel), sentAt: link.quote.sentAt },
-    context: link.context.slice(0, 3).map((c) => ({ authorLabel: pn(c.authorLabel), sentAt: c.sentAt, body: p(c.body) })),
+    context: context.map((c) => ({ authorLabel: pn(c.authorLabel), sentAt: c.sentAt, body: p(c.body) })),
   };
   while (!verifyRequestWithinLimits(req)) {
     if (req.context.length === 0) return null;
@@ -75,6 +89,7 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
   const skip = new Set<string>();
   const counts = { verdicts: 0, tooLarge: 0, discarded: 0, injectionGuarded: 0, rationaleWithheld: 0 };
   let detector: Pseudonymizer | null = null;
+  let fuzzy: TextTransform | null = null;
   let ai: { provider: AiProvider; runConfig: AiRunConfig } | null = null;
   let lastAttempt: AttemptRecord | undefined;
   const withAttempt = () => (lastAttempt ? { attemptRecord: lastAttempt } : {});
@@ -102,8 +117,9 @@ export async function runVerifySupport(ctx: StageContext): Promise<StageOutcome>
         const ident = await loadJobIdentity(ctx, { sourceScoped: false });
         if (!ident.ok) return { kind: "failed", failure: ident.failure, progress: { done: calls, total: calls }, ...withAttempt() };
         detector = ident.identity.detector;
+        fuzzy = ident.identity.fuzzy;
       }
-      const req = buildVerifyRequest(link, detector);
+      const req = buildVerifyRequest(link, detector, fuzzy);
       if (req === null) {
         skip.add(link.pointEvidenceId);
         counts.tooLarge += 1;

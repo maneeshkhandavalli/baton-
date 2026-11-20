@@ -44,7 +44,7 @@ function sessionStore(): Storage | null {
  * remembered in sessionStorage (`baton.demo.v1`) as a per-viewer convenience. Nothing is sent anywhere: no account,
  * database, email or AI (A1, A3).
  */
-export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null }) {
+export function DemoWorkspace({ initialStep, unknownStep = false }: { initialStep: DemoStepId | null; unknownStep?: boolean }) {
   const [session, setSession] = useState<DemoSession | null>(null);
   const [view, setView] = useState<DemoViewResult | null>(null);
   const [pending, setPending] = useState(false);
@@ -148,6 +148,11 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
 
   return (
     <div className="space-y-6">
+      {unknownStep && (
+        <p role="status" className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          That link names a demo step that doesn&rsquo;t exist, so the demo starts at step 1. Use the steps below to jump ahead.
+        </p>
+      )}
       {/* The framing is on every screen: this is a sandbox, nothing leaves the tab. */}
       <div role="note" className="flex flex-col gap-3 rounded-xl border border-info/25 bg-info-soft/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-start gap-2 text-sm">

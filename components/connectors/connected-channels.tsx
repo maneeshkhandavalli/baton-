@@ -9,6 +9,7 @@ import {
   ACCOUNT_NOUN,
   CHANNEL_NOUN,
   blockedReasonText,
+  captureWords,
   groupSummary,
   installationStatus,
   installStatusText,
@@ -344,6 +345,7 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
   const actions = useConnectorActions();
   const [consenting, setConsenting] = useState(false);
   const s = linkStatus(link, { pullBased: PULL_BASED.has(link.provider) });
+  const words = captureWords(link.provider);
   const Settings = PROVIDER_SETTINGS[link.provider];
   const busy = api.busy !== null;
 
@@ -391,12 +393,12 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
             onClick={() =>
               api.act(`sync:${link.id}`, () => actions.syncLinkNow({ linkId: link.id }), (r) =>
                 r.status === "flushed" && r.messages > 0
-                  ? `Added ${plural(r.messages, "message")} to the handover. Review the update in Sources and give consent to process it.`
+                  ? `Added ${plural(r.messages, words.item, words.items)} to the handover. Review the update in Sources and give consent to process it.`
                   : "There was nothing new to add.",
               )
             }
           >
-            <RefreshCw aria-hidden="true" /> {api.busy === `sync:${link.id}` ? "Bringing in…" : "Bring in new messages"}
+            <RefreshCw aria-hidden="true" /> {api.busy === `sync:${link.id}` ? "Bringing in…" : `Bring in new ${words.content}`}
           </Button>
         )}
         {s.canPause && (
@@ -412,12 +414,12 @@ function LinkRow({ link, api }: { link: ConnectorLinkSummary; api: PanelApi }) {
         <ConfirmDialog
           trigger={
             <Button size="sm" className="max-sm:h-10" variant="destructive-ghost" disabled={busy}>
-              Disconnect channel
+              Disconnect {CHANNEL_NOUN[link.provider]}
             </Button>
           }
           title={`Disconnect ${link.channelLabel}?`}
-          description={`Baton stops saving messages from this channel for this handover${link.bufferedCount > 0 ? ` and deletes the ${plural(link.bufferedCount, "message")} not yet added` : ""}. Messages already added stay in Sources; remove them there if you want.`}
-          confirmLabel="Disconnect channel"
+          description={`Baton stops saving ${words.content} from this ${CHANNEL_NOUN[link.provider]} for this handover${link.bufferedCount > 0 ? ` and deletes the ${plural(link.bufferedCount, words.item, words.items)} not yet added` : ""}. ${words.content === "activity" ? "Items" : "Messages"} already added stay in Sources; remove them there if you want.`}
+          confirmLabel={`Disconnect ${CHANNEL_NOUN[link.provider]}`}
           destructive
           onConfirm={async () => {
             await api.act(`unlink:${link.id}`, () => actions.unlinkChannel({ linkId: link.id }), () => `${link.channelLabel} disconnected.`);

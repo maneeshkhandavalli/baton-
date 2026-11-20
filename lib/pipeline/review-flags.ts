@@ -21,7 +21,7 @@ export function buildReviewFlags(points: readonly PipelinePoint[], messages: rea
   const flags: NewPointFlag[] = [];
 
   const candidates = findContradictionCandidates(
-    live.map((p) => ({ pointId: p.pointId, title: p.title, statement: p.statement, attributes: p.attributes, citedMessageIds: p.citedMessageIds ?? [] })),
+    live.map((p) => ({ pointId: p.pointId, category: p.category, title: p.title, statement: p.statement, attributes: p.attributes, citedMessageIds: p.citedMessageIds ?? [] })),
     messages,
   );
   const revision = new Map(live.map((p) => [p.pointId, p.currentRevisionId]));

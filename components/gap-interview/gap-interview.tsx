@@ -16,6 +16,8 @@ import type { GapInterview as GapInterviewData } from "@/lib/contracts/dto";
 import { submitGapAnswers } from "@/lib/actions/gaps";
 import { cn } from "@/lib/utils";
 
+import { mergeSent, parseSent, remainingQuestions, sentStorageKey } from "./sent-questions";
+
 interface Draft {
   name: string;
   answers: Record<string, string>;
@@ -45,13 +47,22 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
     }
   };
   const [done, setDone] = useState<{ submitted: number; skipped: number } | null>(null);
-  const qs = data.questions;
+  // Questions this device already answered through this link (audit C4): only the remaining ones are asked again.
+  const [sent, setSent] = useState<ReadonlySet<string>>(() => new Set());
+  const qs = remainingQuestions(data.questions, sent);
+  const answeredHere = data.questions.length - qs.length;
 
-  // Restore an unsent draft (per-viewer convenience only).
+  // Restore an unsent draft and the questions already answered here (per-viewer convenience only).
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(storageKey(token));
+      const sentIds = parseSent(window.localStorage.getItem(sentStorageKey(token)));
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from browser storage after hydration
+      if (sentIds.size > 0) setSent(sentIds);
+    } catch {
+      /* storage unavailable */
+    }
+    try {
+      const raw = window.localStorage.getItem(storageKey(token));
       if (raw) setDraft(JSON.parse(raw) as Draft);
     } catch {
       /* storage unavailable */
@@ -80,6 +91,10 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
       setDone({ submitted: result.data.submitted, skipped: qs.length - answered.length });
       try {
         window.localStorage.removeItem(storageKey(token));
+        window.localStorage.setItem(
+          sentStorageKey(token),
+          mergeSent(sent, answered.map((q) => q.id), data.questions.map((q) => q.id)),
+        );
       } catch {
         /* storage unavailable */
       }
@@ -104,7 +119,11 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
       <div className="rounded-xl border border-border bg-card p-8 text-center shadow-soft">
         <CheckCircle2 aria-hidden="true" className="mx-auto size-10 text-success" />
         <h2 className="mt-4 type-section-title">Nothing left to answer</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Every question on this link has been answered. Thanks for helping the next person.</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+          {answeredHere > 0
+            ? "You've answered every question on this link. A reviewer checks each answer before it becomes part of the handover."
+            : "Every question on this link has been answered. Thanks for helping the next person."}
+        </p>
       </div>
     );
   }
@@ -139,7 +158,7 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
             <div className="space-y-5">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  The team preparing <span className="font-medium text-foreground">{data.handoverTitle}</span> has {qs.length} {qs.length === 1 ? "question" : "questions"} their documents couldn&rsquo;t answer.
+                  The team preparing <span className="font-medium text-foreground">{data.handoverTitle}</span> has {qs.length} {answeredHere > 0 ? "more " : ""}{qs.length === 1 ? "question" : "questions"} their documents couldn&rsquo;t answer.
                   Answer what you can and skip the rest. It takes about {Math.max(2, qs.length * 2)} minutes.
                 </p>
                 <p className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">

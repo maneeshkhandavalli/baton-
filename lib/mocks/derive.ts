@@ -25,6 +25,7 @@ import {
 } from "@/lib/contracts/enums";
 import type { PointAttributes } from "@/lib/contracts/schemas";
 import { deriveEvidenceStatus, derivePotentiallyOutdated } from "@/lib/contracts/status";
+import { linkInReverifyScope } from "@/lib/signals/reverify-scope";
 
 import { isActiveIncomingInvite } from "./exclusions";
 import type {
@@ -80,7 +81,8 @@ export function settleReverification(p: MockPoint, now = Date.now()) {
   if (p.reverifyAt === null || now < p.reverifyAt) return;
   const rev = currentRevision(p).id;
   for (const l of p.links) {
-    if (!l.excluded && l.quoteCheck !== "not_found" && l.supportVerdict !== "irrelevant") {
+    // Round 4 B (F4): an approved point's human evidence and approved edits are not re-checked (lib/signals/reverify-scope.ts)
+    if (!l.excluded && l.quoteCheck !== "not_found" && l.supportVerdict !== "irrelevant" && linkInReverifyScope(p.reviewState, l.kind, l.supportVerdict)) {
       l.verifiedRevisionId = rev;
     }
   }

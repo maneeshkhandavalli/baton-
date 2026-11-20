@@ -68,7 +68,7 @@ describe("deleteAccount: shared demo accounts", () => {
     const f = world(ACTOR);
     const r = await account.deleteAccount(f.deps, { confirm: "DELETE", purgeHandoverIds: [H, H2] });
     assert.deepEqual(r, { ok: true, data: null });
-    assert.deepEqual(f.events, ["check_account_deletion", "delete_own_account", "softDeleteUser", "endSession"]);
+    assert.deepEqual(f.events, ["check_account_deletion", "delete_own_account", "softDeleteUser", "revoke_deleted_account_sessions", "endSession"]);
   });
 
   it("with no demo configuration nobody is refused", async () => {

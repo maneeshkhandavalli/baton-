@@ -8,6 +8,7 @@ import type { PointCategory } from "../../contracts/enums";
 import { createManualPointInput, parsePointAttributes, reviewPointInput } from "../../contracts/schemas";
 import type { CreateManualPointInput, ReviewPointInput } from "../../contracts/schemas";
 import * as mutations from "../../db/mutations";
+import { refuseDemoContent } from "./demo-guard";
 import { createInputMasker, type InputMasker } from "./mask";
 import { action, parseInput, validationFailed, type Failure } from "./run";
 import type { ActionDeps } from "./types";
@@ -118,6 +119,8 @@ export async function reviewPoint(deps: ActionDeps, input: ReviewPointInput): Pr
 /** Review roles only (SQL). Category and attributes are validated together by the schema, after masking. */
 export async function createManualPoint(deps: ActionDeps, input: CreateManualPointInput): Promise<Result<PointDetail>> {
   return action(deps, createManualPointInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // owner decision 21 Nov: judges' additions would show to every later judge
+    if (demo) return demo;
     const m = createInputMasker();
     const masked = parseInput(createManualPointInput, {
       ...v,

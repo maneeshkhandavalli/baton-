@@ -10,7 +10,7 @@ import "server-only";
  */
 
 export const EXTRACT_PROMPT_VERSION = "extract@2";
-export const SUPPORT_PROMPT_VERSION = "support@1";
+export const SUPPORT_PROMPT_VERSION = "support@2";
 
 export const EXTRACT_SCHEMA_VERSION = "extraction@1";
 export const SUPPORT_SCHEMA_VERSION = "support-verdict@1";

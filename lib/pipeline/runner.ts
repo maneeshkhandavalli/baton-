@@ -6,7 +6,9 @@
  *   1. `getJobContext`. A claim that is no longer ours, or a run that is no longer active, is dropped
  *      without recording anything (the fenced `completeJob` would refuse it anyway).
  *   2. Generic preconditions: per-source stages after a failed or missing parse are `skipped`
- *      (upstream_failed); an `extract` whose input hash already succeeded in an earlier run is a no-op.
+ *      (upstream_failed); an `extract` whose input hash already succeeded in an earlier run (even a run
+ *      cancelled after its extracts finished) is not re-run: it reuses those points and carries their
+ *      coverage, chunk stats, progress and provenance onto this run (audit 4.8, `reusePriorExtract`).
  *   3. The stage handler. Thrown errors become typed failures; `LeaseLostError` (heartbeat) and
  *      `ClaimLostError` (a fenced writer refused a stale claim, DB-12) drop the job.
  *   4. Exactly one fenced `completeJob`: succeeded | retry (backoff 30 s, 2 min, 8 min) | failed |
@@ -24,6 +26,7 @@ import {
   claimReadyJobs,
   PipelineSchemaError,
   completeJob,
+  reusePriorExtract,
   finishRun,
   getJobContext,
   heartbeatJob,
@@ -39,7 +42,7 @@ import { decideRunOutcome } from "./finish";
 import type { PipelineLogger } from "./log";
 import type { IdentityMapKeyResult } from "../privacy/identity-vault";
 import type { VerifiedPepper } from "./pepper-core";
-import type { StageContext, StageHandler } from "./stage-context";
+import { claimOf, type StageContext, type StageHandler } from "./stage-context";
 import type { PipelineAi } from "./ai";
 import { runAnalyze } from "./stages/analyze";
 import { runExtract } from "./stages/extract";
@@ -104,7 +107,8 @@ export const DEFAULT_HANDLERS: Record<PipelineStage, StageHandler> = {
 const ACTIVE_RUN = new Set(["queued", "running"]);
 const NEEDS_PARSED_SOURCE: ReadonlySet<PipelineStage> = new Set(["extract", "verify_quotes"]);
 
-type Disposition = { kind: "lost" } | StageOutcome;
+/** `reuse`: an extract whose input already succeeded in another run (audit 4.8); see `reuseOutcome`. */
+type Disposition = { kind: "lost" } | { kind: "reuse" } | StageOutcome;
 
 function precheck(claimed: ClaimedJob, ctx: JobContext): Disposition | null {
   if (ctx.job.status !== "running" || ctx.job.attempt !== claimed.attempt) return { kind: "lost" };
@@ -115,8 +119,39 @@ function precheck(claimed: ClaimedJob, ctx: JobContext): Disposition | null {
     const s = ctx.source;
     if (!s || s.deleted || s.state !== "parsed") return { kind: "skipped", reason: "upstream_failed" };
   }
-  if (ctx.job.stage === "extract" && ctx.priorSucceeded) return { kind: "succeeded", progress: { done: 0, total: 0 } };
+  if (ctx.job.stage === "extract" && ctx.priorSucceeded) return { kind: "reuse" };
   return null;
+}
+
+/** S5: the fencing token for completion and heartbeat: job id, attempt and (when known) claim generation. */
+function claimArgs(claimed: ClaimedJob): { jobId: string; attempt: number; generation?: number } {
+  const c = claimOf({ claimed });
+  return c.generation === undefined ? { jobId: c.jobId, attempt: c.attempt } : { jobId: c.jobId, attempt: c.attempt, generation: c.generation };
+}
+
+/**
+ * Audit 4.8: the reused extract carries the earlier run's coverage, chunk stats, progress and provenance
+ * instead of completing as "0 of 0". If the earlier run recorded no coverage the progress is left unset (never
+ * a fabricated 0/0), and the report says "coverage not recorded". A database without the function (older
+ * schema) completes the same way, without progress.
+ */
+async function reuseOutcome(db: DbClient, claimed: ClaimedJob, logger: PipelineLogger): Promise<StageOutcome> {
+  try {
+    const r = await reusePriorExtract(db, claimOf({ claimed }));
+    const done = typeof r.progressDone === "number" ? r.progressDone : null;
+    const total = typeof r.progressTotal === "number" ? r.progressTotal : null;
+    logger.info("extract_reused", {
+      jobId: claimed.id,
+      runId: claimed.run_id,
+      priorRunId: r.priorRunId ?? null,
+      priorRunStatus: r.priorRunStatus ?? null,
+      coverageCopied: r.coverageCopied === true,
+    });
+    return r.reused && done !== null && total !== null && total > 0 ? { kind: "succeeded", progress: { done, total } } : { kind: "succeeded" };
+  } catch (e) {
+    if (e instanceof PipelineSchemaError) return { kind: "succeeded" };
+    throw e;
+  }
 }
 
 /** Typed failure for anything a handler throws. */
@@ -175,7 +210,9 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
     try {
       const jobContext = await getJobContext(db, claimed.id);
       const pre = precheck(claimed, jobContext);
-      if (pre) {
+      if (pre?.kind === "reuse") {
+        disposition = await reuseOutcome(db, claimed, logger);
+      } else if (pre) {
         disposition = pre;
       } else {
         const stageCtx: StageContext = {
@@ -190,7 +227,7 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
           ...(deps.getIdentityMapKey ? { getIdentityMapKey: deps.getIdentityMapKey } : {}),
           ai: deps.ai,
           heartbeat: async (progress) => {
-            const status = await heartbeatJob(db, { jobId: claimed.id, attempt: claimed.attempt, leaseSeconds: lease, progress });
+            const status = await heartbeatJob(db, { ...claimArgs(claimed), leaseSeconds: lease, progress });
             if (status === "lost") throw new LeaseLostError();
           },
         };
@@ -207,12 +244,15 @@ export function createDrainer(deps: DrainerDeps): (opts?: DrainOptions) => Promi
     }
 
     let completion: JobCompletion;
-    const extra: Parameters<typeof completeJob>[1] = { jobId: claimed.id, attempt: claimed.attempt, outcome: "succeeded" };
+    const extra: Parameters<typeof completeJob>[1] = { ...claimArgs(claimed), outcome: "succeeded" };
     switch (disposition.kind) {
       case "succeeded":
         completion = "succeeded";
         if (disposition.progress) extra.progress = disposition.progress;
         if (disposition.attemptRecord) extra.attemptRecord = { ...disposition.attemptRecord };
+        break;
+      case "reuse": // converted by reuseOutcome before this point; never completed as 0/0
+        completion = "succeeded";
         break;
       case "skipped":
         completion = "skipped";

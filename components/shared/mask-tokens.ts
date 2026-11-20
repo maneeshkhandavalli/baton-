@@ -58,6 +58,25 @@ export function maskedTextToPlain(text: string): string {
     .join("");
 }
 
+/**
+ * For editable fields (the review Edit dialog): person placeholders become the same words the chip shows
+ * (the name this viewer may see, else "Person n"). Mask tokens and the excluded-participant token stay
+ * as written, so an edit never turns them into plain words.
+ */
+export function resolvePersonTokens(text: string, names: ReadonlyMap<number, string>): string {
+  return segmentMaskedText(text)
+    .map((s) =>
+      s.kind === "text"
+        ? s.text
+        : s.kind === "mask"
+          ? s.token
+          : s.kind === "person"
+            ? ((s.ordinal === null ? undefined : names.get(s.ordinal)) ?? personPlainLabel(s.ordinal))
+            : EXCLUDED_PARTICIPANT_TOKEN,
+    )
+    .join("");
+}
+
 /** A placeholder without a resolved name: "Person 3", or "a participant" for an ambiguous mention. */
 export function personPlainLabel(ordinal: number | null): string {
   return ordinal === null ? "a participant" : `Person ${ordinal}`;

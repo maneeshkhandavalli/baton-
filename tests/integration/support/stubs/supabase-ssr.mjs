@@ -1,6 +1,7 @@
 // Stub of the "@supabase/ssr" platform package. Only the auth surface is emulated:
 //   * auth.getUser() returns the user set with signInAs() (platform.ts), as the Supabase Auth server would
 //     after validating the session, so lib/db/actor.getVerifiedActor() mints actors through its real code;
+//     auth.getClaims() returns that user's claims, with the `amr` set by setSessionAmr();
 //   * auth.signInWithOtp() / signInWithOAuth() / signInWithPassword() / signUp() / resetPasswordForEmail() /
 //     updateUser() / exchangeCodeForSession() / verifyOtp() / signOut() are recorded,
 //     never sent. signInWithOAuth returns an authorize URL on NEXT_PUBLIC_SUPABASE_URL unless the test sets
@@ -27,6 +28,13 @@ function client(kind) {
         const user = state().user ?? null;
         if (state().authError) return { data: { user: null }, error: { message: "stub auth error", status: 401 } };
         return { data: { user }, error: null };
+      },
+      // The session's JWT claims: `amr` from setSessionAmr() (platform.ts); none when signed out.
+      async getClaims() {
+        record("getClaims");
+        const s = state();
+        if (!s.user || s.authError) return { data: null, error: { message: "stub: no session", status: 401 } };
+        return { data: { claims: { sub: s.user.id, ...(s.amr !== undefined ? { amr: s.amr } : {}) } }, error: null };
       },
       async getSession() {
         throw new Error("@supabase/ssr stub: getSession() must never be used for authorization (§8.3)");

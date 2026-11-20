@@ -190,3 +190,51 @@ describe("attentionByHandover", () => {
   });
   it("an empty queue stays empty", () => assert.deepEqual(attentionByHandover([]), []));
 });
+
+describe("Round 4 audit fixes (A1, F10)", () => {
+  it("labels a published (approved) handover 'Published', never 'Approved'", async () => {
+    const { handoverStateMeta } = await import("@/components/handover/labels");
+    assert.equal(handoverStateMeta.approved.label, "Published");
+  });
+
+  const run = (stages: NonNullable<import("@/lib/contracts/dto").ProcessingStatus["run"]>["stages"]) => ({
+    handoverState: "processing" as const,
+    sources: [],
+    run: { id: "r", status: "running" as const, startedAt: null, finishedAt: null, stages, error: null },
+  });
+
+  it("names the stage that is actually running, not always 'Reading sources'", async () => {
+    const { processingStatusLine } = await import("../model");
+    const row = classify(
+      {
+        summary: base({ state: "processing" }),
+        processing: run([
+          { stage: "parse", status: "succeeded", done: 1, total: 1 },
+          { stage: "extract", status: "succeeded", done: 2, total: 2 },
+          { stage: "verify_quotes", status: "running", done: 1, total: 3 },
+          { stage: "verify_support", status: "queued", done: 0, total: 3 },
+        ]),
+      },
+      LINKS,
+    );
+    assert.equal(row.status, "Checking quotes exist · stage 3 of 4");
+    assert.equal(processingStatusLine([]), "Starting processing");
+    assert.equal(processingStatusLine([{ stage: "parse", status: "queued", done: 0, total: 1 }]), "Reading sources · stage 1 of 1");
+    assert.equal(
+      processingStatusLine([
+        { stage: "parse", status: "succeeded", done: 1, total: 1 },
+        { stage: "extract", status: "queued", done: 0, total: 1 },
+      ]),
+      "Extracting knowledge · stage 2 of 2",
+    );
+    assert.equal(processingStatusLine([{ stage: "parse", status: "succeeded", done: 1, total: 1 }]), "Finishing up");
+  });
+
+  it("keeps refreshing only while some handover is processing", async () => {
+    const { hasRunningProcessing } = await import("../model");
+    const processing = classify({ summary: base({ state: "processing" }), processing: run([{ stage: "parse", status: "running", done: 0, total: 1 }]) }, LINKS);
+    const review = classify({ summary: base({ id: "h2" }) }, LINKS);
+    assert.equal(hasRunningProcessing([processing, review]), true);
+    assert.equal(hasRunningProcessing([review]), false);
+  });
+});

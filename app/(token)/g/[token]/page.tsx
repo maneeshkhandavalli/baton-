@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { GapInterview } from "@/components/gap-interview/gap-interview";
 import { PageContainer } from "@/components/layout/page-container";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
@@ -18,6 +19,9 @@ export default function ContributorGapsPage({ params }: PageProps<"/g/[token]">)
       <Suspense fallback={<ListSkeleton label="Opening your questions…" rows={1} />}>
         <InterviewContent params={params} />
       </Suspense>
+      <footer>
+        <LegalLinks className="mt-4 justify-center" />
+      </footer>
     </PageContainer>
   );
 }

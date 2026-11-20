@@ -32,7 +32,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* eslint-disable-next-line @next/next/no-sync-scripts -- blocking is the point (no theme flash) */}
         <script src={THEME_INIT_SRC} />
       </head>
-      <body className="min-h-full bg-background font-sans text-foreground">
+      {/* suppressHydrationWarning: browser extensions (Grammarly adds data-gr-* / data-new-gr-*) edit <body> before
+          React loads. It only ignores attribute differences on this one tag, never in children. */}
+      <body className="min-h-full bg-background font-sans text-foreground" suppressHydrationWarning>
         {children}
         <Toaster position="bottom-right" />
       </body>

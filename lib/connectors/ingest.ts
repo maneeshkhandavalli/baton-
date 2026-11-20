@@ -28,7 +28,20 @@ export interface IngestLogger {
   warn(event: string, fields: Record<string, string | number | boolean | null>): void;
 }
 
-const silent: IngestLogger = { info() {}, warn() {} };
+/**
+ * Default logger: info lines are dropped, warnings are written as one JSON line with codes only (provider, event
+ * type, a fixed code). Callers never pass content, ids of people or credentials in `fields`.
+ */
+const warnOnly: IngestLogger = {
+  info() {},
+  warn(event, fields) {
+    try {
+      console.warn(JSON.stringify({ scope: "connector", event, ...fields }));
+    } catch {
+      // logging never changes an outcome
+    }
+  },
+};
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -73,7 +86,7 @@ export interface IngestOptions {
   filter?: (link: ChannelLinkRecord, messages: ConnectorMessage[]) => ConnectorMessage[];
 }
 
-export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent, logger: IngestLogger = silent, options: IngestOptions = {}): Promise<EventOutcome> {
+export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent, logger: IngestLogger = warnOnly, options: IngestOptions = {}): Promise<EventOutcome> {
   const base = { provider: event.provider, eventType: event.eventType };
   let receipt;
   try {
@@ -93,7 +106,7 @@ export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent,
   }
 
   try {
-    const outcome = await route(store, event, options);
+    const outcome = await route(store, event, options, logger);
     if (outcome.status === "processed") await store.finishEvent(receipt.eventId, { status: "processed" });
     else if (outcome.status === "ignored") await store.finishEvent(receipt.eventId, { status: "ignored", reason: outcome.reason });
     else if (outcome.status === "failed") await store.finishEvent(receipt.eventId, { status: "failed", code: outcome.code });
@@ -107,7 +120,7 @@ export async function ingestEvent(store: ConnectorStore, event: NormalizedEvent,
   }
 }
 
-async function route(store: ConnectorStore, event: NormalizedEvent, options: IngestOptions): Promise<EventOutcome> {
+async function route(store: ConnectorStore, event: NormalizedEvent, options: IngestOptions, logger: IngestLogger): Promise<EventOutcome> {
   if (event.externalAccountId === null) return { status: "ignored", reason: "unsupported_event" };
   const installation = await store.findInstallation(event.provider, event.externalAccountId);
   if (!installation) return { status: "ignored", reason: "no_installation" };
@@ -117,7 +130,19 @@ async function route(store: ConnectorStore, event: NormalizedEvent, options: Ing
     switch (event.lifecycle.kind) {
       case "uninstalled":
       case "token_revoked":
-        await store.revokeInstallation(actor, installation.id, event.lifecycle.reason);
+        try {
+          await store.revokeInstallation(actor, installation.id, event.lifecycle.reason);
+        } catch (e) {
+          // Observable and retryable: the delivery is marked failed (HTTP 503), so the provider redelivers it and the
+          // revocation is tried again. Codes only: never the token, the account id or the payload.
+          logger.warn("connector_revocation_failed", {
+            provider: event.provider,
+            eventType: event.eventType,
+            reason: event.lifecycle.reason,
+            code: e instanceof ConnectorStoreError ? `store_${e.code}` : "error",
+          });
+          throw e;
+        }
         break;
       case "suspended":
         if (installation.status !== "revoked") await store.setInstallationStatus(actor, installation.id, "suspended", event.lifecycle.reason);
@@ -245,7 +270,7 @@ export async function ingestHistory(
   store: ConnectorStore,
   base: Pick<NormalizedEvent, "provider" | "externalAccountId" | "externalChannelId"> & { deliveryPrefix: string },
   messages: readonly ConnectorMessage[],
-  logger: IngestLogger = silent,
+  logger: IngestLogger = warnOnly,
   options: IngestOptions = {},
 ): Promise<HistoryImportResult> {
   const batches = historyBatches(messages.slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush));

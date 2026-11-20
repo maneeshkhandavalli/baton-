@@ -8,7 +8,11 @@ import { beforeEach, describe, it } from "node:test";
 import { sendPasswordSetupLink, signInWithPassword, signUpWithPassword } from "../../app/(auth)/login/actions";
 import { setPassword } from "../../app/(workspace)/account/password/actions";
 import { captureConsole } from "./support/console-capture";
-import { authCalls, resetPlatform, setPasswordStub, signInAs, SITE_URL } from "./support/platform";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { SetPasswordForm } from "../../app/(workspace)/account/password/set-password-form";
+import { authCalls, installBackends, resetPlatform, setPasswordStub, setSessionAmr, signInAs, SITE_URL } from "./support/platform";
 
 const PW = "correct horse battery"; // synthetic
 const calls = (name: string) => authCalls().filter((c) => c.name === name).map((c) => c.args as Record<string, unknown>);
@@ -122,15 +126,119 @@ describe("setting a password while signed in", () => {
 
   it("sets the password for the signed-in account only", async () => {
     signInAs("11111111-1111-4111-8111-111111111111");
+    installBackends().adminDb.returns("account_has_password", false); // e.g. Google only: no current password
     assert.equal((await setPassword(PW, PW)).status, "ok");
     assert.equal(calls("updateUser")[0].password, "[set]");
   });
 
   it("explains Supabase's password rules without provider text", async () => {
     signInAs("11111111-1111-4111-8111-111111111111");
+    installBackends().adminDb.returns("account_has_password", false);
     setPasswordStub({ update: { message: "provider detail", status: 422, code: "same_password" } });
     const r = await setPassword(PW, PW);
     assert.equal(r.status, "error");
     assert.ok(r.status === "error" && r.field === "password" && !r.message.includes("provider detail"));
+  });
+});
+
+// Audit fixes: (1) the "Forgot" email link lands on /account/password, which must then offer the new-password form
+// without the current password; (2) when whether a password exists can't be read, the current password is required
+// (and checked) unless this is a recent recovery sign-in, and a check that can't be done refuses (retryable).
+describe("changing a password: the current password", () => {
+  const USER = "11111111-1111-4111-8111-111111111111";
+  const NOW = () => Math.floor(Date.now() / 1000);
+  const GENERIC = { status: "error", message: "Something went wrong on our side. Please try again." };
+  const updates = () => calls("updateUser").length;
+  const probes = () => authCalls().filter((c) => c.client === "probe" && c.name === "signInWithPassword").length;
+  beforeEach(() => {
+    resetPlatform();
+    signInAs(USER);
+  });
+  const hasPassword = (value: boolean | "unknown") => {
+    const { adminDb } = installBackends();
+    if (value === "unknown") adminDb.fails("account_has_password", "XX000");
+    else adminDb.returns("account_has_password", value);
+  };
+
+  it("an account with a password must give the current one; a wrong one is refused", async () => {
+    hasPassword(true);
+    assert.deepEqual(await setPassword(PW, PW), { status: "error", field: "current", message: "Enter your current password." });
+    setPasswordStub({ current: { message: "provider detail", status: 400, code: "invalid_credentials" } });
+    const wrong = await setPassword(PW, PW, "not it");
+    assert.ok(wrong.status === "error" && wrong.field === "current" && !wrong.message.includes("provider detail"));
+    assert.equal(updates(), 0);
+    setPasswordStub(null);
+    assert.equal((await setPassword(PW, PW, "the old one")).status, "ok");
+    assert.equal(updates(), 1);
+  });
+
+  it("right after a recovery link: no current password needed (\"recovery\" only; an \"otp\" sign-in code is not a reset)", async () => {
+    for (const method of ["recovery"]) {
+      resetPlatform();
+      signInAs(USER);
+      hasPassword(true);
+      setSessionAmr([{ method, timestamp: NOW() - 30 }]);
+      assert.equal((await setPassword(PW, PW)).status, "ok", method);
+      assert.equal(probes(), 0, "nothing to check");
+      assert.equal(updates(), 1);
+    }
+  });
+
+  it("a stale recovery sign-in, or a password sign-in, still needs the current password", async () => {
+    hasPassword(true);
+    for (const amr of [[{ method: "recovery", timestamp: NOW() - 2 * 60 * 60 }], [{ method: "password", timestamp: NOW() - 5 }]]) {
+      setSessionAmr(amr);
+      assert.deepEqual(await setPassword(PW, PW), { status: "error", field: "current", message: "Enter your current password." });
+    }
+    assert.equal(updates(), 0);
+  });
+
+  it("unknown whether a password exists: fails closed, the current password is required and checked", async () => {
+    hasPassword("unknown");
+    setSessionAmr([{ method: "password", timestamp: NOW() - 5 }]);
+    assert.deepEqual(await setPassword(PW, PW), { status: "error", field: "current", message: "Enter your current password." });
+    setPasswordStub({ current: { message: "provider detail", status: 400, code: "invalid_credentials" } });
+    const wrong = await setPassword(PW, PW, "not it");
+    assert.ok(wrong.status === "error" && wrong.field === "current");
+    assert.equal(updates(), 0, "a stolen session cannot change it");
+    setPasswordStub(null);
+    assert.equal((await setPassword(PW, PW, "the old one")).status, "ok");
+    assert.equal(probes(), 2);
+    assert.equal(updates(), 1);
+  });
+
+  it("a check that can't be done refuses with a retryable error, never allows", async () => {
+    for (const has of [true, "unknown"] as const) {
+      resetPlatform();
+      signInAs(USER);
+      hasPassword(has);
+      setPasswordStub({ current: "throw" });
+      const { result, lines } = await captureConsole(() => setPassword(PW, PW, "the old one"));
+      assert.deepEqual(result, GENERIC, String(has));
+      setPasswordStub({ current: { message: "provider detail", status: 500, code: "unexpected_failure" } });
+      const failed = await captureConsole(() => setPassword(PW, PW, "the old one"));
+      assert.deepEqual(failed.result, GENERIC);
+      assert.equal(updates(), 0);
+      const logged = [...lines, ...failed.lines].join("\n");
+      assert.ok(!logged.includes("the old one") && !logged.includes("provider detail"), "no password or provider text logged");
+    }
+  });
+
+  it("unknown whether a password exists, right after a recovery link: the new password is set", async () => {
+    hasPassword("unknown");
+    setSessionAmr([{ method: "recovery", timestamp: NOW() - 30 }]);
+    assert.equal((await setPassword(PW, PW)).status, "ok");
+    assert.equal(updates(), 1);
+  });
+
+  it("the form: \"reset\" (after a recovery link) and \"set\" have no current-password field; \"change\" has one", () => {
+    const html = (mode: "set" | "change" | "reset") => renderToStaticMarkup(createElement(SetPasswordForm, { mode }));
+    for (const mode of ["reset", "set"] as const) {
+      assert.ok(!html(mode).includes('name="current"'), mode);
+      assert.ok(!html(mode).includes("Current password"), mode);
+    }
+    assert.match(html("reset"), />Save new password</);
+    assert.match(html("change"), /<input id="current-password"[^>]*required=""[^>]*name="current"/);
+    for (const mode of ["reset", "set", "change"] as const) assert.ok(!html(mode).includes("\u2014"), "no em dashes");
   });
 });

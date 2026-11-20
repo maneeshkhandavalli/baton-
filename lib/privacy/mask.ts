@@ -358,9 +358,29 @@ const ifscDetector = prefixedDetector(IFSC_RE, "ifsc", (s) => {
 
 const SECRET_CANDIDATE_RE = /[A-Za-z0-9+\/=_\-]{32,}/g;
 
+/**
+ * A slug or path made of ordinary words ("asha-rao/my-first-portfolio", a GitHub repository name or link path;
+ * found live on 21 Nov when a linked repository showed as [SECRET]) is not a secret. All of these must hold:
+ *   - two or more parts split by "/", "-" or "_";
+ *   - every part is a lowercase word (at most 20 letters, no run of 6+ consonants), a Capitalised word (at most 20
+ *     letters), a short acronym (2-6 capitals) or a short number (at most 4 digits);
+ *   - at least one part is a lowercase word (so TitleCase passphrases like "Purple-Monkey-Dishwasher-…" stay
+ *     masked), and the parts are not all numbers.
+ * Real tokens mix cases and digits inside a part (ghp_…, sk-…, base64) or are long letter runs, so they stay
+ * masked; anything after "password:", "token:" etc. is masked separately by the credential rules below.
+ */
+function isWordSlug(s: string): boolean {
+  const parts = s.split(/[\/_\-]+/).filter(Boolean);
+  if (parts.length < 2) return false;
+  const lowerWord = (p: string) => /^[a-z]{1,20}$/.test(p) && !/[bcdfghjklmnpqrstvwxz]{6,}/.test(p);
+  const ok = (p: string) => lowerWord(p) || /^[A-Z][a-z]{1,19}$/.test(p) || /^[A-Z]{2,6}$/.test(p) || /^\d{1,4}$/.test(p);
+  return parts.every(ok) && parts.some(lowerWord);
+}
+
 function secretDetector(view: string): Span[] {
   return regexSpans(view, SECRET_CANDIDATE_RE, "secret", (m) => {
     const s = m[0];
+    if (isWordSlug(s)) return null;
     // No punctuation guard: emails and UPI IDs are already masked (they run first), so a
     // candidate next to ".", ",", ")" or end of text is a bare token and must be masked.
     if (shannonEntropy(s) > 4.0) return s;
@@ -685,6 +705,330 @@ function shortTokenDetector(view: string): Span[] {
   });
 }
 
+// ---------------------------------------------------------------------------------------------
+// R5 detectors (audit S2 / F12): government IDs beyond Aadhaar and PAN, Aadhaar VID, Aadhaar with a
+// bad checksum next to its keyword, bank numbers with a later bank word, international phones
+// written without "+", dates of birth, PIN codes and postal addresses.
+//
+// Every new category reuses the existing token vocabulary (`[ID_n]`, `[BANK_n]`, `[PHONE_n]`),
+// because the token set is shared with the quote checker, the signal detector, the UI and the
+// extraction prompt. Dates of birth, PIN codes and postal addresses are counted as
+// `government_id` (personal identifiers) and become `[ID_n]`.
+//
+// Conservative by construction: a value is masked only when a keyword is next to it, or when its
+// shape is specific enough on its own (GSTIN, an Indian driving licence with a state code, a
+// 16-digit run, a 4-4-4 Aadhaar-style grouping, a known international mobile prefix).
+
+/** Finds the first `valueRe` match within `window` characters after each keyword match. */
+function keywordValueSpans(
+  view: string,
+  keywordRe: RegExp,
+  valueRe: RegExp,
+  kind: MaskKind,
+  value: (raw: string) => string,
+  window = 40,
+): Span[] {
+  const spans: Span[] = [];
+  keywordRe.lastIndex = 0;
+  let k: RegExpExecArray | null;
+  while ((k = keywordRe.exec(view))) {
+    if (k[0].length === 0) {
+      keywordRe.lastIndex++;
+      continue;
+    }
+    const from = k.index + k[0].length;
+    const slice = view.slice(from, from + window);
+    const local = new RegExp(valueRe.source, valueRe.flags.replace("g", ""));
+    const v = local.exec(slice);
+    if (!v) continue;
+    // Only separators and a few filler words may sit between the keyword and the value.
+    const gap = slice.slice(0, v.index);
+    if (!/^(?:[\s:=#.\-–—,()]|\b(?:no|nos|num|number|is|was|of|id|card|details?|holder|reads?|:)\b)*$/i.test(gap)) continue;
+    const start = from + v.index;
+    spans.push({ start, end: start + v[0].length, kind, value: value(v[0]) });
+  }
+  return spans;
+}
+
+const digitsOnly = (s: string) => s.replace(/\D+/g, "");
+const alnumUpper = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "").toUpperCase();
+
+// GSTIN: 2-digit state code + PAN + entity number + "Z" + check character. Masked whole, so the
+// PAN inside it cannot leak (the PAN regex needs a non-alphanumeric character before it).
+const GSTIN_RE = /(?<![A-Za-z0-9])([0-3]\d[A-Za-z]{5}\d{4}[A-Za-z][1-9A-Za-z][Zz][0-9A-Za-z])(?![A-Za-z0-9])/g;
+
+function gstinDetector(view: string): Span[] {
+  return regexSpans(view, GSTIN_RE, "government_id", (m) => `gstin:${m[1].toUpperCase()}`);
+}
+
+// Indian driving licence: state code + 2-digit RTO + 4-digit year + 7-digit number, with optional
+// spaces or hyphens ("MH12 20110012345", "DL-0420110149646").
+const IN_STATE_CODES =
+  "AN|AP|AR|AS|BR|CG|CH|DD|DL|DN|GA|GJ|HP|HR|JH|JK|KA|KL|LA|LD|MH|ML|MN|MP|MZ|NL|OD|OR|PB|PY|RJ|SK|TN|TR|TS|UK|UP|UA|WB";
+const DL_STRICT_RE = new RegExp(
+  `(?<![A-Za-z0-9])(?:${IN_STATE_CODES})[ \\-]?\\d{2}[ \\-]?(?:19|20)\\d{2}[ \\-]?\\d{7}(?![A-Za-z0-9])`,
+  "gi",
+);
+const DL_KEYWORD_RE = /(?<![A-Za-z])(?:driv(?:ing|er'?s?)[ \t]*licen[cs]e|licen[cs]e[ \t]*(?:no|number)|d\.?l\.?[ \t]*(?:no|number)|DL)(?![A-Za-z])/g;
+const DL_VALUE_RE = /(?<![A-Za-z0-9])[A-Za-z]{2}[ \-]?\d{1,2}[ \-]?\d[\d \-]{5,14}\d(?![A-Za-z0-9])/;
+
+function drivingLicenceDetector(view: string): Span[] {
+  return [
+    ...regexSpans(view, DL_STRICT_RE, "government_id", (m) => `dl:${alnumUpper(m[0])}`),
+    ...keywordValueSpans(view, DL_KEYWORD_RE, DL_VALUE_RE, "government_id", (s) => `dl:${alnumUpper(s)}`),
+  ];
+}
+
+// Passport: keyword-gated (a bare letter + 7 digits is also a common SKU or ticket shape).
+const PASSPORT_KEYWORD_RE = /(?<![A-Za-z])pass[ \t]?ports?(?![A-Za-z])/gi;
+const PASSPORT_VALUE_RE = /(?<![A-Za-z0-9])(?:[A-Za-z]{1,2}[ \-]?\d{6,8}|\d{8,9})(?![A-Za-z0-9])/;
+
+function passportDetector(view: string): Span[] {
+  return keywordValueSpans(view, PASSPORT_KEYWORD_RE, PASSPORT_VALUE_RE, "government_id", (s) => `passport:${alnumUpper(s)}`);
+}
+
+// Voter ID (EPIC): 3 letters + 7 digits. With a keyword in any case; without one only in upper
+// case and not with a common business prefix (invoice, order, ticket numbers).
+const EPIC_KEYWORD_RE = /(?<![A-Za-z])(?:voter(?:'?s)?[ \t]*(?:id|card|i\.d\.)|epic|elector(?:al|'?s)?[ \t]*(?:photo[ \t]*)?(?:id|card|roll)?|election[ \t]*(?:id|card))(?![A-Za-z])/gi;
+const EPIC_VALUE_RE = /(?<![A-Za-z0-9])[A-Za-z]{3}[ \-]?\d{7}(?![A-Za-z0-9])/;
+const EPIC_BARE_RE = /(?<![A-Za-z0-9])([A-Z]{3})(\d{7})(?![A-Za-z0-9])/g;
+const BUSINESS_PREFIXES = new Set(
+  "INV ORD REF TXN TKT SKU BIL PRJ REQ CHG INC BUG TSK JOB EMP CUS CST VEN POL CLM QTN QUO SOW GRN DOC REC RCP PAY ACK LOT BAT SRV SER APP PRD ITM UTR NEF IMP RTG MSG"
+    .split(" "),
+);
+
+function epicDetector(view: string): Span[] {
+  return [
+    ...keywordValueSpans(view, EPIC_KEYWORD_RE, EPIC_VALUE_RE, "government_id", (s) => `epic:${alnumUpper(s)}`),
+    ...regexSpans(view, EPIC_BARE_RE, "government_id", (m) => (BUSINESS_PREFIXES.has(m[1]) ? null : `epic:${m[0]}`)),
+  ];
+}
+
+// Aadhaar next to its keyword (any checksum: a typo still identifies a person) and the 16-digit
+// Aadhaar Virtual ID (VID).
+const AADHAAR_KEYWORD_RE = /(?<![A-Za-z])(?:aa?dhaa?r|adhar|uid(?:ai)?|u\.i\.d\.?|vid|virtual[ \t]*id)(?![A-Za-z])/gi;
+const AADHAAR_VALUE_RE =
+  /(?<![0-9])\d{4}[ \-​-‍⁠﻿]?\d{4}[ \-​-‍⁠﻿]?\d{4}(?:[ \-​-‍⁠﻿]?\d{4})?(?![0-9])/;
+
+function aadhaarKeywordDetector(view: string): Span[] {
+  return keywordValueSpans(view, AADHAAR_KEYWORD_RE, AADHAAR_VALUE_RE, "government_id", (s) => {
+    const d = digitsOnly(s);
+    return d.length === 16 ? `vid:${d}` : `aadhaar:${d}`;
+  });
+}
+
+/**
+ * Shapes specific enough without a keyword:
+ * - a chain of exactly 16 digits that is not a Luhn-valid card (the Aadhaar VID shape; masked whole
+ *   so the phone detector cannot carve 10 digits out of it and leak the rest);
+ * - a 4-4-4 grouping of 12 digits starting 2-9 (the printed Aadhaar shape), whatever the checksum.
+ */
+function idShapeDetector(view: string): Span[] {
+  const spans: Span[] = [];
+  for (const chain of digitChains(view)) {
+    const digits = chain.map((g) => g.digits).join("");
+    const start = chain[0].start;
+    const end = chain[chain.length - 1].end;
+    if (digits.length === 16 && !luhnValid(digits)) {
+      spans.push({ start, end, kind: "government_id", value: `vid:${digits}` });
+    } else if (chain.length === 3 && chain.every((g) => g.digits.length === 4) && /^[2-9]/.test(digits)) {
+      const seps = [view.slice(chain[0].end, chain[1].start), view.slice(chain[1].end, chain[2].start)];
+      if (seps.every((s) => s === " " || s === "-") && seps[0] === seps[1]) {
+        spans.push({ start, end, kind: "government_id", value: `aadhaar:${digits}` });
+      }
+    }
+  }
+  return spans;
+}
+
+// Date of birth: a date right after a birth keyword.
+const MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+const DOB_KEYWORD_RE = /(?<![A-Za-z])(?:d\.?o\.?b\.?|date[ \t]+of[ \t]+birth|birth[ \t]?date|born(?:[ \t]+on)?|birthday|b'?day)(?![A-Za-z])/gi;
+const DOB_VALUE_RE = new RegExp(
+  [
+    "(?<![0-9])\\d{1,2}[./\\-]\\d{1,2}[./\\-](?:\\d{4}|\\d{2})(?![0-9])",
+    "(?<![0-9])(?:19|20)\\d{2}[./\\-]\\d{1,2}[./\\-]\\d{1,2}(?![0-9])",
+    `(?<![0-9])\\d{1,2}(?:st|nd|rd|th)?[ \\t\\-]+(?:of[ \\t]+)?(?:${MONTHS})\\.?(?:,?[ \\t\\-]+(?:19|20)\\d{2})?(?![A-Za-z0-9])`,
+    `(?<![A-Za-z])(?:${MONTHS})\\.?[ \\t]+\\d{1,2}(?:st|nd|rd|th)?(?:,?[ \\t]+(?:19|20)\\d{2})?(?![A-Za-z0-9])`,
+  ].join("|"),
+  "i",
+);
+
+function dobDetector(view: string): Span[] {
+  return keywordValueSpans(view, DOB_KEYWORD_RE, DOB_VALUE_RE, "government_id", (s) => `dob:${s.toLowerCase().replace(/\s+/g, " ")}`, 30);
+}
+
+// PIN codes and postal addresses.
+const PIN_VALUE = "[1-9]\\d{2}[ \\t]?\\d{3}";
+const INDIAN_PLACES =
+  "bengaluru|bangalore|mumbai|bombay|delhi|new delhi|chennai|madras|kolkata|calcutta|hyderabad|secunderabad|pune|ahmedabad|surat|jaipur|lucknow|kanpur|nagpur|indore|bhopal|patna|vadodara|baroda|coimbatore|kochi|cochin|ernakulam|thiruvananthapuram|trivandrum|mysuru|mysore|mangaluru|mangalore|noida|gurugram|gurgaon|ghaziabad|faridabad|chandigarh|ludhiana|amritsar|dehradun|guwahati|bhubaneswar|visakhapatnam|vizag|vijayawada|madurai|nashik|thane|navi mumbai|goa|panaji|ranchi|raipur|jammu|srinagar|shimla|udaipur|jodhpur|agra|varanasi|allahabad|prayagraj|meerut|karnataka|maharashtra|tamil nadu|kerala|telangana|andhra pradesh|gujarat|rajasthan|uttar pradesh|madhya pradesh|west bengal|odisha|bihar|punjab|haryana|assam|jharkhand|chhattisgarh|uttarakhand|himachal pradesh";
+
+const ADDRESS_WORDS =
+  /(?<![A-Za-z])(?:road|rd|street|st|cross|main|nagar|colony|layout|sector|sec|lane|marg|path|apartments?|apts?|society|soc|block|blk|phase|floor|towers?|enclave|vihar|puram|halli|pet|bagh|chowk|gali|mohalla|village|taluk|tehsil|district|dist|near|opp(?:osite)?|behind|flat|house|plot|door|villa|bungalow|residency|heights|residence|pin(?:[ \t\-]?code)?)(?![A-Za-z])/i;
+// "address: …" / "lives at …" (not "email address", "IP address" or "address the issue").
+const ADDRESS_KEYWORD_RE =
+  /(?<!(?:e-?mail|ip|mac|web|wallet|url|website|site|server|host|network|memory|contract|bitcoin|btc|eth|hex|return-to)[ \t]?)(?<![A-Za-z])(?:(?:home|postal|residential|permanent|current|correspondence|mailing|shipping|delivery|billing|office)[ \t]+)?(?:address|addr)(?:[ \t]*(?:is|:|=|-|–|—)[ \t]*|[ \t]*\r?\n[ \t]*)|(?<![A-Za-z])(?:lives|living|resides|residing|stays|staying)[ \t]+at[ \t]+/gi;
+// "Flat 4B, Green Park Apartments, 12th Main Road" style lines without a keyword.
+const HOUSE_MARKER_RE =
+  /(?<![A-Za-z0-9])(?:flat|house|h\.?[ \t]?no\.?|door[ \t]?no\.?|plot(?:[ \t]?no\.?)?|apt\.?|#)[ \t]*[A-Za-z]?-?\d+[A-Za-z]?(?:[\/\-]\d+[A-Za-z]?)?(?=[ \t]*,)/gi;
+
+/** Extends an address from `from` over comma-separated parts, up to the last part that reads as an address. */
+function addressExtent(view: string, from: number, requireFirst: boolean): number | null {
+  const lineEnd = view.indexOf("\n", from);
+  const limit = Math.min(lineEnd < 0 ? view.length : lineEnd, from + 200);
+  const text = view.slice(from, limit);
+  // Split into comma / semicolon-free parts, stopping at a sentence end not inside "No." / "St.".
+  let end = text.length;
+  const sentence = /[.!?](?=[ \t]+[A-Z][a-z])/g;
+  let s: RegExpExecArray | null;
+  while ((s = sentence.exec(text))) {
+    const before = text.slice(Math.max(0, s.index - 4), s.index);
+    if (/(?:no|st|rd|nr|opp|apt|dist)$/i.test(before)) continue;
+    end = s.index;
+    break;
+  }
+  const body = text.slice(0, end);
+  const parts = body.split(/(?<=,)/);
+  let pos = 0;
+  let lastGood = -1;
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (ADDRESS_WORDS.test(p) || new RegExp(`(?<![0-9])${PIN_VALUE}(?![0-9])`).test(p) || (i === 0 && !requireFirst && /\d/.test(p)) || new RegExp(`(?<![A-Za-z])(?:${INDIAN_PLACES})(?![A-Za-z])`, "i").test(p)) {
+      lastGood = pos + p.length;
+    } else if (i === 0 && requireFirst) {
+      return null;
+    }
+    pos += p.length;
+  }
+  if (lastGood <= 0) return null;
+  const trimmed = body.slice(0, lastGood).replace(/[\s,;:.]+$/, "");
+  return trimmed.length === 0 ? null : from + trimmed.length;
+}
+
+function addressDetector(view: string): Span[] {
+  const spans: Span[] = [];
+  ADDRESS_KEYWORD_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = ADDRESS_KEYWORD_RE.exec(view))) {
+    const from = m.index + m[0].length;
+    const firstPart = view.slice(from, from + 200).split(/[,\n]/)[0];
+    // The value must look like an address: a digit or an address word in its first part.
+    if (!/\d/.test(firstPart) && !ADDRESS_WORDS.test(firstPart)) continue;
+    const end = addressExtent(view, from, false);
+    if (end !== null && end > from) spans.push({ start: from, end, kind: "government_id", value: `addr:${view.slice(from, end).toLowerCase()}` });
+  }
+  HOUSE_MARKER_RE.lastIndex = 0;
+  while ((m = HOUSE_MARKER_RE.exec(view))) {
+    const markerEnd = m.index + m[0].length;
+    const tailEnd = addressExtent(view, markerEnd, false);
+    // A house marker alone is not an address: at least one later part must read as one.
+    if (tailEnd === null) continue;
+    const tail = view.slice(markerEnd, tailEnd);
+    if (!/,/.test(tail) || !(ADDRESS_WORDS.test(tail.slice(tail.indexOf(",") + 1)) || new RegExp(`(?<![0-9])${PIN_VALUE}(?![0-9])`).test(tail))) continue;
+    spans.push({ start: m.index, end: tailEnd, kind: "government_id", value: `addr:${view.slice(m.index, tailEnd).toLowerCase()}` });
+  }
+  return spans;
+}
+
+/**
+ * Personal details that run before the credential detector. A PIN code names an area shared by
+ * thousands of people, so it is masked only as part of an address span (an address keyword or a
+ * house-number line); a bare "pin code 560001" stays readable (existing false-positive guard).
+ */
+function personalDetailsDetector(view: string): Span[] {
+  return [...addressDetector(view), ...dobDetector(view)];
+}
+
+/** Government ID shapes; before the card, bank and phone detectors so none of them carves a part out. */
+function governmentIdDetector(view: string): Span[] {
+  return [...gstinDetector(view), ...drivingLicenceDetector(view), ...passportDetector(view), ...epicDetector(view), ...aadhaarKeywordDetector(view)];
+}
+
+// Bank words that may come after the number ("transfer to 123456789012 at SBI"). Weaker than the
+// account keywords, so a number that is a valid phone shape is left to the phone detector.
+const BANK_CONTEXT_RE =
+  /(?<![A-Za-z])(?:bank|banks|ifsc|neft|rtgs|imps|beneficiary|branch|sbi|hdfc|icici|axis|kotak|pnb|canara|idbi|idfc|indusind|federal|rbl|uco|iob|boi|bob|baroda|yes[ \t]+bank|union[ \t]+bank|transfer(?:red|ring)?[ \t]+(?:it[ \t]+)?to|deposit(?:ed)?[ \t]+(?:in|into|to))(?![A-Za-z])/gi;
+
+function phoneShaped(digits: string): boolean {
+  const n = digits.length;
+  return (
+    (n === 10 && /^[6-9]/.test(digits)) ||
+    (n === 11 && /^0[6-9]/.test(digits)) ||
+    (n === 12 && /^91[6-9]/.test(digits)) ||
+    (n === 14 && /^0091[6-9]/.test(digits))
+  );
+}
+
+function bankContextDetector(view: string): Span[] {
+  const words: Array<{ start: number; end: number }> = [];
+  BANK_CONTEXT_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = BANK_CONTEXT_RE.exec(view))) words.push({ start: m.index, end: m.index + m[0].length });
+  if (words.length === 0) return [];
+  const near = (start: number, end: number) =>
+    words.some((k) => (start >= k.end && start - k.end <= 40) || (end <= k.start && k.start - end <= 40));
+  return scanDigitWindows(view, "bank_account", 18, (digits, plus, start, end) =>
+    !plus && digits.length >= 9 && digits.length <= 18 && !phoneShaped(digits) && near(start, end) ? digits : null,
+  );
+}
+
+// International phones written without "+": a "00" prefix, a phone keyword just before, or a
+// well-known country code followed by a mobile prefix of the right length.
+const PHONE_KEYWORD_BEFORE_RE =
+  /(?:phone|mobile|mob|cell|call|calls|calling|tel|telephone|whats[ \t]?app|wa|contact|ph|number|ring|dial|sms|text)[\s.:#=\-]{0,4}$/i;
+const INTL_MOBILE_SHAPES = [
+  /^44 ?7\d{9}$/, // UK mobile
+  /^1[2-9]\d{2}[2-9]\d{6}$/, // NANP
+  /^971 ?5\d{8}$/, // UAE
+  /^966 ?5\d{8}$/, // Saudi Arabia
+  /^974 ?[3-7]\d{7}$/, // Qatar
+  /^968 ?9\d{7}$/, // Oman
+  /^973 ?[36]\d{7}$/, // Bahrain
+  /^965 ?[569]\d{7}$/, // Kuwait
+  /^65 ?[89]\d{7}$/, // Singapore
+  /^61 ?4\d{8}$/, // Australia
+  /^64 ?2\d{7,9}$/, // New Zealand
+  /^49 ?1[5-7]\d{8,9}$/, // Germany
+  /^33 ?[67]\d{8}$/, // France
+  /^60 ?1\d{8,9}$/, // Malaysia
+  /^86 ?1[3-9]\d{9}$/, // China
+  /^977 ?9[78]\d{8}$/, // Nepal
+  /^880 ?1\d{9}$/, // Bangladesh
+  /^94 ?7\d{8}$/, // Sri Lanka
+  /^92 ?3\d{9}$/, // Pakistan
+  /^353 ?8\d{8}$/, // Ireland
+  /^31 ?6\d{8}$/, // Netherlands
+  /^27 ?[6-8]\d{8}$/, // South Africa
+  /^254 ?7\d{8}$/, // Kenya
+  /^234 ?[789]\d{9}$/, // Nigeria
+];
+
+function intlPhoneDetector(view: string): Span[] {
+  return scanDigitWindows(view, "phone", 17, (digits, hasPlus, start) => {
+    if (hasPlus) return null;
+    const n = digits.length;
+    if (/^00[1-9]/.test(digits) && n >= 11 && n <= 17) return canonicalPhoneNumber(digits, false);
+    if (n < 11 || n > 15 || !/^[1-9]/.test(digits) || phoneShaped(digits)) return null;
+    const keyword = PHONE_KEYWORD_BEFORE_RE.test(view.slice(Math.max(0, start - 24), start));
+    if (keyword || INTL_MOBILE_SHAPES.some((re) => re.test(digits))) return canonicalPhoneNumber(digits, true);
+    return null;
+  });
+}
+
+/**
+ * Last resort for unseparated 11-18 digit runs that no other detector claimed (a bank account
+ * written with no keyword at all). Compact timestamps (epoch seconds or milliseconds, yyyymmddHHMMss)
+ * are left alone so log lines stay readable.
+ */
+function longDigitRunDetector(view: string): Span[] {
+  return regexSpans(view, /(?<![A-Za-z0-9_\-.\/:])\d{11,18}(?![A-Za-z0-9_\-]|[.\/:]\d)/g, "bank_account", (m) => {
+    const d = m[0];
+    if (/^1[5-9]\d{11}$/.test(d)) return null; // epoch milliseconds
+    if (/^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])[0-5]\d(?:[0-5]\d(?:\d{1,4})?)?$/.test(d)) return null;
+    return d;
+  });
+}
+
 const DETECTORS: Detector[] = [
   (v) => regexSpans(v, PRIVATE_KEY_RE, "secret", (m) => m[0]),
   (v) => regexSpans(v, API_KEY_RE, "api_key", (m) => m[0]),
@@ -697,13 +1041,27 @@ const DETECTORS: Detector[] = [
   secretDetector,
   // Before the password detector: a pasted 20–31 character token is masked whole.
   shortTokenDetector,
+  // R5: addresses, PIN codes and dates of birth before the credential detector, so "pin code:
+  // 560001" is a PIN code rather than a password and an address is masked as one span.
+  personalDetailsDetector,
   passwordDetector,
+  // R5: GSTIN (with its embedded PAN), driving licence, passport, voter ID and keyword Aadhaar/VID
+  // before any digit detector can carve a part out of them.
+  governmentIdDetector,
   cardDetector,
+  // R5: 16-digit runs (Aadhaar VID shape) and 4-4-4 Aadhaar groupings, after the card detector.
+  idShapeDetector,
   bankDetector,
+  // R5: a bank word after the number ("123456789012 at SBI").
+  bankContextDetector,
+  // R5: international numbers without "+" ("0044 7911 123456", "447911123456", "call 14155550123").
+  intlPhoneDetector,
   phoneDetector,
   aadhaarDetector,
   panDetector,
   ifscDetector,
+  // R5: whatever unseparated 11-18 digit run is left (a bank number with no keyword at all).
+  longDigitRunDetector,
 ];
 
 /** Removes overlapping spans: earlier start wins, then longer span. */

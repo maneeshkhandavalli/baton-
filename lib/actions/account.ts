@@ -6,6 +6,7 @@ import type { Result } from "../contracts/api";
 import type { AccountDeletionBlockers } from "../contracts/dto";
 import type { DeleteAccountInput } from "../contracts/schemas";
 import * as core from "./core/account";
+import { connectorDeps } from "../connectors/server";
 import { actionDeps } from "./deps";
 
 export async function getAccountDeletionBlockers(): Promise<Result<AccountDeletionBlockers>> {
@@ -13,5 +14,5 @@ export async function getAccountDeletionBlockers(): Promise<Result<AccountDeleti
 }
 
 export async function deleteAccount(input: DeleteAccountInput): Promise<Result<null>> {
-  return core.deleteAccount(actionDeps(), input);
+  return core.deleteAccount(actionDeps(), input, connectorDeps());
 }

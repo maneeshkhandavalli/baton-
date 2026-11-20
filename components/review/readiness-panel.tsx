@@ -21,6 +21,12 @@ interface ReadinessPanelProps {
   onSection: (s: SectionFilter) => void;
   onBlocker: (kind: ReadinessReport["blockers"][number]["kind"]) => void;
   gapsHref: string | null;
+  /** Round 4 audit C3: the points the Gaps filter shows (missing evidence or an open gap question); defaults to missing. */
+  gapPointIds?: ReadonlySet<string>;
+  /** Open required gap questions that aren't attached to a point on this page. */
+  unattachedRequiredGaps?: number;
+  /** The handover is published (approved or acknowledged): "Ready to publish" no longer applies. */
+  published?: boolean;
   canPublish: boolean;
   onPublish: (() => void) | null;
   /** Round 4: said under the readiness list when this viewer can't publish (only the creator can). */
@@ -54,10 +60,25 @@ function NavButton({ active, onClick, children, count, dots }: { active: boolean
   );
 }
 
-export function ReadinessPanel({ points, readiness, section, onSection, onBlocker, gapsHref, canPublish, onPublish, publishNote, extra, className }: ReadinessPanelProps) {
+export function ReadinessPanel({
+  points,
+  readiness,
+  section,
+  onSection,
+  onBlocker,
+  gapsHref,
+  gapPointIds,
+  unattachedRequiredGaps = 0,
+  published = false,
+  canPublish,
+  onPublish,
+  publishNote,
+  extra,
+  className,
+}: ReadinessPanelProps) {
   const live = points.filter((p) => p.reviewState !== "rejected");
   const conflicts = live.filter((p) => p.evidenceStatus === "conflicting");
-  const gaps = live.filter((p) => p.evidenceStatus === "missing");
+  const gaps = live.filter((p) => (gapPointIds ? gapPointIds.has(p.id) : p.evidenceStatus === "missing"));
   const decided = points.filter((p) => p.reviewState !== "pending").length;
 
   return (
@@ -80,10 +101,12 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
         {readiness && (
           <>
             {readiness.blockers.length === 0 ? (
+              published ? null : (
               <p className="mt-3 flex items-center gap-1.5 text-caption font-medium text-success-fg">
                 <CheckCircle2 aria-hidden="true" className="size-3.5" />
                 Ready to publish
               </p>
+              )
             ) : (
               <ul className="mt-3 space-y-1" aria-label="Before you can publish">
                 {readiness.blockers.map((b) => (
@@ -143,6 +166,13 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
             Gaps
           </span>
         </NavButton>
+        {unattachedRequiredGaps > 0 && (
+          <p className="px-2.5 text-caption text-muted-foreground">
+            {unattachedRequiredGaps === 1
+              ? "1 required question isn't tied to a point. Answer it in the Gap Interview."
+              : `${unattachedRequiredGaps} required questions aren't tied to a point. Answer them in the Gap Interview.`}
+          </p>
+        )}
         {gapsHref && (
           <Link href={gapsHref} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-caption font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
             Manage the Gap Interview

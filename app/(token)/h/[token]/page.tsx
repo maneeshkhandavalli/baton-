@@ -6,6 +6,7 @@ import { Suspense } from "react";
 
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { formatDate } from "@/components/handover/format";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { memberRoleLabel } from "@/components/handover/labels";
 import { invitationCopy, invitationViewFromDetails, invitationViewFromQuery, type InvitationView } from "@/components/invitations/invitation-view";
 import { PageContainer } from "@/components/layout/page-container";
@@ -35,6 +36,9 @@ export default function InvitationPage({ params, searchParams }: PageProps<"/h/[
       <Suspense fallback={<ListSkeleton label="Opening the invitation…" rows={1} />}>
         <InvitationContent params={params} searchParams={searchParams} />
       </Suspense>
+      <footer>
+        <LegalLinks className="mt-4 justify-center" />
+      </footer>
     </PageContainer>
   );
 }

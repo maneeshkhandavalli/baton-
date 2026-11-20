@@ -16,7 +16,9 @@ import { safeEqual } from "./verify";
 import { isConnectorProvider, type ConnectorProvider } from "./types";
 
 export type ConnectorStatePayload =
-  | { t: "oauth"; p: ConnectorProvider; profileId: string; handoverId: string | null; nonce: string; exp: number }
+  // inst: GitHub only, set when the app was already installed and Baton sends the user through a separate
+  // authorization round trip to get the code that proves access to that installation (see github/routes.ts).
+  | { t: "oauth"; p: ConnectorProvider; profileId: string; handoverId: string | null; nonce: string; exp: number; inst?: string }
   | { t: "intent"; p: ConnectorProvider; account: string; accountLabel: string; channel: string; channelLabel: string; nonce: string; exp: number };
 
 const b64u = (b: Buffer | string) => Buffer.from(b).toString("base64url");

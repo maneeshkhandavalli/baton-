@@ -29,6 +29,11 @@ interface EvidenceQuoteProps {
   supportVerdict?: SupportVerdict;
   verdictRationale?: string | null;
   guarded?: boolean;
+  /**
+   * Round 4 audit C2: what kind of testimony this is ("Gap Interview answer", "Your statement", "Reviewer statement").
+   * Defaults to "Gap Interview answer"; see components/review/testimony-label.ts.
+   */
+  testimonyLabel?: string;
   className?: string;
 }
 
@@ -110,6 +115,7 @@ export function EvidenceQuote({
   supportVerdict,
   verdictRationale,
   guarded,
+  testimonyLabel = "Gap Interview answer",
   className,
 }: EvidenceQuoteProps) {
   const SourceIcon = kind === "testimony" ? UserRound : sentAt ? MessageCircle : FileText;
@@ -142,7 +148,7 @@ export function EvidenceQuote({
               <MaskedText text={authorLabel} />
             </span>
           )}
-          {kind === "testimony" && <span className={sep}>Gap Interview answer</span>}
+          {kind === "testimony" && <span className={sep}>{testimonyLabel}</span>}
           {sentAt && (
             <time className={cn(sep, "tabular-nums")} dateTime={sentAt}>
               {kind === "testimony" ? formatDate(sentAt) : formatDateTime(sentAt)}

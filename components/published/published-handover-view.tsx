@@ -8,6 +8,7 @@ import { attributeRows } from "@/components/handover/attributes";
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS, categoryLabel, memberRoleLabel, type HandoverSectionId } from "@/components/handover/labels";
 import { EvidenceQuote } from "@/components/review/evidence-quote";
+import { inferredBasis } from "@/components/review/testimony-label";
 import { KEY_FACT_LABELS, keyFacts } from "@/components/shared/key-facts";
 import { KeyFactsStrip } from "@/components/shared/key-facts-strip";
 import { MaskedText } from "@/components/shared/masked-text";
@@ -264,7 +265,7 @@ function PublishedPoint({ point }: { point: Point }) {
         <p className="mt-3 flex items-start gap-2 rounded-lg bg-status-inferred-soft px-3 py-2 text-sm text-status-inferred-fg">
           <Lightbulb aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>
-            No source states this outright.
+            <MaskedText text={inferredBasis(evidence)} />
             {c.inferredConfirmation ? ` Confirmed by ${c.inferredConfirmation.byLabel} on ${formatDate(c.inferredConfirmation.at)}.` : " Treat it as unconfirmed."}
           </span>
         </p>
@@ -303,6 +304,7 @@ function PublishedPoint({ point }: { point: Point }) {
                   authorLabel={e.authorLabel}
                   sentAt={e.sentAt}
                   sourceTitle={e.sourceTitle}
+                  testimonyLabel="Answer"
                   tone={e.stance === "contradicts" ? "contradicts" : "supports"}
                 />
               ))}

@@ -10,6 +10,12 @@
  *    unparsed chat sources is registered in the handover's encrypted identity vault (stable [PERSON_n]
  *    across sources, whatever order the parse jobs run in); labels become placeholders and mentions of every
  *    known person are replaced. Excluded people are never registered (the parser already dropped them).
+ * 6b. R4 (audit 3.2 / S3): names of people who never sent a message (mentioned only, nicknames, joined
+ *    honorifics, document-only handovers) are found locally (lib/privacy/name-detect.ts, no external service),
+ *    registered in the vault like senders (person key from the same identity hash, so a later sender with
+ *    the same name gets the same number) and replaced. A name that matches an exclusion rule is never
+ *    registered (it becomes `[PERSON]`). Beyond MAX_MENTIONED_PEOPLE new names, the rest become `[PERSON]`:
+ *    a name is never left in clear because the vault is full.
  * 7. `persistPseudonymizedSource`: participants, conversations and messages in ONE transaction, refused
  *    unless every label is a known placeholder; the source is marked `person_v1`.
  * 8. Only after that commit, `deleteParsedRawSource`. A failed delete is left to the retention sweep.
@@ -28,8 +34,13 @@ import {
 } from "../../db/pipeline";
 import { deleteParsedRawSource, downloadVerifiedRawSourceWithMeta, readRawSourceForPeople } from "../../db/storage";
 import { parseSource, previewSource } from "../../parsers/parse-source";
+import { discoverExcludedNames } from "../../privacy/excluded-discovery";
+import { compileExclusions } from "../../privacy/exclusions";
+import { computeIdentityHash } from "../../privacy/identity";
 import { personKeyFor, sealLabel, type IdentityMapKey } from "../../privacy/identity-vault";
-import { pseudonymizeParsedSource } from "../../privacy/pseudonymize-source";
+import type { DiscoveredName } from "../../privacy/name-detect";
+import { AMBIGUOUS_PERSON_TOKEN, personToken } from "../../privacy/pseudonymize";
+import { discoverSourceNames, pseudonymizeMentionedNames, pseudonymizeParsedSource } from "../../privacy/pseudonymize-source";
 import { identityMapKeyFor, openPeople, vaultLabelFor } from "../identity";
 import { claimOf, type StageContext } from "../stage-context";
 import { failed, type FailureReason, type StageOutcome } from "../types";
@@ -148,7 +159,12 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
     if (ordinal === undefined) return failed("internal", "internal"); // reserve always returns every requested person
     ordinalOf.set(o.localId, ordinal);
   }
-  const pseudo = pseudonymizeParsedSource(parsed, { ordinalOf, people: openPeople(key, handoverId, people) });
+  const known = pseudonymizeParsedSource(parsed, { ordinalOf, people: openPeople(key, handoverId, people) });
+
+  // 6b. R4: names of people who never sent a message.
+  const mentioned = await reserveMentionedPeople(ctx, key, pepper.data.pepper, exclusions, discoverSourceNames(known.parsed));
+  const final = pseudonymizeMentionedNames(known.parsed, mentioned.names);
+  const pseudo = { parsed: final.parsed, replaced: known.replaced + final.replaced };
 
   try {
     await persistPseudonymizedSource(ctx.db, claimOf(ctx), pseudo.parsed, pepper.data.version);
@@ -173,12 +189,79 @@ export async function runParse(ctx: StageContext): Promise<StageOutcome> {
     messagesExcluded: parsed.stats.messagesExcluded,
     peopleKnown: people.length,
     mentionsPseudonymized: pseudo.replaced,
+    mentionedPeople: mentioned.registered,
+    mentionedUnnumbered: mentioned.unnumbered,
     otherChatsRead: others.read,
     otherChatsSkipped: others.skipped,
   });
 
   await deleteRaw(ctx, sourceId); // §10.3 step 4: only after the commit above
   return { kind: "succeeded", progress: { done: 1, total: 1 } };
+}
+
+/** At most this many new mentioned-only people are registered per source; the rest become `[PERSON]`. */
+export const MAX_MENTIONED_PEOPLE = 1000;
+
+const normName = (s: string) => s.normalize("NFKC").toLocaleLowerCase("und").replace(/\s+/g, " ").trim();
+
+/**
+ * Registers discovered names in the vault (sealed, like senders) and returns each with its token. A single
+ * word that belongs to exactly one discovered multi-word name ("Kavya" with "Kavya Menon") shares its number.
+ * Names matching an exclusion rule are never registered.
+ */
+async function reserveMentionedPeople(
+  ctx: StageContext,
+  key: IdentityMapKey,
+  pepper: string,
+  exclusions: unknown,
+  names: readonly DiscoveredName[],
+): Promise<{ names: Array<{ label: string; token: string; caseSensitive: boolean }>; registered: number; unnumbered: number }> {
+  if (names.length === 0) return { names: [], registered: 0, unnumbered: 0 };
+  const handoverId = ctx.job.job.handoverId;
+  const excluded = new Set(discoverExcludedNames(names.map((n) => n.label), compileExclusions(exclusions), pepper).map(normName));
+
+  // Single words of exactly one multi-word name are aliases of it.
+  const multiByWord = new Map<string, Set<string>>();
+  for (const n of names) {
+    const words = normName(n.label).split(" ");
+    if (words.length < 2) continue;
+    for (const w of words) multiByWord.set(w, (multiByWord.get(w) ?? new Set()).add(normName(n.label)));
+  }
+  const aliasOf = (n: DiscoveredName): string | null => {
+    const k = normName(n.label);
+    if (k.includes(" ")) return null;
+    const owners = multiByWord.get(k);
+    return owners && owners.size === 1 ? [...owners][0] : null;
+  };
+
+  const toRegister: Array<{ name: DiscoveredName; personKey: string }> = [];
+  for (const n of names) {
+    if (excluded.has(normName(n.label)) || aliasOf(n) !== null) continue;
+    if (toRegister.length >= MAX_MENTIONED_PEOPLE) break;
+    toRegister.push({ name: n, personKey: personKeyFor(key, handoverId, "name", computeIdentityHash(n.label, pepper)) });
+  }
+  const reserved =
+    toRegister.length === 0
+      ? []
+      : await reserveHandoverPeople(
+          ctx.db,
+          claimOf(ctx),
+          toRegister.map((r) => ({ personKey: r.personKey, sealed: sealLabel(key, handoverId, r.personKey, r.name.label).sealed, keyVersion: key.version })),
+        );
+  const ordinalByKey = new Map(reserved.map((p) => [p.personKey, p.ordinal]));
+  const tokenByName = new Map<string, string>();
+  for (const r of toRegister) {
+    const ordinal = ordinalByKey.get(r.personKey);
+    tokenByName.set(normName(r.name.label), ordinal === undefined ? AMBIGUOUS_PERSON_TOKEN : personToken(ordinal));
+  }
+  let unnumbered = 0;
+  const out = names.map((n) => {
+    const alias = aliasOf(n);
+    const token = tokenByName.get(alias ?? normName(n.label));
+    if (token === undefined || token === AMBIGUOUS_PERSON_TOKEN) unnumbered += 1;
+    return { label: n.label, caseSensitive: n.caseSensitive, token: token ?? AMBIGUOUS_PERSON_TOKEN };
+  });
+  return { names: out, registered: toRegister.length, unnumbered };
 }
 
 async function deleteRaw(ctx: StageContext, sourceId: string): Promise<void> {

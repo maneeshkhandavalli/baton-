@@ -19,10 +19,13 @@
  * A name word shared by two or more people ("Ravi" for "Ravi Kumar" and "Ravi Shankar") is ambiguous: it
  * becomes `[PERSON]` (a person, unnumbered), never a guess. A whole name always wins over a shared word.
  *
- * Limitations (documented in docs/architecture/privacy-and-data-protection.md): only KNOWN participants are
- * detected. Names of people who never sent a message in any chat source of the handover, nicknames,
- * misspellings, transliterations into another script, names glued to other words ("Ravibhai") and common
- * words used as names are not replaced. This is not a general named-entity recogniser.
+ * This module detects only KNOWN participants. R4 (audit 3.2 / S3): name-detect.ts adds, locally and
+ * deterministically, joined honorifics ("Ravibhai"), nickname prefixes and romanisation variants of known
+ * names, and the names of people who never sent a message (mentioned only, document-only handovers), which
+ * the parse stage registers in the vault like senders and the AI-payload builders replace by `[PERSON]`.
+ * Still not detected: lower-case names without an @mention or honorific, names in caseless scripts that are
+ * not known participants, misspellings, and names that are also stoplisted words. This is not a general
+ * named-entity recogniser.
  */
 
 /** A known participant: its placeholder number and the masked display label (null: no usable name). */

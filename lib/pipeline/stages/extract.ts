@@ -48,7 +48,7 @@ import { mapAiFailure } from "../ai";
 import { planChunks } from "../chunk";
 import { CoverageWriter, scanAndStoreSignals } from "../coverage";
 import { PointIndex, type ClaimShape } from "../dedup";
-import { collectStrings, excludedGuardFrom, findsIdentity, loadJobIdentity, type ExcludedGuard } from "../identity";
+import { collectStrings, createPayloadPseudonymizer, excludedGuardFrom, findsIdentity, loadJobIdentity, type ExcludedGuard } from "../identity";
 import { claimOf, type StageContext } from "../stage-context";
 import { failed, failure, type StageOutcome } from "../types";
 import { callSignal, startAiStage } from "./ai-prelude";
@@ -177,9 +177,12 @@ export async function runExtract(ctx: StageContext): Promise<StageOutcome> {
   if (!loaded.ok) return failed("conflict", "source_changed", true);
   const { accessLevel } = loaded;
 
+  // R4: known names, their fuzzy forms and any other name ([PERSON]) in the owner-typed titles.
+  const titles = [ctx.job.handover.teamName, ...(ctx.job.handover.roleTitle === null ? [] : [ctx.job.handover.roleTitle])];
+  const pTitle = createPayloadPseudonymizer(ident.identity, titles);
   const handover = {
-    teamName: detector.apply(ctx.job.handover.teamName).text,
-    roleTitle: ctx.job.handover.roleTitle === null ? null : detector.apply(ctx.job.handover.roleTitle).text,
+    teamName: pTitle(ctx.job.handover.teamName),
+    roleTitle: ctx.job.handover.roleTitle === null ? null : pTitle(ctx.job.handover.roleTitle),
   };
   const plan = planChunks(loaded.messages, handover, EXTRACT_REQUEST_LIMITS);
   const total = plan.chunks.length;

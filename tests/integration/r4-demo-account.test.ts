@@ -15,7 +15,7 @@ import { signInWithPassword } from "../../app/(auth)/login/actions";
 import { setPassword } from "../../app/(workspace)/account/password/actions";
 import { DemoAccountPanel } from "../../components/auth/demo-account-panel";
 import { DEMO_ACCOUNT_REFUSAL, parseDemoAccounts } from "../../lib/demo-accounts";
-import { authCalls, resetPlatform, signInAs } from "./support/platform";
+import { authCalls, installBackends, resetPlatform, signInAs } from "./support/platform";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PW = "correct horse battery"; // synthetic
@@ -86,6 +86,7 @@ describe("setting a password: shared demo accounts", () => {
 
   it("any other account still sets its password", async () => {
     signInAs("11111111-1111-4111-8111-111111111111", "someone@example.test");
+    installBackends().adminDb.returns("account_has_password", false); // no password yet: no current one to give
     assert.equal((await setPassword(PW, PW)).status, "ok");
     assert.equal(updates().length, 1);
   });

@@ -20,7 +20,13 @@ import { ConnectorStoreError } from "../../connectors/errors";
 import { flushLink, type SourceWriter } from "../../connectors/flush";
 import { ingestHistory, type HistoryImportResult } from "../../connectors/ingest";
 import { onlyLink, pullLink } from "../../connectors/sync";
-import { ProviderError, type AdapterContext, type ProviderServerAdapter } from "../../connectors/providers/adapter";
+import {
+  ProviderConfigError,
+  ProviderError,
+  type AdapterContext,
+  type ProviderConfigReason,
+  type ProviderServerAdapter,
+} from "../../connectors/providers/adapter";
 import { verifyConnectorState } from "../../connectors/state";
 import {
   CONNECTOR_MESSAGE_LIMITS,
@@ -31,6 +37,7 @@ import {
   type ConnectorStore,
   type InstallationRecord,
 } from "../../connectors/types";
+import { refuseDemoContent } from "./demo-guard";
 import { createInputMasker } from "./mask";
 import { action, failWith, ok, type Failure } from "./run";
 import type { ActionDeps } from "./types";
@@ -46,13 +53,88 @@ export interface ConnectorDeps {
   creatorHandovers(profileId: string): Promise<Array<{ id: string; title: string }>>;
   /** The person's Baton display name for channel notices (never an email); null when unknown. Optional in tests. */
   displayName?(profileId: string): Promise<string | null>;
+  /**
+   * Code-only log line, injected by the server deps factory (lib/connectors/server.ts); a no-op when absent (core
+   * modules never write to the console). Receives the provider, an event name and a fixed
+   * code: never a token, a message, a channel or person id, or a provider response body.
+   */
+  log?(entry: ConnectorActionLogEntry): void;
 }
+
+export interface ConnectorActionLogEntry {
+  scope: "connector";
+  provider: ConnectorProvider | "unknown";
+  /** e.g. "notice_started", "notice_paused", "notice_stopped", "revoke_at_provider", "provider_config". */
+  event: string;
+  /** A ProviderError code, a ProviderConfigReason, or "error" for anything else. */
+  code: string;
+}
+
+/** Code-only, never the error message (a provider message may echo a URL with a token in it). */
+export function failureCode(e: unknown): string {
+  if (e instanceof ProviderConfigError) return e.reason;
+  if (e instanceof ProviderError) return e.code;
+  if (e instanceof ConnectorStoreError) return `store_${e.code}`;
+  return "error";
+}
+
+function logAction(c: Pick<ConnectorDeps, "log">, provider: ConnectorActionLogEntry["provider"], event: string, code: string): void {
+  const entry: ConnectorActionLogEntry = { scope: "connector", provider, event, code };
+  try {
+    c.log?.(entry);
+  } catch {
+    // logging never changes the outcome of an action
+  }
+}
+
+/**
+ * Posts a capture notice. A failure never blocks the action (the consent, pause or stop is already recorded), but it
+ * is no longer silent: it is logged as `notice_<change>` with a code only.
+ */
+async function postNotice(
+  c: ConnectorDeps,
+  adapter: ProviderServerAdapter,
+  inst: InstallationRecord,
+  link: ChannelLinkRecord,
+  change: "started" | "paused" | "stopped",
+  by: string | null,
+): Promise<boolean> {
+  if (!adapter.announceCapture) return false;
+  try {
+    await adapter.announceCapture(c.adapterContext(), inst, link, change, by);
+    return true;
+  } catch (e) {
+    logAction(c, inst.provider, `notice_${change}`, failureCode(e));
+    return false;
+  }
+}
+
+/** Safe, specific text for a server misconfiguration the owner can fix (never the value of a variable). */
+const CONFIG_MESSAGES: Partial<Record<ProviderConfigReason, string>> = {
+  github_app_id_is_client_id:
+    "GitHub isn't set up correctly on this server: the App ID setting holds the app's Client ID. The server owner must set GITHUB_APP_ID to the numeric App ID from the GitHub App's settings page, then redeploy.",
+  github_app_id_not_numeric:
+    "GitHub isn't set up correctly on this server: GITHUB_APP_ID must be the numeric App ID from the GitHub App's settings page. The server owner can fix this and redeploy.",
+  github_app_id_missing: "GitHub isn't set up correctly on this server: GITHUB_APP_ID is empty. The server owner can fix this and redeploy.",
+  github_private_key_missing: "GitHub isn't set up correctly on this server: the app's private key is missing. The server owner can fix this and redeploy.",
+  github_private_key_unparsable:
+    "GitHub isn't set up correctly on this server: the app's private key can't be read. The server owner should paste the whole .pem file into GITHUB_APP_PRIVATE_KEY again, then redeploy.",
+  github_private_key_not_rsa:
+    "GitHub isn't set up correctly on this server: the app's private key is not the RSA key GitHub generated. The server owner should generate a new private key for the GitHub App, then redeploy.",
+};
 
 const uuid = z.string().uuid();
 const providerSchema = z.enum(CONNECTOR_PROVIDERS);
 
 /** Maps store/provider errors to the standard failures; anything else is rethrown (guarded → internal). */
-function mapError(e: unknown): Failure {
+function mapError(e: unknown, c: Pick<ConnectorDeps, "log"> = {}): Failure {
+  if (e instanceof ProviderConfigError) {
+    logAction(c, e.reason.startsWith("github_") ? "github" : "unknown", "provider_config", e.reason);
+    return failWith("precondition_failed", {
+      message: CONFIG_MESSAGES[e.reason] ?? "This connector isn't set up on this server yet.",
+      details: { reason: "provider_not_configured", config: e.reason },
+    });
+  }
   if (e instanceof ConnectorStoreError) {
     if (e.code === "internal") throw e;
     const message =
@@ -77,11 +159,11 @@ function mapError(e: unknown): Failure {
   throw e;
 }
 
-async function attempt<T>(work: () => Promise<Result<T>>): Promise<Result<T>> {
+async function attempt<T>(c: Pick<ConnectorDeps, "log">, work: () => Promise<Result<T>>): Promise<Result<T>> {
   try {
     return await work();
   } catch (e) {
-    return mapError(e);
+    return mapError(e, c);
   }
 }
 
@@ -116,7 +198,7 @@ const PRIVATE_CHANNEL_OFF = "Private channels aren't turned on for Slack on this
 
 export async function listHandoverConnectors(deps: ActionDeps, c: ConnectorDeps, input: { handoverId: string }): Promise<Result<HandoverConnectorsView>> {
   return action(deps, z.object({ handoverId: uuid }), input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
       // No provider configured on this server: say so without touching the connector tables (a deployment
       // without connector credentials, or before the connector migration, must not show an error).
       if (!CONNECTOR_PROVIDERS.some((p) => connectorConfigured(p, c.env))) {
@@ -171,7 +253,7 @@ export async function listInstallationChannels(
   input: { installationId: string; handoverId: string },
 ): Promise<Result<ChannelChoiceDto[]>> {
   return action(deps, z.object({ installationId: uuid, handoverId: uuid }), input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
       const store = c.store();
       const inst = await store.getInstallation(v.installationId);
       if (!inst || inst.installedByProfileId !== actor.profileId || inst.status !== "active") return failWith("not_found");
@@ -203,7 +285,9 @@ const linkInput = z.object({ installationId: uuid, handoverId: uuid, externalCha
 /** Links a channel (state pending_consent). The label is taken from the provider, never from the browser. */
 export async function linkChannel(deps: ActionDeps, c: ConnectorDeps, input: z.input<typeof linkInput>): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, linkInput, input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
+      const demo = refuseDemoContent(actor); // F3: a shared demo account can't connect channels or bring in content
+      if (demo) return demo;
       const store = c.store();
       const inst = await store.getInstallation(v.installationId);
       // Someone else's installation is "not found": its channels are never looked up for this user.
@@ -245,7 +329,9 @@ const consentInput = z.object({
  */
 export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, input: z.input<typeof consentInput>): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, consentInput, input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
+      const demo = refuseDemoContent(actor); // F3: a shared demo account can't connect channels or bring in content
+      if (demo) return demo;
       const store = c.store();
       const user = { kind: "user", profileId: actor.profileId } as const;
       const before = await store.getLink(v.linkId);
@@ -297,8 +383,8 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
       }
       // announce the start of capture; a retry on an already capturing link does not announce it again
       if (v.historyDays === 0 || before.state !== "capturing") {
-        const by = await actorName(c, actor.profileId);
-        await adapter.announceCapture?.(ctx, inst, link, "started", by).catch(() => {}); // a notice failure never blocks consent
+        // a notice failure never blocks consent; it is logged (code only)
+        await postNotice(c, adapter, inst, link, "started", await actorName(c, actor.profileId));
       }
       if (incomplete) {
         return failWith("precondition_failed", {
@@ -322,7 +408,9 @@ const settingsInput = z.object({ linkId: uuid, settings: z.record(z.string(), z.
  */
 export async function updateConnectorLinkSettings(deps: ActionDeps, c: ConnectorDeps, input: z.input<typeof settingsInput>): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, settingsInput, input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
+      const demo = refuseDemoContent(actor); // F3: a shared demo account can't connect channels or bring in content
+      if (demo) return demo;
       const store = c.store();
       const link = await store.getLink(v.linkId);
       if (!link || link.state === "revoked") return failWith("not_found");
@@ -339,14 +427,14 @@ export async function updateConnectorLinkSettings(deps: ActionDeps, c: Connector
 
 export async function setCapturePaused(deps: ActionDeps, c: ConnectorDeps, input: { linkId: string; paused: boolean }): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, z.object({ linkId: uuid, paused: z.boolean() }), input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
       const store = c.store();
       const link = await store.setLinkState({ kind: "user", profileId: actor.profileId }, v.linkId, v.paused ? "paused" : "capturing");
       const inst = await store.getInstallation(link.installationId);
       const adapter = inst ? await c.adapter(inst.provider) : null;
       // Resuming a pull-based link starts from now: nothing sent while it was paused is captured.
       if (!v.paused && adapter?.cursorAt) await store.setPullCursor(link.id, adapter.cursorAt(c.now()));
-      if (inst && adapter) await adapter.announceCapture?.(c.adapterContext(), inst, link, v.paused ? "paused" : "started", await actorName(c, actor.profileId)).catch(() => {});
+      if (inst && adapter) await postNotice(c, adapter, inst, link, v.paused ? "paused" : "started", await actorName(c, actor.profileId));
       return ok(linkSummary(link, new Map(inst ? [[inst.id, inst]] : [])));
     }),
   );
@@ -354,13 +442,13 @@ export async function setCapturePaused(deps: ActionDeps, c: ConnectorDeps, input
 
 export async function unlinkChannel(deps: ActionDeps, c: ConnectorDeps, input: { linkId: string }): Promise<Result<null>> {
   return action(deps, linkIdInput, input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
       const store = c.store();
       const link = await store.getLink(v.linkId);
       if (!link) return failWith("not_found");
       await store.revokeLink({ kind: "user", profileId: actor.profileId }, v.linkId, "creator_unlinked");
       const inst = await store.getInstallation(link.installationId);
-      if (inst) await (await c.adapter(inst.provider)).announceCapture?.(c.adapterContext(), inst, link, "stopped", await actorName(c, actor.profileId)).catch(() => {});
+      if (inst) await postNotice(c, await c.adapter(inst.provider), inst, link, "stopped", await actorName(c, actor.profileId));
       return ok(null);
     }),
   );
@@ -369,7 +457,9 @@ export async function unlinkChannel(deps: ActionDeps, c: ConnectorDeps, input: {
 /** "Bring in new messages now": flushes the buffer into a source (or a new version) for the creator to review. */
 export async function syncLinkNow(deps: ActionDeps, c: ConnectorDeps, input: { linkId: string }): Promise<Result<{ status: string; messages: number }>> {
   return action(deps, linkIdInput, input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
+      const demo = refuseDemoContent(actor); // F3: a shared demo account can't connect channels or bring in content
+      if (demo) return demo;
       const store = c.store();
       const link = await store.getLink(v.linkId);
       if (!link || link.state === "revoked") return failWith("not_found");
@@ -397,14 +487,22 @@ export const FLUSH_MESSAGES: Record<string, string> = {
 
 export async function disconnectInstallation(deps: ActionDeps, c: ConnectorDeps, input: { installationId: string }): Promise<Result<null>> {
   return action(deps, z.object({ installationId: uuid }), input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
       const store = c.store();
       const inst = await store.getInstallation(v.installationId);
       if (!inst || inst.installedByProfileId !== actor.profileId) return failWith("not_found");
       const adapter = await c.adapter(inst.provider);
-      // revoke at the provider first (best effort), then locally: local revocation always happens
-      await adapter.revokeAtProvider?.(c.adapterContext(), inst).catch(() => {});
-      await store.revokeInstallation({ kind: "user", profileId: actor.profileId }, inst.id, "creator_disconnected");
+      // revoke at the provider first (best effort), then locally: local revocation always happens. A provider-side
+      // failure is logged with a code only (the owner may need to remove the app by hand at the provider).
+      if (adapter.revokeAtProvider) {
+        await adapter.revokeAtProvider(c.adapterContext(), inst).catch((e: unknown) => logAction(c, inst.provider, "revoke_at_provider", failureCode(e)));
+      }
+      try {
+        await store.revokeInstallation({ kind: "user", profileId: actor.profileId }, inst.id, "creator_disconnected");
+      } catch (e) {
+        logAction(c, inst.provider, "revoke_local", failureCode(e));
+        throw e;
+      }
       return ok(null);
     }),
   );
@@ -414,7 +512,7 @@ export async function disconnectInstallation(deps: ActionDeps, c: ConnectorDeps,
 
 export async function readLinkIntent(deps: ActionDeps, c: ConnectorDeps, input: { intent: string }): Promise<Result<LinkIntentDto>> {
   return action(deps, z.object({ intent: z.string().min(10).max(4096) }), input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
       const check = verifyConnectorState(c.env.CONNECTOR_STATE_SECRET ?? "", v.intent, c.now());
       if (!check.ok || check.payload.t !== "intent") return failWith("token_invalid", { details: { reason: check.ok ? "invalid" : check.reason } });
       const p = check.payload;
@@ -432,7 +530,9 @@ const intentLinkInput = z.object({ intent: z.string().min(10).max(4096), handove
  */
 export async function linkFromIntent(deps: ActionDeps, c: ConnectorDeps, input: z.input<typeof intentLinkInput>): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, intentLinkInput, input, (actor, v) =>
-    attempt(async () => {
+    attempt(c, async () => {
+      const demo = refuseDemoContent(actor); // F3: a shared demo account can't connect channels or bring in content
+      if (demo) return demo;
       const check = verifyConnectorState(c.env.CONNECTOR_STATE_SECRET ?? "", v.intent, c.now());
       if (!check.ok || check.payload.t !== "intent") return failWith("token_invalid", { details: { reason: check.ok ? "invalid" : check.reason } });
       const p = check.payload;

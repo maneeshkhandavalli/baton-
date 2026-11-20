@@ -95,6 +95,26 @@ export function phaseOf(s: Pick<DraftSource, "status" | "errorPhase" | "needsDat
   return s.errorPhase ?? "failed";
 }
 
+/**
+ * Sources waiting for the creator's answer ("Needs your answer": today only the day/month or month/day
+ * question). Continue and Start processing are held while any is left: the run would fail with
+ * date_format_ambiguous. Removing the source clears it too.
+ */
+export function sourcesNeedingAnswer<T extends Pick<DraftSource, "status" | "errorPhase" | "needsDateOrder">>(sources: readonly T[]): T[] {
+  return sources.filter((s) => phaseOf(s) === "needs_input");
+}
+
+/** "Answer the date order question for chat.txt first." Null when nothing is waiting. */
+export function needsAnswerReason(sources: readonly Pick<DraftSource, "name">[], where = ""): string | null {
+  if (sources.length === 0) return null;
+  const names = sources.map((s) => s.name);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `Answer the date order question${names.length === 1 ? "" : "s"} for ${list}${where} first.`;
+}
+
+/** startProcessing's refusal for a chat still waiting for that answer (same literal as lib/actions/core/handovers.ts). */
+export const DATE_ORDER_REQUIRED_REASON = "date_order_required";
+
 /** Size message shared by the local check and the server's `too_large` verdict. */
 export const TOO_LARGE_MESSAGE = "Files can be up to 25 MB. Export the chat without media, or split the document.";
 

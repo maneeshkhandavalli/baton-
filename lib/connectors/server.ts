@@ -44,6 +44,8 @@ export function connectorDeps(): ConnectorDeps {
     writer: () => createSourceWriter({ db: serverDb, storage: serverStorage }),
     env: process.env,
     now: () => Date.now(),
+    // code-only lines (provider, event, fixed code): notice and revocation failures become visible in the logs
+    log: (entry) => console.warn(JSON.stringify(entry)),
     async creatorHandovers(profileId) {
       const r = await callRpc(serverDb(), "connector_creator_handovers", { p_actor_profile_id: profileId });
       return Array.isArray(r) ? (r as Array<{ id: string; title: string }>).map((h) => ({ id: String(h.id), title: String(h.title) })) : [];

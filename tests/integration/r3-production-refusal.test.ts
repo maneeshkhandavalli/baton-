@@ -49,16 +49,21 @@ function world(stage: "extract" | "verify_support") {
     .on("claim_ready_processing_jobs", () => (claims++ === 0 ? [job] : []))
     .returns("get_processing_job_context", jobContext(stage, { source: { state: "parsed" } }))
     .returns("heartbeat_processing_job", "running")
+    .returns("heartbeat_processing_claim", "running") // S5 (20261121100200): the generation-checked heartbeat
     .returns("set_job_provenance", null)
     .returns("pipeline_set_job_provenance", null)
     .returns("list_extraction_messages", { accessLevel: "everyone", messages: [] })
     .returns("list_points_for_pipeline", [])
     .on("list_links_needing_support", () => (stage === "verify_support" ? [LINK] : []))
     .on("complete_processing_job", (args) => (args.p_outcome === "failed" ? "failed" : "succeeded"))
+    .on("complete_processing_claim", (args) => (args.p_outcome === "failed" ? "failed" : "succeeded")) // S5
     .returns("list_run_jobs", { runStatus: "running", jobs: [] });
   workerSlot(w.adminDb); // Task 01B
   return w;
 }
+
+/** S5: a claim with a generation completes through complete_processing_claim, otherwise complete_processing_job. */
+const lastCompletion = (w: ReturnType<typeof world>) => w.adminDb.last("complete_processing_claim") ?? w.adminDb.last("complete_processing_job");
 
 const drain = async () =>
   (
@@ -85,7 +90,7 @@ describe("B5: the worker refuses a 'fake' run outside development/test", () => {
         assert.equal(body.claimed, 1);
         assert.equal(body.failed, 1, JSON.stringify(body));
 
-        const done = w.adminDb.last("complete_processing_job")?.args;
+        const done = lastCompletion(w)?.args;
         assert.equal(done?.p_outcome, "failed", "not retried: a configuration problem never heals by retrying");
         assert.equal(done?.p_error_message, "provider_not_configured");
         const touched = AI_WRITES.filter((fn) => w.adminDb.called(fn));
@@ -100,6 +105,6 @@ describe("B5: the worker refuses a 'fake' run outside development/test", () => {
     const res = await drain();
     assert.equal(res.status, 200);
     assert.ok(w.adminDb.called("pipeline_set_job_provenance") || w.adminDb.called("set_job_provenance"), "the stage got past the provider check");
-    assert.notEqual(w.adminDb.last("complete_processing_job")?.args.p_error_message, "provider_not_configured");
+    assert.notEqual(lastCompletion(w)?.args.p_error_message, "provider_not_configured");
   });
 });

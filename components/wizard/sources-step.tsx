@@ -29,9 +29,11 @@ interface SourcesStepProps {
   onUseSample?: () => void;
   /** True while sample files are being added. */
   addingSample?: boolean;
+  /** Bring this source's question into view and focus it (a new `nonce` asks again). */
+  attention?: { localId: string; nonce: number } | null;
 }
 
-export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, onSwitchKind, full, onUseSample, addingSample = false }: SourcesStepProps) {
+export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, onSwitchKind, full, onUseSample, addingSample = false, attention = null }: SourcesStepProps) {
   const uid = useId();
   const readyCount = sources.filter((s) => s.status === "ready").length;
   const announcement = useUploadAnnouncements(sources);
@@ -80,7 +82,15 @@ export function SourcesStep({ sources, onFiles, onRemove, onRetry, onDateOrder, 
           </div>
           <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" aria-label="Added files">
             {sources.map((s) => (
-              <FileRow key={s.localId} s={s} onRemove={onRemove} onRetry={onRetry} onDateOrder={onDateOrder} onSwitchKind={onSwitchKind} />
+              <FileRow
+                key={s.localId}
+                s={s}
+                onRemove={onRemove}
+                onRetry={onRetry}
+                onDateOrder={onDateOrder}
+                onSwitchKind={onSwitchKind}
+                focusRequest={attention?.localId === s.localId ? attention.nonce : undefined}
+              />
             ))}
           </ul>
         </section>
@@ -130,8 +140,19 @@ function FileRow({
   onRetry,
   onDateOrder,
   onSwitchKind,
-}: Pick<SourcesStepProps, "onRemove" | "onRetry" | "onDateOrder" | "onSwitchKind"> & { s: DraftSource }) {
+  focusRequest,
+}: Pick<SourcesStepProps, "onRemove" | "onRetry" | "onDateOrder" | "onSwitchKind"> & { s: DraftSource; focusRequest?: number }) {
   const phase = phaseOf(s);
+  const rowRef = useRef<HTMLLIElement>(null);
+  // Continue or Start processing was pressed while this source still needs an answer: show the question.
+  useEffect(() => {
+    if (focusRequest === undefined) return;
+    const row = rowRef.current;
+    if (!row) return;
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    row.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
+    (row.querySelector<HTMLElement>("[data-date-order] button") ?? row).focus({ preventScroll: true });
+  }, [focusRequest]);
   const meta = uploadPhaseMeta[phase];
   const progress = uploadProgress(phase);
   const visual = TONE_ICON[phase];
@@ -148,7 +169,7 @@ function FileRow({
         : (s.error ?? meta.description);
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
+    <li ref={rowRef} tabIndex={-1} className="flex flex-col gap-3 px-4 py-3.5 outline-none sm:flex-row sm:items-center sm:gap-4">
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <span aria-hidden="true" className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md [&_svg]:size-4", meta.busy ? "bg-primary-soft" : "", visual.className)}>
           {meta.busy ? visual.icon : phase === "ready" ? <KindIcon /> : visual.icon}
@@ -189,7 +210,7 @@ function FileRow({
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2 pl-11 sm:pl-0">
         {phase === "needs_input" && (
-          <span className="flex flex-wrap gap-2" role="group" aria-label={`Date format for ${s.name}`}>
+          <span data-date-order className="flex flex-wrap gap-2" role="group" aria-label={`Date format for ${s.name}`}>
             <Button size="sm" variant="outline" onClick={() => onDateOrder(s, "dmy")}>
               Day/Month (31/12)
             </Button>

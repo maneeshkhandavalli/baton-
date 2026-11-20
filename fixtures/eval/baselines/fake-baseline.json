@@ -5,7 +5,7 @@
   "extractModel": "fake-extract-v1",
   "verifyModel": "fake-verify-v1",
   "extractPrompt": "extract@2",
-  "verifyPrompt": "support@1",
+  "verifyPrompt": "support@2",
   "detectorVersion": "signals@1",
   "datasets": [
     {

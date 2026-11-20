@@ -236,7 +236,9 @@ insert into claimed select * from public.claim_ready_processing_jobs(10, 300);
 select tests.eq((select attempt from claimed where id = tests.id('ex_other')), 1, 'the yielded extract is claimed again');
 select tests.eq((select claim_progress_done from public.processing_jobs where id = tests.id('ex_other')), 1,
                 'it resumes from chunk 1');
-select tests.eq(public.complete_processing_job(tests.id('ex_other'), 1, 'yield', null, null, null, null, 1, 2), 'queued',
+-- S5 (20261121100200): after a yield the attempt number is ambiguous, so completion names its claim generation
+select tests.eq(public.complete_processing_claim(tests.id('ex_other'), 1, (select claim_generation from public.processing_jobs where id = tests.id('ex_other')),
+                                               'yield', null, null, null, null, 1, 2), 'queued',
                 'a yield without new progress re-queues');
 select tests.eq((select attempt from public.processing_jobs where id = tests.id('ex_other')), 1,
                 'a yield without new progress consumes the attempt');
@@ -252,7 +254,8 @@ begin
   -- the completion commits first; the in-flight writer of that claim then sees it and is refused
   perform tests.c_open('c1', 'service'); perform tests.c_open('c2', 'service');
   perform tests.c_exec('c1', 'begin');
-  perform tests.eq(tests.c_try('c1', format('select public.complete_processing_job(%L, 2, %L)', tests.id('ex_other'), 'succeeded')),
+  perform tests.eq(tests.c_try('c1', format('select public.complete_processing_claim(%L, 2, %s::bigint, %L)', tests.id('ex_other'),
+                                            (select claim_generation from public.processing_jobs where id = tests.id('ex_other')), 'succeeded')),
                    'OK:succeeded', 'the completion runs in an open transaction');
   perform tests.c_send('c2', tests.chunk_sql('ex_other', 2, 1, 2, '[]'));
   perform tests.ok(tests.c_blocked('c2'), 'the writer waits for the completion');
@@ -494,11 +497,12 @@ select tests.eq((select current_setting('baton.claim_generation', true)), '', 't
 select tests.eq((select progress_done from public.processing_jobs where id = tests.id('ex6')), 2, 'checkpoint after two chunks');
 
 -- heartbeat: an expired lease is not renewed (it reports lost), a valid one is
-select tests.eq(public.heartbeat_processing_job(tests.id('ex6'), 1, 300), 'running', 'a valid lease is renewed');
+select tests.eq(public.heartbeat_processing_claim(tests.id('ex6'), 1, 2::bigint, 300), 'running', 'a valid lease is renewed (generation 2)');
+select tests.eq(public.heartbeat_processing_job(tests.id('ex6'), 1, 300), 'lost', 'S5: the attempt-only heartbeat refuses the ambiguous (yielded) attempt');
 select tests.as_owner();
 update public.processing_jobs set lease_expires_at = now() - interval '1 second' where id = tests.id('ex6');
 select tests.as_service();
-select tests.eq(public.heartbeat_processing_job(tests.id('ex6'), 1, 300), 'lost', 'an expired lease is not revived');
+select tests.eq(public.heartbeat_processing_claim(tests.id('ex6'), 1, 2::bigint, 300), 'lost', 'an expired lease is not revived');
 select tests.ok((select lease_expires_at <= now() from public.processing_jobs where id = tests.id('ex6')), 'the lease stays expired');
 select tests.throws(tests.gen_chunk_sql(1, 2, 2, 3), 'BTLL0', 'and the expired claim cannot write');
 

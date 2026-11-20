@@ -13,6 +13,7 @@
 
 import { randomBytes } from "node:crypto";
 
+import { isDemoAccountEmail } from "../../../demo-accounts";
 import { loginPath } from "../../../supabase/redirects";
 import { ConnectorStoreError } from "../../errors";
 import { connectorConfigured, connectorPaths, connectorUrls, siteBaseUrl } from "../../config";
@@ -32,9 +33,26 @@ export interface ConnectorLogEntry {
 
 export interface BotRouteDeps extends AdapterContext {
   /** The verified Baton user of this request (getVerifiedActor), or null when signed out. */
-  getActor(): Promise<{ profileId: string } | null>;
+  getActor(): Promise<ConnectorRouteActor | null>;
   /** Code-only log line; defaults to console.warn(JSON). Never receives content, ids of people or secrets. */
   log?(entry: ConnectorLogEntry): void;
+}
+
+/** The signed-in Baton user of a connector route. `email` is only used for the shared-demo-account check (F3). */
+export interface ConnectorRouteActor {
+  profileId: string;
+  email?: string | null;
+}
+
+/** Shown when a shared demo account tries to connect an app (F3: demo accounts can't add content). */
+export const DEMO_CONNECT_REFUSAL = "Demo accounts can't connect apps or channels. Create your own account to try connectors, or use the no-sign-in demo.";
+
+/**
+ * F3: a shared demo account never starts an install or finishes one (no state is signed, no code is exchanged, no
+ * installation is written). Returns the 403 answer, or null for an ordinary account.
+ */
+export function refuseDemoInstall(actor: ConnectorRouteActor): Response | null {
+  return isDemoAccountEmail(actor.email) ? text(DEMO_CONNECT_REFUSAL, 403) : null;
 }
 
 export function logCode(deps: Pick<BotRouteDeps, "log">, provider: ConnectorProvider, event: string, code: string): void {
@@ -92,6 +110,8 @@ export async function beginInstall(provider: BotProvider, request: Request, deps
   const url = new URL(request.url);
   const actor = await deps.getActor();
   if (!actor) return { ok: false, response: redirectTo(deps.env, loginRedirectPath(connectorPaths.install(provider) + url.search)) };
+  const demo = refuseDemoInstall(actor);
+  if (demo) return { ok: false, response: demo };
   const rawHandover = url.searchParams.get("handover");
   const handoverId = rawHandover && UUID.test(rawHandover) ? rawHandover.toLowerCase() : null;
   if (rawHandover && !handoverId) return { ok: false, response: text("Unknown handover.", 400) };
@@ -122,6 +142,8 @@ export async function checkCallback(provider: BotProvider, request: Request, dep
   const url = new URL(request.url);
   const actor = await deps.getActor();
   if (!actor) return { ok: false, response: redirectTo(deps.env, loginRedirectPath(connectorPaths.callback(provider) + url.search)) };
+  const demo = refuseDemoInstall(actor);
+  if (demo) return { ok: false, response: demo };
   const check = verifyConnectorState(deps.env.CONNECTOR_STATE_SECRET ?? "", url.searchParams.get("state"), deps.now());
   if (!check.ok || check.payload.t !== "oauth" || check.payload.p !== provider) {
     logCode(deps, provider, "oauth_callback", check.ok ? "state_mismatch" : `state_${check.reason}`);

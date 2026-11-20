@@ -271,8 +271,21 @@ export async function claimReadyJobs(adminDb: DbClient, limit = 5, leaseSeconds 
 export type JobCompletion = "succeeded" | "retry" | "failed" | "skipped" | "yield";
 
 /**
- * DB-2: fenced completion. Throws DbError("conflict") when the job is no longer this claim's (lease lost,
- * run cancelled or finished); the caller must then record nothing else. `errorMessage` is a reason token
+ * S5: with a claim generation the generation-checked functions (`complete_processing_claim`,
+ * `heartbeat_processing_claim`, migration 20261121100200) are called; without one (older claim shape) the
+ * attempt-only originals, which refuse an ambiguous, yielded attempt.
+ */
+function hasGeneration(generation: number | undefined): generation is number {
+  return typeof generation === "number" && Number.isSafeInteger(generation) && generation > 0;
+}
+
+function generationArg(generation: number | undefined): { p_claim_generation?: number } {
+  return hasGeneration(generation) ? { p_claim_generation: generation } : {};
+}
+
+/**
+ * DB-2: fenced completion. Throws DbError("conflict") when the job is no longer this claim's (lease lost
+ * or expired, a newer claim generation after a yield, run cancelled or finished); the caller must then record nothing else. `errorMessage` is a reason token
  * matching ^[a-z0-9_:]{1,64}$ (§12.7). Returns the job's new status.
  */
 export async function completeJob(
@@ -280,6 +293,8 @@ export async function completeJob(
   input: {
     jobId: string;
     attempt: number;
+    /** S5: this claim's generation; when present `complete_processing_claim` is used (migration 20261121100200). */
+    generation?: number;
     outcome: JobCompletion;
     attemptRecord?: Record<string, unknown>;
     errorCode?: string;
@@ -288,9 +303,10 @@ export async function completeJob(
     progress?: { done: number; total: number };
   },
 ): Promise<"succeeded" | "queued" | "failed" | "cancelled"> {
-  return (await callRpc(adminDb, "complete_processing_job", {
+  const args = {
     p_job_id: input.jobId,
     p_attempt: input.attempt,
+    ...generationArg(input.generation),
     p_outcome: input.outcome,
     p_attempt_record: input.attemptRecord ?? null,
     p_error_code: input.errorCode ?? null,
@@ -298,21 +314,31 @@ export async function completeJob(
     p_next_attempt_at: input.nextAttemptAt ?? null,
     p_progress_done: input.progress?.done ?? null,
     p_progress_total: input.progress?.total ?? null,
-  })) as "succeeded" | "queued" | "failed" | "cancelled";
+  };
+  // One SQL function per name; both names are literal so the DB-12 wiring scan sees them.
+  const status = hasGeneration(input.generation)
+    ? await callRpc(adminDb, "complete_processing_claim", args)
+    : await callRpc(adminDb, "complete_processing_job", args);
+  return status as "succeeded" | "queued" | "failed" | "cancelled";
 }
 
 /** DB-3: extends the lease; returns the run status, or "lost" when the claim is no longer valid. */
 export async function heartbeatJob(
   adminDb: DbClient,
-  input: { jobId: string; attempt: number; leaseSeconds: number; progress?: { done: number; total: number } },
+  input: { jobId: string; attempt: number; generation?: number; leaseSeconds: number; progress?: { done: number; total: number } },
 ): Promise<"queued" | "running" | "lost"> {
-  return (await callRpc(adminDb, "heartbeat_processing_job", {
+  const args = {
     p_job_id: input.jobId,
     p_attempt: input.attempt,
+    ...generationArg(input.generation),
     p_lease_seconds: input.leaseSeconds,
     p_progress_done: input.progress?.done ?? null,
     p_progress_total: input.progress?.total ?? null,
-  })) as "queued" | "running" | "lost";
+  };
+  const status = hasGeneration(input.generation)
+    ? await callRpc(adminDb, "heartbeat_processing_claim", args)
+    : await callRpc(adminDb, "heartbeat_processing_job", args);
+  return status as "queued" | "running" | "lost";
 }
 
 export interface JobContext {
@@ -611,6 +637,29 @@ export interface StoredSignal {
   start: number;
   end: number;
   value: string | null;
+}
+
+/** Audit 4.8: what `pipeline_reuse_prior_extract` reports when an extract reuses an earlier run's result. */
+export interface PriorExtractReuse {
+  reused: boolean;
+  priorJobId?: string;
+  priorRunId?: string;
+  priorRunStatus?: string;
+  progressDone?: number | null;
+  progressTotal?: number | null;
+  /** False when the earlier run recorded no coverage: the report then says "coverage not recorded". */
+  coverageCopied?: boolean;
+  chunkStats?: number;
+}
+
+/**
+ * Audit 4.8 (migration 20261121100300): an extract whose input already succeeded in another run (even one
+ * cancelled after its extracts finished) reuses those points. This copies that run's coverage and chunk stats
+ * onto the current run and records the reuse provenance on the job. Fenced (DB-12).
+ */
+export async function reusePriorExtract(adminDb: DbClient, claim: JobClaim): Promise<PriorExtractReuse> {
+  const data = (await fencedRpc(adminDb, "pipeline_reuse_prior_extract", claim, {})) as PriorExtractReuse | null;
+  return data && typeof data === "object" ? data : { reused: false };
 }
 
 /** Fenced (extract): upserts the source's coverage row and inserts signals (existing ones are kept). */

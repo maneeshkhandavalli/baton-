@@ -95,8 +95,20 @@ export const IDS = {
 } as const;
 
 export interface RpcCall {
+  /** Canonical name: the S5 generation-checked `*_processing_claim` functions are recorded as `*_processing_job`. */
   fn: string;
   args: Record<string, unknown>;
+  /** The RPC name actually called (differs from `fn` only for the S5 `*_processing_claim` functions). */
+  rpcName?: string;
+}
+
+/**
+ * S5 (migration 20261121100200): `complete_processing_claim` / `heartbeat_processing_claim` are the
+ * generation-checked versions of `complete_processing_job` / `heartbeat_processing_job`, with the same result.
+ * The fakes answer and record them under the original name so every drain test covers both.
+ */
+export function canonicalRpc(fn: string): string {
+  return fn === "complete_processing_claim" ? "complete_processing_job" : fn === "heartbeat_processing_claim" ? "heartbeat_processing_job" : fn;
 }
 
 /** Marks a handler result as a PostgREST error with the given SQLSTATE. */
@@ -134,8 +146,9 @@ export function fakeDb(handlers: Record<string, Handler | unknown>, log: string[
   const calls: RpcCall[] = [];
   handlers = { ...identityDefaults(handlers), ...handlers };
   const client: DbClient = {
-    rpc: async (fn, args = {}) => {
-      calls.push({ fn, args });
+    rpc: async (rpcName, args = {}) => {
+      const fn = canonicalRpc(rpcName);
+      calls.push(fn === rpcName ? { fn, args } : { fn, args, rpcName });
       log.push(`rpc:${fn}`);
       const h = handlers[fn];
       const value = typeof h === "function" ? (h as Handler)(args, calls) : (h ?? null);

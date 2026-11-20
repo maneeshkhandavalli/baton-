@@ -67,6 +67,11 @@ select tests.ok(not exists (select 1 from claimed where stage in ('verify_suppor
                 'per-handover stages wait for every source');
 
 -- yield with progress keeps the attempt; yield without progress is a retry
+-- Round 4 (S5): which source's verify_quotes is claimed here depends on the random job ids, so the fixture
+-- records it, and the reaper below targets the OTHER one (before, the reaper could hit the yielded job itself)
+select tests.put('vq_yielded', (select id from claimed where stage = 'verify_quotes'));
+select tests.put('vq_reaped', (select id from public.processing_jobs where run_id = tests.id('run') and stage = 'verify_quotes'
+                                 and id <> tests.id('vq_yielded')));
 select tests.eq(public.complete_processing_job((select id from claimed where stage = 'verify_quotes'), 1, 'yield',
                   null, null, null, null, 1, 3), 'queued', 'yield re-queues');
 select tests.eq((select attempt from public.processing_jobs where id = (select id from claimed where stage = 'verify_quotes')), 0,
@@ -89,16 +94,23 @@ select tests.eq((select error_message from public.processing_jobs where id = (se
 -- ── DB-1 reaper: a lease that expired on the last attempt fails instead of hanging ──
 select tests.as_owner();
 update public.processing_jobs set status = 'running', attempt = max_attempts, lease_expires_at = now() - interval '1 minute'
- where id = tests.id('verify_quotes_s2');
+ where id = tests.id('vq_reaped');
 select tests.as_service();
 truncate claimed;
 insert into claimed select * from public.claim_ready_processing_jobs(10, 300);
-select tests.eq((select status from public.processing_jobs where id = tests.id('verify_quotes_s2')), 'failed',
+select tests.eq((select status from public.processing_jobs where id = tests.id('vq_reaped')), 'failed',
                 'the reaper fails a job whose last lease expired');
-select tests.eq((select error_message from public.processing_jobs where id = tests.id('verify_quotes_s2')), 'lease_expired',
+select tests.eq((select error_message from public.processing_jobs where id = tests.id('vq_reaped')), 'lease_expired',
                 'the reaper records a reason token');
 select tests.eq((select stage from claimed), 'verify_quotes', 'the yielded verify_quotes is claimable again');
-select tests.eq(public.complete_processing_job((select id from claimed), 1, 'succeeded'), 'succeeded', 'verify_quotes done');
+select tests.eq((select id from claimed), tests.id('vq_yielded'), 'it is the yielded job itself (not a fresh first claim)');
+select tests.eq((select attempt || '/' || claim_generation from claimed), '1/2', 'the reclaim reuses attempt 1 with generation 2');
+-- S5 (20261121100200): after a yield the attempt number repeats, so the attempt-only completion is refused and
+-- the worker names its claim generation
+select tests.throws(format('select public.complete_processing_job(%L, 1, %L)', (select id from claimed), 'succeeded'), 'BTCF0',
+                    'S5: an attempt-only completion of a reclaimed (yielded) job is refused');
+select tests.eq(public.complete_processing_claim((select id from claimed), 1, (select claim_generation from claimed), 'succeeded'),
+                'succeeded', 'verify_quotes done');
 select tests.eq((select stage from public.claim_ready_processing_jobs(10, 300)), 'verify_support',
                 'verify_support becomes ready once every per-source job is terminal');
 

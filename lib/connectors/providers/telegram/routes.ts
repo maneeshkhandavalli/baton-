@@ -13,6 +13,7 @@
 import { httpStatusFor, ingestEvent } from "../../ingest";
 import { verifyTelegramSecret } from "../../verify";
 import { handoverCommand, isConfigured, json, logCode, logOutcome, notFound, parseJson, readRawBody, redirectExternal, text, type BotRouteDeps } from "../bots/shared";
+import { helpText, pauseChannel, statusText, unknownActionText } from "../bots/commands";
 import { telegramCall } from "./api";
 import { isGroupAdmin, parseTelegramUpdate } from "./server";
 
@@ -36,8 +37,21 @@ export async function handleTelegramWebhook(request: Request, deps: BotRouteDeps
 
   if (parsed.kind === "command") {
     let reply: string;
-    if (!parsed.isGroup) reply = "Add me to a group, then send /handover in that group to connect it to a Baton handover.";
-    else if (parsed.anonymousAdmin || !parsed.fromId) reply = "Baton sends the connect link privately, so it can't answer an anonymous admin. Turn off “Remain anonymous” for yourself, then send /handover again.";
+    if (parsed.action === "help") reply = helpText("telegram"); // static, for anyone
+    else if (parsed.action === null) reply = unknownActionText("telegram");
+    else if (!parsed.isGroup) reply = "Add me to a group, then send /handover in that group to connect it to a Baton handover.";
+    else if (parsed.action === "status" || parsed.action === "pause") {
+      // The same rule as /handover: a group admin (an anonymous admin is one, and needs no private message here).
+      if (!(await isGroupAdmin(deps, parsed.chatId, parsed.fromId, parsed.anonymousAdmin))) {
+        reply = parsed.action === "pause" ? "Only a group admin can pause Baton in this group." : "Only a group admin can check Baton's status in this group.";
+      } else if (parsed.action === "status") {
+        reply = await statusText(deps.store, "telegram", parsed.chatId, parsed.chatId);
+      } else {
+        const r = await pauseChannel(deps.store, "telegram", parsed.chatId, parsed.chatId);
+        if (r.paused > 0) logCode(deps, "telegram", "command", "paused_by_channel_admin");
+        reply = r.text;
+      }
+    } else if (parsed.anonymousAdmin || !parsed.fromId) reply = "Baton sends the connect link privately, so it can't answer an anonymous admin. Turn off “Remain anonymous” for yourself, then send /handover again.";
     else if (!(await isGroupAdmin(deps, parsed.chatId, parsed.fromId, false))) reply = "Only a group admin can connect this group to a Baton handover.";
     else {
       const cmd = await handoverCommand(deps.store, deps.env, deps.now(), { provider: "telegram", account: parsed.chatId, accountLabel: parsed.chatTitle, channel: parsed.chatId, channelLabel: parsed.chatTitle });

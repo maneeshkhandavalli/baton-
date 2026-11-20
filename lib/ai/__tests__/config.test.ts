@@ -75,7 +75,7 @@ describe("getAiConfiguration (D11)", () => {
     assert.match(config.runConfig.extract.model, /^fake-/);
     assert.match(config.runConfig.verify.model, /^fake-/);
     assert.equal(config.runConfig.extract.promptVersion, "extract@2");
-    assert.equal(config.runConfig.verify.promptVersion, "support@1");
+    assert.equal(config.runConfig.verify.promptVersion, "support@2");
   });
 
   it("fake ignores AI_MODEL_* so a fake run never shows a real-looking model", () => {

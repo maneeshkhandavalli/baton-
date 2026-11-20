@@ -66,11 +66,11 @@ describe("deleteAccount: authorization", () => {
 });
 
 describe("deleteAccount: the happy path", () => {
-  it("check → files → one database transaction → files again → auth user → session, in that order", async () => {
+  it("check → files → one database transaction → files again → auth user → every session → this browser, in that order", async () => {
     const f = world();
     const r = await account.deleteAccount(f.deps, { confirm: "DELETE", purgeHandoverIds: [H2, H] });
     assert.deepEqual(r, { ok: true, data: null });
-    assert.deepEqual(f.events, ["check_account_deletion", "delete_own_account", "softDeleteUser", "endSession"]);
+    assert.deepEqual(f.events, ["check_account_deletion", "delete_own_account", "softDeleteUser", "revoke_deleted_account_sessions", "endSession"]);
     const check = f.calls.find((c) => c.fn === "check_account_deletion")!;
     assert.equal(check.client, "admin");
     assert.equal(check.args?.p_confirmation, "DELETE");
@@ -95,7 +95,7 @@ describe("deleteAccount: the happy path", () => {
     const r = await account.deleteAccount(f.deps, { confirm: "DELETE", purgeHandoverIds: [] });
     assert.ok(r.ok);
     assert.deepEqual(f.storageCalls, []);
-    assert.deepEqual(f.events, ["check_account_deletion", "delete_own_account", "softDeleteUser", "endSession"]);
+    assert.deepEqual(f.events, ["check_account_deletion", "delete_own_account", "softDeleteUser", "revoke_deleted_account_sessions", "endSession"]);
   });
 
   it("only listed handovers' folders are touched; other handovers' files stay", async () => {
@@ -155,7 +155,7 @@ describe("deleteAccount: failures", () => {
     const f = world({ rpc: { check_account_deletion: { error: { code: "BTUA0", message: "sign in required" } } } });
     const r = await account.deleteAccount(f.deps, { confirm: "DELETE", purgeHandoverIds: [] });
     assert.deepEqual(r, { ok: true, data: null });
-    assert.deepEqual(f.fns(), ["check_account_deletion"], "no purge or anonymisation runs again");
+    assert.deepEqual(f.fns(), ["check_account_deletion", "revoke_deleted_account_sessions"], "no purge or anonymisation runs again; sessions on other devices are ended");
     assert.deepEqual(f.storageCalls, []);
     assert.deepEqual(f.authCalls, [{ op: "softDeleteUser", profileId: ACTOR_ID }, { op: "endSession" }]);
   });

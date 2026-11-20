@@ -4,6 +4,8 @@
  * reviewer's free text (§12.1), re-checks attributes for the point's real category, and explains refusals.
  */
 
+import { z } from "zod";
+
 import type { Result } from "../../contracts/api";
 import {
   decideChangeReviewInput,
@@ -16,6 +18,7 @@ import { parsePointAttributes } from "../../contracts/schemas";
 import type { PointCategory } from "../../contracts/enums";
 import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
+import { callRpc } from "../../db/rpc";
 import { createInputMasker } from "./mask";
 import { action, failWith, ok, validationFailed } from "./run";
 import type { ActionDeps } from "./types";
@@ -106,3 +109,47 @@ export async function decideChangeReview(
   });
 }
 
+
+// ── Round 4 B (audit F4): Confirm & approve a point backed by reviewer testimony ──────────────────────────────────
+
+export const confirmTestimonyInput = z.object({
+  pointId: z.string().uuid(),
+  expectedRevisionId: z.string().uuid(),
+  note: z.string().max(2000).optional(),
+});
+export type ConfirmTestimonyInput = z.input<typeof confirmTestimonyInput>;
+
+export const CONFIRM_TESTIMONY_CONFLICT_MESSAGE = "This point changed since you opened it. Reload to see the current version.";
+export const CONFIRM_TESTIMONY_NOT_POSSIBLE_MESSAGE =
+  "This point can't be confirmed from a statement: it has no statement or accepted answer of its own, or a source quotation contradicts it. Resolve the conflict or approve it another way.";
+export const CONFIRM_TESTIMONY_NOT_PENDING_MESSAGE = "Only a point waiting for review can be confirmed and approved.";
+
+/**
+ * "Confirm & approve" (confirm_testimony_and_approve): a review role confirms that the point's own testimony (their
+ * statement on a manual point, or an accepted Gap Interview answer) supports its current wording. The testimony is
+ * recorded as a reviewer-confirmed `supports` verdict for the current revision and the point is approved as Sourced.
+ * The alternative to "Approve as gap" for a point whose testimony an automatic check rejected. The database decides
+ * who may do this (review role, visibility, in review, privacy hold) and records it in the point's history.
+ */
+export async function confirmTestimonyAndApprove(
+  deps: ActionDeps,
+  input: ConfirmTestimonyInput,
+): Promise<Result<{ pointId: string; evidenceStatus: "sourced"; reviewState: "approved" }>> {
+  return action(deps, confirmTestimonyInput, input, async (actor, v) => {
+    const m = createInputMasker();
+    try {
+      await callRpc(deps.adminDb(), "confirm_testimony_and_approve", {
+        p_actor_profile_id: actor.profileId,
+        p_point_id: v.pointId,
+        p_expected_revision_id: v.expectedRevisionId,
+        p_note: v.note?.trim() ? m.text(v.note.trim()) : null,
+      });
+      return ok({ pointId: v.pointId, evidenceStatus: "sourced" as const, reviewState: "approved" as const });
+    } catch (error) {
+      if (isDbError(error) && error.code === "conflict") return failWith("conflict", { message: CONFIRM_TESTIMONY_CONFLICT_MESSAGE });
+      if (isDbError(error) && error.code === "precondition_failed") return failWith("precondition_failed", { message: CONFIRM_TESTIMONY_NOT_POSSIBLE_MESSAGE });
+      if (isDbError(error) && error.code === "invalid_transition") return failWith("invalid_transition", { message: CONFIRM_TESTIMONY_NOT_PENDING_MESSAGE });
+      throw error;
+    }
+  });
+}

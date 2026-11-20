@@ -41,6 +41,7 @@ import {
   loadRawSourceForPreview,
 } from "../../db/storage";
 import { createInputMasker } from "./mask";
+import { refuseDemoContent } from "./demo-guard";
 import { action, failWith, ok, parseInput, type Failure } from "./run";
 import type { ActionDeps } from "./types";
 
@@ -51,6 +52,8 @@ import type { ActionDeps } from "./types";
  */
 export async function createSourceUpload(deps: ActionDeps, input: CreateSourceUploadInput): Promise<Result<SourceUploadTicket>> {
   return action(deps, createSourceUploadInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const masked = parseInput(createSourceUploadInput, { ...v, fileName: createInputMasker().text(v.fileName) });
     if (!masked.ok) return masked;
     try {
@@ -86,6 +89,8 @@ export async function createSourceVersionUpload(
   input: CreateSourceVersionUploadInput,
 ): Promise<Result<SourceVersionUploadResult>> {
   return action(deps, createSourceVersionUploadInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const masked = parseInput(createSourceVersionUploadInput, { ...v, fileName: createInputMasker().text(v.fileName) });
     if (!masked.ok) return masked;
     let r: Awaited<ReturnType<typeof createSignedSourceVersionUpload>>;
@@ -126,6 +131,8 @@ export async function createSourceVersionUpload(
 /** M5: the server measures the uploaded object; the database compares it with the declared values. */
 export async function confirmSourceUploaded(deps: ActionDeps, input: { sourceId: string }): Promise<Result<SourceSummary>> {
   return action(deps, sourceIdInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     await confirmSourceUpload(deps.adminDb(), deps.adminStorage(), actor, v.sourceId);
     return getSourceSummary(deps.userDb, v.sourceId);
   });
@@ -184,6 +191,8 @@ export async function previewSource(deps: ActionDeps, input: { sourceId: string 
  */
 export async function recordSourceConsent(deps: ActionDeps, input: RecordSourceConsentInput): Promise<Result<SourceSummary>> {
   return action(deps, recordSourceConsentInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const ai = deps.aiRunConfig();
     if (!ai.ok) return ai;
     // R3 Task 05E: the statement must be exactly the wording this server shows for its ACTUAL configuration. The
@@ -260,6 +269,8 @@ export async function confirmIdentityMatch(deps: ActionDeps, input: ConfirmIdent
  */
 export async function removeSource(deps: ActionDeps, input: { sourceId: string }): Promise<Result<null>> {
   return action(deps, sourceIdInput, input, async (actor, v) => {
+    const demo = refuseDemoContent(actor); // F3: shared demo accounts can't add content or spend on AI
+    if (demo) return demo;
     const db = deps.adminDb();
     const rawPath = await mutations.removeSource(db, actor, v.sourceId);
     if (rawPath) {

@@ -61,6 +61,21 @@ export function logAccountIssue(event: string, details: Record<string, string | 
   console.error(`[account] ${event}`, details);
 }
 
+/**
+ * The session's JWT `amr` claim (how and when it signed in), or null when it can't be read. Never throws. The
+ * password page and setPassword both read it here and decide with needsCurrentPassword
+ * (components/account/password-mode.ts), so the form and the server always agree.
+ */
+export async function readSessionAmr(client?: Awaited<ReturnType<typeof createSupabaseServerClient>>): Promise<unknown> {
+  try {
+    const supabase = client ?? (await createSupabaseServerClient());
+    const { data } = await supabase.auth.getClaims();
+    return (data?.claims as { amr?: unknown } | undefined)?.amr ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export type SignInProvider = "google" | "email";
 
 export interface AccountOverview {

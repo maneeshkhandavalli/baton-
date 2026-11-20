@@ -97,14 +97,17 @@ select tests.eq(public.pipeline_list_handover_people(tests.id('job'), 1) ->> 'so
 select tests.as_service();
 select tests.eq((select array_agg((e ->> 'ordinal')::int) from jsonb_array_elements(public.resolve_handover_people(tests.id('ann'), tests.id('h'))) e),
                 array[1], 'the creator (reviewer_only clearance) sees PERSON_1 only: the participant of a parsed source');
-select tests.eq(jsonb_array_length(public.resolve_handover_people(tests.id('lee'), tests.id('h'))), 1, 'a lead sees a leads_only source''s people');
+-- Round 4 (S6, migration 20261121100100): a lead is not a review role, so it resolves only people named in
+-- content it can see (published points, its own gap questions); nothing is published here. See it24.
+select tests.eq(public.resolve_handover_people(tests.id('lee'), tests.id('h')), '[]'::jsonb, 'a lead resolves nobody before anything naming them is published');
 select tests.eq(public.resolve_handover_people(tests.id('ivy'), tests.id('h')), '[]'::jsonb, 'an everyone-clearance member does not');
 select tests.throws(format('select public.resolve_handover_people(%L, %L)', tests.id('out'), tests.id('h')), 'BTNF0', 'a non-member gets not_found');
 select tests.throws(format('select public.resolve_handover_people(%L, %L)', tests.id('ann'), gen_random_uuid()), 'BTNF0', 'an unknown handover is not_found');
 select tests.as_owner();
 update public.sources set access_level = 'everyone' where id = tests.id('r');
 select tests.as_service();
-select tests.eq(jsonb_array_length(public.resolve_handover_people(tests.id('ivy'), tests.id('h'))), 1, 'once the source is for everyone, so is its people''s mapping');
+select tests.eq(public.resolve_handover_people(tests.id('ivy'), tests.id('h')), '[]'::jsonb,
+                'Round 4 (S6): an everyone source alone no longer exposes its people to an incoming member (it24 covers publication)');
 
 -- ── another handover never shares people ───────────────────────────────────────────────────────────────
 select tests.handover('h2', 'ann', 'outgoing');

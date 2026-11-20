@@ -167,6 +167,7 @@ function EvidenceDisclosure({ entry }: { entry: TimelineEntry }) {
               authorLabel={e.authorLabel}
               sentAt={e.sentAt}
               sourceTitle={e.sourceTitle}
+              testimonyLabel="Answer"
               tone={e.stance === "contradicts" ? "contradicts" : "supports"}
             />
           ))}

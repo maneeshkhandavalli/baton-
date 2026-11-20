@@ -16,14 +16,15 @@
 import { randomBytes } from "node:crypto";
 
 import { loginPath } from "../../../supabase/redirects";
-import { connectorConfigured, connectorPaths, siteBaseUrl } from "../../config";
+import { connectorConfigured, connectorPaths, connectorUrls, siteBaseUrl } from "../../config";
 import { ConnectorStoreError } from "../../errors";
 import { httpStatusFor, ingestEvent, type IngestLogger } from "../../ingest";
 import { OAUTH_STATE_TTL_S, signConnectorState, verifyConnectorState } from "../../state";
 import type { ConnectorMessage, ConnectorStore } from "../../types";
 import { verifyGithubSignature } from "../../verify";
 import { ProviderError } from "../adapter";
-import { exchangeOAuthCode, githubPaginate, revokeUserToken, type GithubHttp } from "./api";
+import { refuseDemoInstall, type ConnectorRouteActor } from "../bots/shared";
+import { exchangeOAuthCode, GITHUB_WEB, githubPaginate, revokeUserToken, type GithubHttp } from "./api";
 import { familyOf, idStr, normalizeGithubWebhook, obj, parseGithubSettings, str } from "./events";
 
 type Env = Record<string, string | undefined>;
@@ -35,7 +36,7 @@ export interface GithubRouteDeps {
   store(): ConnectorStore;
   fetch: typeof fetch;
   /** The verified session user (getVerifiedActor), or null when signed out. */
-  getActor(): Promise<{ profileId: string } | null>;
+  getActor(): Promise<ConnectorRouteActor | null>;
   /** One structured log line (codes only). Defaults to console.warn(JSON). */
   log?(line: LogFields): void;
   nonce?(): string;
@@ -145,6 +146,8 @@ export async function handleGithubInstall(request: Request, deps: GithubRouteDep
     const back = `${connectorPaths.install("github")}${handoverId ? `?handover=${handoverId}` : ""}`;
     return redirect(siteBaseUrl(deps.env) + loginPath(back));
   }
+  const demo = refuseDemoInstall(actor); // F3: shared demo accounts can't connect apps
+  if (demo) return demo;
 
   if (handoverId) {
     // creator check: the store refuses anyone but the handover's creator
@@ -210,6 +213,8 @@ export async function handleGithubCallback(request: Request, deps: GithubRouteDe
   const params = new URL(request.url).searchParams;
   const actor = await deps.getActor();
   if (!actor) return redirect(siteBaseUrl(deps.env) + loginPath("/dashboard", "connector_signin_required"));
+  const demo = refuseDemoInstall(actor); // F3: nothing is exchanged or stored for a shared demo account
+  if (demo) return demo;
 
   const setupAction = params.get("setup_action");
   const stateRaw = params.get("state");
@@ -228,12 +233,45 @@ export async function handleGithubCallback(request: Request, deps: GithubRouteDe
 
   if (setupAction === "request") return done("install_requested"); // an org owner must approve first
 
-  const installationId = params.get("installation_id") ?? "";
+  // The installation comes from the signed state when Baton already sent the user through the authorization step
+  // below (never swapped by a query parameter), otherwise from GitHub's redirect.
+  const stateInstallation = check.payload.t === "oauth" ? check.payload.inst : undefined;
+  const installationId = stateInstallation ?? params.get("installation_id") ?? "";
   const code = params.get("code") ?? "";
-  if (!/^\d{1,20}$/.test(installationId) || !/^[A-Za-z0-9_-]{1,512}$/.test(code)) return done("invalid_request");
-
   const clientId = deps.env.GITHUB_APP_CLIENT_ID ?? "";
   const clientSecret = deps.env.GITHUB_APP_CLIENT_SECRET ?? "";
+
+  // App already installed on this account (found 21 Nov): GitHub's install page becomes "Configure" and returns
+  // with setup_action=update and the installation id but NO OAuth code, so access can't be proved yet. Send the
+  // user through GitHub's authorization step once, carrying the installation id in a fresh signed state; it
+  // comes back here with a code. A second return without a code is refused (no loop).
+  if (!code && !stateInstallation && /^\d{1,20}$/.test(installationId)) {
+    if (!clientId.trim()) {
+      logLine(deps, "install_misconfigured", { code: "client_id_missing" });
+      return done("unavailable");
+    }
+    let next: string;
+    try {
+      next = signConnectorState(deps.env.CONNECTOR_STATE_SECRET ?? "", {
+        t: "oauth",
+        p: "github",
+        profileId: actor.profileId,
+        handoverId,
+        nonce: deps.nonce ? deps.nonce() : randomBytes(16).toString("base64url"),
+        exp: Math.floor(deps.now() / 1000) + OAUTH_STATE_TTL_S,
+        inst: installationId,
+      });
+    } catch {
+      logLine(deps, "install_misconfigured", { code: "state_secret" });
+      return done("unavailable");
+    }
+    const authorize = new URL(`${GITHUB_WEB}/login/oauth/authorize`);
+    authorize.searchParams.set("client_id", clientId);
+    authorize.searchParams.set("redirect_uri", connectorUrls("github", deps.env).callback);
+    authorize.searchParams.set("state", next);
+    return redirect(authorize.toString());
+  }
+  if (!/^\d{1,20}$/.test(installationId) || !/^[A-Za-z0-9_-]{1,512}$/.test(code)) return done("invalid_request");
   const http: GithubHttp = { fetch: deps.fetch, now: deps.now };
   try {
     let userToken = await exchangeOAuthCode(http, clientId, clientSecret, code);

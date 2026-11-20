@@ -188,3 +188,16 @@ describe("buildTimeline", () => {
     assert.deepEqual(filterTimeline(m, "contacts"), []);
   });
 });
+
+describe("Round 4 audit C5: accepted testimony on the first publication", () => {
+  it("an inferred point whose only evidence is a dated testimony is dated, not Undated", () => {
+    const h = handover([
+      { id: "gap", category: "blocker", content: content([quote("2026-11-20T09:00:00Z", "supports", "testimony")], { evidenceStatus: "inferred" }) },
+      { id: "old", category: "decision", content: content([quote("2026-09-05T09:00:00Z")]) },
+    ]);
+    assert.deepEqual(ids(h), [
+      ["2026-09", ["old"]],
+      ["2026-11", ["gap"]],
+    ]);
+  });
+});

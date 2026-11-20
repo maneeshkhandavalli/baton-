@@ -35,6 +35,7 @@ import {
   text,
   type BotRouteDeps,
 } from "../bots/shared";
+import { helpText, parseCommandAction, statusText, unknownActionText } from "../bots/commands";
 import { SLACK_AUTHORIZE_URL, exchangeSlackCode, missingRequiredSlackScopes, slackBotScopes, slackCall, slackOptions } from "./api";
 import { parseSlackEnvelope, resolveAuthors } from "./server";
 
@@ -116,11 +117,20 @@ async function slashCommand(form: URLSearchParams, deps: BotRouteDeps): Promise<
   if (!slackOptions(deps.env).slashCommand) {
     return json({ response_type: "ephemeral", text: "The /handover command isn't turned on for this Baton server. Link this channel from the handover's Settings → Connected channels in Baton." });
   }
+  const action = parseCommandAction(form.get("text"));
+  if (action === "help") return json({ response_type: "ephemeral", text: helpText("slack") });
+  if (action === null) return json({ response_type: "ephemeral", text: unknownActionText("slack") });
+  if (action === "pause") {
+    // Not offered on Slack: a slash command carries no admin flag, and an extra users.info call would not fit Slack's
+    // 3-second answer window. Pausing stays in Baton (the handover's creator).
+    return json({ response_type: "ephemeral", text: "Pausing from Slack isn't available. The handover's creator can pause or stop saving in Baton: Settings → Connected channels." });
+  }
   const team = form.get("team_id");
   const channel = form.get("channel_id");
   if (!team || !channel || !/^[CG]/.test(channel)) {
     return json({ response_type: "ephemeral", text: "Use /handover in a channel to connect it to a Baton handover." });
   }
+  if (action === "status") return json({ response_type: "ephemeral", text: await statusText(deps.store, "slack", team, channel) });
   const installation = await deps.store.findInstallation("slack", team).catch(() => null);
   const channelName = form.get("channel_name");
   const reply = await handoverCommandReply(deps.store, deps.env, deps.now(), {

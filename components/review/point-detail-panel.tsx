@@ -123,7 +123,7 @@ function Verification({ e }: { e: EvidenceItem }) {
       </CheckRow>
       {!e.isCurrentRevisionVerdict && e.supportVerdict !== "unchecked" && (
         <CheckRow ok={false} warn>
-          Checked against an earlier wording; re-checking the current revision
+          Checked against an earlier wording, not the current one
         </CheckRow>
       )}
     </ul>
