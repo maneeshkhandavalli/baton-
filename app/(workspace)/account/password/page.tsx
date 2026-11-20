@@ -16,7 +16,6 @@ export default function SetPasswordPage() {
     <PageContainer width="narrow" className="space-y-8">
       <PageHeader
         back={{ href: "/account", label: "Account" }}
-        eyebrow="Account"
         title="Set a password"
         description="Add a password to sign in with your email address as well as with Google. It's the same account either way."
       />
