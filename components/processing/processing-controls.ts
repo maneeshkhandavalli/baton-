@@ -122,6 +122,9 @@ export function processingControls(i: ControlsInput): Controls {
 function startLabel(i: ControlsInput): StartLabel {
   // a candidate becomes a pending update once its consent is recorded (the same click), so it counts as one
   const updates = i.pendingUpdates + (i.pendingCandidates ?? 0);
+  // A run that stopped is retried with the same button the failure message names ("choose Try again below"),
+  // also for a source update; only a newly uploaded version still awaiting consent is named instead.
+  if ((i.runStatus === "failed" || i.runStatus === "cancelled") && (i.pendingCandidates ?? 0) === 0) return "Try again";
   if (i.runStatus === "succeeded" && i.newSources > 0) {
     if (updates > 0) return "Process the new sources and versions";
     return i.newSources === 1 ? "Process the new source" : "Process the new sources";

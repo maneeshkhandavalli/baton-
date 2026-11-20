@@ -78,6 +78,12 @@ describe("processing controls: a source added after a succeeded run", () => {
     assert.equal(controlsFor([update]).label, "Process the new version");
     assert.equal(controlsFor([processed()], { runStatus: "failed" }).label, "Try again");
     assert.equal(controlsFor([processed()], { runStatus: "cancelled" }).label, "Try again");
+    // a failed source-update run: the failure message says "choose Try again below", so the button says it too
+    const failedUpdate = processed({ version: { versionNumber: 2, updateState: "failed" } });
+    const retry = controlsFor([failedUpdate], { runStatus: "failed" });
+    assert.equal(retry.label, "Try again");
+    assert.equal(retry.showStart, true);
+    assert.equal(retry.startDisabled, false);
     assert.equal(controlsFor([telegramImport()], { runStatus: null, handoverState: "draft" }).label, "Start processing");
   });
 

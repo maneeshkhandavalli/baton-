@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { DemoWorkspace } from "@/components/demo/demo-workspace";
-import { parseStepParam } from "@/components/demo/demo-guide";
+import { initialStepFromQuery } from "@/components/demo/demo-guide";
 import { WorkspaceSkeleton } from "@/components/shared/skeletons";
 import { routes } from "@/lib/routes";
 
@@ -44,5 +44,5 @@ export default function DemoWorkspacePage({ searchParams }: { searchParams: Prom
 
 async function Workspace({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams;
-  return <DemoWorkspace initialStep={parseStepParam(query.step)} />;
+  return <DemoWorkspace initialStep={initialStepFromQuery(query.step)} />;
 }
