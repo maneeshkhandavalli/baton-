@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   logging: { serverFunctions: false },
   partialPrefetching: true,
   turbopack: {
+    // Local worktrees whose node_modules is a junction to a sibling checkout set this to a common parent folder so
+    // Turbopack can resolve packages outside the project directory. Unset everywhere else (including production).
+    ...(process.env.BATON_TURBOPACK_ROOT ? { root: process.env.BATON_TURBOPACK_ROOT } : {}),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],

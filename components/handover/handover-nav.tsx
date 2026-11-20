@@ -25,8 +25,8 @@ export function HandoverNav({ viewerRole = null }: { viewerRole?: MemberRole | n
   }, [pathname]);
 
   return (
-    <nav aria-label="Handover sections" className="-mb-px overflow-x-auto [scrollbar-width:none]">
-      <ul ref={listRef} className="flex gap-5 sm:gap-6">
+    <nav aria-label="Handover sections" className="w-full overflow-x-auto pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul ref={listRef} className="inline-flex gap-1 rounded-full border border-border bg-card p-1">
         {visibleHandoverNav(viewerRole).map(({ title, href }) => {
           const target = href(id);
           const active = pathname === target;
@@ -37,10 +37,10 @@ export function HandoverNav({ viewerRole = null }: { viewerRole?: MemberRole | n
                 href={target}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-11 items-center border-b-2 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:rounded-sm focus-visible:ring-3 focus-visible:ring-ring/40",
+                  "focus-ring inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium whitespace-nowrap transition-colors duration-150 sm:h-9",
                   active
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 {title}
@@ -55,5 +55,5 @@ export function HandoverNav({ viewerRole = null }: { viewerRole?: MemberRole | n
 
 /** Same-height placeholder shown while the nav resolves. */
 export function HandoverNavFallback() {
-  return <div aria-hidden="true" className="h-11" />;
+  return <div aria-hidden="true" className="h-[3.5rem]" />;
 }

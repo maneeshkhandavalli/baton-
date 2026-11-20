@@ -562,3 +562,27 @@
     animation-iteration-count: infinite !important;
   }
 }
+
+/* ── App redesign (2026-11-20, docs/design/app-redesign-2026-11-20.md) ─────────────────────────────
+ * `frame-ticks`: the landing's and Loopsii's hairline frame with small square handles on its four corners. Used
+ * sparingly (sign-in panel, page header rule), never on every card. Pure background paint: no layout cost. */
+@utility frame-ticks {
+  border: 1px solid var(--border-strong);
+  background-image:
+    linear-gradient(var(--foreground), var(--foreground)), linear-gradient(var(--foreground), var(--foreground)),
+    linear-gradient(var(--foreground), var(--foreground)), linear-gradient(var(--foreground), var(--foreground));
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+}
+/* The rail that ends a page header: a hairline with the same square handles at both ends. */
+@utility rule-ticks {
+  background-image:
+    linear-gradient(var(--border-strong), var(--border-strong)), linear-gradient(var(--foreground), var(--foreground)),
+    linear-gradient(var(--foreground), var(--foreground));
+  background-size: 100% 1px, 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  background-position: 0 50%, 0 50%, 100% 50%;
+  height: 5px;
+}
