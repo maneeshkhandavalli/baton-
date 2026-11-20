@@ -91,7 +91,7 @@ describe("Omega configuration gate", () => {
     assert.ok(c.ok && c.mode === "evaluation");
     assert.ok(c.ok && c.runConfig.provider === OMEGA_PROVIDER_ID);
     assert.ok(c.ok && c.runConfig.extract.model === MODELS.extract && c.runConfig.verify.model === MODELS.verify);
-    assert.ok(c.ok && c.runConfig.adapterVersion === "omega-anthropic@2+json_schema");
+    assert.ok(c.ok && c.runConfig.adapterVersion === "omega-anthropic@3+json_schema");
     assert.ok(!JSON.stringify(c).includes(SECRET), "the key is never in the configuration");
   });
 
@@ -151,10 +151,10 @@ describe("Omega production (owner-approved profile)", () => {
     assert.equal(c.provider.displayName, OMEGA_PRODUCTION_DISPLAY_NAME);
     assert.doesNotMatch(c.provider.displayName, /evaluation|synthetic/i, "production is not labelled evaluation-only");
     assert.deepEqual(c.runConfig, omegaRunConfig(MODELS, "json_schema"));
-    assert.equal(c.runConfig.adapterVersion, "omega-anthropic@2+json_schema");
+    assert.equal(c.runConfig.adapterVersion, "omega-anthropic@3+json_schema");
     assert.ok(!JSON.stringify(c).includes(SECRET), "the key is never in the configuration");
     const p = getAiConfiguration({ ...prodEnv, OMEGA_OUTPUT_MODE: "prompt" });
-    assert.ok(p.ok && p.runConfig.adapterVersion === "omega-anthropic@2+prompt");
+    assert.ok(p.ok && p.runConfig.adapterVersion === "omega-anthropic@3+prompt");
   });
 
   it("the profile is trimmed and accepted in any NODE_ENV (including unset), but is case-sensitive", () => {
@@ -294,6 +294,23 @@ ${OMEGA_SCHEMA_SECTION_HEADING}
       }),
     );
     assert.ok(support.startsWith(SUPPORT_SYSTEM_PROMPT) && support.includes('"verdict"'));
+  });
+
+  it("adapter @3: the schema section names every person/label attribute of the extraction schema", () => {
+    const labels = new Set<string>();
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") {
+        for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
+          if (k === "properties") for (const name of Object.keys(child as object)) if (name.endsWith("Label")) labels.add(name);
+          walk(child);
+        }
+      }
+    };
+    walk(EXTRACT_RESPONSE_SCHEMA);
+    assert.ok(labels.size >= 7);
+    for (const name of labels) assert.ok(OMEGA_SCHEMA_SECTION_HEADING.includes(name), `${name} is named in the person-field rule`);
+    assert.match(OMEGA_SCHEMA_SECTION_HEADING, /Never copy instructions/);
   });
 
   it("translates the schema into a conservative structured-output subset", () => {

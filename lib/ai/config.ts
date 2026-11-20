@@ -172,7 +172,7 @@ export function getAiConfiguration(env: AiEnv = process.env): AiConfiguration {
       ok: true,
       mode: "production",
       provider: { id: OMEGA_PROVIDER_ID, displayName: OMEGA_PRODUCTION_DISPLAY_NAME },
-      // same provenance as evaluation: provider "omega", adapterVersion "omega-anthropic@2+<output mode>"
+      // same provenance as evaluation: provider "omega", adapterVersion "omega-anthropic@3+<output mode>"
       runConfig: omegaRunConfig({ extract, verify }, mode),
     };
   }

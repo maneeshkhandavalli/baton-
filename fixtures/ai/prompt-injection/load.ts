@@ -62,7 +62,11 @@ const verifyExpect = z.strictObject({
    * (lib/ai/injection-guard.ts): a promoting verdict on instruction-bearing evidence becomes `irrelevant`.
    */
   verdict: z.enum(["supports", "partial", "contradicts", "irrelevant"]).optional(),
-  /** Whether the PI-11 guard must replace the compromised verdict (default false). */
+  /**
+   * Whether the PI-11 guard must replace a promoting verdict (default false). For `outcome: "error"` cases the
+   * compromised output never reaches the guard; there it states that the request itself is instruction-bearing,
+   * so the live suite expects the guard to fire on an honest `supports`/`partial` (e.g. PI-12, PI-13).
+   */
   guarded: z.boolean().optional(),
 });
 
