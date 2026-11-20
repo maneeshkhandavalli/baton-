@@ -1,8 +1,15 @@
 # Live provider test plan (Round 4)
 
 Prerequisites (CHECKLIST §0): isolated stack running (done), `.env.connectors-test.local` filled for the provider,
-ngrok authenticated (`ngrok config add-authtoken …`, never committed), tunnel up (`ngrok http 3110`),
-`BATON_SITE_URL=<TUNNEL>`, 3110 restarted with `node scripts/connectors/preview-3110.mjs .env.connectors-test.local`.
+ngrok authenticated (`ngrok config add-authtoken …`, never committed), tunnel up on the static domain with the
+traffic policy (`ngrok http 3110 --url https://spilt-launch-mankind.ngrok-free.dev --traffic-policy-file
+<baton-connectors-testdb>/ngrok-policy.yml`; only the seven provider webhook/callback paths are public, everything
+else needs the tunnel login), `BATON_SITE_URL=<TUNNEL>`, 3110 started with
+`node scripts/connectors/preview-3110.mjs .env.connectors-test.local`. Baton pages can be used directly at
+`http://localhost:3110` (no tunnel login); the signed `/connect?intent=…` link works on either host.
+
+Status (2026-11-20): **Telegram verified live** (results in the Telegram section and `../STATUS.md`). Discord, Slack
+and GitHub: not yet run (credentials missing).
 All browsing for installs happens at `<TUNNEL>` (same origin as the provider's redirect). Use a fresh synthetic Baton
 account on the isolated stack (it is empty; nothing from baton-dev exists there) and only throwaway targets: a test
 repository, a test Discord server/channel, a test Telegram group, a test Slack channel.
@@ -21,7 +28,7 @@ real message/event typed by a person in the provider appears as buffered content
 | 5 | Message persisted? | panel "1 message waiting"; SQL Q3 count ≥ 1 (body never printed) |
 | 6 | Correct handover updated? | after **Bring in new messages**: Settings → Sources shows `<Provider> - <channel>` on THAT handover; SQL Q4 |
 | 7 | Duplicate / retry handled? | re-deliver the same event (GitHub Redeliver; Slack retries automatically on a 503) → SQL Q2 shows one `processed` row per delivery id, Q3 count unchanged |
-| 8 | Disconnect / revocation? | Disconnect in Baton → bot posts "stopped by <you>"; SQL Q1 `revoked`, credentials null, Q3 = 0; a new message afterwards is not stored |
+| 8 | Disconnect / revocation? | **Disconnect channel** → link `revoked`, Q3 = 0, a new message afterwards is ignored `no_capturing_link` (bot posts "stopped by <you>"). **Disconnect group/workspace/server** is a separate action → Q1 `revoked`, credentials null, later events `installation_inactive` |
 
 Read-only SQL on the isolated stack only (never baton-dev), e.g.
 `docker exec supabase_db_baton-connectors-test psql -U postgres -tAc "<query>"`:
@@ -68,8 +75,23 @@ Read-only SQL on the isolated stack only (never baton-dev), e.g.
 | Admin without Start pressed (second admin) sends `/handover` | group: "I can't message you privately yet … press Start" |
 | Open the private link signed in as a Baton user who is NOT the handover's creator | refused before anything is stored (no installation created) |
 | Open it as the creator → pick the handover → confirm | bot posts "<you> connected this channel…"; link capturing |
-| Post a message as a person → Bring in new messages | appears on THAT handover only |
-| Remove the bot from the group | installation revoked; buffered messages deleted |
+| Post a message as a person → Bring in new messages | appears on THAT handover only (first flush = version 1) |
+| Edit a message in the same capture window | the buffered row is updated, edit time recorded |
+| Send a message, Pause, Resume, then edit it | the edit is ignored `outside_capture_window`; the row keeps its text |
+| Pause, send a message, Resume, edit it | message ignored `no_capturing_link`, edit ignored `outside_capture_window`; no row |
+| In a second group: message BEFORE `/handover`, then connect (history 0 days) and edit it | `no_installation`, then `outside_capture_window`; no row |
+| More messages → Bring in new messages | a pending **candidate** version; Processing page asks for its consent → "Process the new version" (scoped run) |
+| **Disconnect channel**, then post a message | link revoked, window closed; message ignored `no_capturing_link`; bot still in the group |
+| **Disconnect group** (separate action), or remove the bot in Telegram | installation revoked; bot leaves (`bot_removed`); later messages ignored `installation_inactive` |
+
+### Telegram result (2026-11-20, local test AI adapter)
+
+Every row above passed with real messages (bot `@BatonProjectContextBot`, group "baton bot testing group",
+installation `b3f0ed31`, link `0c0a0f66-49ff-4ecd-ab09-a440a836c08e`, handover
+`af38678a-0f73-4c89-afa2-055c3407575d`; second group "Baton Telegram QA 2" for the pre-consent row). Delivery ids,
+timestamps, source/publication ids and limits are recorded in `../STATUS.md` ("Live Telegram verification").
+Not covered: the non-admin and second-admin `/handover` replies, the non-creator link refusal, a duplicate delivery,
+and real AI extraction (the test adapter only matches keyword phrasing; the v2 messages were worded for it).
 
 ## Slack (app "baton"; minimal scopes; test channel)
 

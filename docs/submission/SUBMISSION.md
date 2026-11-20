@@ -66,8 +66,11 @@ See `docs/round4/STATUS.md`.
   (new version → 2 contradictions → corrections → version 2 → re-acknowledge; version 3 → new information).
   Evidence: `docs/round4/review/browser/VERIFICATION.md`.
 * **Automated:** ≈3,000 unit/integration tests plus SQL suites in throwaway Postgres containers, all passing.
-* **Live provider delivery (GitHub, Discord, Telegram, Slack):** [to confirm per provider] — implemented and tested
-  with synthetic events only so far; no live event has been verified yet.
+* **Live provider delivery:** **Telegram verified live on 2026-11-20** (local isolated stack via an ngrok tunnel,
+  development bot, real group messages; capture consent and capture windows, import as versions 1 and 2, processing
+  with the test adapter, publication v2, incoming acknowledgement, channel and group disconnect; evidence in
+  `docs/round4/STATUS.md`). **GitHub, Discord, Slack:** [to confirm per provider] — implemented on the same shared
+  connector infrastructure and tested with synthetic events only; no live event verified.
 * **Processing with a real AI provider:** [to confirm] — verified with the deterministic test adapter only.
 
 ## Team

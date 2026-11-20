@@ -13,7 +13,7 @@ Already filled by Main (do not change): Supabase URL/keys of the isolated stack,
 
 | Item | What / where | Action |
 |---|---|---|
-| ngrok authtoken | dashboard.ngrok.com → Your Authtoken | The token in `%LOCALAPPDATA%\ngrok\ngrok.yml` is rejected by ngrok (`ERR_NGROK_105`, "does not look like a proper ngrok authtoken"). Run `! ngrok config add-authtoken <token>` in this session's prompt (it stays in ngrok's own config, not the repo). |
+| ngrok authtoken | dashboard.ngrok.com → Your Authtoken | ✅ Done 2026-11-20 (kept in ngrok's own config, never in the repo); the tunnel ran on the static domain below for the live Telegram test. |
 | Static domain (optional, recommended) | dashboard.ngrok.com → Domains (free accounts get one) | Tell Main the domain name (not secret); then the URL survives restarts and console URLs never need re-entering. |
 
 Main then runs `ngrok http 3110 --url https://spilt-launch-mankind.ngrok-free.dev --traffic-policy-file …/baton-connectors-testdb/ngrok-policy.yml` (static domain, so console URLs never change). The policy (outside the repo) leaves ONLY seven exact paths public: `/api/connectors/telegram/webhook`, `slack/webhook`, `slack/callback`, `github/webhook`, `github/callback`, `discord/webhook`, `discord/callback`; each verifies a signature, secret or signed state. Everything else (app pages, dev assets, install and sync routes, dot-segment or encoded paths) asks for the basic-auth login in `…/baton-connectors-testdb/tunnel-login.txt`. `<TUNNEL>` = `https://spilt-launch-mankind.ngrok-free.dev`.

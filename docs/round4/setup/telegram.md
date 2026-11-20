@@ -1,7 +1,11 @@
 # Telegram setup (shared Baton bot)
 
-Status: code implemented and tested with synthetic data. **Nothing below has been done with real credentials.**
-Steps marked **[needs your credentials/approval]** must be done by the owner.
+Status (2026-11-20): implemented, tested with synthetic data, and **verified live locally** with the development bot
+`@BatonProjectContextBot` against the isolated stack through an ngrok tunnel: capture consent, capture windows
+(pause/resume, pre-consent), import as versions 1 and 2, pending-version consent, processing with the **local test AI
+adapter**, publication, incoming acknowledgement, Disconnect channel and Disconnect group (evidence: `../STATUS.md`,
+"Live Telegram verification"). **Not verified:** a production deployment, a production bot, and extraction by a real
+AI provider. Steps marked **[needs your credentials/approval]** must be done by the owner.
 
 How it works: one Baton bot serves every group. A group admin adds the bot to a group and sends `/handover`; the bot
 sends that admin a Baton link valid for 30 minutes in a PRIVATE message (the group only sees "I've sent you the
@@ -57,9 +61,13 @@ or secret. A bot has exactly one webhook: development and production need **diff
 ## 6. What is captured
 
 * Only messages sent **after the bot joined and after consent**. Telegram gives bots no history, so there is no
-  earlier-messages option.
+  earlier-messages option (verified live: a message sent before `/handover` was ignored as `no_installation`).
+* **Capture windows:** consent opens a window, Pause closes it, Resume opens a new one, Disconnect closes it. A message
+  is stored only if it was sent inside a window; an **edit** only if it was made in the SAME window as the message. A
+  late edit of an older message (before consent, during a pause, or across a pause) is ignored
+  (`outside_capture_window`) and never overwrites what was saved.
 * Text and captions. Photos, files, voice, stickers, contacts and locations become "media omitted" (no file, no phone
-  number). Edits replace the saved text; Telegram does not tell bots about deletions.
+  number). Telegram does not tell bots about deletions.
 * Service messages (joins, title changes, pins) and other bots are skipped. Author = first + last name (or username).
 
 ## 7. Local development
@@ -76,12 +84,23 @@ Webhooks need public HTTPS: use a tunnel and a **separate development bot** whos
 3. Open it signed in as the handover's creator → choose the handover → **Continue** → read and tick → **Start saving
    messages**. The bot posts the capture notice in the group.
 4. Post a message as a person. The panel shows "1 message waiting to be added".
-5. **Bring in new messages** → **Settings → Sources** shows the chat source awaiting consent.
+5. **Bring in new messages** → **Settings → Sources** shows the chat source (version 1) awaiting consent; the
+   Processing page collects that consent ("Process the new source").
+6. Later messages + **Bring in new messages** create a **new version** of the same source holding only the messages
+   since the previous import. It is not used until its consent is confirmed on the Processing page ("Process the new
+   version"), which processes only that version and compares it with the published handover (change review).
+
+Live result (2026-11-20, local test adapter): all six steps passed; details, ids and limits in `../STATUS.md`.
+Known limit: avoid a third import (version 3) on the same channel until change detection treats connector versions as
+additive; otherwise points backed by version 2 are flagged as "evidence missing" (STATUS.md, "Open risks").
 
 ## 9. Revocation
 
-* **Disconnect channel**: stops capture, deletes messages not yet added, posts a notice.
-* **Disconnect group**: the bot leaves the group (`leaveChat`), the link is revoked and buffered messages deleted.
+* **Disconnect channel** (one link): stops capture for that handover, closes its capture window, deletes messages not
+  yet added, posts a notice. The bot stays in the group; later messages are ignored (`no_capturing_link`). Verified live.
+* **Disconnect group** (the installation, a separate button): revokes every link of the group in all handovers, then
+  the bot leaves (`leaveChat` → `bot_removed`); later updates are ignored (`installation_inactive`). Verified live.
+  Disconnect channel never does this by itself.
 * Removing or banning the bot in Telegram sends `my_chat_member` (left/kicked): Baton revokes the group's installation
   and deletes its buffered messages. Sources already added stay.
 * Rotating the token: BotFather `/revoke`, update `TELEGRAM_BOT_TOKEN`, run the webhook script again.
