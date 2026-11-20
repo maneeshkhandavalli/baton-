@@ -27,12 +27,14 @@
 @theme inline {
   /* ── Typography ───────────────────────────────────────── */
   /* Variables are injected by next/font in app/layout.tsx (lib/fonts.ts). */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  /* `font-heading` is UI (sans) headings; editorial headings use `font-display` / `type-*`. */
-  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  /* The landing's three faces: Host Grotesk (display), Atkinson Hyperlegible Next (text and UI), Atkinson
+     Hyperlegible Mono (references, data and technical labels). `font-serif` stays as an alias of display. */
+  --font-sans: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  /* `font-heading` is UI headings; page and section titles use `font-display` / `type-*`. */
+  --font-heading: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-atkinson-mono), ui-monospace, SFMono-Regular, monospace;
 
   /* Extra steps on Tailwind's scale: 11px (badges, eyebrows), 13px (dense UI), 15px (reading UI). */
   --text-2xs: 0.6875rem;
@@ -63,6 +65,12 @@
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);
   --color-inverse-muted: var(--inverse-muted);
+  --color-sunken: var(--sunken);
+  --color-faint-foreground: var(--faint-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-ink: var(--highlight-ink);
+  --color-on-highlight: var(--on-highlight);
+  --color-track: var(--track);
 
   /* ── System tones ─────────────────────────────────────── */
   --color-primary: var(--primary);
@@ -147,184 +155,194 @@
 
 :root {
   color-scheme: light;
-  --radius: 0.625rem; /* 10px → md 8px, xl 12px, 2xl 16px */
+  --radius: 0.875rem; /* 14px: md ~11px controls, xl ~17px panels, 2xl ~22px cards (the landing uses 24px), pills full */
 
-  /* Surfaces + ink: warm paper, white sheets, navy ink */
-  --background: #f7f4ee;
-  --foreground: #151c33;
+  /* Graphite & Highlighter: the landing page's identity (app/(marketing)/identity.css), now app-wide. Graphite
+     paper, white sheets, ink text, ink primary actions. One accent, the highlighter, only ever marks evidence
+     and focus. */
+  --background: #f6f6f4;
+  --foreground: #18181b;
   --card: #ffffff;
-  --card-foreground: #151c33;
+  --card-foreground: #18181b;
   --popover: #ffffff;
-  --popover-foreground: #151c33;
-  --muted: #efeae1;
-  --muted-foreground: #5a6177;
-  --accent: #ebe5da;
-  --accent-foreground: #151c33;
-  --secondary: #efeae1;
-  --secondary-foreground: #151c33;
-  --border: #e6e0d5;
-  --border-strong: #d4cbbb;
-  --input: #9d9483; /* control borders: 3:1 against the card (WCAG 1.4.11) */
-  --ring: #2c42c9;
-  --overlay: rgb(21 28 51 / 0.32);
-  --inverse: #151c33;
-  --inverse-foreground: #eef0f6;
-  --inverse-muted: #a3abc2;
+  --popover-foreground: #18181b;
+  --muted: #eeeeeb;
+  --muted-foreground: #55555c;
+  --accent: #eeeeeb;
+  --accent-foreground: #18181b;
+  --secondary: #eeeeeb;
+  --secondary-foreground: #18181b;
+  --border: #e1e1dc;
+  --border-strong: #c9c9c2;
+  --input: #8e8e86; /* control borders: 3:1 against the card (WCAG 1.4.11) */
+  --ring: #4f5a00;
+  --overlay: rgb(24 24 27 / 0.4);
+  --inverse: #18181b;
+  --inverse-foreground: #f6f6f4;
+  --inverse-muted: #a6a6ad;
+  --sunken: #e7e7e3;
+  --faint-foreground: #6e6e75;
+  --highlight: #e3ee6b;
+  --highlight-ink: #4f5a00;
+  --on-highlight: #18181b;
+  --track: #d6d6cf;
 
-  /* System tones */
-  --primary: #2c42c9;
-  --primary-hover: #2335a6;
+  /* System tones. Primary is ink (the landing's ink pill); --primary-fg is the highlighter's ink for text accents. */
+  --primary: #18181b;
+  --primary-hover: #2e2e33;
   --primary-foreground: #ffffff;
-  --primary-soft: #eaedfb;
-  --primary-fg: #2335a6;
+  --primary-soft: #eeeeeb;
+  --primary-fg: #4f5a00;
 
-  /* UI3: leaf green, kept clearly apart from evidence "sourced" (was #127a58, ΔE 5.7 under deuteranopia) */
-  --success: #2e7d32;
-  --success-hover: #256628;
+  --success: #2c7a3f;
+  --success-hover: #23633a;
   --success-foreground: #ffffff;
-  --success-soft: #e5f2e6;
-  --success-fg: #23622a;
+  --success-soft: #e4f1e6;
+  --success-fg: #22602f;
 
-  /* UI3: darker so white text passes 4.5:1 (was #c25e0c, 4.3:1) and it separates from "inferred" ochre */
-  --warning: #ad4f0e;
-  --warning-soft: #fcecdc;
-  --warning-fg: #8e4307;
+  --warning: #a5520f;
+  --warning-soft: #f8ead9;
+  --warning-fg: #84400a;
 
-  --destructive: #c2364b;
-  --destructive-hover: #a42a3e;
+  --destructive: #b8372b;
+  --destructive-hover: #9a2d23;
   --destructive-foreground: #ffffff;
-  --destructive-soft: #f9e5e8;
-  --destructive-fg: #9f2638;
+  --destructive-soft: #f8e1de;
+  --destructive-fg: #962c22;
 
-  --info: #2c42c9;
-  --info-soft: #eaedfb;
-  --info-fg: #2335a6;
+  --info: #45454c;
+  --info-soft: #ececee;
+  --info-fg: #45454c;
 
-  /* Sidebar: the same paper, separated by a hairline — no heavy dark rail */
-  --sidebar: #f2eee6;
-  --sidebar-foreground: #151c33;
-  --sidebar-muted-foreground: #5a6177;
-  --sidebar-primary: #2c42c9;
+  /* Sidebar: the same paper as the page, drawn as a floating hairline panel like the landing's header pill */
+  --sidebar: #f6f6f4;
+  --sidebar-foreground: #18181b;
+  --sidebar-muted-foreground: #55555c;
+  --sidebar-primary: #18181b;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8e2d6;
-  --sidebar-accent-foreground: #151c33;
-  --sidebar-border: #e3dccf;
-  --sidebar-ring: #2c42c9;
+  --sidebar-accent: #eeeeeb;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #c9c9c2;
+  --sidebar-ring: #4f5a00;
 
-  /* Evidence status: green · ochre · berry · slate. Conflicting is berry, not error-red:
-     a conflict needs a decision, it is not a failure. */
-  --status-sourced: #0e8a62;
-  --status-sourced-fg: #0a6b4c;
-  --status-sourced-soft: #e4f3ec;
-  --status-inferred: #b8780c;
-  --status-inferred-fg: #865606;
-  --status-inferred-soft: #f8eedb;
-  --status-conflicting: #b0336f;
-  --status-conflicting-fg: #8e2659;
-  --status-conflicting-soft: #f8e6ef;
-  --status-missing: #6b7590;
-  --status-missing-fg: #4c556c;
-  --status-missing-soft: #eceef3;
+  /* Evidence status: the four colours of the Baton mark. Sourced blue, inferred ochre, conflicting berry, missing
+     graphite. Conflicting is berry, not error-red: a conflict needs a decision, it is not a failure. */
+  --status-sourced: #2b5f9e;
+  --status-sourced-fg: #224c80;
+  --status-sourced-soft: #e3ebf6;
+  --status-inferred: #94700f;
+  --status-inferred-fg: #73560a;
+  --status-inferred-soft: #f4ecd4;
+  --status-conflicting: #8a3b7c;
+  --status-conflicting-fg: #6e2f63;
+  --status-conflicting-soft: #f2e3ef;
+  --status-missing: #6a6a72;
+  --status-missing-fg: #4f4f56;
+  --status-missing-soft: #ececee;
 
   /* Charts */
-  --chart-1: #2c42c9;
-  --chart-2: #0e8a62;
-  --chart-3: #b8780c;
-  --chart-4: #b0336f;
-  --chart-5: #6b7590;
+  --chart-1: #18181b;
+  --chart-2: #2b5f9e;
+  --chart-3: #94700f;
+  --chart-4: #8a3b7c;
+  --chart-5: #6a6a72;
 
-  /* Elevation: low, warm-tinted, never grey smudges */
-  --elevation-xs: 0 1px 1px 0 rgb(21 28 51 / 0.04);
-  --elevation-soft: 0 1px 2px 0 rgb(21 28 51 / 0.04), 0 1px 3px 0 rgb(21 28 51 / 0.03);
-  --elevation-raised: 0 2px 4px -1px rgb(21 28 51 / 0.05), 0 10px 28px -8px rgb(21 28 51 / 0.12);
-  --elevation-overlay: 0 4px 8px -2px rgb(21 28 51 / 0.06), 0 24px 56px -12px rgb(21 28 51 / 0.24);
+  /* Elevation: flat hairline sheets at rest (like the landing's cards); shadows on hover and overlays */
+  --elevation-xs: 0 1px 1px 0 rgb(24 24 27 / 0.04);
+  --elevation-soft: 0 0 #0000; /* resting sheets are flat, as on the landing */
+  --elevation-raised: 0 2px 4px -1px rgb(24 24 27 / 0.06), 0 12px 28px -10px rgb(24 24 27 / 0.18);
+  --elevation-overlay: 0 4px 10px -2px rgb(24 24 27 / 0.08), 0 28px 56px -14px rgb(24 24 27 / 0.28);
 }
 
 .dark {
   color-scheme: dark;
 
-  --background: #0f1320;
-  --foreground: #e9ebf2;
-  --card: #161b2b;
-  --card-foreground: #e9ebf2;
-  --popover: #1a2033;
-  --popover-foreground: #e9ebf2;
-  --muted: #1c2234;
-  --muted-foreground: #9ba3b9;
-  --accent: #232a3f;
-  --accent-foreground: #e9ebf2;
-  --secondary: #1c2234;
-  --secondary-foreground: #e9ebf2;
-  --border: #262d42;
-  --border-strong: #353d56;
-  --input: #5f6782;
-  --ring: #8d9cf7;
-  --overlay: rgb(5 7 14 / 0.6);
-  /* Bands (marketing privacy band, acknowledge band) stay dark in dark mode: a lifted navy panel
-     rather than a cream slab that would glare against the night paper. */
-  --inverse: #1d2542;
-  --inverse-foreground: #eef0f6;
-  --inverse-muted: #a9b1c7;
+  --background: #101011;
+  --foreground: #ededef;
+  --card: #1c1c1f;
+  --card-foreground: #ededef;
+  --popover: #27272b;
+  --popover-foreground: #ededef;
+  --muted: #27272b;
+  --muted-foreground: #a6a6ad;
+  --accent: #27272b;
+  --accent-foreground: #ededef;
+  --secondary: #27272b;
+  --secondary-foreground: #ededef;
+  --border: #35353a;
+  --border-strong: #48484e;
+  --input: #6b6b72;
+  --ring: #dbe57a;
+  --overlay: rgb(0 0 0 / 0.62);
+  --inverse: #27272b;
+  --inverse-foreground: #ededef;
+  --inverse-muted: #a6a6ad;
+  --sunken: #0a0a0b;
+  --faint-foreground: #8b8b92;
+  --highlight: #d8e36a;
+  --highlight-ink: #dbe57a;
+  --on-highlight: #101011;
+  --track: #3e3e44;
 
-  --primary: #8d9cf7;
-  --primary-hover: #a5b1fa;
-  --primary-foreground: #0f1320;
-  --primary-soft: #1f2752;
-  --primary-fg: #b3bdfb;
+  --primary: #ededef;
+  --primary-hover: #ffffff;
+  --primary-foreground: #101011;
+  --primary-soft: #27272b;
+  --primary-fg: #dbe57a;
 
-  --success: #7cc35a;
-  --success-hover: #94d074;
-  --success-foreground: #0b1708;
-  --success-soft: #16260f;
-  --success-fg: #a3d98a;
+  --success: #6cc07f;
+  --success-hover: #86cd96;
+  --success-foreground: #0b170e;
+  --success-soft: #15251a;
+  --success-fg: #94d4a2;
 
-  --warning: #d9803a;
-  --warning-soft: #301d0e;
-  --warning-fg: #f6ad73;
+  --warning: #e0954a;
+  --warning-soft: #2e1f10;
+  --warning-fg: #efb57c;
 
-  --destructive: #f0697d;
-  --destructive-hover: #f58999;
-  --destructive-foreground: #1a0a0e;
-  --destructive-soft: #33151b;
-  --destructive-fg: #f7909f;
+  --destructive: #f07a6c;
+  --destructive-hover: #f4978c;
+  --destructive-foreground: #1a0a08;
+  --destructive-soft: #341714;
+  --destructive-fg: #f6a59b;
 
-  --info: #8d9cf7;
-  --info-soft: #1f2752;
-  --info-fg: #b3bdfb;
+  --info: #b9b9c0;
+  --info-soft: #232326;
+  --info-fg: #c9c9cf;
 
-  --sidebar: #121726;
-  --sidebar-foreground: #e9ebf2;
-  --sidebar-muted-foreground: #9ba3b9;
-  --sidebar-primary: #8d9cf7;
-  --sidebar-primary-foreground: #0f1320;
-  --sidebar-accent: #1f2638;
+  --sidebar: #101011;
+  --sidebar-foreground: #ededef;
+  --sidebar-muted-foreground: #a6a6ad;
+  --sidebar-primary: #ededef;
+  --sidebar-primary-foreground: #101011;
+  --sidebar-accent: #27272b;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #232a3e;
-  --sidebar-ring: #8d9cf7;
+  --sidebar-border: #48484e;
+  --sidebar-ring: #dbe57a;
 
-  --status-sourced: #3cc28f;
-  --status-sourced-fg: #74dcb2;
-  --status-sourced-soft: #10291f;
-  --status-inferred: #e0a53a;
-  --status-inferred-fg: #f0c472;
-  --status-inferred-soft: #2c2210;
-  --status-conflicting: #e06aa6;
-  --status-conflicting-fg: #f29ac6;
-  --status-conflicting-soft: #2e1424;
-  --status-missing: #8d96ad;
-  --status-missing-fg: #b4bbcc;
-  --status-missing-soft: #1e2333;
+  --status-sourced: #84aeea;
+  --status-sourced-fg: #a9c6f1;
+  --status-sourced-soft: #15233a;
+  --status-inferred: #d8b24e;
+  --status-inferred-fg: #e7cb84;
+  --status-inferred-soft: #2a2310;
+  --status-conflicting: #db8ccc;
+  --status-conflicting-fg: #e9b0de;
+  --status-conflicting-soft: #2f1a2b;
+  --status-missing: #a0a0a8;
+  --status-missing-fg: #c2c2c8;
+  --status-missing-soft: #232326;
 
-  --chart-1: #8d9cf7;
-  --chart-2: #3cc28f;
-  --chart-3: #e0a53a;
-  --chart-4: #e06aa6;
-  --chart-5: #8d96ad;
+  --chart-1: #ededef;
+  --chart-2: #84aeea;
+  --chart-3: #d8b24e;
+  --chart-4: #db8ccc;
+  --chart-5: #a0a0a8;
 
-  --elevation-xs: 0 1px 1px 0 rgb(0 0 0 / 0.3);
-  --elevation-soft: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 0 rgb(0 0 0 / 0.2);
-  --elevation-raised: 0 2px 4px -1px rgb(0 0 0 / 0.3), 0 12px 28px -8px rgb(0 0 0 / 0.5);
-  --elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 0.35), 0 24px 56px -12px rgb(0 0 0 / 0.6);
+  --elevation-xs: 0 1px 1px 0 rgb(0 0 0 / 0.4);
+  --elevation-soft: inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  --elevation-raised: inset 0 1px 0 0 rgb(255 255 255 / 0.05), 0 12px 28px -10px rgb(0 0 0 / 0.6);
+  --elevation-overlay: inset 0 1px 0 0 rgb(255 255 255 / 0.06), 0 28px 56px -14px rgb(0 0 0 / 0.7);
 }
 
 /* Focus: a solid 2px ring-coloured outline with a 2px gap (≥ 6.7:1 on paper and card in both themes, WCAG 1.4.11).
@@ -345,45 +363,50 @@
 
 /* ── Type roles ───────────────────────────────────────────
  * Prefer these composites over ad-hoc size/leading/tracking combinations.
- * Display roles are serif (Instrument Serif, one weight); UI roles are Inter.
+ * Display roles are Host Grotesk, heavy and tightly tracked like the landing's headings (.bi-display, .bi-h2,
+ * .bi-h3); UI roles are Atkinson Hyperlegible Next; data and technical labels are Atkinson Hyperlegible Mono.
  */
 @utility type-display {
-  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  font-size: clamp(2.75rem, 1.9rem + 3.4vw, 4.5rem);
-  line-height: 1.02;
-  letter-spacing: -0.02em;
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 640;
+  font-size: clamp(2.5rem, 1.7rem + 3.2vw, 4.25rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 @utility type-page-title {
-  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  font-size: clamp(2.125rem, 1.75rem + 1.4vw, 2.875rem);
-  line-height: 1.06;
-  letter-spacing: -0.015em;
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 640;
+  font-size: clamp(2rem, 1.6rem + 1.6vw, 2.875rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 @utility type-section-title {
-  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  font-size: clamp(1.625rem, 1.45rem + 0.7vw, 2rem);
-  line-height: 1.12;
-  letter-spacing: -0.01em;
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 620;
+  font-size: clamp(1.5rem, 1.3rem + 0.8vw, 1.875rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
   text-wrap: balance;
 }
 @utility type-title {
-  font-family: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  font-size: 1.5rem;
+  font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 1.375rem;
   line-height: 1.2;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.025em;
   text-wrap: balance;
 }
 @utility type-heading {
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
   font-size: 0.9375rem;
   line-height: 1.4;
   font-weight: 600;
   letter-spacing: -0.006em;
 }
 @utility type-subheading {
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
   font-size: 0.875rem;
   line-height: 1.4;
   font-weight: 600;
@@ -402,21 +425,22 @@
   font-size: 0.8125rem;
   line-height: 1.25rem;
 }
+/* Technical label: mono caps, like the landing's corner labels (SOURCED, INFERRED) and section tags. */
 @utility type-eyebrow {
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-atkinson-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 0.6875rem;
   line-height: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 @utility type-quote {
-  font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--font-atkinson-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 0.8125rem;
   line-height: 1.6;
 }
 @utility type-numeric {
-  font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--font-atkinson-mono), ui-monospace, SFMono-Regular, monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -537,4 +561,28 @@
     animation-duration: 1.6s !important;
     animation-iteration-count: infinite !important;
   }
+}
+
+/* ── App redesign (2026-11-20, docs/design/app-redesign-2026-11-20.md) ─────────────────────────────
+ * `frame-ticks`: the landing's and Loopsii's hairline frame with small square handles on its four corners. Used
+ * sparingly (sign-in panel, page header rule), never on every card. Pure background paint: no layout cost. */
+@utility frame-ticks {
+  border: 1px solid var(--border-strong);
+  background-image:
+    linear-gradient(var(--foreground), var(--foreground)), linear-gradient(var(--foreground), var(--foreground)),
+    linear-gradient(var(--foreground), var(--foreground)), linear-gradient(var(--foreground), var(--foreground));
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+}
+/* The rail that ends a page header: a hairline with the same square handles at both ends. */
+@utility rule-ticks {
+  background-image:
+    linear-gradient(var(--border-strong), var(--border-strong)), linear-gradient(var(--foreground), var(--foreground)),
+    linear-gradient(var(--foreground), var(--foreground));
+  background-size: 100% 1px, 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  background-position: 0 50%, 0 50%, 100% 50%;
+  height: 5px;
 }

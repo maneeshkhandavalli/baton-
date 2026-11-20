@@ -7,6 +7,8 @@ import { HandoverSettings } from "@/components/settings/handover-settings";
 import { FormSkeleton } from "@/components/shared/skeletons";
 import { getConsentDisclosure } from "@/lib/ai/consent-disclosure";
 import { getQueries } from "@/lib/data";
+import { getVerifiedActor } from "@/lib/db/actor";
+import { isDemoAccountEmail } from "@/lib/demo-accounts";
 import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Handover settings" };
@@ -29,12 +31,13 @@ async function SettingsContent({ params }: { params: Promise<{ id: string }> }) 
   if (!handover.ok) notFound();
   const review = handover.data.viewerRole === "outgoing" || handover.data.viewerRole === "reviewer";
   // Review-only reads (§13.1 route table). Other roles never call them, so nothing hints at what they hold.
-  const [members, sources, tokens, participants, exclusions] = await Promise.all([
+  const [members, sources, tokens, participants, exclusions, actor] = await Promise.all([
     queries.listMembers(id),
     queries.listSources(id),
     review ? queries.listAccessTokens(id) : null,
     review ? queries.listParticipants(id) : null,
     review ? queries.listExclusions(id) : null,
+    getVerifiedActor(),
   ]);
   return (
     <HandoverSettings
@@ -45,6 +48,7 @@ async function SettingsContent({ params }: { params: Promise<{ id: string }> }) 
       participants={participants?.ok ? participants.data : []}
       exclusions={exclusions?.ok ? exclusions.data : []}
       consentDisclosure={getConsentDisclosure()}
+      demoAccount={isDemoAccountEmail(actor?.email)}
     />
   );
 }

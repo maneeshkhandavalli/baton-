@@ -37,7 +37,7 @@ export function EmptyState({ title, description, icon, action, tone = "neutral",
     <section
       className={cn(
         "flex flex-col items-center justify-center text-center",
-        page ? "rounded-xl border border-dashed border-border-strong/70 px-6 py-16 sm:py-20" : "px-4 py-10",
+        page ? "rounded-2xl border border-dashed border-border-strong/70 px-6 py-16 sm:py-20" : "px-4 py-10",
         className,
       )}
     >

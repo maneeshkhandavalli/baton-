@@ -19,8 +19,8 @@ export function MobileNav() {
       </DialogTrigger>
       <DialogContent side="left" className="bg-sidebar text-sidebar-foreground">
         <DialogTitle className="sr-only">Navigation</DialogTitle>
-        <div className="flex h-14 shrink-0 items-center px-5">
-          <BatonLogo size="sm" />
+        <div className="flex h-16 shrink-0 items-center px-5">
+          <BatonLogo size="lg" />
         </div>
         <div
           className="flex flex-1 flex-col"

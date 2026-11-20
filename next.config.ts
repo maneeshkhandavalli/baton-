@@ -12,8 +12,13 @@ const nextConfig: NextConfig = {
   // Those arguments include passwords (signInWithPassword) and invitation tokens (acceptInvitation), which must
   // never reach a log. Keep it off.
   logging: { serverFunctions: false },
+  // Development only: Next's floating dev badge sat on top of the sidebar's Help and Sign out controls.
+  devIndicators: false,
   partialPrefetching: true,
   turbopack: {
+    // Local worktrees whose node_modules is a junction to a sibling checkout set this to a common parent folder so
+    // Turbopack can resolve packages outside the project directory. Unset everywhere else (including production).
+    ...(process.env.BATON_TURBOPACK_ROOT ? { root: process.env.BATON_TURBOPACK_ROOT } : {}),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],

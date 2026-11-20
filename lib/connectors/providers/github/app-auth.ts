@@ -24,6 +24,10 @@ export function normalizePrivateKey(raw: string | undefined): string | null {
   let pem = raw.trim();
   if ((pem.startsWith('"') && pem.endsWith('"')) || (pem.startsWith("'") && pem.endsWith("'"))) pem = pem.slice(1, -1);
   pem = pem.replace(/\\r/g, "").replace(/\\n/g, "\n").replace(/\r\n?/g, "\n").trim();
+  // A PEM pasted into a single-line dashboard field often arrives with its line breaks turned into spaces:
+  // rebuild the body (base64 never contains spaces) so the key still parses.
+  const flat = /^(-----BEGIN (?:RSA )?PRIVATE KEY-----)\s+([A-Za-z0-9+/=\s]+?)\s+(-----END (?:RSA )?PRIVATE KEY-----)$/.exec(pem);
+  if (flat && !pem.includes("\n")) pem = `${flat[1]}\n${flat[2].split(/\s+/).join("\n")}\n${flat[3]}`;
   if (!/^-----BEGIN (RSA )?PRIVATE KEY-----\n[\s\S]+\n-----END (RSA )?PRIVATE KEY-----$/.test(pem)) return null;
   return `${pem}\n`;
 }

@@ -9,6 +9,7 @@ import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { getAccountDeletionBlockers } from "@/lib/actions/account";
 import { getQueries } from "@/lib/data";
+import { isDemoAccountEmail } from "@/lib/demo-accounts";
 import { getAccountOverview } from "@/lib/supabase/account-auth";
 import { connection } from "next/server";
 
@@ -51,7 +52,7 @@ async function AccountContent() {
   return (
     <div className="space-y-6">
       {overview ? (
-        <AccountDetails overview={overview} handovers={counts} />
+        <AccountDetails overview={overview} handovers={counts} demoAccount={isDemoAccountEmail(overview.email)} />
       ) : (
         <p className="text-sm text-muted-foreground">Your account details couldn&rsquo;t be loaded. Try signing in again.</p>
       )}
@@ -61,7 +62,7 @@ async function AccountContent() {
         <p className="text-sm text-muted-foreground">Creatorship offers couldn&rsquo;t be loaded: {offers.error.message}</p>
       )}
       {blockers.ok ? (
-        <AccountDeletion blockers={blockers.data} offers={outgoing} />
+        <AccountDeletion blockers={blockers.data} offers={outgoing} demoAccount={isDemoAccountEmail(overview?.email)} />
       ) : (
         <p className="text-sm text-muted-foreground">Account deletion couldn&rsquo;t be loaded: {blockers.error.message}</p>
       )}

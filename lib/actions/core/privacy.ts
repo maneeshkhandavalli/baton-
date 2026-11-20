@@ -9,13 +9,15 @@ import type { Result } from "../../contracts/api";
 import type { ErasureReport } from "../../contracts/dto";
 import { eraseParticipantInput } from "../../contracts/schemas";
 import type { EraseParticipantInput } from "../../contracts/schemas";
+import { refuseDemoAccount } from "./demo-guard";
 import { action, failWith } from "./run";
 import type { ActionDeps } from "./types";
 
 export const RECOVERY_MANIFEST_UNAVAILABLE = "recovery_manifest_unavailable";
 
 export async function eraseParticipant(deps: ActionDeps, input: EraseParticipantInput): Promise<Result<ErasureReport>> {
-  return action(deps, eraseParticipantInput, input, async () =>
+  return action(deps, eraseParticipantInput, input, async (actor) =>
+    refuseDemoAccount(actor) ??
     failWith("precondition_failed", {
       message: "Erasure isn't available yet. Nothing was changed.",
       details: { reason: RECOVERY_MANIFEST_UNAVAILABLE },

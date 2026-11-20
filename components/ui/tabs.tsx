@@ -32,7 +32,7 @@ function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
       className={cn(
         "relative flex max-w-full items-center overflow-x-auto [scrollbar-width:none]",
         variant === "underline" && "gap-6 border-b border-border",
-        variant === "segmented" && "w-fit gap-1 rounded-lg border border-border bg-muted p-1",
+        variant === "segmented" && "w-fit gap-1 rounded-full border border-border bg-muted p-1",
         className
       )}
       {...props}
@@ -47,8 +47,8 @@ function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
       data-slot="tabs-tab"
       className={cn(
         "inline-flex shrink-0 items-center gap-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none hover:text-foreground focus-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground [&_svg]:size-4 [&_svg]:shrink-0",
-        variant === "underline" && "-mb-px h-11 border-b-2 border-transparent rounded-none focus-visible:rounded-sm data-active:border-primary",
-        variant === "segmented" && "h-8 rounded-md px-3 max-sm:h-10 data-active:bg-card data-active:shadow-xs",
+        variant === "underline" && "-mb-px h-11 border-b-2 border-transparent rounded-none focus-visible:rounded-sm data-active:border-foreground",
+        variant === "segmented" && "h-8 rounded-full px-3.5 max-sm:h-10 data-active:bg-card data-active:shadow-xs",
         className
       )}
       {...props}

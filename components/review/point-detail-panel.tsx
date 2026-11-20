@@ -64,7 +64,7 @@ function Section({ title, children, className, help }: { title: string; children
 function CheckRow({ ok, warn, children }: { ok: boolean; warn?: boolean; children: React.ReactNode }) {
   const Icon = ok ? CheckCircle2 : warn ? CircleAlert : CircleSlash;
   return (
-    <li className="flex items-start gap-2 text-xs">
+    <li className="flex items-start gap-2 text-caption">
       <Icon
         aria-hidden="true"
         className={cn("mt-px size-3.5 shrink-0", ok ? "text-status-sourced" : warn ? "text-status-inferred" : "text-status-conflicting")}
@@ -141,12 +141,12 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
       <div className="space-y-2 px-5 pt-5 pb-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge status={point.evidenceStatus} size="sm" />
-          <span className="text-xs text-muted-foreground">{categoryLabel[point.category]}</span>
-          <span className="text-xs text-muted-foreground">· Revision {point.revisionNumber}</span>
+          <span className="text-caption text-muted-foreground">{categoryLabel[point.category]}</span>
+          <span className="text-caption text-muted-foreground">· Revision {point.revisionNumber}</span>
         </div>
         <h2 className="type-title"><MaskedText text={point.title} /></h2>
         <p className="text-sm leading-relaxed text-muted-foreground"><MaskedText text={point.statement} /></p>
-        <p className="text-xs text-muted-foreground">{statusConfig[point.evidenceStatus].description}</p>
+        <p className="text-caption text-muted-foreground">{statusConfig[point.evidenceStatus].description}</p>
       </div>
 
       {flags.some((f) => f.state === "open") && (
@@ -172,7 +172,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
         <Section title="Inference">
           <p className="rounded-lg bg-status-inferred-soft px-3 py-2 text-sm text-status-inferred-fg"><MaskedText text={point.inferenceRationale} /></p>
           {point.inferredConfirmation && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-caption text-muted-foreground">
               Confirmed by {point.inferredConfirmation.by} on {formatDate(point.inferredConfirmation.at)}
             </p>
           )}
@@ -199,7 +199,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                   <div className="flex flex-wrap items-center gap-1.5">
                     <AccessBadge level={e.accessLevel} showEveryone={false} />
                     {e.excluded && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-caption text-muted-foreground">
                         Excluded{e.exclusionReason && (
                           <>
                             : <MaskedText text={e.exclusionReason} />
@@ -243,7 +243,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                     <p className="text-sm font-medium">{s.title}</p>
                     <AccessBadge level={s.accessLevel} showEveryone={false} />
                   </div>
-                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
                     <dt className="text-muted-foreground">Type</dt>
                     <dd>{sourceKindLabel[s.kind]}</dd>
                     {s.firstMessageAt && (
@@ -258,7 +258,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                     <dd>{s.rawDeletedAt ? `Deleted ${formatDate(s.rawDeletedAt)}` : "Kept until processed"}</dd>
                   </dl>
                   {masked.length > 0 && (
-                    <p className="mt-2 flex flex-wrap gap-1 text-2xs text-muted-foreground">
+                    <p className="mt-2 flex flex-wrap gap-1 text-xs text-muted-foreground">
                       <ShieldCheck aria-hidden="true" className="size-3.5 text-status-sourced" />
                       Masked:
                       {masked.map(([k, n]) => (
@@ -272,7 +272,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
               );
             })}
           </ul>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Only the quoted passage is shown here, not the messages around it.
           </p>
         </Section>
@@ -316,7 +316,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                     <MaskedText text={r.title} />
                   </span>
                 </p>
-                <p className="pl-6 text-xs text-muted-foreground">
+                <p className="pl-6 text-caption text-muted-foreground">
                   {r.authorLabel ?? "Extracted by Baton"} · {formatDateTime(r.createdAt)}
                   {r.editReason && (
                     <>
@@ -344,8 +344,8 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                     <span className="font-medium">{reviewActionLabel[h.action] ?? h.action}</span>
                     <span className="text-muted-foreground"> · {h.actorLabel ?? "Baton"}</span>
                   </p>
-                  {h.note && <p className="text-xs text-muted-foreground"><MaskedText text={h.note} /></p>}
-                  <p className="text-xs text-muted-foreground">{formatDateTime(h.createdAt)}</p>
+                  {h.note && <p className="text-caption text-muted-foreground"><MaskedText text={h.note} /></p>}
+                  <p className="text-caption text-muted-foreground">{formatDateTime(h.createdAt)}</p>
                 </div>
               </li>
             ))}

@@ -28,8 +28,8 @@ export function PageHeader({ title, eyebrow, description, actions, meta, back, d
   return (
     <header
       className={cn(
-        "flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8",
-        divider && "border-b border-border pb-6 sm:pb-8",
+        "relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8",
+        divider && "pb-6 sm:pb-8",
         className,
       )}
     >
@@ -37,7 +37,7 @@ export function PageHeader({ title, eyebrow, description, actions, meta, back, d
         {back && (
           <Link
             href={back.href}
-            className="-ml-1 inline-flex items-center gap-1.5 rounded-sm px-1 text-caption font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="-ml-1 inline-flex items-center gap-1.5 rounded-sm px-1 text-caption font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-ring"
           >
             <ArrowLeft aria-hidden="true" className="size-3.5" />
             {back.label}
@@ -49,6 +49,8 @@ export function PageHeader({ title, eyebrow, description, actions, meta, back, d
         {meta && <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1 text-caption text-muted-foreground">{meta}</div>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {/* App redesign 2026-11-20: the hairline ends in the landing's square handles (frame motif). */}
+      {divider && <span aria-hidden="true" className="rule-ticks pointer-events-none absolute inset-x-0 -bottom-[2px]" />}
     </header>
   );
 }

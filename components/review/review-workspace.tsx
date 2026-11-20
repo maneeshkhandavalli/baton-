@@ -320,7 +320,7 @@ export function ReviewWorkspace({
       <aside aria-label="Readiness and sections" className="hidden lg:block">
         <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
       </aside>
-      <details className="group rounded-xl border border-border bg-card shadow-soft lg:hidden">
+      <details className="group rounded-2xl border border-border bg-card lg:hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
           <span className="flex items-center gap-2">
             <ListFilter aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -453,7 +453,7 @@ export function ReviewWorkspace({
 
       {/* Right: source context and verification */}
       <aside aria-label="Point details" className="hidden xl:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-xl border border-border bg-card shadow-soft">
+        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">
           {detail ?? <p className="p-5 text-sm text-muted-foreground">Select a point to see its evidence.</p>}
         </div>
       </aside>

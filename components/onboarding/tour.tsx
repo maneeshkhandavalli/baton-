@@ -302,7 +302,7 @@ export function TourOverlay() {
   if (!onPage) {
     if (!(offPageSince?.stepId === step.id && offPageSince.long)) return null;
     return (
-      <div className="fixed bottom-4 left-4 z-[60] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-xl border border-border bg-popover py-1.5 pr-1.5 pl-3 text-sm shadow-raised">
+      <div className="fixed bottom-4 left-4 z-[60] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-2xl border border-border bg-popover py-1.5 pr-1.5 pl-3 text-sm shadow-raised">
         <span className="truncate text-muted-foreground">
           Tour paused ({progress.label})
         </span>
@@ -355,7 +355,7 @@ export function TourOverlay() {
         aria-describedby={bodyId}
         data-testid="tour-card"
         className={cn(
-          "fixed z-[61] w-80 rounded-xl border border-border bg-popover p-3.5 text-popover-foreground shadow-raised max-sm:w-[calc(100vw-2rem)]",
+          "fixed z-[61] w-80 rounded-2xl border border-border bg-popover p-3.5 text-popover-foreground shadow-raised max-sm:w-[calc(100vw-2rem)]",
           !(anchorEl && place) && "invisible",
         )}
         style={
@@ -371,7 +371,7 @@ export function TourOverlay() {
           >
             {step.title}
           </h2>
-          <p className="shrink-0 pt-px text-caption tabular-nums text-muted-foreground">
+          <p className="shrink-0 pt-px font-mono text-xs tabular-nums text-muted-foreground">
             <span className="sr-only">Step </span>
             {progress.label}
           </p>

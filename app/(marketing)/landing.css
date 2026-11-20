@@ -664,6 +664,31 @@
     width: 30%;
     height: 30%;
   }
+  /* Below 1024px the statement spans the full width, so a disc pinned mid-screen would sit on its words as they
+     scroll past. There the stage is not sticky (the disc stays in the hero's centre cell, orbit folded away) and the
+     intro gets its own in-flow cluster: a block sized from the same 7-column tile, between the statement and the list. */
+  @media (max-width: 1023px) {
+    .lp-stage {
+      position: relative;
+      top: auto;
+    }
+    .lp-stage .lp-orbit {
+      display: none;
+    }
+  }
+  .lp-cluster {
+    --cols: 7;
+    --tile: calc((100cqw - 2 * var(--frame-x)) / var(--cols));
+    --disc-scale: 1.5;
+    position: relative;
+    pointer-events: none;
+    /* Orbit radius 1.5 tiles + a tilted 0.92-tile item (half-diagonal 0.65) = 2.15 tiles each way, plus a little air. */
+    height: calc(var(--tile) * 4.6);
+    margin-top: calc(48 * var(--u));
+  }
+  .lp-cluster .lp-stage__center {
+    top: 50%;
+  }
 
   /* ── 2 · Intro ──────────────────────────────────── */
   .lp-intro {
@@ -688,11 +713,17 @@
       gap: calc(40 * var(--u));
     }
   }
+  /* Below 1024px the list follows the in-flow cluster; the intro's last 100svh is where the problem panel rises
+     (it has margin-top: -100svh), so that much is kept clear after the list. */
+  @media (max-width: 1023px) {
+    .lp-intro {
+      min-height: 0;
+      padding-top: calc(140 * var(--u));
+      padding-bottom: calc(100svh + 96 * var(--u));
+    }
+  }
   .lp-intro__side {
-    --tile: calc((100vw - 2 * var(--frame-x)) / 7);
-    position: sticky;
-    top: calc(62svh + var(--tile) * 2.3);
-    margin-top: 40svh;
+    margin-top: calc(40 * var(--u));
     max-width: 26rem;
     text-align: center;
     margin-inline: auto;
@@ -700,6 +731,7 @@
   @media (min-width: 1024px) {
     .lp-intro__side {
       --tile: calc((100vw - 2 * var(--frame-x)) / 11);
+      position: sticky;
       top: calc(62svh - 3.5rem);
       margin-top: 30svh;
       margin-left: calc(50% + var(--tile) * 2.75);
@@ -993,21 +1025,6 @@
     gap: 1rem;
     padding: calc(10 * var(--u)) calc(14 * var(--u)) calc(16 * var(--u));
     font-size: var(--fs-small);
-  }
-  .lp-framed-cta {
-    display: flex;
-    justify-content: center;
-    margin-top: calc(40 * var(--u));
-  }
-  .lp-framed-cta > div {
-    position: relative;
-    padding: calc(10 * var(--u));
-    border-radius: calc(26 * var(--u));
-    background: color-mix(in srgb, var(--t-apricot) 70%, var(--t-paper));
-    box-shadow:
-      0 0 0 1px var(--hair),
-      0 0 0 calc(8 * var(--u)) var(--background),
-      0 0 0 calc(9 * var(--u)) var(--hair);
   }
 
   /* ── 5 · How it works: stacked sticky cards ─────── */
@@ -1706,6 +1723,74 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+
+  /* ── Header action (session-aware, marketing-header-actions.tsx) ── */
+  .lp-nav__actions {
+    display: contents;
+  }
+  /* Signed in, the header's "Open workspace" is the page's primary action, so the hero's demo pill steps back to
+     the outlined style: one ink pill per screen. (Same size, so nothing shifts when the session streams in.) */
+  .brand-identity:has(.lp-nav [data-session="in"]) .lp-hero__ctas [data-cta="primary"] {
+    color: var(--foreground);
+  }
+  .brand-identity:has(.lp-nav [data-session="in"]) .lp-hero__ctas [data-cta="primary"] :is(.lp-cta__disc, .lp-cta__label) {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--hair);
+  }
+
+  /* ── Loading: the route fallback and the first-visit splash (brand-loader.tsx) ── */
+  .lp-loader {
+    display: grid;
+    justify-items: center;
+    gap: max(0.875rem, calc(18 * var(--u)));
+    color: var(--foreground);
+  }
+  .lp-loader__mark {
+    display: flex;
+    gap: max(3px, calc(4 * var(--u)));
+    width: max(7.5rem, calc(160 * var(--u)));
+    height: max(0.75rem, calc(16 * var(--u)));
+  }
+  .lp-loader__mark > span {
+    flex: 1;
+    transform-origin: left center;
+  }
+  .lp-loader__mark > span:first-child {
+    border-radius: 999px 0 0 999px;
+  }
+  .lp-loader__mark > span:last-child {
+    border-radius: 0 999px 999px 0;
+  }
+  .lp-loader__word {
+    letter-spacing: 0.32em;
+    font-weight: 600;
+  }
+  .lp-loader__pixels {
+    display: flex;
+    gap: 3px;
+  }
+  .lp-loader__pixels > span {
+    width: 7px;
+    height: 7px;
+    opacity: 0.55;
+  }
+  .lp-loading {
+    display: grid;
+    place-items: center;
+    min-height: 100svh;
+    background: var(--background);
+  }
+  /* The splash is never shown by CSS alone: only the inline script in intro-splash.tsx sets data-show (and the
+     motion block below is the only place that displays it), so no-JS and reduced-motion visitors never see it. */
+  .lp-splash {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    place-items: center;
+    background: var(--background);
+    pointer-events: none;
+  }
 }
 
 /* Accordion height animation (reference: grid-template-rows .6s); motion only. */
@@ -1737,5 +1822,76 @@
   .lp-cta__label,
   .lp-acc__icon {
     transition: none;
+  }
+}
+
+/* Loading motion: the mark draws in segment by segment, the pixels follow; the route fallback keeps the pixels
+   pulsing. The splash fades by itself after 600 ms (a failsafe if hydration is slow); intro-splash.tsx usually
+   starts the fade sooner with data-leaving. Motion only: otherwise the splash never shows and the loader is still. */
+@media (prefers-reduced-motion: no-preference) {
+  .lp-splash[data-show] {
+    display: grid;
+    pointer-events: auto;
+    animation: lp-splash-out 0.3s ease-in 0.6s forwards;
+  }
+  .lp-splash[data-show][data-leaving] {
+    animation: lp-splash-leave 0.3s ease-in forwards;
+  }
+  .lp-loader__mark > span {
+    animation: lp-loader-seg 0.42s cubic-bezier(0.84, 0, 0.16, 1) calc(var(--i) * 55ms) both;
+  }
+  .lp-loader__word {
+    animation: lp-loader-rise 0.4s ease-out 0.12s both;
+  }
+  .lp-loader__pixels > span {
+    animation: lp-loader-pop 0.3s ease-out calc(0.15s + var(--i) * 30ms) both;
+  }
+  .lp-loader[data-looping] .lp-loader__pixels > span {
+    animation: lp-loader-pulse 1.4s ease-in-out calc(var(--i) * 120ms) infinite;
+  }
+  @keyframes lp-splash-out {
+    to {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  }
+  @keyframes lp-splash-leave {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  }
+  @keyframes lp-loader-seg {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes lp-loader-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes lp-loader-pop {
+    from {
+      opacity: 0;
+      transform: scale(0);
+    }
+  }
+  @keyframes lp-loader-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 }

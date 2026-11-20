@@ -37,7 +37,7 @@ export function ConnectorFixtureGallery({ initial }: { initial: FixtureScenario 
         </div>
       </div>
       <ConnectorActionsProvider key={scenario} actions={actions}>
-        <section id="connectors" className="rounded-xl border border-border bg-card p-5">
+        <section id="connectors" className="rounded-2xl border border-border bg-card p-5">
           <ConnectedChannels handoverId="00000000-0000-4000-8000-000000000001" />
         </section>
       </ConnectorActionsProvider>

@@ -72,7 +72,7 @@ export function ChangeReviews({ handoverId, items, canDecide, handoverState, blo
 
   return (
     <div className="space-y-6">
-      <section aria-labelledby="changes-summary" className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
+      <section aria-labelledby="changes-summary" className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex items-center gap-1">
           <h2 id="changes-summary" className="type-subheading">
             {unresolved.length === 0 ? "No change needs a decision" : `${unresolved.length} ${unresolved.length === 1 ? "change needs" : "changes need"} a decision`}
@@ -113,10 +113,10 @@ export function ChangeReviews({ handoverId, items, canDecide, handoverState, blo
           </>
         )}
         <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
-          <Link href={routes.handover.review(handoverId)} className="text-sm font-medium text-primary-fg underline-offset-4 hover:underline">
+          <Link href={routes.handover.review(handoverId)} className="text-sm font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
             Open the review
           </Link>
-          <Link href={routes.handover.processing(handoverId)} className="text-sm font-medium text-primary-fg underline-offset-4 hover:underline">
+          <Link href={routes.handover.processing(handoverId)} className="text-sm font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
             Source updates
           </Link>
         </div>
@@ -145,11 +145,11 @@ function FilterChip({ active, onClick, count, children }: { active: boolean; onC
       onClick={onClick}
       className={cn(
         "inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-sm max-sm:min-h-10 transition-colors focus-ring",
-        active ? "border-primary bg-primary-soft text-primary-fg" : "border-border bg-card text-foreground/85 hover:bg-muted",
+        active ? "border-foreground bg-muted text-foreground" : "border-border bg-card text-foreground/85 hover:bg-muted",
       )}
     >
       {children}
-      <span className="font-mono text-xs tabular-nums text-muted-foreground">{count}</span>
+      <span className="text-caption font-medium tabular-nums text-muted-foreground">{count}</span>
     </button>
   );
 }
@@ -178,7 +178,7 @@ function ChangeCard({ handoverId, item, canDecide }: { handoverId: string; item:
   const lastNote = [...item.decisions].reverse().find((d) => d.note);
 
   return (
-    <article aria-labelledby={headingId} className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
+    <article aria-labelledby={headingId} className="rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={item.kind === "possible_contradiction" ? "conflicting" : item.kind === "evidence_missing" ? "missing" : "info"}>{t.label}</Badge>
         <Badge tone={state.tone}>{state.label}</Badge>

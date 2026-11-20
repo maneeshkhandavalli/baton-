@@ -42,7 +42,7 @@ function DialogContent({
         className={cn(
           "fixed z-50 flex flex-col bg-popover text-popover-foreground shadow-overlay ring-1 ring-foreground/8 outline-none",
           side === "center" &&
-            "top-1/2 left-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto rounded-2xl p-6 duration-200 ease-emphasized data-open:animate-in data-open:fade-in-0 data-open:zoom-in-98 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-98",
+            "top-1/2 left-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto rounded-3xl p-6 duration-200 ease-emphasized data-open:animate-in data-open:fade-in-0 data-open:zoom-in-98 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-98",
           side === "right" &&
             "inset-y-0 right-0 h-dvh w-full max-w-md overflow-y-auto duration-250 ease-emphasized data-open:animate-in data-open:slide-in-from-right data-closed:animate-out data-closed:slide-out-to-right",
           side === "left" &&
@@ -55,7 +55,7 @@ function DialogContent({
         {showClose && (
           <DialogPrimitive.Close
             aria-label="Close"
-            className="absolute top-3 right-3 inline-flex size-10 items-center sm:size-9 justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-ring"
+            className="absolute top-3 right-3 inline-flex size-10 items-center sm:size-9 justify-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-ring"
           >
             <XIcon className="size-4" />
           </DialogPrimitive.Close>

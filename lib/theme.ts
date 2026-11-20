@@ -22,7 +22,7 @@ export type Theme = (typeof THEMES)[number];
 export const DEFAULT_THEME: Theme = "light";
 
 /** Browser chrome colour per theme; equals `--background` in app/globals.css. */
-export const THEME_COLOR: Record<Theme, string> = { light: "#f7f4ee", dark: "#0f1320" };
+export const THEME_COLOR: Record<Theme, string> = { light: "#f6f6f4", dark: "#101011" };
 
 /** Anything other than an explicit "dark" (missing, corrupted, unknown) is the default light theme. */
 export function parseTheme(value: unknown): Theme {

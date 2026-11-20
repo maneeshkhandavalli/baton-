@@ -3,6 +3,7 @@ import Link from "next/link";
 import { formatDate } from "@/components/handover/format";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { DEMO_ACCOUNT_REFUSAL } from "@/lib/demo-accounts";
 import type { AccountOverview } from "@/lib/supabase/account-auth";
 import { cn } from "@/lib/utils";
 
@@ -10,15 +11,17 @@ interface AccountDetailsProps {
   overview: AccountOverview;
   /** Handovers the user created, and others they are a member of (from listMyHandovers); null if unavailable. */
   handovers: { created: number; memberOf: number } | null;
+  /** A shared demo account (lib/demo-accounts.ts): changing the password is turned off. */
+  demoAccount?: boolean;
 }
 
 /** The signed-in user's own account: email, sign-in methods, dates and handover counts. Server component. */
-export function AccountDetails({ overview, handovers }: AccountDetailsProps) {
+export function AccountDetails({ overview, handovers, demoAccount = false }: AccountDetailsProps) {
   const google = overview.providers.includes("google");
   const password = overview.hasPassword;
 
   return (
-    <section aria-labelledby="account-details-heading" className="space-y-5 rounded-xl border border-border bg-card p-5 sm:p-6">
+    <section aria-labelledby="account-details-heading" className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
       <h2 id="account-details-heading" className="type-heading">
         Account details
       </h2>
@@ -83,9 +86,13 @@ export function AccountDetails({ overview, handovers }: AccountDetailsProps) {
               {password !== null ? (
                 <span className="text-caption text-muted-foreground">{password ? "Set" : "Not set"}</span>
               ) : null}
-              <Link href="/account/password" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-                {password === true ? "Change password" : password === false ? "Set a password" : "Set or change password"}
-              </Link>
+              {demoAccount ? (
+                <span className="text-caption text-muted-foreground">{DEMO_ACCOUNT_REFUSAL}</span>
+              ) : (
+                <Link href="/account/password" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                  {password === true ? "Change password" : password === false ? "Set a password" : "Set or change password"}
+                </Link>
+              )}
             </div>
           </li>
         </ul>

@@ -13,14 +13,14 @@ const badgeVariants = cva(
   {
     variants: {
       tone: {
-        neutral: "border-border bg-muted text-muted-foreground",
+        neutral: "border-border bg-card text-muted-foreground",
         outline: "border-border-strong bg-transparent text-muted-foreground",
-        primary: "border-primary/20 bg-primary-soft text-primary-fg",
+        primary: "border-border-strong bg-card text-foreground",
         info: "border-info/20 bg-info-soft text-info-fg",
         success: "border-success/20 bg-success-soft text-success-fg",
         warning: "border-warning/25 bg-warning-soft text-warning-fg",
         danger: "border-destructive/20 bg-destructive-soft text-destructive-fg",
-        inverse: "border-inverse bg-inverse text-inverse-foreground dark:border-inverse-muted/45",
+        inverse: "border-transparent bg-highlight text-on-highlight",
         sourced: "border-status-sourced/20 bg-status-sourced-soft text-status-sourced-fg",
         inferred: "border-status-inferred/25 bg-status-inferred-soft text-status-inferred-fg",
         conflicting: "border-status-conflicting/20 bg-status-conflicting-soft text-status-conflicting-fg",
@@ -56,7 +56,7 @@ const badgeDotClass: Record<NonNullable<VariantProps<typeof badgeVariants>["tone
   success: "bg-success",
   warning: "bg-warning",
   danger: "bg-destructive",
-  inverse: "bg-inverse-foreground",
+  inverse: "bg-on-highlight",
   sourced: "bg-status-sourced",
   inferred: "bg-status-inferred",
   conflicting: "bg-status-conflicting",
@@ -69,14 +69,16 @@ type BadgeProps = React.ComponentProps<"span"> &
     dot?: boolean
     /** Animate the dot (live states such as "Processing"); static under reduced motion. */
     pulse?: boolean
+    /** Override the dot colour (e.g. a lifecycle state drawn in the Baton mark's colours). */
+    dotClassName?: string
   }
 
 /** Server-safe (no hooks): usable from server and client components alike. */
-function Badge({ className, tone = "neutral", size = "md", shape = "pill", dot = false, pulse = false, children, ...props }: BadgeProps) {
+function Badge({ className, tone = "neutral", size = "md", shape = "pill", dot = false, pulse = false, dotClassName, children, ...props }: BadgeProps) {
   return (
     <span data-slot="badge" className={cn(badgeVariants({ tone, size, shape }), className)} {...props}>
       {dot && (
-        <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", badgeDotClass[tone ?? "neutral"], pulse && "animate-pulse")} />
+        <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", badgeDotClass[tone ?? "neutral"], pulse && "animate-pulse motion-reduce:animate-none", dotClassName)} />
       )}
       {children}
     </span>

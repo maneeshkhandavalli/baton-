@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
  * - warning — reversible risk, needs attention before continuing
  * - danger — failure or irreversible consequence
  */
-const alertVariants = cva("relative flex gap-3 rounded-lg border px-4 py-3 text-sm", {
+const alertVariants = cva("relative flex gap-3 rounded-xl border px-4 py-3 text-sm", {
   variants: {
     tone: {
       neutral: "border-border bg-muted/60 text-foreground [&>svg]:text-muted-foreground",

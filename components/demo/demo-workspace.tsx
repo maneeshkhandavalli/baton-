@@ -118,7 +118,7 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
   const nav = useMemo(
     () => (
       <nav aria-label="Demo steps" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
-        <ol className="flex min-w-max gap-1.5 sm:min-w-0 sm:flex-wrap">
+        <ol className="flex w-max gap-1 rounded-full border border-border bg-card p-1">
           {DEMO_STEPS.map((s) => {
             const current = s.id === step;
             return (
@@ -128,11 +128,11 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
                   aria-current={current ? "step" : undefined}
                   onClick={() => go(s.id)}
                   className={cn(
-                    "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-sm whitespace-nowrap transition-colors focus-ring",
-                    current ? "border-primary bg-primary-soft font-medium text-primary-fg" : "border-border bg-card text-foreground/85 hover:bg-muted",
+                    "inline-flex min-h-10 items-center gap-2 rounded-full px-3.5 text-sm whitespace-nowrap transition-colors duration-150 focus-ring sm:min-h-9",
+                    current ? "bg-foreground font-semibold text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
-                  <span aria-hidden="true" className="type-numeric text-caption text-muted-foreground">
+                  <span aria-hidden="true" className={cn("type-numeric text-caption", current ? "text-background/75" : "text-muted-foreground")}>
                     {s.n}
                   </span>
                   {s.label}
@@ -169,7 +169,7 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
 
       {nav}
 
-      <section aria-labelledby="demo-step-title" className="grid gap-4 rounded-xl border border-border bg-card p-4 shadow-soft sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-8">
+      <section aria-labelledby="demo-step-title" className="grid gap-4 rounded-2xl border border-border bg-card p-4 sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-8">
         <div className="space-y-2">
           <p className="type-eyebrow text-muted-foreground">
             Step {stepNumber(step)} of {DEMO_STEPS.length} · as {guide.as}
@@ -201,7 +201,7 @@ export function DemoWorkspace({ initialStep }: { initialStep: DemoStepId | null 
         {!session || !view ? (
           <WorkspaceSkeleton label="Opening the demo…" />
         ) : !view.ok ? (
-          <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">{view.message}</p>
+          <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">{view.message}</p>
         ) : (
           <DemoScreenView screen={guide.screen} view={view.view} pending={pending} dispatch={dispatch} onNext={next ? () => go(next) : null} />
         )}

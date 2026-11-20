@@ -39,7 +39,7 @@ export function HandoverTimeline({ handover }: { handover: PublishedHandover }) 
       </header>
 
       {model.total === 0 ? (
-        <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Nothing in this publication is visible to you yet.</p>
+        <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">Nothing in this publication is visible to you yet.</p>
       ) : model.sections.length < 2 ? (
         <TimelineGroups groups={model.groups} />
       ) : (

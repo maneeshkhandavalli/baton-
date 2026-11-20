@@ -9,6 +9,9 @@
  */
 
 .brand-identity {
+  /* The app now uses these same values app-wide (app/globals.css). The marketing radius stays at its original
+     10px base so the landing renders exactly as before; the app's base radius is 14px. */
+  --radius: 0.625rem;
   /* Fonts: re-point the global font variables inside this scope (next/font variables are set on the wrapper). */
   --font-inter: var(--font-atkinson-next);
   --font-instrument-serif: var(--font-host-grotesk);

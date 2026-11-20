@@ -78,7 +78,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
               <li key={t.id}>
                 <a href={`#${t.id}`} className="flex justify-between gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                   {t.label}
-                  {t.count !== null && <span className="type-numeric text-xs">{t.count}</span>}
+                  {t.count !== null && <span className="type-numeric text-caption">{t.count}</span>}
                 </a>
               </li>
             ))}
@@ -90,13 +90,13 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         <header className="space-y-6 border-b border-border pb-10" data-tour="published-header">
           <div className="space-y-3">
             {showTitle && (
-              <p className="text-caption text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {handover.teamName}
                 {handover.roleTitle && ` · ${handover.roleTitle}`}
               </p>
             )}
             <h2 className={showTitle ? "type-page-title break-words" : "sr-only"}>{handover.title}</h2>
-            <p className="text-caption text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} (
               {memberRoleLabel[viewerRole].toLowerCase()})
             </p>
@@ -107,7 +107,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
             </p>
           )}
 
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">
             {[
               ...groups.slice(0, 3).map((g) => ({ id: g.id, label: STAT_LABEL[g.id] ?? g.label, value: g.points.length })),
               { id: "open-questions", label: "Open questions", value: gaps.length },
@@ -117,7 +117,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
                 <dt className="type-eyebrow text-muted-foreground [overflow-wrap:normal]">{s.label}</dt>
                 <dd className="mt-1 font-display text-3xl leading-none tabular-nums">
                   {s.value > 0 ? (
-                    <a href={`#${s.id}`} className="rounded-sm hover:text-primary-fg">
+                    <a href={`#${s.id}`} className="rounded-sm hover:text-foreground">
                       {s.value}
                     </a>
                   ) : (
@@ -128,7 +128,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
             ))}
           </dl>
 
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-caption text-muted-foreground">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <StatusBadge status="sourced" size="sm" /> backed by a quote you can check
             </span>
@@ -164,7 +164,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
               <span className="ml-3 align-middle font-sans text-sm text-muted-foreground tabular-nums">{g.points.length}</span>
             </h3>
             {g.id === "open_work" && <OpenWorkSummary points={g.points} />}
-            <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
               {g.points.map((p) => (
                 <li key={p.id}>
                   <PublishedPoint point={p} />
@@ -184,7 +184,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
                 Known gaps. Nobody could answer these before the handover, so treat them as things to find out, not facts.
               </p>
             </div>
-            <ul className="divide-y divide-dashed divide-status-missing/30 overflow-hidden rounded-xl border border-dashed border-status-missing/45 bg-status-missing-soft/50">
+            <ul className="divide-y divide-dashed divide-status-missing/30 overflow-hidden rounded-2xl border border-dashed border-status-missing/45 bg-status-missing-soft/50">
               {gaps.map((p) => (
                 <li key={p.id} className="flex items-start gap-3 p-4 sm:px-5">
                   <CircleHelp aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-missing-fg" />
@@ -243,7 +243,7 @@ function PublishedPoint({ point }: { point: Point }) {
         <MaskedText text={c.title} />
       </h4>
       <KeyFactsStrip facts={facts} className="mt-2" />
-      <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-foreground/80 [overflow-wrap:anywhere]">
+      <p className="mt-2 max-w-[70ch] text-md leading-relaxed text-foreground/85 [overflow-wrap:anywhere]">
         <MaskedText text={c.statement} />
       </p>
 
@@ -284,7 +284,7 @@ function PublishedPoint({ point }: { point: Point }) {
             aria-expanded={open}
             aria-controls={panelId}
             onClick={() => setOpen(!open)}
-            className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-primary-fg max-sm:h-10 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/40"
+            className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-foreground underline decoration-foreground/30 underline-offset-4 max-sm:h-10 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
           >
             <ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
             {evidence.length === 0
@@ -304,7 +304,7 @@ function PublishedPoint({ point }: { point: Point }) {
                   tone={e.stance === "contradicts" ? "contradicts" : "supports"}
                 />
               ))}
-              {redacted > 0 && <p className="text-caption text-muted-foreground">Some evidence was removed at a participant&rsquo;s request.</p>}
+              {redacted > 0 && <p className="text-sm text-muted-foreground">Some evidence was removed at a participant&rsquo;s request.</p>}
             </div>
           )}
         </div>
@@ -373,11 +373,11 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={completed}
-        className="h-1.5 overflow-hidden rounded-full bg-muted"
+        className="h-1.5 overflow-hidden rounded-full bg-track"
       >
         <div className="h-full rounded-full bg-success transition-[width] duration-500" style={{ width: `${(completed / total) * 100}%` }} />
       </div>
-      <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border shadow-soft md:grid-cols-3">
+      <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-3">
         {days.map((d) => (
           <div key={d.label} className="bg-card p-4 sm:p-5">
             <h4 className="mb-3 type-eyebrow text-muted-foreground">{d.label}</h4>
@@ -395,7 +395,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
                       <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} className="mt-0.5 size-4 shrink-0 accent-[var(--success)] outline-none" />
                       <span className="min-w-0">
                         <span className={cn("block leading-snug", checked && "line-through")}>{item.title}</span>
-                        {item.detail && <span className="mt-0.5 block text-caption text-muted-foreground">{item.detail}</span>}
+                        {item.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{item.detail}</span>}
                       </span>
                     </label>
                   </li>
@@ -421,7 +421,7 @@ function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handov
       // Only the incoming member's own action gets the inverse slab; for everyone else it's a quiet note (UI polish).
       className={cn(
         "scroll-mt-6",
-        !acked && (viewerRole !== "incoming" || preview) ? "rounded-xl border border-border px-5 py-4 sm:px-6" : "rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8",
+        !acked && (viewerRole !== "incoming" || preview) ? "rounded-2xl border border-border px-5 py-4 sm:px-6" : "rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8",
       )}
       data-tour="acknowledge"
     >

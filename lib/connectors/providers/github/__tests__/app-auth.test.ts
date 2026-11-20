@@ -22,7 +22,14 @@ describe("github app JWT", () => {
   });
 
   it("accepts the key with real newlines, escaped \\n, quotes or CRLF; refuses garbage without echoing it", () => {
-    const variants = [TEST_PRIVATE_PEM, TEST_PRIVATE_PEM.replace(/\n/g, "\\n"), `"${TEST_PRIVATE_PEM.trim().replace(/\n/g, "\\n")}"`, TEST_PRIVATE_PEM.replace(/\n/g, "\r\n")];
+    const variants = [
+      TEST_PRIVATE_PEM,
+      TEST_PRIVATE_PEM.replace(/\n/g, "\\n"),
+      `"${TEST_PRIVATE_PEM.trim().replace(/\n/g, "\\n")}"`,
+      TEST_PRIVATE_PEM.replace(/\n/g, "\r\n"),
+      // pasted into a single-line dashboard field: line breaks flattened to spaces
+      TEST_PRIVATE_PEM.trim().replace(/\n/g, " "),
+    ];
     for (const v of variants) assert.equal(normalizePrivateKey(v), TEST_PRIVATE_PEM.trim() + "\n");
     const bogus = "-----BEGIN RSA PRIVATE KEY-----\nnot-a-key-synthetic\n-----END RSA PRIVATE KEY-----";
     assert.throws(() => createAppJwt("123456", bogus, NOW), (e: unknown) => e instanceof ProviderError && e.code === "not_configured" && !e.message.includes("not-a-key"));

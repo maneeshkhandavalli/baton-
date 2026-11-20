@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
-import Link from "next/link";
-import { ArrowUpRight, CalendarClock, Check, Contact, Gavel, KeyRound, ListChecks, Lock, OctagonX, TriangleAlert, UserRound } from "lucide-react";
+import { CalendarClock, Check, Contact, Gavel, KeyRound, ListChecks, Lock, OctagonX, TriangleAlert, UserRound } from "lucide-react";
 
 import { ComingNext } from "@/components/marketing/coming-next";
 import { LandingCtas } from "@/components/marketing/cta";
@@ -8,12 +7,12 @@ import { EvidencePreview } from "@/components/marketing/evidence-preview";
 import { ForTheNerds } from "@/components/marketing/for-the-nerds";
 import { HeroMosaic } from "@/components/marketing/hero-mosaic";
 import { HowItWorksSteps } from "@/components/marketing/how-it-works";
+import { IntroSplash } from "@/components/marketing/intro-splash";
 import { LandingMotion } from "@/components/marketing/landing-motion";
 import { LivingHandover } from "@/components/marketing/living-handover";
 import { PixelField } from "@/components/marketing/pixel-field";
 import { RotatingWord } from "@/components/marketing/rotating-word";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { routes } from "@/lib/routes";
 import { EVIDENCE_STATUSES } from "@/types/status";
 
 /**
@@ -21,7 +20,8 @@ import { EVIDENCE_STATUSES } from "@/types/status";
  * (docs/design/landing/loopsii-reference-breakdown.md; styles in app/(marketing)/landing.css; scroll choreography in
  * components/marketing/landing-motion.tsx, motion-allowed only). Section order follows the reference:
  * hero mosaic → statement + orbit → dark pinned band → lime band with the product window → stacked step cards →
- * stage tiles → split panels → roadmap wheel → FAQ → stair-stepped outro → closing card.
+ * stage tiles → split panels → roadmap wheel → FAQ → stair-stepped outro → closing card. Calls to action: the hero
+ * and the closing card only (components/marketing/cta.tsx); the header carries the session's action.
  * Every illustration is a piece of Baton with the fictional CodeCell demo data (lib/demo/scenario). Claims are the
  * product's real behaviour; connectors are "Early access", Ask the Handover is a "Preview".
  */
@@ -158,10 +158,38 @@ function TileArt({ kind }: { kind: string }) {
   );
 }
 
+/** The Baton disc with the orbit of what a handover carries. `inFlow` is the copy shown in the intro below 1024px. */
+function CarriesCluster({ inFlow = false }: { inFlow?: boolean }) {
+  return (
+    <>
+      <div className="lp-orbit" {...(inFlow ? { "data-orbit-flow": "" } : { "data-orbit": "" })}>
+        {CARRIES.map((c, i) => (
+          <span
+            key={c.label}
+            className={`lp-orbit__item ${c.s}`}
+            style={{ "--c": c.c, "--a": `${(360 / CARRIES.length) * i}deg`, "--tilt": c.tilt } as CSSProperties}
+          >
+            <c.Icon strokeWidth={2.25} />
+          </span>
+        ))}
+      </div>
+      <div className="lp-disc" {...(inFlow ? {} : { "data-disc": "" })}>
+        <span className="lp-disc__mark">
+          <span className="bg-status-sourced" />
+          <span className="bg-status-inferred" />
+          <span className="bg-status-conflicting" />
+          <span className="bg-status-missing" />
+        </span>
+      </div>
+    </>
+  );
+}
+
 export default function HomePage() {
   return (
     <div className="lp">
       <LandingMotion />
+      <IntroSplash />
 
       <div className="lp-loop" data-loop>
         {/* ── 1 · Hero ─────────────────────────────── */}
@@ -203,42 +231,30 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* The Baton disc + the orbit of what a handover carries (sticky: rides from the hero into the intro). */}
+        {/* The Baton disc + the orbit of what a handover carries (sticky from 1024px: rides from the hero into the intro).
+            Below 1024px the disc stays in the hero's centre cell and the intro shows its own in-flow cluster instead. */}
         <div aria-hidden="true" className="lp-stage">
           <div className="lp-stage__center">
-            <div className="lp-orbit" data-orbit>
-              {CARRIES.map((c, i) => (
-                <span
-                  key={c.label}
-                  className={`lp-orbit__item ${c.s}`}
-                  style={{ "--c": c.c, "--a": `${(360 / CARRIES.length) * i}deg`, "--tilt": c.tilt } as CSSProperties}
-                >
-                  <c.Icon strokeWidth={2.25} />
-                </span>
-              ))}
-            </div>
-            <div className="lp-disc" data-disc>
-              <span className="lp-disc__mark">
-                <span className="bg-status-sourced" />
-                <span className="bg-status-inferred" />
-                <span className="bg-status-conflicting" />
-                <span className="bg-status-missing" />
-              </span>
-            </div>
+            <CarriesCluster />
           </div>
         </div>
 
         {/* ── 2 · Intro: the statement ─────────────── */}
         <section data-intro aria-labelledby="problem-title" className="lp-intro lp-graph">
           <div className="lp-wrap lp-intro__head" data-intro-head data-reveal>
-            <p className="lp-hand">the problem</p>
-            <div>
+            <div className="lg:col-start-2">
               <h2 id="problem-title" className="sr-only">
                 What leaves with the person who leaves.
               </h2>
               <p className="lp-statement max-w-[30ch]">
                 The next lead inherits months of group chat and a few half-finished documents. The answers are in there somewhere, scattered across replies.
               </p>
+            </div>
+          </div>
+          {/* Phones and tablets: the cluster gets its own block between the statement and the list, so it never sits on text. */}
+          <div aria-hidden="true" className="lp-cluster lg:hidden">
+            <div className="lp-stage__center">
+              <CarriesCluster inFlow />
             </div>
           </div>
           <div className="lp-intro__side lp-wrap">
@@ -349,23 +365,12 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
-        <div className="lp-framed-cta">
-          <div>
-            <Link href={routes.handover.new} className="lp-cta">
-              <span aria-hidden="true" className="lp-cta__disc">
-                <ArrowUpRight className="size-4" />
-              </span>
-              <span className="lp-cta__label">Start a handover</span>
-            </Link>
-          </div>
-        </div>
       </div>
 
       {/* ── 5 · How it works: stacked cards ───────── */}
       <section id="how-it-works" aria-labelledby="how-title" className="lp-steps">
         <div className="lp-steps__head" data-reveal>
-          <p className="lp-hand">how it works</p>
-          <h2 id="how-title" className="lp-h2 mx-auto mt-3 max-w-[18ch]">
+          <h2 id="how-title" className="lp-h2 mx-auto max-w-[18ch]">
             From the team chat to a handover, in four steps.
           </h2>
         </div>
@@ -375,18 +380,16 @@ export default function HomePage() {
       {/* ── 6 · Evidence: stage tiles ─────────────── */}
       <section id="evidence" aria-labelledby="evidence-title" className="lp-features lp-wrap">
         <div data-reveal>
-          <p className="lp-hand">evidence</p>
-          <h2 id="evidence-title" className="lp-h2 mt-3 max-w-[16ch]">
+          <h2 id="evidence-title" className="lp-h2 max-w-[16ch]">
             Every point says how sure you can be.
           </h2>
         </div>
 
         <div className="lp-stage-group">
           <div className="lp-stage-group__head">
-            <span className="lp-pill-tag">Labels</span>
-            <h3 className="lp-h3 mt-4 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">Four labels, worked out from the evidence.</h3>
+            <h3 className="lp-h3 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">Four labels, worked out from the evidence.</h3>
             <p className="lp-body mt-3 max-w-[36ch]">
-              Baton never presents a guess as a fact. Each point carries one of four labels, worked out from the evidence rather than set by hand.
+              Baton never presents a guess as a fact, and nobody sets a label by hand.
             </p>
           </div>
           <dl className="lp-tiles">
@@ -409,8 +412,7 @@ export default function HomePage() {
 
         <div className="lp-stage-group">
           <div className="lp-stage-group__head">
-            <span className="lp-pill-tag">Sign-off</span>
-            <h3 className="lp-h3 mt-4 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">A person signs off before anything is published.</h3>
+            <h3 className="lp-h3 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">A person signs off before anything is published.</h3>
             <p className="lp-body mt-3 max-w-[36ch]">Publishing stays locked while:</p>
           </div>
           <ul className="lp-tiles">
@@ -436,7 +438,6 @@ export default function HomePage() {
       {/* ── 7 · Privacy: split card + sky panel ───── */}
       <section id="privacy" aria-labelledby="privacy-title" className="lp-split">
         <div className="lp-split__card" data-reveal>
-          <p className="lp-hand">privacy</p>
           <h2 id="privacy-title" className="lp-statement max-w-[16ch]">
             Built for group chats full of phone numbers.
           </h2>

@@ -16,6 +16,7 @@ describe("landing: what works today, early access, preview (roadmap)", () => {
     assert.equal((src.match(/<PreviewLabel \/>/g) ?? []).length, 1, "Ask the Handover is a Preview");
     assert.match(src, /title: "Ask the Handover"/);
     assert.match(src, /not\s+features you can use today/);
+    assert.match(src, /Not built yet\. Nothing here works today\./, "Ask the Handover says it does not exist yet");
   });
   it("presents the connectors as built but not live", () => {
     for (const name of ["GitHub", "Discord", "Telegram", "Slack"]) assert.ok(src.includes(name), name);
@@ -80,11 +81,41 @@ describe("landing: calls to action, anchors and the marketing header", () => {
     assert.match(layout, /<MarketingFooter \/>/);
     assert.match(read("components/layout/site-header.tsx"), /export function SiteHeader/);
   });
-  it("the header keeps the skip link, the theme toggle, the signed-in account menu and the workspace action", () => {
+  it("the header keeps the skip link, the theme toggle, and one session-aware action streamed in Suspense", () => {
     assert.match(header, /href="#main"/);
-    assert.match(header, /<ThemeToggle \/>/);
-    assert.match(header, /<Suspense fallback=\{null\}>\s*<HeaderAccount \/>/);
-    assert.match(header, /href=\{routes\.dashboard\}/);
+    assert.match(header, /<ThemeToggle( className="[^"]*")? \/>/);
+    assert.match(header, /<Suspense fallback=\{<MarketingHeaderActionsFallback \/>\}>\s*<MarketingHeaderActions \/>/);
+    assert.doesNotMatch(header, /href=\{routes\.dashboard\}/,"the header itself never hard-codes the workspace action");
+  });
+  it("signed in: the account menu and 'Open workspace' once; signed out: 'Sign in' only", () => {
+    const actions = read("components/marketing/marketing-header-actions.tsx");
+    assert.match(actions, /await connection\(\)/);
+    assert.match(actions, /supabase\.auth\.getUser\(\)/);
+    assert.match(actions, /<AccountMenu /);
+    assert.equal((actions.match(/href=\{routes\.dashboard\}/g) ?? []).length, 1, "one workspace link");
+    assert.equal((actions.match(/>Open workspace</g) ?? []).length, 1);
+    assert.match(actions, /data-session="in"/);
+    assert.match(actions, /data-session="out"/);
+    assert.match(actions, /href=\{routes\.login\}/);
+    assert.match(actions, /<noscript>\s*<SignInLink \/>\s*<\/noscript>/, "no-JS visitors still get Sign in");
+    assert.match(read("app/(marketing)/landing.css"), /:has\(\.lp-nav \[data-session="in"\]\) \.lp-hero__ctas \[data-cta="primary"\]/, "signed in, the hero's demo pill steps back");
+  });
+  it("one primary per call-to-action group, and no third copy mid-page or in the footer", () => {
+    const cta = read("components/marketing/cta.tsx");
+    assert.equal((cta.match(/data-cta="primary"/g) ?? []).length, 1);
+    assert.match(cta, /href=\{routes\.demo\} className="lp-cta" data-cta="primary"/, "the demo is the primary action");
+    assert.doesNotMatch(page, /<Link/, "no standalone CTA links on the page besides the two LandingCtas groups");
+    const footer = read("components/marketing/marketing-footer.tsx");
+    assert.doesNotMatch(footer, /<Link|href=/, "the footer stays minimal");
+  });
+  it("no em dashes in landing copy", () => {
+    const files = [
+      "app/(marketing)/page.tsx",
+      "app/(marketing)/layout.tsx",
+      "app/(marketing)/loading.tsx",
+      ...["cta", "coming-next", "evidence-preview", "for-the-nerds", "hero-mosaic", "how-it-works", "living-handover", "marketing-footer", "marketing-header", "marketing-header-actions", "intro-splash", "brand-loader", "rotating-word"].map((f) => `components/marketing/${f}.tsx`),
+    ];
+    for (const f of files) assert.ok(!read(f).includes(String.fromCharCode(0x2014)), f);
   });
 });
 
@@ -123,5 +154,33 @@ describe("landing: For the nerds", () => {
     for (const t of ["PII masking and privacy", "Evidence and source traceability", "AI extraction and verification", "Human review", "Publishing and access controls"]) assert.ok(src.includes(`title: "${t}"`), t);
     assert.match(src, /<details key=\{t\.title\}/);
     assert.ok(!/<details[^>]*\bopen\b/.test(src), "no topic opens by default");
+  });
+});
+
+describe("landing: loading", () => {
+  it("the route fallback is a polite, busy status with the brand loader", () => {
+    const src = read("app/(marketing)/loading.tsx");
+    assert.match(src, /role="status"/);
+    assert.match(src, /aria-busy="true"/);
+    assert.match(src, /<BrandLoader looping \/>/);
+  });
+  it("the intro splash is decorative, once per session, motion-only and never shown without JavaScript", () => {
+    const src = read("components/marketing/intro-splash.tsx");
+    assert.match(src, /^"use client";/);
+    assert.match(src, /aria-hidden="true"/);
+    // the pre-paint decision is a static classic script, never injected raw HTML (IT-04)
+    assert.match(src, /<script src=\{INTRO_SPLASH_INIT_SRC\} \/>/);
+    assert.doesNotMatch(src, /dangerouslySetInnerHTML/);
+    const init = read("public/intro-splash-init.js");
+    assert.match(init, /sessionStorage\.getItem\("baton:intro-seen"\)/);
+    assert.match(init, /try\{[\s\S]*sessionStorage[\s\S]*\}catch/);
+    assert.match(init, /prefers-reduced-motion: no-preference/);
+    assert.match(init, /setAttribute\("data-show",""\)/, "only the init script reveals it");
+    assert.match(read("app/(marketing)/page.tsx"), /<IntroSplash \/>/);
+    const css = read("app/(marketing)/landing.css");
+    assert.match(css, /\.lp-splash \{\s*display: none;/, "hidden by default (no JS, reduced motion)");
+    const motion = css.match(/@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n\}\n/g) ?? [];
+    assert.ok(motion.some((b) => /\.lp-splash\[data-show\] \{\s*display: grid;/.test(b)), "shown only inside the motion block");
+    assert.ok(motion.some((b) => /lp-splash-out 0\.3s ease-in 0\.6s forwards/.test(b)), "CSS failsafe fades it by about 900 ms");
   });
 });
