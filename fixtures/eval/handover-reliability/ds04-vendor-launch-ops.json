@@ -1,0 +1,77 @@
+{
+  "id": "ds04-vendor-launch-ops",
+  "description": "Synthetic small-business operations chat: the outgoing operations lead hands over a product-launch workstream. Deadline, explicit decision later reversed, several owners, an unresolved question, a financial commitment, a task dependency and changed information. English. Pseudonymised and masked as stored by Baton (2026-11-20 AI recovery sprint).",
+  "team": { "name": "Launch operations", "roleTitle": "Operations lead" },
+  "messages": [
+    { "id": "m01", "author": "[PERSON_1]", "sentAt": "2026-10-01T09:05:00+05:30", "body": "Morning all. Starting this thread for the Diwali launch of the new tea gift boxes." },
+    { "id": "m02", "author": "[PERSON_1]", "sentAt": "2026-10-01T09:07:00+05:30", "body": "We decided to go with Kumar Packaging as the box supplier, they quoted the best price for 2,000 units." },
+    { "id": "m03", "author": "[PERSON_2]", "sentAt": "2026-10-01T09:20:00+05:30", "body": "Noted. The launch date is fixed for 25 October, the website listing has to be live by then." },
+    { "id": "m04", "author": "[PERSON_1]", "sentAt": "2026-10-02T11:00:00+05:30", "body": "[PERSON_3] will own the supplier relationship and track the delivery schedule from now on." },
+    { "id": "m05", "author": "[PERSON_3]", "sentAt": "2026-10-02T11:04:00+05:30", "body": "Yes, I'll handle supplier follow-ups and the delivery tracking sheet." },
+    { "id": "m06", "author": "[PERSON_1]", "sentAt": "2026-10-03T15:30:00+05:30", "body": "We paid an advance of ₹45,000 to Kumar Packaging today, the balance ₹55,000 is due on delivery." },
+    { "id": "m07", "author": "[PERSON_2]", "sentAt": "2026-10-04T10:12:00+05:30", "body": "I'm responsible for the product photos and the website listing copy." },
+    { "id": "m08", "author": "[PERSON_2]", "sentAt": "2026-10-04T10:15:00+05:30", "body": "The photoshoot can only happen after the sample boxes arrive, so the listing depends on the supplier sending samples." },
+    { "id": "m09", "author": "[PERSON_4]", "sentAt": "2026-10-06T18:40:00+05:30", "body": "Who is going to approve the final price of the gift box? We still haven't decided between ₹899 and ₹999." },
+    { "id": "m10", "author": "[PERSON_1]", "sentAt": "2026-10-07T09:00:00+05:30", "body": "[PERSON_4] will handle customer support emails during the launch week." },
+    { "id": "m11", "author": "[PERSON_3]", "sentAt": "2026-10-09T13:22:00+05:30", "body": "Update: Kumar Packaging can't deliver before 28 October because of a strike at their plant." },
+    { "id": "m12", "author": "[PERSON_1]", "sentAt": "2026-10-09T14:05:00+05:30", "body": "Change of plan: we are switching the box supplier to Sri Lakshmi Boxes, they can deliver by 18 October. The Kumar advance will be refunded." },
+    { "id": "m13", "author": "[PERSON_2]", "sentAt": "2026-10-10T09:30:00+05:30", "body": "ok, I'll book the photographer for 20 October once the new samples arrive" },
+    { "id": "m14", "author": "[PERSON_4]", "sentAt": "2026-10-11T16:45:00+05:30", "body": "Still no answer on the gift box price, please someone decide before the listing goes live." }
+  ],
+  "labels": [
+    { "id": "L01", "kind": "decision", "messageIds": ["m02"], "keywords": ["Kumar", "supplier"], "owner": null },
+    { "id": "L02", "kind": "reversed_decision", "messageIds": ["m02"], "reversedBy": ["m12"], "keywords": ["supplier", "Sri Lakshmi"], "owner": null },
+    { "id": "L03", "kind": "deadline", "messageIds": ["m03"], "keywords": ["25 October", "launch"], "owner": null },
+    { "id": "L04", "kind": "responsibility", "messageIds": ["m04", "m05"], "keywords": ["supplier", "delivery"], "owner": "[PERSON_3]" },
+    { "id": "L05", "kind": "financial_commitment", "messageIds": ["m06"], "keywords": ["45,000", "advance"], "owner": null },
+    { "id": "L06", "kind": "responsibility", "messageIds": ["m07"], "keywords": ["photos", "listing"], "owner": "[PERSON_2]" },
+    { "id": "L07", "kind": "dependency", "messageIds": ["m08"], "keywords": ["samples", "photoshoot"], "owner": null },
+    { "id": "L08", "kind": "unresolved_question", "messageIds": ["m09", "m14"], "keywords": ["price", "gift box"], "owner": null },
+    { "id": "L09", "kind": "responsibility", "messageIds": ["m10"], "keywords": ["customer support"], "owner": "[PERSON_4]" },
+    { "id": "L10", "kind": "contradiction", "messageIds": ["m11"], "keywords": ["28 October", "strike"], "owner": null }
+  ],
+  "supportPairs": [
+    {
+      "id": "S01",
+      "claim": { "category": "decision", "title": "Box supplier", "statement": "Kumar Packaging is the box supplier for the launch.", "attributes": {} },
+      "messageId": "m02",
+      "quote": "We decided to go with Kumar Packaging as the box supplier",
+      "expected": "supports"
+    },
+    {
+      "id": "S02",
+      "claim": { "category": "decision", "title": "Box supplier", "statement": "Kumar Packaging is the box supplier for the launch.", "attributes": {} },
+      "messageId": "m12",
+      "quote": "we are switching the box supplier to Sri Lakshmi Boxes",
+      "expected": "contradicts"
+    },
+    {
+      "id": "S03",
+      "claim": { "category": "owner", "title": "Supplier relationship", "statement": "[PERSON_3] owns the supplier relationship and delivery tracking.", "attributes": { "responsibility": "Supplier relationship and delivery tracking" } },
+      "messageId": "m04",
+      "quote": "[PERSON_3] will own the supplier relationship and track the delivery schedule from now on.",
+      "expected": "supports"
+    },
+    {
+      "id": "S04",
+      "claim": { "category": "open_task", "title": "Supplier balance", "statement": "A balance of ₹55,000 is due to Kumar Packaging on delivery.", "attributes": {} },
+      "messageId": "m06",
+      "quote": "the balance ₹55,000 is due on delivery",
+      "expected": "supports"
+    },
+    {
+      "id": "S05",
+      "claim": { "category": "owner", "title": "Customer support", "statement": "[PERSON_2] handles customer support emails during launch week.", "attributes": { "responsibility": "Customer support emails" } },
+      "messageId": "m10",
+      "quote": "[PERSON_4] will handle customer support emails during the launch week.",
+      "expected": "contradicts"
+    },
+    {
+      "id": "S06",
+      "claim": { "category": "next_action", "title": "Launch date", "statement": "The launch is on 25 October and the website listing must be live by then.", "attributes": {} },
+      "messageId": "m03",
+      "quote": "The launch date is fixed for 25 October, the website listing has to be live by then.",
+      "expected": "supports"
+    }
+  ]
+}

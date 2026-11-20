@@ -328,42 +328,153 @@
           "guarded": false
         }
       ]
+    },
+    {
+      "dataset": "ds04-vendor-launch-ops",
+      "messages": 14,
+      "labels": 10,
+      "chunks": 1,
+      "failedChunks": [],
+      "candidates": 3,
+      "droppedByLib": {},
+      "unmatchedLabels": [
+        "L02",
+        "L03",
+        "L04",
+        "L05",
+        "L07",
+        "L08",
+        "L09",
+        "L10"
+      ],
+      "metrics": {
+        "detectionRecall": {
+          "num": 10,
+          "den": 12,
+          "value": 0.8333
+        },
+        "detectionPrecision": {
+          "num": 10,
+          "den": 11,
+          "value": 0.9091
+        },
+        "extractionRecall": {
+          "num": 2,
+          "den": 10,
+          "value": 0.2
+        },
+        "citationAccuracy": {
+          "num": 3,
+          "den": 3,
+          "value": 1
+        },
+        "supportPrecision": {
+          "num": 3,
+          "den": 4,
+          "value": 0.75
+        },
+        "supportAccuracy": {
+          "num": 3,
+          "den": 6,
+          "value": 0.5
+        },
+        "unsupportedClaimRate": {
+          "num": 0,
+          "den": 3,
+          "value": 0
+        },
+        "attributionAccuracy": {
+          "num": 0,
+          "den": 0,
+          "value": null
+        },
+        "contradictionRecall": {
+          "num": 1,
+          "den": 2,
+          "value": 0.5
+        }
+      },
+      "attributionResolutions": {},
+      "supportConfusion": [
+        {
+          "pair": "S01",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S02",
+          "expected": "contradicts",
+          "modelVerdict": "partial",
+          "verdict": "partial",
+          "guarded": false
+        },
+        {
+          "pair": "S03",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S04",
+          "expected": "supports",
+          "modelVerdict": "partial",
+          "verdict": "partial",
+          "guarded": false
+        },
+        {
+          "pair": "S05",
+          "expected": "contradicts",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        },
+        {
+          "pair": "S06",
+          "expected": "supports",
+          "modelVerdict": "supports",
+          "verdict": "supports",
+          "guarded": false
+        }
+      ]
     }
   ],
   "totals": {
     "detectionRecall": {
-      "num": 34,
-      "den": 40,
-      "value": 0.85
+      "num": 44,
+      "den": 52,
+      "value": 0.8462
     },
     "detectionPrecision": {
-      "num": 34,
-      "den": 35,
-      "value": 0.9714
+      "num": 44,
+      "den": 46,
+      "value": 0.9565
     },
     "extractionRecall": {
-      "num": 10,
-      "den": 36,
-      "value": 0.2778
+      "num": 12,
+      "den": 46,
+      "value": 0.2609
     },
     "citationAccuracy": {
-      "num": 9,
-      "den": 9,
+      "num": 12,
+      "den": 12,
       "value": 1
     },
     "supportPrecision": {
-      "num": 8,
-      "den": 8,
-      "value": 1
+      "num": 11,
+      "den": 12,
+      "value": 0.9167
     },
     "supportAccuracy": {
-      "num": 12,
-      "den": 16,
-      "value": 0.75
+      "num": 15,
+      "den": 22,
+      "value": 0.6818
     },
     "unsupportedClaimRate": {
       "num": 0,
-      "den": 9,
+      "den": 12,
       "value": 0
     },
     "attributionAccuracy": {
@@ -372,9 +483,9 @@
       "value": null
     },
     "contradictionRecall": {
-      "num": 4,
-      "den": 6,
-      "value": 0.6667
+      "num": 5,
+      "den": 8,
+      "value": 0.625
     }
   }
 }
