@@ -23,7 +23,6 @@ export default function NewHandoverPage({ searchParams }: PageProps<"/handover/n
       <PageHeader
         back={{ href: routes.dashboard, label: "Dashboard" }}
         title="Start a handover"
-        description="Your draft saves as you go."
         divider={false}
       />
       <Suspense fallback={<FormSkeleton label="Opening your draft…" />}>

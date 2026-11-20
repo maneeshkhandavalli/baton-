@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, FileUp, Inbox, MessageCircleQuestion, Scale, ShieldAlert, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { AlertOctagon, ArrowRight, CheckCircle2, Crown, FilePen, Inbox, MessageCircleQuestion, Scale, ShieldAlert, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -96,38 +96,22 @@ function CardGrid({ cards }: { cards: HandoverCardData[] }) {
   );
 }
 
-/** First-run: what Baton does in three plain steps, one way in, one way to look around. */
+/**
+ * First-run: one line on what a handover is, one way in, one way to look around. (UI polish: the three step cards
+ * repeated the Getting Started checklist shown beside this.)
+ */
 function FirstRun({ newHandover, demoHref }: { newHandover: ReactNode; demoHref: string }) {
-  const steps = [
-    { icon: FileUp, title: "Add the record", text: "Upload the team's WhatsApp exports and documents. Personal details are masked first." },
-    { icon: Sparkles, title: "Baton drafts it", text: "Decisions, owners, open work and risks, each linked to the message it came from." },
-    { icon: UsersRound, title: "People check it", text: "You review every point, fill the gaps, then hand it over to whoever comes next." },
-  ];
   return (
     <EmptyState
       icon={<Inbox />}
       title="No handovers yet"
       description="A handover gathers what your team knows into something the next person can trust."
       action={
-        <div className="flex w-full flex-col items-center gap-8">
-          <ol className="grid w-full max-w-3xl gap-4 text-left sm:grid-cols-3">
-            {steps.map((s, i) => (
-              <li key={s.title} className="rounded-lg border border-border bg-card p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <span className="type-numeric text-caption text-muted-foreground">{i + 1}</span>
-                  <s.icon aria-hidden="true" className="size-4 text-muted-foreground" />
-                  {s.title}
-                </p>
-                <p className="mt-1.5 text-caption text-muted-foreground">{s.text}</p>
-              </li>
-            ))}
-          </ol>
-          <div className="flex flex-wrap justify-center gap-2">
-            {newHandover}
-            <Link href={demoHref} className={buttonVariants({ size: "lg", variant: "outline" })}>
-              Explore the demo
-            </Link>
-          </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          {newHandover}
+          <Link href={demoHref} className={buttonVariants({ size: "lg", variant: "outline" })}>
+            Explore the demo
+          </Link>
         </div>
       }
     />

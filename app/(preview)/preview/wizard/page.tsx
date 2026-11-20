@@ -25,7 +25,6 @@ export default function PreviewWizardPage({ searchParams }: { searchParams: Prom
       <PageHeader
         back={{ href: "/preview/dashboard", label: "Dashboard" }}
         title="Start a handover"
-        description="Your draft saves as you go."
         divider={false}
       />
       <Suspense fallback={<FormSkeleton label="Opening your draft…" />}>
