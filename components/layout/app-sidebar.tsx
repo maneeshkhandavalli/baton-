@@ -16,19 +16,19 @@ export function AppSidebar() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 p-3 pr-0 lg:flex">
       <div className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="flex h-16 shrink-0 items-center justify-between gap-2 pr-2.5 pl-5">
-        <Link href={routes.dashboard} aria-label="Baton dashboard" className="rounded-md outline-none focus-ring">
-          <BatonLogo size="lg" />
-        </Link>
-        <div className="flex items-center gap-0.5">
-          <HelpMenu className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
-          <ThemeToggle
-            size="icon-sm"
-            className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          />
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 pr-2 pl-5">
+          <Link href={routes.dashboard} aria-label="Baton dashboard" className="rounded-md outline-none focus-ring">
+            <BatonLogo />
+          </Link>
+          <div className="flex items-center gap-0.5">
+            <HelpMenu className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
+            <ThemeToggle
+              size="icon-sm"
+              className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            />
+          </div>
         </div>
-      </div>
-      <WorkspaceNavigation className="flex-1 px-2.5 pt-3 pb-2.5" />
+        <WorkspaceNavigation className="flex-1 px-2.5 pt-3 pb-2.5" />
       </div>
     </aside>
   );
