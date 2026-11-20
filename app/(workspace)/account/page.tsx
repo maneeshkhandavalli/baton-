@@ -10,7 +10,7 @@ import { ListSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { getAccountDeletionBlockers } from "@/lib/actions/account";
 import { getQueries } from "@/lib/data";
-import { isDemoAccountEmail } from "@/lib/demo-accounts";
+import { DEMO_ACCOUNTS_FULL_ACCESS, isDemoAccountEmail } from "@/lib/demo-accounts";
 import { getAccountOverview } from "@/lib/supabase/account-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { connection } from "next/server";
@@ -64,7 +64,7 @@ async function AccountContent() {
           <h2 id="display-name-heading" className="type-heading">
             Your name
           </h2>
-          <DisplayNameForm current={displayName} demoAccount={isDemoAccountEmail(overview.email)} />
+          <DisplayNameForm current={displayName} demoAccount={!DEMO_ACCOUNTS_FULL_ACCESS && isDemoAccountEmail(overview.email)} />
         </section>
       )}
       {offers.ok ? (

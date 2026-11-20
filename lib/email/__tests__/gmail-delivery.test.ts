@@ -13,6 +13,9 @@ import * as members from "../../actions/core/members";
 import type { VerifiedActor } from "../../db/actor-rules";
 import { NOT_CONFIGURED_TRANSPORT, RESEND_ENDPOINT, createResendTransport, withNotConnectedFallback } from "../core";
 import { GMAIL_SEND_SCOPE, GMAIL_SEND_URL, GOOGLE_TOKEN_URL, createGmailTransport, resolveGmailConfig, type GmailConfig } from "../gmail-core";
+import { DEMO_ACCOUNTS_FULL_ACCESS } from "../../demo-accounts";
+
+const SKIP_F3 = DEMO_ACCOUNTS_FULL_ACCESS ? "judges have full access (owner decision 21 Nov); restores with DEMO_ACCOUNTS_FULL_ACCESS = false" : false;
 
 const CONFIG = resolveGmailConfig({
   GMAIL_CLIENT_ID: "1234567890-synthetic.apps.googleusercontent.com",
@@ -154,7 +157,7 @@ describe("demo accounts never send email (F3)", () => {
     else process.env.BATON_DEMO_EMAILS = saved;
   });
 
-  it("the invitation is created and the link returned for copying; no Gmail call at all; delivery is demo", async () => {
+  it("the invitation is created and the link returned for copying; no Gmail call at all; delivery is demo", { skip: SKIP_F3 }, async () => {
     const g = gmail({ status: 200, body: { id: "never" } });
     const f = fakeDeps({ actor: DEMO, rpc: { ...base }, email: g.transport });
     const r = await members.inviteMember(f.deps, input);
@@ -265,7 +268,7 @@ describe("Gmail not connected: falls back to Resend, and only then", () => {
     assert.equal(rs.sends(), 0);
   });
 
-  it("demo accounts still never send, through either provider", async () => {
+  it("demo accounts still never send, through either provider", { skip: SKIP_F3 }, async () => {
     const saved = process.env.BATON_DEMO_EMAILS;
     process.env.BATON_DEMO_EMAILS = "demo.creator@example.test";
     try {

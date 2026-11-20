@@ -13,7 +13,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { isDemoAccountEmail } from "../../../demo-accounts";
+import { DEMO_ACCOUNTS_FULL_ACCESS, isDemoAccountEmail } from "../../../demo-accounts";
 import { loginPath } from "../../../supabase/redirects";
 import { ConnectorStoreError } from "../../errors";
 import { connectorConfigured, connectorPaths, connectorUrls, siteBaseUrl } from "../../config";
@@ -52,6 +52,7 @@ export const DEMO_CONNECT_REFUSAL = "Demo accounts can't connect apps or channel
  * installation is written). Returns the 403 answer, or null for an ordinary account.
  */
 export function refuseDemoInstall(actor: ConnectorRouteActor): Response | null {
+  if (DEMO_ACCOUNTS_FULL_ACCESS) return null; // judges can connect apps (owner decision 21 Nov)
   return isDemoAccountEmail(actor.email) ? text(DEMO_CONNECT_REFUSAL, 403) : null;
 }
 
