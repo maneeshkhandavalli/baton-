@@ -47,9 +47,9 @@ export function ParticipantsPanel({ handoverId, participants, exclusions, source
           [...bySource.entries()].map(([title, people]) => (
             <div key={title} className="space-y-1.5">
               <p className="text-xs text-muted-foreground">{title}</p>
-              <ul className="divide-y divide-border rounded-lg border border-border">
+              <ul className="divide-y divide-border border-y border-border">
                 {people.map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+                  <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">
                         <MaskedText text={p.displayLabel} />
@@ -62,7 +62,7 @@ export function ParticipantsPanel({ handoverId, participants, exclusions, source
                     {creator && !p.excluded && (
                       <ConfirmDialog
                         trigger={
-                          <Button size="xs" variant="ghost" aria-label={`Erase ${maskedTextToPlain(p.displayLabel)}`}>
+                          <Button size="xs" variant="ghost" className="max-sm:h-10" aria-label={`Erase ${maskedTextToPlain(p.displayLabel)}`}>
                             <UserX aria-hidden="true" data-icon="inline-start" />
                             Erase
                           </Button>
@@ -93,9 +93,9 @@ export function ParticipantsPanel({ handoverId, participants, exclusions, source
         {exclusions.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing was left out.</p>
         ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
+          <ul className="divide-y divide-border border-y border-border">
             {exclusions.map((e) => (
-              <li key={e.id} className="px-3 py-2">
+              <li key={e.id} className="py-2.5">
                 <p className="text-sm">
                   {exclusionKindLabel[e.kind]}
                   {e.requestedVia === "participant_request" && <span className="text-muted-foreground"> · at their request</span>}

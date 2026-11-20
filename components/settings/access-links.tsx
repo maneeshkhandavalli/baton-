@@ -1,6 +1,6 @@
 "use client";
 
-import { Link2, Mail } from "lucide-react";
+
 import { useState } from "react";
 
 import { formatDate } from "@/components/handover/format";
@@ -39,7 +39,7 @@ export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[];
   const revoke = (t: AccessTokenSummary, label: string) => (
     <ConfirmDialog
       trigger={
-        <Button size="xs" variant="ghost" aria-label={`Revoke ${label}`}>
+        <Button size="xs" variant="ghost" className="max-sm:h-10" aria-label={`Revoke ${label}`}>
           Revoke
         </Button>
       }
@@ -56,7 +56,7 @@ export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[];
   const reissue = (t: AccessTokenSummary) => (
     <ConfirmDialog
       trigger={
-        <Button size="xs" variant="ghost" aria-label={`Send a new link to ${t.recipientEmail ?? "this person"}`}>
+        <Button size="xs" variant="ghost" className="max-sm:h-10" aria-label={`Send a new link to ${t.recipientEmail ?? "this person"}`}>
           Send a new link
         </Button>
       }
@@ -87,10 +87,9 @@ export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[];
           {invites.length === 0 ? (
             <p className="text-sm text-muted-foreground">No invitations yet.</p>
           ) : (
-            <ul className="divide-y divide-border rounded-lg border border-border">
+            <ul className="divide-y divide-border border-y border-border">
               {invites.map((t) => (
-                <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
-                  <Mail aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{t.recipientEmail ?? "Invitation"}</p>
                     <p className="text-xs text-muted-foreground">
@@ -122,10 +121,9 @@ export function AccessLinks({ tokens, creator }: { tokens: AccessTokenSummary[];
         {gapLinks.length === 0 ? (
           <p className="text-sm text-muted-foreground">No links yet. Create one on the Gaps page.</p>
         ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
+          <ul className="divide-y divide-border border-y border-border">
             {gapLinks.map((t, i) => (
-              <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
-                <Link2 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+              <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">Link created {formatDate(t.createdAt)}</p>
                   <p className="text-xs text-muted-foreground">
