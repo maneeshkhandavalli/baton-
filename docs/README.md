@@ -13,6 +13,7 @@ Start here. One line per document. Judges: read the first section, then `status/
 ## Product
 
 - [product/journey-audit.md](product/journey-audit.md): audit of the application journeys (creator and incoming owner).
+- [product/decision-timeline-plan.md](product/decision-timeline-plan.md): the decision timeline (Timeline tab at `/handover/[id]/timeline` and the demo's Receive step): plan, audit amendments and build notes.
 - [design/design-system.md](design/design-system.md): the Baton design system. [design/design-decisions.md](design/design-decisions.md): UI decisions. [design/AI-SLOP-AUDIT.md](design/AI-SLOP-AUDIT.md): landing audit. [design/landing/](design/landing/): landing reference analysis.
 
 ## Architecture

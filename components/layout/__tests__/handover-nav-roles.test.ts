@@ -13,9 +13,16 @@ describe("handover tabs by role", () => {
     assert.deepEqual(titles("reviewer"), handoverNav.map((i) => i.title));
   });
 
-  it("incoming and lead members see only the publication", () => {
-    assert.deepEqual(titles("incoming"), ["Published"]);
-    assert.deepEqual(titles("lead"), ["Published"]);
+  it("incoming and lead members see only the publication (and its timeline)", () => {
+    assert.deepEqual(titles("incoming"), ["Published", "Timeline"]);
+    assert.deepEqual(titles("lead"), ["Published", "Timeline"]);
+  });
+
+  it("the Timeline tab follows Published and is open to every member", () => {
+    const i = handoverNav.findIndex((n) => n.title === "Timeline");
+    assert.equal(handoverNav[i - 1]?.title, "Published");
+    assert.equal(handoverNav[i].reviewOnly, false);
+    assert.equal(handoverNav[i].href("h1"), "/handover/h1/timeline");
   });
 
   it("an unknown role (not loaded) falls back to every tab", () => {

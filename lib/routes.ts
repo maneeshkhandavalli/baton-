@@ -24,6 +24,8 @@ export const routes = {
     settings: (id: string) => `/handover/${encodeURIComponent(id)}/settings`,
     /** The current publication, read by membership (getPublishedHandover). Reconciliation Q3 proposal. */
     published: (id: string) => `/handover/${encodeURIComponent(id)}/published`,
+    /** Decision timeline: the same publication in the order things were said (docs/product/decision-timeline-plan.md). */
+    timeline: (id: string) => `/handover/${encodeURIComponent(id)}/timeline`,
   },
   token: {
     /** Contributor link for answering knowledge gaps. */
