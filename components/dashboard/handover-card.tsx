@@ -74,17 +74,17 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
   return (
     <article className="group relative flex h-full flex-col rounded-2xl border border-border bg-card p-5 transition-[box-shadow,border-color,transform] duration-300 ease-emphasized has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raised motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={h.teamName}>
+        <p className="min-w-0 truncate text-sm font-medium text-muted-foreground" title={h.teamName}>
           {h.teamName}
         </p>
-        <HandoverStateBadge state={h.state} size="sm" />
+        <HandoverStateBadge state={h.state} />
       </div>
       <h3 className="mt-3 type-title [overflow-wrap:anywhere]">
         <Link href={href} aria-label={`${h.title}. ${cta}`} className="outline-none after:absolute after:inset-0 after:rounded-2xl">
           {h.title}
         </Link>
       </h3>
-      <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
+      <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
         <span>
           You: {memberRoleLabel[h.viewerRole]}
           {h.viewerIsCreator && " · creator"}
@@ -107,22 +107,22 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(progress * 100)}
-              className="h-1.5 overflow-hidden rounded-full bg-track"
+              className="h-2 overflow-hidden rounded-full bg-track"
             >
               <div className={cn("h-full rounded-full", progress >= 1 ? "bg-success" : "bg-foreground")} style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
-            <p className="mt-1.5 font-mono text-xs text-muted-foreground tabular-nums">{row.progressLabel}</p>
+            <p className="mt-2 text-sm font-medium text-foreground tabular-nums">{row.progressLabel}</p>
           </div>
         )}
       </div>
 
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-caption">
-        <span className="font-mono text-xs text-muted-foreground">Updated {formatDate(h.updatedAt)}</span>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border pt-4 text-caption">
+        <span className="text-sm whitespace-nowrap text-muted-foreground">Updated {formatDate(h.updatedAt)}</span>
         {/* The landing's CTA: ink label with the highlighter disc that nudges on hover. */}
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+        <span className="ml-auto inline-flex items-center gap-2 text-md font-semibold whitespace-nowrap text-foreground">
           {cta}
-          <span aria-hidden="true" className="grid size-7 place-items-center rounded-full bg-highlight text-on-highlight">
-            <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+          <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-highlight text-on-highlight">
+            <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none" />
           </span>
         </span>
       </div>

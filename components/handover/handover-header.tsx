@@ -17,8 +17,9 @@ export async function HandoverHeader({ params }: { params: Promise<{ id: string 
   return (
     <div className="flex min-w-0 flex-col gap-2 pt-6 pb-4 sm:pt-8">
       <h1 className="type-page-title break-words text-foreground">{h.title}</h1>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-caption text-muted-foreground">
-        <span>{h.teamName}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">{h.teamName}</span>
+        <span aria-hidden="true" className="size-1 rounded-full bg-border-strong" />
         <span>
           You: {memberRoleLabel[h.viewerRole]}
           {h.viewerIsCreator && " · creator"}

@@ -58,24 +58,39 @@ function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
   if (!items.length) return null;
   return (
     <section aria-labelledby="up-next" className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div data-tour="up-next" className="flex items-baseline justify-between gap-3 border-b border-border px-4 pt-4 pb-3 sm:px-5">
-        <h2 id="up-next" className="font-display text-lg leading-snug font-semibold tracking-[-0.015em]">
+      <div data-tour="up-next" className="flex items-baseline justify-between gap-3 border-b border-border px-4 pt-5 pb-4 sm:px-6">
+        <h2 id="up-next" className="font-display text-2xl leading-tight font-semibold tracking-[-0.02em]">
           Up next
         </h2>
-        {total > items.length && <p className="text-caption text-muted-foreground">{total - items.length} more {total - items.length === 1 ? "handover needs" : "handovers need"} you below</p>}
+        {total > items.length && <p className="text-sm text-muted-foreground">{total - items.length} more {total - items.length === 1 ? "handover needs" : "handovers need"} you below</p>}
       </div>
       <ul className="divide-y divide-border">
-        {items.map((it) => (
-          <li key={it.key} className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
-            <span aria-hidden="true" className={cn("hidden size-9 shrink-0 place-items-center rounded-full border sm:grid", it.danger ? "border-destructive/40 text-destructive-fg" : "border-border-strong text-foreground")}>
-              <it.icon className="size-4" />
+        {items.map((it, i) => (
+          <li
+            key={it.key}
+            className={cn(
+              "flex flex-col gap-3 px-4 transition-colors sm:flex-row sm:items-center sm:gap-5 sm:px-6",
+              // The lead item is the next step: larger, tinted with the highlighter, and its action is the lime pill.
+              i === 0 ? "bg-highlight/15 py-5" : "py-4 hover:bg-muted/50",
+            )}
+          >
+            <span aria-hidden="true" className={cn("hidden size-10 shrink-0 place-items-center rounded-full border sm:grid", it.danger ? "border-destructive/40 text-destructive-fg" : "border-border-strong bg-card text-foreground")}>
+              <it.icon className="size-[1.125rem]" />
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-md font-semibold">{it.title}</p>
-              <p className={cn("text-caption", it.danger ? "text-destructive-fg" : "text-muted-foreground")}>{it.reason}</p>
-              {it.also && it.also.length > 0 && <p className="mt-0.5 text-caption text-muted-foreground">Also needs: {it.also.map((l) => l.toLocaleLowerCase()).join(" · ")}</p>}
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className={cn("font-semibold [overflow-wrap:anywhere]", i === 0 ? "text-lg leading-snug" : "text-md")}>{it.title}</p>
+              <p className={cn("text-md", it.danger ? "font-medium text-destructive-fg" : "text-foreground/80")}>{it.reason}</p>
+              {it.also && it.also.length > 0 && <p className="text-sm text-muted-foreground">Also needs: {it.also.map((l) => l.toLocaleLowerCase()).join(" · ")}</p>}
             </div>
-            <Link href={it.href} aria-label={`${it.cta}: ${it.title}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0 self-start sm:self-auto")}>
+            <Link
+              href={it.href}
+              aria-label={`${it.cta}: ${it.title}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: i === 0 ? "lg" : "default" }),
+                "shrink-0 self-start sm:self-auto",
+                i === 0 && "border-transparent bg-highlight font-semibold text-on-highlight hover:bg-highlight/80",
+              )}
+            >
               {it.cta}
               <ArrowRight aria-hidden="true" data-icon="inline-end" />
             </Link>

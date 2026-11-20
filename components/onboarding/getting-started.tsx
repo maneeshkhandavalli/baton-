@@ -174,7 +174,7 @@ export function GettingStartedView({
             <h2 id={headingId} className="font-display text-lg leading-snug font-semibold tracking-[-0.015em]">
               Getting started
             </h2>
-            <p className="font-mono text-xs text-muted-foreground tabular-nums">
+            <p className="text-sm text-muted-foreground tabular-nums">
               {checklist.complete
                 ? "All done. You can hide this list."
                 : `${checklist.done} of ${checklist.total} done`}
