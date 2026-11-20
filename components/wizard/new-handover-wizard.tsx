@@ -33,7 +33,7 @@ import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
 import { routes } from "@/lib/routes";
 import { createSupabaseUploadClient } from "@/lib/supabase/client";
 
-import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTarget, TOO_LARGE_MESSAGE, type DraftSource } from "./draft-state";
+import { blankSource, confirmFailure, fromSummary, maxStepFor, NO_CHAT_MESSAGES, phaseOf, signedTarget, TOO_LARGE_MESSAGE, txtUploadKind, type DraftSource } from "./draft-state";
 import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import type { DetailsValues } from "./details-save";
@@ -513,9 +513,14 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
       setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
       if (isTxt(file.name)) {
         void (async () => {
-          const detected: UserUploadSourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
-          if (detected !== kind) update(localId, { kind: detected });
-          await uploadSource(localId, { name: file.name, size: file.size, kind: detected, file });
+          const detected = txtUploadKind(group, await looksLikeChatExport(file));
+          // (an empty file keeps its own "This file is empty." from uploadSource)
+          if (detected === "no_chat_messages" && file.size > 0) {
+            return update(localId, { status: "error", errorPhase: "unsupported", error: NO_CHAT_MESSAGES });
+          }
+          const chosen: UserUploadSourceKind = detected === "no_chat_messages" ? kind : detected;
+          if (chosen !== kind) update(localId, { kind: chosen });
+          await uploadSource(localId, { name: file.name, size: file.size, kind: chosen, file });
         })();
         continue;
       }
