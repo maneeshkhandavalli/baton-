@@ -18,7 +18,7 @@ import { connectorConfigured, connectorPaths, slackOptions } from "../../connect
 import { captureConsentStatement, CONNECTOR_CAPTURE_CONSENT_VERSION, MAX_HISTORY_DAYS } from "../../connectors/consent";
 import { ConnectorStoreError } from "../../connectors/errors";
 import { flushLink, type SourceWriter } from "../../connectors/flush";
-import { ingestEvent } from "../../connectors/ingest";
+import { ingestHistory, type HistoryImportResult } from "../../connectors/ingest";
 import { onlyLink, pullLink } from "../../connectors/sync";
 import { ProviderError, type AdapterContext, type ProviderServerAdapter } from "../../connectors/providers/adapter";
 import { verifyConnectorState } from "../../connectors/state";
@@ -26,6 +26,7 @@ import {
   CONNECTOR_MESSAGE_LIMITS,
   CONNECTOR_PROVIDERS,
   type ChannelLinkRecord,
+  type ConnectorMessage,
   type ConnectorProvider,
   type ConnectorStore,
   type InstallationRecord,
@@ -226,7 +227,20 @@ const consentInput = z.object({
   historyDays: z.number().int().min(0).max(MAX_HISTORY_DAYS).default(0),
 });
 
-/** Records capture consent (pending_consent/paused → capturing), optionally imports recent history, announces. */
+/**
+ * Records capture consent (pending_consent/paused → capturing), optionally imports recent history, announces.
+ *
+ * PR #7 second review, fix 2 — order of operations when earlier messages are requested (historyDays > 0):
+ *   1. load and validate the link and installation; 2. the caller must be the handover's creator AND the person who
+ *   installed the app, checked before the provider is contacted; 3. lifecycle (active installation, link not revoked)
+ *   and history capability; 4. fetch the history FIRST: if the provider fails, nothing has been written (no setting,
+ *   no consent, no capture window, no state change, no announcement); 5. only then save historyDays and record consent
+ *   (if recording consent fails, the previous settings are written back: two writes, compensated, not atomic);
+ *   6. buffer the history in ≤ 100-message batches (fix 1); 7. announce.
+ * A history batch that still fails after one retry is surfaced: consent IS recorded (said so in the message), and
+ * confirming again re-fetches and re-buffers safely (upserts by provider message id, no duplicates; an already
+ * capturing link opens no new window and is not announced again). historyDays = 0 keeps the previous path.
+ */
 export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, input: z.input<typeof consentInput>): Promise<Result<ConnectorLinkSummary>> {
   return action(deps, consentInput, input, (actor, v) =>
     attempt(async () => {
@@ -242,19 +256,46 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
       if (v.historyDays > 0 && !adapter.fetchHistory) {
         return failWith("validation_failed", { message: "This app can't bring in earlier messages. Choose \"from now on\".", details: { field: "historyDays" } });
       }
-      if (v.historyDays > 0) await store.updateLinkSettings(user, v.linkId, { ...before.settings, historyDays: v.historyDays });
-      const link = await store.recordCaptureConsent(user, v.linkId, v.consentVersion);
       const ctx = c.adapterContext();
+      let history: ConnectorMessage[] = [];
       if (v.historyDays > 0 && adapter.fetchHistory) {
+        await store.listLinksForHandover(user, before.handoverId); // creator only: forbidden otherwise (read-only)
+        if (inst.installedByProfileId !== actor.profileId) {
+          return failWith("forbidden", { message: "Only the person who connected this app can bring in earlier messages." });
+        }
+        if (inst.status !== "active" || before.state === "revoked") return failWith("invalid_transition", { message: "That can't be changed in the connection's current state." });
         const since = new Date(c.now() - v.historyDays * 86_400_000).toISOString();
-        const messages = await adapter.fetchHistory(ctx, inst, link, since, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush);
-        await ingestEvent(store, {
-          provider: inst.provider, deliveryId: `history:${link.id}:${link.consentedAt}`, eventType: "history_import",
-          externalAccountId: inst.externalAccountId, externalChannelId: link.externalChannelId, messages,
-        }, undefined, { filter: onlyLink(link.id) });
+        history = (await adapter.fetchHistory(ctx, inst, before, since, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush)).slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush);
+        await store.updateLinkSettings(user, v.linkId, { ...before.settings, historyDays: v.historyDays });
       }
-      const by = await actorName(c, actor.profileId);
-      await adapter.announceCapture?.(ctx, inst, link, "started", by).catch(() => {}); // a notice failure never blocks consent
+      let link: ChannelLinkRecord;
+      try {
+        link = await store.recordCaptureConsent(user, v.linkId, v.consentVersion);
+      } catch (e) {
+        if (v.historyDays > 0) await store.updateLinkSettings(user, v.linkId, before.settings).catch(() => {}); // compensate
+        throw e;
+      }
+      let incomplete: HistoryImportResult | null = null;
+      if (history.length > 0) {
+        const r = await ingestHistory(
+          store,
+          { provider: inst.provider, externalAccountId: inst.externalAccountId, externalChannelId: link.externalChannelId, deliveryPrefix: `history:${link.id}:${link.consentedAt}` },
+          history, undefined, { filter: onlyLink(link.id) },
+        );
+        if (r.failed.length > 0) incomplete = r;
+      }
+      // announce the start of capture; a retry on an already capturing link does not announce it again
+      if (v.historyDays === 0 || before.state !== "capturing") {
+        const by = await actorName(c, actor.profileId);
+        await adapter.announceCapture?.(ctx, inst, link, "started", by).catch(() => {}); // a notice failure never blocks consent
+      }
+      if (incomplete) {
+        return failWith("precondition_failed", {
+          message: "Baton started saving new messages, but some earlier messages couldn't be brought in. Confirm again with the same choice to retry; messages already brought in aren't duplicated.",
+          retryable: true,
+          details: { reason: "history_import_incomplete", consentRecorded: true, failedBatches: incomplete.failed.length, batches: incomplete.batches, buffered: incomplete.buffered },
+        });
+      }
       return ok(linkSummary((await store.getLink(link.id)) ?? link, new Map([[inst.id, inst]])));
     }),
   );

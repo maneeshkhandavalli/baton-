@@ -190,3 +190,61 @@ export function httpStatusFor(outcome: EventOutcome): number {
   // buffer_full is retryable too (PR #7 review, finding 4): a link's buffer frees up at its next flush.
   return outcome.status === "failed" ? 503 : 200;
 }
+
+// ── history imports (consent-time) ───────────────────────────────────────────
+
+/**
+ * Splits an ordered message list into consecutive batches of at most `size` (default: the 100-message event
+ * contract), keeping the order. Pure.
+ */
+export function historyBatches<T>(messages: readonly T[], size: number = CONNECTOR_MESSAGE_LIMITS.messagesPerEvent): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < messages.length; i += size) out.push(messages.slice(i, i + size));
+  return out;
+}
+
+/** Deterministic, distinct delivery id of history batch `index` (zero-padded so ids sort in batch order). */
+export const historyDeliveryId = (prefix: string, index: number): string => `${prefix}:${String(index).padStart(3, "0")}`;
+
+export interface HistoryImportResult {
+  /** Batches sent through ingestEvent (0 when there was nothing to import). */
+  batches: number;
+  /** Messages buffered (inserted or updated) across processed batches. */
+  buffered: number;
+  /** Batches that failed (after one immediate retry); empty when the whole import is safely buffered. */
+  failed: Array<{ index: number; deliveryId: string; code: string }>;
+}
+
+/**
+ * PR #7 second review, fix 1: a consent-time history import may hold up to messagesPerFlush (5,000) messages, but an
+ * event carries at most messagesPerEvent (100) — sanitizeMessages drops the rest. So history goes through the ORDINARY
+ * ingest path in ordered batches of ≤ 100, each with its own deterministic delivery id (ledger de-duplication, capture
+ * windows, sanitising and per-link filtering all apply unchanged). Every outcome is checked:
+ *  - processed / duplicate (already done) / ignored (e.g. nothing in the batch was inside the capture window, or it
+ *    sanitised to nothing) → done; ignoring is a final, truthful outcome, never a failure;
+ *  - failed → retried once immediately (the ledger reclaims a failed delivery; buffering upserts by provider message
+ *    id, so a retry never duplicates); still failing → reported in `failed`, and the caller must surface it.
+ * Messages beyond messagesPerFlush are not imported (the documented upper limit; adapters already cap their fetch).
+ */
+export async function ingestHistory(
+  store: ConnectorStore,
+  base: Pick<NormalizedEvent, "provider" | "externalAccountId" | "externalChannelId"> & { deliveryPrefix: string },
+  messages: readonly ConnectorMessage[],
+  logger: IngestLogger = silent,
+  options: IngestOptions = {},
+): Promise<HistoryImportResult> {
+  const batches = historyBatches(messages.slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush));
+  const result: HistoryImportResult = { batches: batches.length, buffered: 0, failed: [] };
+  for (const [index, batch] of batches.entries()) {
+    const deliveryId = historyDeliveryId(base.deliveryPrefix, index);
+    const event: NormalizedEvent = {
+      provider: base.provider, deliveryId, eventType: "history_import",
+      externalAccountId: base.externalAccountId, externalChannelId: base.externalChannelId, messages: batch,
+    };
+    let outcome = await ingestEvent(store, event, logger, options);
+    if (outcome.status === "failed") outcome = await ingestEvent(store, event, logger, options);
+    if (outcome.status === "processed") result.buffered += outcome.buffered;
+    else if (outcome.status === "failed") result.failed.push({ index, deliveryId, code: outcome.code });
+  }
+  return result;
+}

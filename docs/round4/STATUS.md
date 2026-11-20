@@ -25,10 +25,10 @@ The connector infrastructure (capture consent, capture windows, buffer, flush, v
 pending-version consent) is shared by all four providers and covered by synthetic tests for each of them. Only
 **Telegram** has been verified live; Discord, Slack and GitHub have not.
 
-## Last full regression (2026-11-20, PR #7 review fixes)
+## Last full regression (2026-11-20, PR #7 second-review fixes)
 
-Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 282 ·
-pipeline 251 · connectors 192 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
+Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 289 ·
+pipeline 251 · connectors 198 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
 (incl. `99_connectors_r4` §12 history invariant and §13 capacity, `99_connector_version_consent`) · integration SQL
 15/15, 0 open findings.
 
@@ -116,8 +116,26 @@ installation `ea4b1122` active. The bot is no longer in "baton bot testing group
 
 Migration `20261120800400` is in the repo and passes the SQL suite; it is **not yet applied** to `baton-connectors-test`.
 
+### PR #7 second review fixes (2026-11-20, synthetic tests; not re-run live)
+
+* **History imports no longer truncate at 100 messages.** Consent-time history (up to 5,000) is buffered through the
+  ordinary ingest path in ordered batches of ≤ 100, each with a deterministic delivery id
+  (`history:<link>:<consentedAt>:000`, `:001`, …); every outcome is checked, a failed batch is retried once and then
+  surfaced.
+* **A failed history fetch leaves the link unchanged.** With history requested, the creator and installer checks and
+  the lifecycle checks run first, then the provider fetch, and only then the settings and consent writes; if the
+  fetch fails, nothing is written and nothing is announced. If some batches still fail after consent is recorded,
+  the action says so ("Baton started saving new messages, but some earlier messages couldn't be brought in") and
+  confirming again re-imports safely (no duplicates, no second window or announcement). The retry is offered while the
+  consent step is open; after a page reload there is no dedicated "retry history" control.
+
 ### Open risks (not fixed)
 
+* **Delta message identity (design decision pending):** change detection matches chat messages by author and send
+  time; two distinct messages with the same author and second would be treated as the same place. Provider message
+  ids are not carried into the normalized pipeline. Deferred for a separate decision.
+* **Reply-parent metadata (contract gap):** connector transcripts carry `reply_to`, but the `chat_import` parser does
+  not map it into normalized messages, so reply relationships are lost after import. Deferred (parser/schema change).
 * `buffer_full` is now retried (503). A link that stays full for long makes the provider keep failing deliveries;
   Slack can disable an app's event subscription after sustained failures. Flushing the link clears it.
 * A deletion delivered while a link is **paused** is dropped, so the buffered original remains until the next flush

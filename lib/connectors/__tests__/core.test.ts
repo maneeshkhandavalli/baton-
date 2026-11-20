@@ -8,12 +8,12 @@ import { TEST_PEPPER } from "../../../fixtures/parser/load";
 import { parseSource } from "../../parsers/parse-source";
 import { connectorConfigured, connectorUrls } from "../config";
 import { flushDueLinks, flushLink, type SourceWriter } from "../flush";
-import { httpStatusFor, ingestEvent, sanitizeMessages } from "../ingest";
+import { historyBatches, historyDeliveryId, httpStatusFor, ingestEvent, ingestHistory, sanitizeMessages } from "../ingest";
 import { openCredentials, parseConnectorSecretKey, sealCredentials } from "../secrets";
 import { signConnectorState, verifyConnectorState } from "../state";
 import { MemoryConnectorStore } from "../store-memory";
 import { serializeTranscript, transcriptFileName } from "../transcript";
-import type { ConnectorMessage, NormalizedEvent } from "../types";
+import { CONNECTOR_MESSAGE_LIMITS, type ConnectorMessage, type NormalizedEvent } from "../types";
 import { safeEqual, verifyDiscordSignature, verifyGithubSignature, verifySlackSignature, verifyTelegramSecret } from "../verify";
 
 const CREATOR = "11111111-1111-4111-8111-111111111111";
@@ -399,5 +399,95 @@ describe("ingest fan-out with a full buffer", () => {
       /precondition_failed/,
     );
     assert.equal(store.bufferedFor(links[0].id).find((m) => m.providerMessageId === "keep")?.text, "original");
+  });
+});
+
+// PR #7 second review, fix 1: a consent-time history import is split into ≤ 100-message batches through the ordinary
+// ingest path (sanitizeMessages keeps at most messagesPerEvent per event, so one big event silently lost the rest).
+describe("history import in batches (ingestHistory)", () => {
+  const HIST = (n: number) => Array.from({ length: n }, (_, i) =>
+    msg(`h${String(i).padStart(4, "0")}`, new Date(Date.parse("2026-11-19T08:30:00Z") + i * 1000).toISOString(), "Asha", `history message ${i}`));
+  /** A memory store that records every bufferMessages batch and can fail chosen batches (by first message id). */
+  class SpyStore extends MemoryConnectorStore {
+    sizes: number[] = [];
+    failFirstIds = new Set<string>();
+    async bufferMessages(linkId: string, messages: readonly ConnectorMessage[]) {
+      this.sizes.push(messages.length);
+      if (messages.length > 0 && this.failFirstIds.has(messages[0].providerMessageId)) throw new Error("transient store failure");
+      return super.bufferMessages(linkId, messages);
+    }
+  }
+  async function hist() {
+    const store = new SpyStore(() => Date.parse("2026-11-19T08:00:00Z"));
+    store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
+    const user = { kind: "user", profileId: CREATOR } as const;
+    const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T1", accountLabel: "CodeCell", scopes: [], credentials: "c1.x.y.z" });
+    const link = await store.linkChannel(user, { installationId: inst.id, handoverId: HANDOVER, externalChannelId: "C1", channelLabel: "#core-team" });
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const base = { provider: "slack" as const, externalAccountId: "T1", externalChannelId: "C1", deliveryPrefix: `history:${link.id}:t0` };
+    return { store, link, base };
+  }
+
+  it("historyBatches keeps order and never exceeds 100 per batch; ids are deterministic and distinct", () => {
+    const b = historyBatches(HIST(250));
+    assert.deepEqual(b.map((x) => x.length), [100, 100, 50]);
+    assert.deepEqual(b.flat().map((m) => m.providerMessageId), HIST(250).map((m) => m.providerMessageId));
+    const ids = [0, 1, 2].map((i) => historyDeliveryId("history:L:t0", i));
+    assert.deepEqual(ids, ["history:L:t0:000", "history:L:t0:001", "history:L:t0:002"]);
+    assert.equal(new Set(ids).size, 3);
+    assert.deepEqual([0, 1, 2].map((i) => historyDeliveryId("history:L:t0", i)), ids, "same input → same ids");
+  });
+
+  it("250 history messages are ALL buffered (not just the first 100), each batch ≤ 100, one ledger row per batch", async () => {
+    const { store, link, base } = await hist();
+    const r = await ingestHistory(store, base, HIST(250), undefined, { filter: (l, m) => (l.id === link.id ? m : []) });
+    assert.deepEqual(r, { batches: 3, buffered: 250, failed: [] });
+    assert.equal(store.bufferedFor(link.id).length, 250);
+    assert.ok(store.sizes.every((n) => n <= CONNECTOR_MESSAGE_LIMITS.messagesPerEvent));
+    assert.deepEqual(store.events.filter((e) => e.deliveryId.startsWith(base.deliveryPrefix)).map((e) => [e.deliveryId, e.status]),
+      [[`${base.deliveryPrefix}:000`, "processed"], [`${base.deliveryPrefix}:001`, "processed"], [`${base.deliveryPrefix}:002`, "processed"]]);
+  });
+
+  it("reprocessing completed batches is a duplicate: nothing is buffered twice", async () => {
+    const { store, link, base } = await hist();
+    await ingestHistory(store, base, HIST(250));
+    const again = await ingestHistory(store, base, HIST(250));
+    assert.deepEqual(again, { batches: 3, buffered: 0, failed: [] });
+    assert.equal(store.bufferedFor(link.id).length, 250);
+  });
+
+  it("a failed batch is surfaced (after one retry) and a later run completes it without duplicates", async () => {
+    const { store, link, base } = await hist();
+    store.failFirstIds.add("h0100"); // the second batch fails (twice: first try and the immediate retry)
+    const r = await ingestHistory(store, base, HIST(250));
+    assert.equal(r.failed.length, 1);
+    assert.deepEqual(r.failed[0], { index: 1, deliveryId: `${base.deliveryPrefix}:001`, code: "internal" });
+    assert.equal(r.buffered, 150, "the other batches are buffered");
+    assert.equal(store.events.find((e) => e.deliveryId === `${base.deliveryPrefix}:001`)?.status, "failed");
+    store.failFirstIds.clear();
+    const retry = await ingestHistory(store, base, HIST(250));
+    assert.deepEqual(retry.failed, []);
+    assert.equal(retry.buffered, 100, "only the failed batch is reprocessed (the others are ledger duplicates)");
+    assert.equal(store.bufferedFor(link.id).length, 250);
+    assert.equal(new Set(store.bufferedFor(link.id).map((m) => m.providerMessageId)).size, 250, "no duplicates");
+  });
+
+  it("≤ 100 messages: one batch, as before; an empty or fully ignored import is neither a failure nor a fake success", async () => {
+    const { store, link, base } = await hist();
+    assert.deepEqual(await ingestHistory(store, base, HIST(100)), { batches: 1, buffered: 100, failed: [] });
+    assert.equal(store.bufferedFor(link.id).length, 100);
+    assert.deepEqual(await ingestHistory(store, { ...base, deliveryPrefix: "history:x:empty" }, []), { batches: 0, buffered: 0, failed: [] });
+    const blank = [{ ...msg("b1", "2026-11-19T08:30:00.000Z"), text: "   " }]; // sanitised to nothing
+    assert.deepEqual(await ingestHistory(store, { ...base, deliveryPrefix: "history:x:blank" }, blank), { batches: 1, buffered: 0, failed: [] });
+    const old = [msg("o1", "2026-11-01T08:30:00.000Z")]; // outside the capture window
+    assert.deepEqual(await ingestHistory(store, { ...base, deliveryPrefix: "history:x:old" }, old), { batches: 1, buffered: 0, failed: [] });
+  });
+
+  it("the 5,000-message upper limit is kept", async () => {
+    const { store, base } = await hist();
+    const many = Array.from({ length: 5_050 }, (_, i) => msg(`m${i}`, new Date(Date.parse("2026-11-19T08:01:00Z") + i).toISOString()));
+    const r = await ingestHistory(store, base, many);
+    assert.equal(r.batches, 50);
+    assert.ok(store.sizes.every((n) => n <= 100));
   });
 });
