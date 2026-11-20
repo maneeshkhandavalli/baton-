@@ -42,16 +42,22 @@ stale the week after, and can't be checked.
   review → Gap Interview link (answer it signed out in another browser) → publish → Published and Timeline tabs →
   Settings → invite (copy the link) → open the invitation in another browser and accept.
 * Living Handover: Settings → Start a revision → New version of the chat → Process the new version → Changes.
-* Connected channels: Settings → Connected channels. No provider is configured on the deployed site, so every provider
-  honestly shows "Not set up on this server". The Telegram connector was verified live on a local isolated stack.
+* Connected channels: Settings → Connected channels. A provider that is not configured on the deployment honestly
+  shows "Not set up on this server". The Telegram connector was verified live on a local isolated stack.
 
-## Round 3 commitments (Round 1 proposal, "Round 3: three committed improvements")
+## Round 2 commitments (as stated by the team; exact wording in the Round 2 form)
 
 | # | Commitment | Status |
 |---|---|---|
-| 1 | GitHub + decision timeline | **Timeline delivered** (real app tab + demo). **GitHub connector built**, tested with synthetic events only, not verified live and not configured on production. The timeline orders points by date; it does not link a commit to a chat decision automatically. |
-| 2 | Ask the handover | **Not built.** We prioritised a reliable real-AI pipeline (recall 58.7% → 100% on labelled synthetic data), consent and privacy over a Q&A layer built on unreliable extraction. Next on the roadmap. |
-| 3 | Living handover | **Delivered and browser-verified** (versions 2 and 3, Playwright, 2026-11-19) and verified live with Telegram data (2026-11-20). |
+| 1 | GitHub integration (commits, issues and pull requests; repository activity connected with project decisions) | **GitHub App connector built** (issues, comments, pull requests, reviews, default-branch commit messages, releases; never code), tested with synthetic signed events. Repository activity becomes cited points through the normal pipeline; the new **Decision Timeline** (real app tab + demo) shows points from every source in date order. No explicit commit-to-decision link. |
+| 2 | Communication bots for Discord, Telegram and Slack on one shared service with consistent permissions | **One shared connector service** (consent gate, capture windows, buffer, versioned `chat_import` sources, the same permission checks). **Telegram** verified live (2026-11-20, local isolated stack); **Discord** and **Slack** built and tested with synthetic signed events. The bots capture and announce; they do not answer questions in the chat. |
+| 3 | Living Handover | **Delivered and browser-verified** (versions 2 and 3, Playwright, 2026-11-19) and verified live with Telegram data (2026-11-20). |
+
+**Ask the handover** (original Round 1 proposal, not a Round 2 commitment): **not built.** We prioritised a reliable
+real-AI pipeline (recall 58.7% → 100% on labelled synthetic data), consent and privacy over a Q&A layer built on
+unreliable extraction. Next on the roadmap.
+
+Production status of each connector on the deployed site is recorded in the submission form, not here.
 
 ## Privacy and safety (implemented)
 
@@ -97,12 +103,12 @@ See `docs/status/STATUS.md`.
   development bot, real group messages; capture consent and capture windows, import as versions 1 and 2, processing
   with the test adapter, publication v2, incoming acknowledgement, channel and group disconnect; evidence in
   `docs/status/STATUS.md`). **GitHub, Discord, Slack:** implemented on the same shared connector infrastructure and
-  tested with synthetic events only; no live event verified; not configured on production.
+  tested with synthetic events only; no live event verified at the time of writing.
 
 ## Known limitations
 
-* GitHub, Discord and Slack connectors are not verified live and not configured on production.
-* Ask the handover (commitment 2) is not built.
+* GitHub, Discord and Slack connectors were not verified with live events at the time of writing.
+* Ask the handover (Round 1 proposal) is not built; the bots do not answer questions in the chat.
 * The verifier model can answer "supports" on injected quotes; the deterministic guard is the backstop and human
   approval is mandatory.
 * Contradiction retrieval is lexical; extraction is not reproducible between runs.

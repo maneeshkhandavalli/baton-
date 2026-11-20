@@ -24,9 +24,9 @@ change people every term.
 5. Optional: **Settings** → create an invitation link, copy it, and open it in another browser signed in as a second
    account to see the incoming member's view. **Settings → Start a revision** shows the Living Handover flow.
 
-Connected channels: the Telegram connector was verified live with a real group on a local stack. GitHub, Discord and
-Slack connectors are built but not verified live. None are configured on the deployed site, where they show "Not set
-up on this server".
+Connected channels (Settings → Connected channels): one shared connector service for Telegram, Discord, Slack and
+GitHub. Telegram was verified live with a real group on a local stack; Discord, Slack and GitHub are built and tested
+with synthetic signed events. A provider that is not configured on a deployment shows "Not set up on this server".
 
 ## Run it locally
 
