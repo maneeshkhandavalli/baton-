@@ -34,8 +34,8 @@ export function HelpMenu({ className, size = "sm" }: { className?: string; size?
         data-tour="help-menu"
         aria-label="Help and guidance"
         className={cn(
-          "inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium outline-none focus-ring hover:bg-muted data-[popup-open]:bg-muted",
-          size === "lg" ? "size-11" : "h-8 px-2",
+          "inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-medium outline-none focus-ring hover:bg-muted data-[popup-open]:bg-muted",
+          size === "lg" ? "size-11" : "h-8 px-2.5",
           className,
         )}
       >
@@ -44,7 +44,7 @@ export function HelpMenu({ className, size = "sm" }: { className?: string; size?
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
-          <Menu.Popup className="w-64 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-raised outline-none">
+          <Menu.Popup className="w-64 rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-raised outline-none">
             <p className="px-2.5 pt-1.5 pb-1 type-eyebrow text-muted-foreground">Help</p>
             <Menu.Item className={itemClass} onClick={openWelcome}>
               <Sparkles aria-hidden="true" className="size-4 text-muted-foreground" />

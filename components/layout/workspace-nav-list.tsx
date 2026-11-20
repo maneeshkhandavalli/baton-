@@ -13,8 +13,10 @@ export interface WorkspaceNavListProps {
   className?: string;
 }
 
+/* Pill destinations, as in the landing's header: the current page is an outlined pill on a white sheet, others
+   are quiet text that fills on hover. */
 const itemClass =
-  "flex h-9 w-full items-center gap-2.5 max-lg:h-10 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40";
+  "flex h-10 w-full items-center gap-2.5 rounded-full px-3.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-ring";
 
 
 function NavLinks({ items, pathname }: { items: readonly NavItem[]; pathname: string | null }) {
@@ -31,11 +33,11 @@ function NavLinks({ items, pathname }: { items: readonly NavItem[]; pathname: st
               className={cn(
                 itemClass,
                 active
-                  ? "bg-card text-sidebar-accent-foreground shadow-xs ring-1 ring-sidebar-border"
+                  ? "bg-card font-semibold text-sidebar-accent-foreground ring-1 ring-sidebar-border"
                   : "text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
-              <Icon aria-hidden="true" className={cn("size-4 shrink-0", active && "text-sidebar-primary")} />
+              <Icon aria-hidden="true" className={cn("size-4 shrink-0", active && "text-sidebar-foreground")} />
               {title}
             </Link>
           </li>
@@ -53,7 +55,7 @@ export function WorkspaceNavList({ pathname, className }: WorkspaceNavListProps)
   return (
     <nav aria-label="Workspace" className={cn("flex flex-col gap-6", className)}>
       <NavLinks items={workspaceNav} pathname={pathname} />
-      <div className="mt-auto space-y-0.5 border-t border-sidebar-border pt-3">
+      <div className="mt-auto space-y-0.5 border-t border-border pt-2.5">
         <NavLinks items={accountNav} pathname={pathname} />
         {/* POST-only route: a link or prefetch can never sign someone out. */}
         <form action={routes.signOut} method="post">

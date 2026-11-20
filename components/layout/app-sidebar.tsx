@@ -8,25 +8,28 @@ import { routes } from "@/lib/routes";
 import { WorkspaceNavigation } from "./workspace-navigation";
 
 /**
- * Desktop sidebar (≥ lg). Paper-toned and quiet so the page content carries the hierarchy:
- * logo and the theme switch, primary destinations, then account + sign-out pinned to the bottom.
+ * Desktop sidebar (≥ lg). The landing's header pill turned on its side: a floating hairline panel on the same
+ * paper, round-cornered, with the four-colour Baton mark, pill-shaped destinations, then account + sign-out pinned
+ * to the bottom. Quiet, so the page content carries the hierarchy.
  */
 export function AppSidebar() {
   return (
-    <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
-      <div className="flex h-16 shrink-0 items-center justify-between gap-2 pr-3 pl-5">
-        <Link href={routes.dashboard} aria-label="Baton dashboard" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40">
-          <BatonLogo />
+    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 p-3 pr-0 lg:flex">
+      <div className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border border-sidebar-border bg-sidebar text-sidebar-foreground">
+      <div className="flex h-16 shrink-0 items-center justify-between gap-2 pr-2.5 pl-5">
+        <Link href={routes.dashboard} aria-label="Baton dashboard" className="rounded-md outline-none focus-ring">
+          <BatonLogo size="lg" />
         </Link>
         <div className="flex items-center gap-0.5">
           <HelpMenu className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
           <ThemeToggle
             size="icon-sm"
-            className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring/40"
+            className="text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           />
         </div>
       </div>
-      <WorkspaceNavigation className="flex-1 px-3 pt-2 pb-4" />
+      <WorkspaceNavigation className="flex-1 px-2.5 pt-3 pb-2.5" />
+      </div>
     </aside>
   );
 }
