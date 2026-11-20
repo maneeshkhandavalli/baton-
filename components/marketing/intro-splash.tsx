@@ -4,19 +4,19 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { BrandLoader } from "./brand-loader";
 
-const SEEN_KEY = "baton:intro-seen";
 /** The fade must start by this point (landing.css's failsafe animation uses the same delay); the fade takes 300 ms. */
 const FADE_BY_MS = 600;
 /** Long enough for the mark to read, short enough not to hold anyone up. */
 const MIN_VISIBLE_MS = 350;
 
 /**
- * Decides, before the first paint, whether the splash shows. Runs inline right after the splash's markup, so the
- * first frame is CSS only (no flash, no wait for hydration). It shows only with JavaScript (no-JS visitors never get
- * `data-show`, so nothing covers the page), only when motion is allowed, and once per tab session; if
- * sessionStorage is unavailable it does not show at all. `data-t` records when it appeared.
+ * Decides, before the first paint, whether the splash shows: public/intro-splash-init.js, a classic script placed
+ * right after the splash's markup, so the first frame is CSS only (no flash, no wait for hydration). It shows only
+ * with JavaScript, only when motion is allowed, and once per tab session (key `baton:intro-seen`); if sessionStorage
+ * is unavailable it does not show at all. `data-t` records when it appeared. A static file, not an inline script,
+ * so no component injects raw HTML (IT-04).
  */
-const DECIDE = `(function(){try{var e=document.currentScript&&document.currentScript.previousElementSibling;if(!e||!matchMedia("(prefers-reduced-motion: no-preference)").matches)return;if(sessionStorage.getItem("${SEEN_KEY}"))return;sessionStorage.setItem("${SEEN_KEY}","1");e.setAttribute("data-t",String(Math.round(performance.now())));e.setAttribute("data-show","")}catch(_){}})()`;
+export const INTRO_SPLASH_INIT_SRC = "/intro-splash-init.js";
 
 const subscribeNoop = () => () => {};
 
@@ -62,7 +62,8 @@ export function IntroSplash() {
       <div ref={ref} data-splash className="lp-splash" aria-hidden="true" suppressHydrationWarning>
         <BrandLoader />
       </div>
-      {fromServer ? <script dangerouslySetInnerHTML={{ __html: DECIDE }} /> : null}
+      {/* eslint-disable-next-line @next/next/no-sync-scripts -- must run before first paint, right after the markup */}
+      {fromServer ? <script src={INTRO_SPLASH_INIT_SRC} /> : null}
     </>
   );
 }
