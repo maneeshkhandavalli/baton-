@@ -8,12 +8,15 @@
  *   - gemini_free    the Gemini Developer API without a paid data-governance profile (development only);
  *   - gemini_paid    the Gemini API under the approved "gemini-paid-dpa" profile;
  *   - evaluation     an evaluation-only provider (synthetic data only);
+ *   - omega_owner_approved  Omega Plus in production under the "omega-owner-approved" profile (owner decision
+ *                    2026-11-20): a third-party gateway whose retention and training terms are NOT documented, and
+ *                    the statement says so plainly;
  *   - not_configured no provider: processing cannot start (the server refuses consent too).
  * It names a provider only by its public display name; it never carries a key, a URL or any other secret.
  * Each wording has its own statement version, recorded with the consent.
  */
 
-export const CONSENT_DISCLOSURE_KINDS = ["local_test", "gemini_free", "gemini_paid", "evaluation", "not_configured"] as const;
+export const CONSENT_DISCLOSURE_KINDS = ["local_test", "gemini_free", "gemini_paid", "evaluation", "omega_owner_approved", "not_configured"] as const;
 export type ConsentDisclosureKind = (typeof CONSENT_DISCLOSURE_KINDS)[number];
 
 export interface ConsentDisclosure {
@@ -30,6 +33,7 @@ export interface ConsentDisclosure {
 
 export const GEMINI_FREE_LABEL = "Google Gemini (Gemini Developer API, free tier)";
 export const GEMINI_PAID_LABEL = "Google Gemini (Gemini API, paid tier under Google's Data Processing Addendum)";
+export const OMEGA_PRODUCTION_LABEL = "the Omega Plus API";
 
 const MASKING = "Phone numbers, emails, payment details and secrets are masked before anything is sent.";
 
@@ -71,6 +75,14 @@ export function consentDisclosure(kind: ConsentDisclosureKind, providerName?: st
         statementVersion: "evaluation-2026-11-18-v1",
       };
     }
+    case "omega_owner_approved":
+      return {
+        kind,
+        providerLabel: "Omega Plus API (third-party AI gateway)",
+        badge: "Third-party AI gateway · terms not documented",
+        providerStatement: `I understand masked content will be sent to ${OMEGA_PRODUCTION_LABEL}, a third-party gateway that forwards it to upstream AI model providers for processing. ${MASKING} Omega has not documented how long it keeps prompts or whether they are used for training, so do not upload anything you would not share with a third party. The raw file is deleted after processing.`,
+        statementVersion: "omega-owner-approved-2026-11-20-v1",
+      };
     case "not_configured":
       return {
         kind,
@@ -92,6 +104,7 @@ export function disclosureProviderId(kind: ConsentDisclosureKind): string | null
     case "gemini_paid":
       return "gemini";
     case "evaluation":
+    case "omega_owner_approved":
       return "omega";
     case "not_configured":
       return null;

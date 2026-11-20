@@ -4,7 +4,8 @@
 //   AI_API_KEY=<gemini key>    → production's Gemini provider and model ids
 //   OMEGA_API_KEY=<omega key>  → Omega Plus, the EVALUATION-only provider (lib/ai/config.ts): BATON_ALLOW_EVAL_PROVIDER=1,
 //                                fixed model ids. Optional lines: AI_MODEL_EXTRACT, AI_MODEL_VERIFY, OMEGA_OUTPUT_MODE,
-//                                OMEGA_API_BASE_URL. Production refuses Omega whatever this file says.
+//                                OMEGA_API_BASE_URL. This file never enables production Omega: AI_DATA_GOVERNANCE
+//                                is always unset here (production needs AI_DATA_GOVERNANCE=omega-owner-approved).
 import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 

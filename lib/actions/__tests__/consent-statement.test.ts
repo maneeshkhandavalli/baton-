@@ -64,6 +64,42 @@ describe("recordSourceConsent: the statement version is checked on the server", 
     assert.ok(!r2.ok && r2.error.details?.reason === CONSENT_STATEMENT_OUTDATED_REASON);
   });
 
+  it("production Omega: exactly the owner-approved statement is recorded, with provider omega", async () => {
+    const OMEGA_RUN_CONFIG = { ...FAKE_RUN_CONFIG, provider: "omega" };
+    const expected = consentDisclosure("omega_owner_approved").statementVersion;
+    assert.equal(expected, "omega-owner-approved-2026-11-20-v1");
+    const world = () =>
+      fakeDeps({
+        aiRunConfig: () => ({ ok: true, data: OMEGA_RUN_CONFIG }),
+        consentDisclosure: () => consentDisclosure("omega_owner_approved"),
+        rpc: { api_get_source: { data: { id: S } } },
+      });
+    const ok = world();
+    await sources.recordSourceConsent(ok.deps, consent(expected));
+    const write = ok.calls.find((c) => c.fn === "record_source_consent");
+    assert.ok(write, "consent was recorded");
+    assert.equal(write.args?.p_statement_version, expected);
+    assert.equal(write.args?.p_ai_provider, "omega");
+    // the evaluation wording (or any other) does not cover production Omega
+    for (const other of ["evaluation", "gemini_paid", "local_test"] as const) {
+      const f = world();
+      const r = await sources.recordSourceConsent(f.deps, consent(consentDisclosure(other).statementVersion));
+      assert.ok(!r.ok && r.error.details?.reason === CONSENT_STATEMENT_OUTDATED_REASON, other);
+      assert.equal(f.calls.filter((c) => c.fn === "record_source_consent").length, 0);
+    }
+  });
+
+  it("the Omega wording cannot describe a Gemini run (fails closed)", async () => {
+    const f = fakeDeps({
+      aiRunConfig: () => ({ ok: true, data: GEMINI_RUN_CONFIG }),
+      consentDisclosure: () => consentDisclosure("omega_owner_approved"),
+      rpc: { api_get_source: { data: { id: S } } },
+    });
+    const r = await sources.recordSourceConsent(f.deps, consent(consentDisclosure("omega_owner_approved").statementVersion));
+    assert.ok(!r.ok && r.error.details?.reason === "provider_not_configured");
+    assert.equal(f.calls.filter((c) => c.fn === "record_source_consent").length, 0);
+  });
+
   it("a wording that does not describe the configured provider fails closed (never records a mismatched consent)", async () => {
     const f = fakeDeps({
       aiRunConfig: () => ({ ok: true, data: GEMINI_RUN_CONFIG }),

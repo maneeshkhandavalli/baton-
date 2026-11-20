@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { getConsentDisclosure } from "../consent-disclosure";
-import { CONSENT_DISCLOSURE_KINDS, consentDisclosure } from "../../contracts/consent";
+import { CONSENT_DISCLOSURE_KINDS, consentDisclosure, disclosureProviderId } from "../../contracts/consent";
 
 const SECRET = "AIzaSy-test-secret-not-real-0000000000";
 const OMEGA_SECRET = "om-test-secret-not-real-1111";
@@ -67,6 +67,46 @@ describe("consent disclosure (provider wording)", () => {
     assert.match(d.providerStatement, /evaluation only/);
     assert.match(d.providerStatement, /Omega Plus API/);
     assert.ok(!JSON.stringify(d).includes(OMEGA_SECRET) && !JSON.stringify(d).includes("eval.example.test"));
+  });
+
+  it("production Omega (owner-approved profile): its own honest wording and statement version", () => {
+    const d = getConsentDisclosure({
+      NODE_ENV: "production", AI_PROVIDER: "omega", OMEGA_API_KEY: OMEGA_SECRET, AI_DATA_GOVERNANCE: "omega-owner-approved",
+      AI_MODEL_EXTRACT: "claude-sonnet-5-5", AI_MODEL_VERIFY: "claude-sonnet-5", OMEGA_API_BASE_URL: "https://prod.example.test",
+    });
+    assert.equal(d.kind, "omega_owner_approved");
+    assert.equal(d.statementVersion, "omega-owner-approved-2026-11-20-v1");
+    assert.match(d.providerStatement, /masked content will be sent to the Omega Plus API/);
+    assert.match(d.providerStatement, /third-party gateway that forwards it to upstream AI model providers/);
+    assert.match(d.providerStatement, /has not documented how long it keeps prompts or whether they are used for training/);
+    assert.match(d.providerStatement, /do not upload anything you would not share with a third party/);
+    assert.match(d.providerStatement, /masked before anything is sent/);
+    assert.match(d.providerStatement, /raw file is deleted after processing/);
+    assert.doesNotMatch(`${d.providerStatement} ${d.badge} ${d.providerLabel}`, /evaluation|synthetic|gemini|google/i);
+    assert.ok(!JSON.stringify(d).includes(OMEGA_SECRET) && !JSON.stringify(d).includes("prod.example.test"));
+    assert.equal(disclosureProviderId(d.kind), "omega");
+  });
+
+  it("Omega in production without the profile: not configured", () => {
+    const d = getConsentDisclosure({
+      NODE_ENV: "production", AI_PROVIDER: "omega", OMEGA_API_KEY: OMEGA_SECRET,
+      AI_MODEL_EXTRACT: "claude-sonnet-5-5", AI_MODEL_VERIFY: "claude-sonnet-5",
+    });
+    assert.equal(d.kind, "not_configured");
+  });
+
+  it("existing wordings keep their statement versions", () => {
+    assert.deepEqual(
+      Object.fromEntries(CONSENT_DISCLOSURE_KINDS.map((k) => [k, consentDisclosure(k).statementVersion])),
+      {
+        local_test: "local-test-2026-11-18-v1",
+        gemini_free: "gemini-free-2026-11-14-v1",
+        gemini_paid: "gemini-paid-dpa-2026-11-18-v1",
+        evaluation: "evaluation-2026-11-18-v1",
+        omega_owner_approved: "omega-owner-approved-2026-11-20-v1",
+        not_configured: "not-configured-2026-11-18-v1",
+      },
+    );
   });
 
   it("every wording has its own statement version", () => {

@@ -181,12 +181,13 @@ invention.
 
 | variable | meaning |
 |---|---|
-| `AI_PROVIDER` | `gemini` (production, Task 02 gate), `fake` (dev/test), `omega` (evaluation only) |
+| `AI_PROVIDER` | `gemini` (production, Task 02 gate), `fake` (dev/test), `omega` (evaluation; production only under `omega-owner-approved`, §9a) |
 | `OMEGA_API_KEY` | server-side only; used only in the request header; never in config objects, provenance, errors, logs or reports |
 | `OMEGA_API_BASE_URL` | optional; default `https://api.omegaplusapi.com`; https only, no credentials/query |
 | `AI_MODEL_EXTRACT`, `AI_MODEL_VERIFY` | **required fixed ids** for Omega (no default). Any id containing `omega` (`omega-plus`, `claude-omega-plus`, `claude-omega-ultra`) is refused as a dynamic route |
 | `OMEGA_OUTPUT_MODE` | `json_schema` (default: `output_config.format`) or `prompt` (no schema parameter; Zod still validates) |
-| `BATON_ALLOW_EVAL_PROVIDER` | must be exactly `1`, and `NODE_ENV` exactly `development`/`test`, for Omega to be accepted at all |
+| `BATON_ALLOW_EVAL_PROVIDER` | must be exactly `1`, and `NODE_ENV` exactly `development`/`test`, for Omega to be accepted in evaluation mode |
+| `AI_DATA_GOVERNANCE` | `omega-owner-approved` (trimmed, exact) accepts Omega in production mode in any `NODE_ENV` (§9a) |
 
 - **Production gate (Task 02) not bypassed.** Omega has no data-governance profile, so every non-dev/test environment
   returns `provider_not_configured` / `data_governance_unapproved`, whatever `AI_DATA_GOVERNANCE` says. Dev mode alone is
@@ -242,6 +243,36 @@ Record per run: provider, `adapterVersion`, both model ids, every `reportedModel
 pass/fail per case, the metric table, token usage, and any 429/529 patterns. Gate (unchanged from PI-11): 100% live
 pass on that exact provider/model/prompt version. A PI-25 `supports` is a documented residual, mitigated by mandatory
 human approval.
+
+## 9a. Production use of Omega (owner-approved, 2026-11-20)
+
+The owner decided on 2026-11-20 to use Omega Plus on the public site for the hackathon, **knowing** the gaps in §9:
+the vendor does not document prompt/response retention, content logging, training use, upstream sub-processors or data
+location, and a model name does not guarantee the upstream model. This is implemented as an explicit, auditable opt-in.
+The governance gate is not removed or weakened.
+
+- **Profile.** `APPROVED_AI_DATA_GOVERNANCE["omega-owner-approved"]` (provider `omega`), whose description records that the
+  owner accepted those undocumented terms. `AI_DATA_GOVERNANCE=omega-owner-approved` (trimmed, case-sensitive) accepts
+  `AI_PROVIDER=omega` with mode `production` in any `NODE_ENV`. Without it, production refuses Omega with
+  `data_governance_unapproved`, as before. The profile never enables Gemini, and `gemini-paid-dpa` never enables Omega.
+- **Evaluation path unchanged.** In `development`/`test` with `BATON_ALLOW_EVAL_PROVIDER=1`, Omega stays `evaluation` (checked
+  first, even if the profile is also set).
+- **No other check relaxed.** `OMEGA_API_KEY` required; fixed `AI_MODEL_EXTRACT`/`AI_MODEL_VERIFY` (no default, any id
+  containing `omega` refused); https base URL; valid `OMEGA_OUTPUT_MODE`; no fallback provider; `model_mismatch` still
+  refused by the adapter. Provenance is identical to evaluation: provider `omega`, `adapterVersion`
+  `omega-anthropic@1+<mode>`.
+- **Adapter selection.** `providerFor` (lib/ai/config.ts) builds the adapter by provider id, not by mode.
+- **Display name.** Production: "Omega Plus API (Anthropic-compatible gateway)". Evaluation keeps "… evaluation only,
+  synthetic data only".
+- **Consent.** New disclosure kind `omega_owner_approved`, statement version `omega-owner-approved-2026-11-20-v1`. It says
+  that masked content goes to the Omega Plus API, a third-party gateway that forwards it to upstream AI model providers;
+  that Omega has not documented how long it keeps prompts or whether they are used for training; and that the uploader
+  should not upload anything they would not share with a third party. The server derives the expected version from the
+  live configuration and records exactly that version with provider `omega`. Other kinds and versions are unchanged.
+- **Still open (unchanged by this decision).** §12 items 1–3 remain true as findings. The vendor terms are still
+  undocumented: this decision accepts that risk, it does not resolve it. The live injection gate (PI-11) and live
+  evaluation on the exact models to be deployed should still be recorded. Revoke by unsetting `AI_DATA_GOVERNANCE`:
+  processing then shows "not configured" and new consents cannot be recorded.
 
 ## 10. Offline evaluation
 
@@ -321,6 +352,8 @@ is a claim about a real model.
 
 1. **Vendor terms for Omega Plus**: data retention, content logging, no-training commitment, upstream sub-processors and
    data location, in writing. Until then, synthetic data only. No profile may be added to `APPROVED_AI_DATA_GOVERNANCE`.
+   **Superseded for the hackathon by the owner's decision of 2026-11-20 (§9a):** profile `omega-owner-approved` accepts
+   the undocumented terms explicitly. The terms themselves are still not documented.
 2. **Live injection suite (D11/PI-11 gate)** on the exact provider, models and prompt versions to be enabled, including
    PI-25 (D11-LIVE-1). It has not been run for Gemini or Omega.
 3. **Live evaluation** (§9 step 3) on the same configuration, with results recorded here.
