@@ -42,7 +42,8 @@ describe("startProcessing: a source update is processed on its own", () => {
     const f = deps({ mode: "scoped", sourceIds: [NEW_ID] });
     const r = await handovers.startProcessing(f.deps, { handoverId: H });
     assert.deepEqual(r, { ok: true, data: { runId: OTHER_ID } });
-    assert.deepEqual(f.events.slice(0, 2), ["source_update_processing_scope", "start_source_update_processing"]);
+    // (the read-only "anything left to read?" check of the new chat version may read it in between; best effort)
+    assert.deepEqual(f.events.filter((e) => e !== "source_preview_target").slice(0, 2), ["source_update_processing_scope", "start_source_update_processing"]);
     assert.equal(f.calls.filter((c) => c.fn === "start_processing").length, 0, "no full run");
     const jobs = f.calls.find((c) => c.fn === "start_source_update_processing")!.args!.p_jobs as Array<{ stage: string; sourceId: string | null }>;
     assert.deepEqual(jobs.map((j) => `${j.stage}:${j.sourceId ?? "-"}`), [

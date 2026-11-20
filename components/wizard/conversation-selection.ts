@@ -44,3 +44,26 @@ export function deselectAll(conversations: readonly SelectableConversation[]): s
 export function toggleConversation(excluded: readonly string[], localId: string): string[] {
   return excluded.includes(localId) ? excluded.filter((x) => x !== localId) : [...excluded, localId];
 }
+
+export interface ScopedChat {
+  name: string;
+  /** null for a document (it always has content to read). */
+  conversations: readonly SelectableConversation[] | null;
+  excluded: readonly string[];
+}
+
+/**
+ * Chats that would be read with NO message selected (judge break test: "Deselect all" then "Start processing"
+ * ran the AI on nothing and recorded every conversation as left out). Start stays disabled while any is listed:
+ * keep at least one conversation, or remove that chat. Documents always have content to read.
+ */
+export function chatsWithNothingSelected(sources: readonly ScopedChat[]): string[] {
+  return sources.filter((s) => s.conversations !== null && selectionSummary(s.conversations, s.excluded).selectedMessages === 0).map((s) => s.name);
+}
+
+/** The short reason shown next to the disabled Start button (no em dashes). */
+export function nothingSelectedReason(names: readonly string[]): string | null {
+  if (names.length === 0) return null;
+  const which = names.length === 1 ? names[0] : `${names.length} chats`;
+  return `Nothing is selected in ${which}. Select at least one conversation, or go back and remove that chat.`;
+}

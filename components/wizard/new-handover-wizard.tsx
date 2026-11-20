@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
-import { isUserUploadSourceKind, MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type UserUploadSourceKind } from "@/lib/contracts/enums";
+import { isChatSourceKind, isUserUploadSourceKind, MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type UserUploadSourceKind } from "@/lib/contracts/enums";
 import type { HandoverSummary, SourceSummary } from "@/lib/contracts/dto";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
@@ -37,6 +37,7 @@ import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTa
 import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import type { DetailsValues } from "./details-save";
+import { chatsWithNothingSelected, nothingSelectedReason } from "./conversation-selection";
 import { ScopeStep } from "./scope-step";
 import { SourcesStep } from "./sources-step";
 import { useDetailsAutosave } from "./use-details-autosave";
@@ -647,6 +648,12 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
   // ── Finish: remaining exclusions, final access levels on the consent record, start processing ─
   async function finish() {
     if (!handoverId) return;
+    // Nothing is recorded (no exclusion, no run) while a chat has nothing selected; Start is disabled then too.
+    const empty = nothingSelectedReason(nothingSelected);
+    if (empty) {
+      setStartError(empty);
+      return;
+    }
     setSubmitting(true);
     setStartError(null);
     try {
@@ -711,7 +718,11 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
     }),
   );
   const consentGiven = consentComplete(consent);
-  const canNext = step === 0 ? true : step === 1 ? consentGiven : step === 2 ? ready.length > 0 && !busy : matches.length === 0 && !busy && !savingScope;
+  const nothingSelected = chatsWithNothingSelected(
+    ready.map((s) => ({ name: s.name, conversations: isChatSourceKind(s.kind) ? (s.preview?.conversations ?? []) : null, excluded: s.excludedConversations })),
+  );
+  const canNext =
+    step === 0 ? true : step === 1 ? consentGiven : step === 2 ? ready.length > 0 && !busy : matches.length === 0 && nothingSelected.length === 0 && !busy && !savingScope;
   const detectedMasking = ready.reduce<Partial<Record<MaskKind, number>>>((acc, s) => {
     for (const k of MASK_KINDS) acc[k] = (acc[k] ?? 0) + (s.preview?.masking.counts[k] ?? 0);
     return acc;
@@ -730,7 +741,9 @@ export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT
           ? "Add at least one file that's ready."
           : shownStep === 3 && matches.length > 0
             ? "Answer each “same person?” question first."
-            : null;
+            : shownStep === 3
+              ? nothingSelectedReason(nothingSelected)
+              : null;
 
   return (
     <div className="space-y-8">

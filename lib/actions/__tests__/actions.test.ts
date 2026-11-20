@@ -707,6 +707,38 @@ describe("startProcessing (I3)", () => {
     assert.equal(r2.error.details?.reason, undefined, "other refusals keep their own code");
   });
 
+  it("judge break test: a chat with every conversation left out is refused before any run starts (no AI call)", async () => {
+    const chat = { id: S, kind: "whatsapp_export", title: "chat.txt", state: "uploaded", rawDeletedAt: null };
+    const nothingKept = { ...PREVIEW, stats: { ...PREVIEW.stats, messagesKept: 0, messagesExcluded: 46 } } as SourcePreview;
+    const f = startDeps({
+      queries: { listSources: okResult([chat]) },
+      storage: { download: new Blob([RAW_BYTES]) },
+      rpc: { start_processing: { data: NEW_ID }, source_preview_target: { data: PREVIEW_TARGET }, parse_exclusion_rules: { data: RULES } },
+      previewParser: async () => ({ ok: true, data: nothingKept }),
+    });
+    const r = await handovers.startProcessing(f.deps, { handoverId: H });
+    assert.ok(!r.ok);
+    assert.equal(r.error.code, "validation_failed");
+    assert.equal(r.error.details?.reason, handovers.NOTHING_TO_PROCESS_REASON);
+    assert.match(r.error.message, /Nothing is left to read in chat\.txt/);
+    assert.ok(!f.events.includes("start_processing"), "no run");
+    assert.ok(!f.events.includes("scheduleDrain"), "no drain");
+    assert.equal(f.parserInputs[0]?.exclusions.length, RULES.length, "checked with the recorded exclusions");
+
+    // the same chat with messages left: the run starts
+    const g = startDeps({
+      queries: { listSources: okResult([chat]) },
+      storage: { download: new Blob([RAW_BYTES]) },
+      rpc: { start_processing: { data: NEW_ID }, source_preview_target: { data: PREVIEW_TARGET }, parse_exclusion_rules: { data: RULES } },
+      previewParser: async () => ({ ok: true, data: PREVIEW }),
+    });
+    assert.deepEqual(await handovers.startProcessing(g.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });
+
+    // a chat that cannot be checked here (raw unreadable) is left to the run's own parse
+    const h = startDeps({ queries: { listSources: okResult([chat]) }, rpc: { start_processing: { data: NEW_ID } } });
+    assert.deepEqual(await handovers.startProcessing(h.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });
+  });
+
   it("a throwing scheduleDrain never fails a started run", async () => {
     const f = startDeps({ scheduleDrainThrows: true });
     assert.deepEqual(await handovers.startProcessing(f.deps, { handoverId: H }), { ok: true, data: { runId: NEW_ID } });

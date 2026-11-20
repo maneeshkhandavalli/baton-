@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { deselectAll, selectAll, selectionSummary, toggleConversation } from "../conversation-selection";
+import { chatsWithNothingSelected, deselectAll, nothingSelectedReason, selectAll, selectionSummary, toggleConversation } from "../conversation-selection";
 
 const convs = [
   { localId: "c_1", messageCount: 9 },
@@ -33,5 +33,25 @@ describe("wizard conversation selector", () => {
     assert.ok(!/<details[^>]*\bopen\b/.test(src), "previews are collapsed by default");
     assert.match(src, /legend="Dates to read"/);
     assert.match(src, /excludedConversations: toggleConversation\(/);
+  });
+});
+
+describe("wizard: nothing selected blocks Start (judge break test)", () => {
+  it("a chat with every conversation deselected is listed; a document never is", () => {
+    const chat = { name: "team.txt", conversations: convs, excluded: deselectAll(convs) };
+    const doc = { name: "notes.md", conversations: null, excluded: [] };
+    assert.deepEqual(chatsWithNothingSelected([chat]), ["team.txt"]);
+    assert.deepEqual(chatsWithNothingSelected([chat, doc]), ["team.txt"], "a document does not make an empty chat readable");
+    assert.deepEqual(chatsWithNothingSelected([{ ...chat, excluded: ["c_1"] }, doc]), []);
+    assert.deepEqual(chatsWithNothingSelected([doc]), []);
+    assert.deepEqual(chatsWithNothingSelected([{ name: "empty.txt", conversations: [], excluded: [] }]), ["empty.txt"]);
+  });
+
+  it("a short reason without em dashes, or none", () => {
+    assert.equal(nothingSelectedReason([]), null);
+    const one = nothingSelectedReason(["team.txt"])!;
+    assert.match(one, /team\.txt/);
+    assert.doesNotMatch(one, /—/);
+    assert.match(nothingSelectedReason(["a.txt", "b.txt"])!, /2 chats/);
   });
 });
