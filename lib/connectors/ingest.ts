@@ -19,6 +19,7 @@ import {
   type EventOutcome,
   type NormalizedEvent,
 } from "./types";
+import { ConnectorStoreError } from "./errors";
 
 export interface IngestLogger {
   info(event: string, fields: Record<string, string | number | boolean | null>): void;
@@ -145,14 +146,26 @@ async function route(store: ConnectorStore, event: NormalizedEvent, options: Ing
   let accepted = 0;
   let filteredOut = 0;
   let outsideWindow = 0;
+  let full = 0;
   for (const link of links) {
     const selected = options.filter ? options.filter(link, messages) : messages;
     if (selected.length === 0) {
       filteredOut += 1;
       continue;
     }
-    if (link.bufferedCount + selected.length > CONNECTOR_MESSAGE_LIMITS.bufferedPerLink) return { status: "failed", code: "buffer_full" };
-    const r = await store.bufferMessages(link.id, selected);
+    // PR #7 review, finding 4: the per-link limit (CONNECTOR_MESSAGE_LIMITS.bufferedPerLink) is enforced by the store,
+    // atomically and only for NEW messages (an edit of an already-buffered message is always applied). A full link is
+    // skipped, never the whole fan-out: every other link of this channel still receives the event.
+    let r: Awaited<ReturnType<ConnectorStore["bufferMessages"]>>;
+    try {
+      r = await store.bufferMessages(link.id, selected);
+    } catch (e) {
+      if (e instanceof ConnectorStoreError && e.code === "precondition_failed") {
+        full += 1;
+        continue;
+      }
+      throw e;
+    }
     if (r.refused) continue;
     if (r.inserted + r.updated === 0 && r.outsideWindow > 0) {
       outsideWindow += 1; // nothing authorised for this link (sent or edited outside its capture windows)
@@ -161,6 +174,10 @@ async function route(store: ConnectorStore, event: NormalizedEvent, options: Ing
     accepted += 1;
     buffered += r.inserted + r.updated;
   }
+  // Any full link: the delivery is incomplete, so report it as failed (HTTP 503) and let the provider retry. The ledger
+  // reprocesses a failed delivery, and buffering upserts by provider message id, so links that already took the
+  // messages are unchanged by the retry (no duplicates); pull-based sync keeps its cursor until the event succeeds.
+  if (full > 0) return { status: "failed", code: "buffer_full" };
   if (accepted === 0) {
     if (outsideWindow > 0) return { status: "ignored", reason: "outside_capture_window" };
     return { status: "ignored", reason: filteredOut === links.length ? "unsupported_event" : "no_capturing_link" };
@@ -170,5 +187,6 @@ async function route(store: ConnectorStore, event: NormalizedEvent, options: Ing
 
 /** HTTP status a webhook route should answer for an outcome (providers retry on 5xx). */
 export function httpStatusFor(outcome: EventOutcome): number {
-  return outcome.status === "failed" ? (outcome.code === "buffer_full" ? 200 : 503) : 200;
+  // buffer_full is retryable too (PR #7 review, finding 4): a link's buffer frees up at its next flush.
+  return outcome.status === "failed" ? 503 : 200;
 }

@@ -236,9 +236,14 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
       if (!before) return failWith("not_found");
       const inst = await store.getInstallation(before.installationId);
       if (!inst) return failWith("not_found");
+      const adapter = await c.adapter(inst.provider);
+      // PR #7 review: a provider without history import (Telegram) can never consent to earlier messages. Checked
+      // BEFORE anything is written, so neither the settings nor the capture window can carry a back-dating value.
+      if (v.historyDays > 0 && !adapter.fetchHistory) {
+        return failWith("validation_failed", { message: "This app can't bring in earlier messages. Choose \"from now on\".", details: { field: "historyDays" } });
+      }
       if (v.historyDays > 0) await store.updateLinkSettings(user, v.linkId, { ...before.settings, historyDays: v.historyDays });
       const link = await store.recordCaptureConsent(user, v.linkId, v.consentVersion);
-      const adapter = await c.adapter(inst.provider);
       const ctx = c.adapterContext();
       if (v.historyDays > 0 && adapter.fetchHistory) {
         const since = new Date(c.now() - v.historyDays * 86_400_000).toISOString();

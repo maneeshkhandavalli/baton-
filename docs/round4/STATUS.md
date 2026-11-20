@@ -25,15 +25,15 @@ The connector infrastructure (capture consent, capture windows, buffer, flush, v
 pending-version consent) is shared by all four providers and covered by synthetic tests for each of them. Only
 **Telegram** has been verified live; Discord, Slack and GitHub have not.
 
-## Last full regression (2026-11-20, on top of `2bebbed`)
+## Last full regression (2026-11-20, PR #7 review fixes)
 
-Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 277 ·
-pipeline 237 · connectors 188 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
-(incl. `99_connectors_r4` capture windows/tombstones and `99_connector_version_consent`) · integration SQL 15/15,
-0 open findings.
+Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 282 ·
+pipeline 249 · connectors 192 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
+(incl. `99_connectors_r4` §12 history invariant and §13 capacity, `99_connector_version_consent`) · integration SQL
+15/15, 0 open findings.
 
-Not run: `next build` (the running `next dev` preview on 3110 shares `.next`; last build ✅ at `72047c0`). HTTP smoke
-last run at `72047c0` (20/20).
+Not run: `next build` (the running `next dev` preview on 3110 shares `.next`, and under 1 GB of memory was free;
+last build ✅ at `72047c0`). HTTP smoke last run at `72047c0` (20/20).
 
 ## Environment facts (2026-11-20)
 
@@ -105,13 +105,21 @@ installation `ea4b1122` active. The bot is no longer in "baton bot testing group
 | A source added during review is processed in a **full** run (the scoped run covers version updates only); the 7 gap-answer points' newly verified evidence reopened their approvals (`auto_reopen`) | By design; re-approved before publishing. Scoped processing for added sources would need a migration (not done) |
 | Uncited parsed messages are deleted at publication (§12.6) | By design: v1 kept its source row, but its 5 parsed messages (incl. TEST markers) are gone |
 
+### PR #7 review fixes (2026-11-20, synthetic and SQL tests; not re-run live)
+
+| Finding | Fix |
+|---|---|
+| 1. Telegram consent could carry `historyDays` and back-date its first capture window | The action refuses `historyDays` > 0 for a provider without `fetchHistory` before writing anything; migration `20261120800400` adds a trigger: a window of a link whose provider has no history import (Telegram) can never open before consent (insert or move). Slack, Discord, GitHub unchanged |
+| 2. `chat_import` was matched like a document (null headings → every quotation "present") | `chat_import` is a chat: matched by author and time like WhatsApp exports |
+| 3. Connector versions are deltas, so old evidence absent from the latest delta became `evidence_missing` | Change detection treats `chat_import` as additive: evidence whose message the delta does not re-send is carried; an edit or deletion of a cited message (same author and time) is still classified and reported. End-to-end test over five real flushes |
+| 4. One full buffer stopped the fan-out to other handovers; `buffer_full` answered 200; edits were refused at capacity | Each link is buffered independently (the store enforces 20,000 per link, all-or-nothing, new messages only); a delivery with any full link is `failed: buffer_full` → HTTP 503 so the provider retries (idempotent upserts) |
+
+Migration `20261120800400` is in the repo and passes the SQL suite; it is **not yet applied** to `baton-connectors-test`.
+
 ### Open risks (not fixed)
 
-* **Delta versions vs change detection (version 3+):** each connector flush is a delta, but change detection compares
-  the previous version's evidence with the new version as if it were a full replacement (`chat_import` counts as a
-  document). Once v2's two messages carry evidence, a v3 flush would raise false `evidence_missing` items (blocking
-  publication until dismissed; nothing is deleted). Do not create v3 until additive comparison for connector sources
-  is implemented. Not exercised live.
+* `buffer_full` is now retried (503). A link that stays full for long makes the provider keep failing deliveries;
+  Slack can disable an app's event subscription after sustained failures. Flushing the link clears it.
 * A deletion delivered while a link is **paused** is dropped, so the buffered original remains until the next flush
   (Slack/GitHub; Telegram has no deletion events). Documented in `connectors-contract.md` §4a.
 * Slack: deleting a thread parent may arrive as `message_changed` with a tombstone subtype — not verified live.

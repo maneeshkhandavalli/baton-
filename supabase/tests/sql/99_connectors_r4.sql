@@ -303,9 +303,12 @@ begin
   perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link and closed_at is null), 0, 'disconnect closes the window');
   perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link), 3, 'window history is kept');
 
-  -- consented history days back-date only the first window
+  -- consented history days back-date only the first window (a provider WITH history import: Slack; Telegram may not,
+  -- see §12)
   perform tests.as_service();
-  v_link2 := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), '-1010', 'History QA', '{}') ->> 'id')::uuid;
+  v_link2 := (public.connector_link_channel('user', tests.id('ann'),
+                (public.connector_upsert_installation('user', tests.id('ann'), 'slack', 'T0HIST', 'History QA', '{}', null) ->> 'id')::uuid,
+                tests.id('h'), 'C0HIST', '#history', '{}') ->> 'id')::uuid;
   perform public.connector_update_link_settings('user', tests.id('ann'), v_link2, '{"historyDays": 7}');
   perform public.connector_record_capture_consent('user', tests.id('ann'), v_link2, 'connector-capture-v1');
   perform tests.as_owner();
@@ -376,5 +379,75 @@ begin
   perform tests.eq(tests.tomb(v_link, 'tA', '2031-01-01T08:30:00Z', '2031-01-01T10:30:00Z') ->> 'outside_window', '1',
                    'a tombstone that carries a cross-window edit time is refused by the database');
   perform tests.eq(tests.buf_count(v_link), 2, 'only tA and tN exist');
+  perform tests.as_owner();
+end $$;
+
+-- ── 12. a provider without history import never gets a back-dated window (PR #7 review, finding 1) ───────────
+do $$
+declare
+  v_inst uuid;
+  v_link uuid;
+  v_link0 uuid;
+begin
+  perform tests.as_service();
+  v_inst := (public.connector_upsert_installation('user', tests.id('ann'), 'telegram', '-1012', 'No-history QA', '{}', null) ->> 'id')::uuid;
+  v_link := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), '-1012', 'No-history QA', '{}') ->> 'id')::uuid;
+  perform public.connector_update_link_settings('user', tests.id('ann'), v_link, '{"historyDays": 7}');
+  perform tests.throws(format('select public.connector_record_capture_consent(%L, %L, %L, %L)', 'user', tests.id('ann'), v_link,
+                              'connector-capture-v1'), 'BTVF0', 'Telegram consent with history days is refused by the database');
+  perform tests.as_owner();
+  perform tests.eq((select state from public.connector_channel_links where id = v_link), 'pending_consent',
+                   'the refused consent changed nothing (still pending)');
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link), 0, 'and opened no window');
+
+  -- without history days the window opens exactly at consent
+  perform tests.as_service();
+  v_link0 := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), '-1013', 'No-history QA 2', '{}') ->> 'id')::uuid;
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link0, 'connector-capture-v1');
+  perform tests.as_owner();
+  perform tests.ok((select w.opened_at = l.consented_at from public.connector_capture_windows w
+                      join public.connector_channel_links l on l.id = w.link_id where w.link_id = v_link0),
+                   'a Telegram window opens at the consent time');
+  -- no path can back-date it: a direct insert or an update of opened_at is refused
+  perform tests.throws(format('insert into public.connector_capture_windows (link_id, opened_at, closed_at) values (%L, now() - interval %L, now() - interval %L)',
+                              v_link0, '2 days', '1 day'), 'BTVF0', 'a back-dated Telegram window cannot be inserted');
+  perform tests.throws(format('update public.connector_capture_windows set opened_at = opened_at - interval %L where link_id = %L', '1 hour', v_link0),
+                       'BTVF0', 'nor can an existing one be moved earlier');
+  perform tests.ok(public._connector_provider_has_history('slack') and public._connector_provider_has_history('discord')
+                   and public._connector_provider_has_history('github') and not public._connector_provider_has_history('telegram'),
+                   'history providers: slack, discord, github (mirrors CONNECTOR_HISTORY_PROVIDERS)');
+  perform tests.as_service();
+  perform tests.throws(format('select public._connector_provider_has_history(%L)', 'slack'), '42501', 'the helper is not callable by API roles');
+  perform tests.as_owner();
+end $$;
+
+-- ── 13. capacity: 20,000 buffered per link; an edit of a buffered message is applied at capacity (PR #7 finding 4) ──
+do $$
+declare
+  v_inst uuid;
+  v_link uuid;
+begin
+  perform tests.as_service();
+  v_inst := (public.connector_upsert_installation('user', tests.id('ann'), 'slack', 'T0CAP', 'Capacity QA', '{}', null) ->> 'id')::uuid;
+  v_link := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), 'C0CAP', '#capacity', '{}') ->> 'id')::uuid;
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link, 'connector-capture-v1');
+  perform tests.as_owner();
+  delete from public.connector_capture_windows where link_id = v_link;
+  insert into public.connector_capture_windows (link_id, opened_at) values (v_link, '2032-01-01T00:00:00Z');
+  insert into public.connector_buffered_messages (link_id, provider_message_id, sent_at, author_label, kind, body)
+  select v_link, 'cap' || g, '2032-01-01T01:00:00Z', 'Asha', 'text', 'filler' from generate_series(1, 20000) g;
+
+  perform tests.as_service();
+  perform tests.eq(tests.wbuf(v_link, 'cap1', '2032-01-01T01:00:00Z', '2032-01-01T01:05:00Z', 'edited at capacity') ->> 'updated', '1',
+                   'an edit of an already-buffered message is applied at capacity');
+  perform tests.eq(tests.buf_body('cap1'), 'edited at capacity', 'the edit is stored');
+  perform tests.throws(format('select tests.wbuf(%L, %L, %L)', v_link, 'cap-new', '2032-01-01T02:00:00Z'), 'BTPF0',
+                       'a NEW message beyond 20,000 is refused');
+  perform tests.throws(format($q$select public.connector_buffer_messages(%L, %L::jsonb)$q$, v_link,
+                              '[{"provider_message_id":"cap2","sent_at":"2032-01-01T01:00:00Z","edited_at":"2032-01-01T01:06:00Z","author_label":"Asha","kind":"text","text":"mixed"},
+                                {"provider_message_id":"cap-new2","sent_at":"2032-01-01T02:00:00Z","author_label":"Asha","kind":"text","text":"new"}]'),
+                       'BTPF0', 'a batch with a new message beyond the limit is refused');
+  perform tests.eq(tests.buf_body('cap2'), 'filler', 'and is rolled back whole (its edit is not applied)');
+  perform tests.eq(tests.buf_count(v_link), 20000, 'the link still holds exactly 20,000');
   perform tests.as_owner();
 end $$;

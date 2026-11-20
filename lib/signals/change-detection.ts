@@ -36,7 +36,18 @@ import { CONTRADICTION_LIMITS, findContradictionCandidates, type RetrievalMessag
 export const CHANGE_DETECTOR_VERSION = "change-detect@1";
 
 export type SourceFamily = "chat" | "document";
-export const sourceFamily = (kind: string): SourceFamily => (kind === "whatsapp_export" ? "chat" : "document");
+/**
+ * Chats are matched by author and time; documents by section heading. A connector `chat_import` is parsed by the same
+ * chat builder (author + timestamp per message, no headings), so it is a chat (PR #7 review, finding 2).
+ */
+export const sourceFamily = (kind: string): SourceFamily => (kind === "whatsapp_export" || kind === "chat_import" ? "chat" : "document");
+
+/**
+ * A connector `chat_import` version holds only the messages since the previous import (a DELTA), so the source's
+ * content is the union of its versions. Change detection must not read "absent from the delta" as "removed"
+ * (PR #7 review, finding 3).
+ */
+export const isAdditiveSourceKind = (kind: string): boolean => kind === "chat_import";
 
 export interface OldEvidence {
   evidenceId: string;
@@ -84,6 +95,13 @@ export interface DetectionPoint {
 
 export interface DetectionInput {
   family: SourceFamily;
+  /**
+   * The new version is a delta over the earlier versions (connector chat_import). Old evidence whose message the delta
+   * does not touch (no new message at the same place: same author and time) is carried forward as present; evidence
+   * whose message the delta re-sends (an edit or a deletion) is classified normally, so a removed or changed quotation
+   * still produces evidence_missing / evidence_moved.
+   */
+  additive?: boolean;
   /** The previous version's last message time (chats); null when unknown. */
   watermark: string | null;
   /** null: the handover was never published (no new_information items). */
@@ -101,6 +119,7 @@ export interface DetectionInput {
 export type DetectionCounts = Record<
   | "evidenceCompared"
   | "evidencePresent"
+  | "evidenceCarried"
   | "evidenceMoved"
   | "evidenceAmbiguous"
   | "evidenceMissing"
@@ -275,7 +294,7 @@ const id = (s: string) => s.toLowerCase();
 
 export function detectChanges(input: DetectionInput): DetectionResult {
   const counts: DetectionCounts = {
-    evidenceCompared: 0, evidencePresent: 0, evidenceMoved: 0, evidenceAmbiguous: 0, evidenceMissing: 0, placeholderChanged: 0,
+    evidenceCompared: 0, evidencePresent: 0, evidenceCarried: 0, evidenceMoved: 0, evidenceAmbiguous: 0, evidenceMissing: 0, placeholderChanged: 0,
     newMessages: input.newMessages.length, newContentMessages: 0, possibleContradictions: 0, supportChanged: 0, newInformation: 0,
   };
   const items: NewChangeReviewItem[] = [];
@@ -290,6 +309,11 @@ export function detectChanges(input: DetectionInput): DetectionResult {
     const rev = baseRevision(e.pointId);
     if (!points.has(e.pointId) || rev === null) continue; // an erased point
     counts.evidenceCompared += 1;
+    // additive (delta) versions: a cited message the delta does not re-send is still part of the source
+    if (input.additive && input.family === "chat" && e.sentAt !== null && !messages.some((m) => samePlace("chat", e, m))) {
+      counts.evidenceCarried += 1;
+      continue;
+    }
     const outcome = classifyPrepared(input.family, e, messages);
     const key = `${id(e.evidenceId)}:${id(e.pointId)}`;
     const base = { pointId: e.pointId, baseRevisionId: rev, oldEvidenceId: e.evidenceId };

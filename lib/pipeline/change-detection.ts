@@ -21,7 +21,7 @@ import {
   type ChangeDetectionChange,
   type PipelinePoint,
 } from "../db/pipeline";
-import { CHANGE_DETECTOR_VERSION, detectChanges, sourceFamily, type NewMessage } from "../signals/change-detection";
+import { CHANGE_DETECTOR_VERSION, detectChanges, isAdditiveSourceKind, sourceFamily, type NewMessage } from "../signals/change-detection";
 import { claimOf, type StageContext } from "./stage-context";
 
 const MESSAGE_PAGE = 2000;
@@ -76,6 +76,7 @@ export async function runChangeDetection(ctx: StageContext, points: readonly Pip
     }
     const result = detectChanges({
       family: sourceFamily(change.sourceKind),
+      additive: isAdditiveSourceKind(change.sourceKind),
       watermark: change.fromLastMessageAt,
       basePublicationId: change.basePublicationId,
       basePoints: change.basePoints,

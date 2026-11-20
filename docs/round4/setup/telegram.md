@@ -91,8 +91,9 @@ Webhooks need public HTTPS: use a tunnel and a **separate development bot** whos
    version"), which processes only that version and compares it with the published handover (change review).
 
 Live result (2026-11-20, local test adapter): all six steps passed; details, ids and limits in `../STATUS.md`.
-Known limit: avoid a third import (version 3) on the same channel until change detection treats connector versions as
-additive; otherwise points backed by version 2 are flagged as "evidence missing" (STATUS.md, "Open risks").
+Change detection treats these versions as additive (PR #7 fix): a point backed by an earlier version is not flagged as
+"evidence missing" just because a later import does not repeat its message; an edit of that message still is. Telegram
+has no history import: consent never back-dates the capture window (enforced in the action and the database).
 
 ## 9. Revocation
 

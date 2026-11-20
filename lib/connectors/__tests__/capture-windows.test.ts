@@ -166,20 +166,37 @@ describe("capture windows: consent boundary", () => {
     assert.equal(h.store.events.filter((e) => e.deliveryId === "tg:7777").length, 1);
   });
 
-  it("consented history days back-date only the FIRST window; re-consent after a pause is not back-dated", async () => {
+  it("Telegram (no history import): consent with history days is refused and nothing is back-dated (PR #7 finding 1)", async () => {
     const h = harness();
     const link = await h.setup();
     h.at("2026-11-20T09:00:00Z");
     await h.store.updateLinkSettings(h.user, link.id, { historyDays: 7 });
-    await h.store.recordCaptureConsent(h.user, link.id, "v1");
-    await h.message(12, "2026-11-17T12:00:00Z", "3 days earlier, inside consented history");
-    await h.message(13, "2026-11-10T12:00:00Z", "10 days earlier, outside");
-    h.at("2026-11-20T10:00:00Z");
-    await h.store.setLinkState(h.user, link.id, "paused");
-    h.at("2026-11-20T11:00:00Z");
-    await h.store.recordCaptureConsent(h.user, link.id, "v1"); // re-consent = new window at 11:00, no back-dating
-    await h.message(14, "2026-11-20T10:30:00Z", "sent while paused");
-    assert.deepEqual(texts(h.store, link.id), [["12", "3 days earlier, inside consented history"]]);
+    await assert.rejects(h.store.recordCaptureConsent(h.user, link.id, "v1"), /validation_failed/);
+    await h.message(12, "2026-11-17T12:00:00Z", "3 days earlier");
+    assert.deepEqual(texts(h.store, link.id), []);
+  });
+
+  it("history providers: consented history days back-date only the FIRST window; re-consent after a pause is not", async () => {
+    let clock = T("2026-11-20T09:00:00Z");
+    const store = new MemoryConnectorStore(() => clock);
+    store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
+    const user = { kind: "user", profileId: CREATOR } as const;
+    const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T0H", accountLabel: "QA", scopes: [], credentials: null });
+    const link = await store.linkChannel(user, { installationId: inst.id, handoverId: HANDOVER, externalChannelId: "C0H", channelLabel: "#qa" });
+    await store.updateLinkSettings(user, link.id, { historyDays: 7 });
+    await store.recordCaptureConsent(user, link.id, "v1");
+    const m = (id: string, at: string) => ({ providerMessageId: id, sentAt: at, authorLabel: "Asha", kind: "text" as const, text: id });
+    clock = T("2026-11-20T10:00:00Z");
+    await store.setLinkState(user, link.id, "paused");
+    clock = T("2026-11-20T11:00:00Z");
+    await store.recordCaptureConsent(user, link.id, "v1"); // re-consent = new window at 11:00, no back-dating
+    const r = await store.bufferMessages(link.id, [
+      m("12", "2026-11-17T12:00:00.000Z"), // 3 days before the first consent: inside consented history
+      m("13", "2026-11-10T12:00:00.000Z"), // 10 days before: outside
+      m("14", "2026-11-20T10:30:00.000Z"), // during the pause
+    ]);
+    assert.deepEqual([r.inserted, r.outsideWindow], [1, 2]);
+    assert.deepEqual(store.bufferedFor(link.id).map((b) => b.providerMessageId), ["12"]);
   });
 
   it("malformed times are outside every window (store level)", async () => {

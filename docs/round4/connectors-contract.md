@@ -29,7 +29,7 @@ Base: `work/r4-integration` (fc4bbb3 + this contract commit).
 | Installation | One provider account Baton can act in: GitHub App installation, Discord guild, Slack workspace, Telegram group. `installed_by` = the Baton user who connected it. Status `active / suspended / error / revoked` (revoked is terminal: credentials deleted, every link revoked, buffers deleted). |
 | Channel link | One channel/repo → one handover. State `pending_consent → capturing ⇄ paused`, `revoked` is terminal. **Linking requires the actor to be BOTH the handover creator AND the installer.** Consent: creator only, versioned. Resume (`paused → capturing`) needs a person and earlier consent. A provider may only pause. |
 | Event ledger | `(provider, delivery_id)` unique, status `received / processed / ignored / failed`, attempts, reason code. No content. |
-| Buffer | Normalised messages of a capturing link waiting for a flush. Unique per `(link, providerMessageId)`: an edit replaces the row. Bounded (20,000 per link). Deleted on revoke and after a successful flush. |
+| Buffer | Normalised messages of a capturing link waiting for a flush. Unique per `(link, providerMessageId)`: an edit replaces the row. Bounded (20,000 NEW messages per link; an edit of a buffered message is always applied; a full link never blocks the other links of the channel). Deleted on revoke and after a successful flush. |
 
 ## 2. Flow
 
@@ -38,7 +38,7 @@ provider ──webhook──▶ /api/connectors/<p>/webhook  (worker)
    verify signature (lib/connectors/verify.ts) → parse → NormalizedEvent
    ingestEvent(store, event)  (lib/connectors/ingest.ts, Main)
       ledger de-dup → installation lifecycle → capturing links of that channel → sanitize → buffer
-   respond httpStatusFor(outcome)   (503 only for transient failure → provider retries)
+   respond httpStatusFor(outcome)   (503 for any failure, incl. buffer_full → provider retries; idempotent per link)
 
 creator ──"Bring in new messages" / bot command / scheduled /api/connectors/sync──▶ flushLink (Main)
    buffer → chat_import transcript → first: create_source / later: create_source_version
@@ -81,7 +81,13 @@ possible while the handover is draft/in review; otherwise messages stay buffered
 ### 4a. Capture windows (consent boundary, migration `20261120800300`)
 
 * Consent opens a window, pause and disconnect close it, resume and re-consent open a new one. Only the FIRST window
-  is back-dated, by the consented history days (max 30). Boundaries are `[opened, closed)` at second precision.
+  is back-dated, by the consented history days (max 30), and only for providers with history import (Slack, Discord,
+  GitHub). Telegram cannot: the action refuses `historyDays` and the database refuses a window opening before consent
+  (migration `20261120800400`). Boundaries are `[opened, closed)` at second precision.
+* **Versions are deltas, compared additively.** Each flush after the first is a new version holding only the
+  messages since the previous one. Change detection treats `chat_import` as a chat (author + time) and as additive:
+  evidence whose message a delta does not re-send stays present; an edit or deletion of a cited message (re-sent at
+  the same place) is classified normally (`evidence_missing` / `evidence_moved`).
 * A message is stored only when its original send time lies in a window; an **edit** only when its edit time lies in
   the SAME window. Edits of objects created before consent, during a pause or in an earlier window are refused and
   never overwrite what was captured (privacy-first limitation; e.g. a GitHub issue edited after a pause keeps its

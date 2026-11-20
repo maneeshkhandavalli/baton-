@@ -10,6 +10,7 @@
 import { ConnectorStoreError } from "./errors";
 import {
   CONNECTOR_MESSAGE_LIMITS,
+  providerHasHistory,
   type BufferResult,
   type ChannelLinkRecord,
   type ConnectorActor,
@@ -226,6 +227,8 @@ export class MemoryConnectorStore implements ConnectorStore {
     if (!inst || inst.status !== "active") throw new ConnectorStoreError("invalid_transition");
     const first = l.consentedAt === null;
     const wasCapturing = l.state === "capturing";
+    // Mirrors _trg_connector_capture_window_history (20261120800400): no back-dated window without history import.
+    if (!wasCapturing && first && historyDaysOf(l.settings) > 0 && !providerHasHistory(inst.provider)) throw new ConnectorStoreError("validation_failed");
     Object.assign(l, { state: "capturing", consentVersion, consentedAt: this.iso(), consentedByProfileId: (actor as { profileId: string }).profileId, updatedAt: this.iso() });
     if (!wasCapturing) this.openWindow(l.id, this.now() - (first ? historyDaysOf(l.settings) * 86_400_000 : 0));
     this.audit.push({ action: "connector.capture_consented", actor: this.actorKey(actor), entityId: l.id, handoverId: l.handoverId });
@@ -302,6 +305,14 @@ export class MemoryConnectorStore implements ConnectorStore {
     let inserted = 0;
     let updated = 0;
     let outsideWindow = 0;
+    // Capacity, as in connector_buffer_messages (one transaction): only NEW in-window messages count; refusing rolls
+    // back the whole call, so nothing of this batch is applied when it does not fit.
+    const inWindow = (m: ConnectorMessage) => {
+      const w = this.windowAt(linkId, m.sentAt);
+      return w !== -1 && (m.editedAt == null || this.windowAt(linkId, m.editedAt) === w);
+    };
+    const fresh = new Set(messages.filter((m) => inWindow(m) && !this.buffer.some((b) => b.linkId === linkId && b.providerMessageId === m.providerMessageId)).map((m) => m.providerMessageId));
+    if (fresh.size > 0 && l.bufferedCount + fresh.size > CONNECTOR_MESSAGE_LIMITS.bufferedPerLink) throw new ConnectorStoreError("precondition_failed");
     for (const m of messages) {
       // Same rule as connector_buffer_messages: send time inside a window, an edit inside the SAME window.
       const w = this.windowAt(linkId, m.sentAt);

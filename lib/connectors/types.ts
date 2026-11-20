@@ -17,6 +17,14 @@ export type ConnectorProvider = (typeof CONNECTOR_PROVIDERS)[number];
 export const isConnectorProvider = (v: unknown): v is ConnectorProvider =>
   typeof v === "string" && (CONNECTOR_PROVIDERS as readonly string[]).includes(v);
 
+/**
+ * Providers whose adapter can import earlier messages (`fetchHistory`). Only these may back-date the first capture
+ * window by the consented history days; Telegram gives bots no history. Mirrored by the database
+ * (`_connector_provider_has_history`, migration 20261120800400) and pinned against the adapters in tests.
+ */
+export const CONNECTOR_HISTORY_PROVIDERS = ["github", "discord", "slack"] as const satisfies readonly ConnectorProvider[];
+export const providerHasHistory = (p: ConnectorProvider): boolean => (CONNECTOR_HISTORY_PROVIDERS as readonly string[]).includes(p);
+
 // ── Canonical message (what every adapter produces) ─────────────────────────
 
 export const CONNECTOR_MESSAGE_KINDS = ["text", "system", "media_omitted", "deleted"] as const;

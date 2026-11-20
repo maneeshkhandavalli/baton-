@@ -114,10 +114,11 @@ describe("connector ingest: consent gate, de-duplication, lifecycle", () => {
     assert.equal(out[1].text.length, 20_000);
   });
 
-  it("maps outcomes to HTTP: retry only on transient failure", () => {
+  it("maps outcomes to HTTP: every failure is retryable (503), including buffer_full; final outcomes are 200", () => {
     assert.equal(httpStatusFor({ status: "failed", code: "store_unavailable" }), 503);
+    assert.equal(httpStatusFor({ status: "failed", code: "buffer_full" }), 503); // PR #7 finding 4: the buffer frees at the next flush
     assert.equal(httpStatusFor({ status: "duplicate" }), 200);
-    assert.equal(httpStatusFor({ status: "failed", code: "buffer_full" }), 200);
+    assert.equal(httpStatusFor({ status: "ignored", reason: "no_capturing_link" }), 200);
   });
 });
 
@@ -325,5 +326,72 @@ describe("per-link selection (ingest filter)", () => {
     assert.equal(store.bufferedFor(link2.id).length, 0);
     const none = await ingestEvent(store, event("f2", [msg("2", "2026-11-19T09:01:00.000Z")]), undefined, { filter: () => [] });
     assert.deepEqual(none, { status: "ignored", reason: "unsupported_event" });
+  });
+});
+
+// PR #7 review, finding 4: one full buffer must not starve the other handovers linked to the same channel; an edit of
+// an already-buffered message is applied at capacity; the 20,000-per-link limit still holds; a provider retry of the
+// incomplete delivery is idempotent for the links that already took it.
+describe("ingest fan-out with a full buffer", () => {
+  const LIMIT = 20_000;
+  async function threeHandovers() {
+    const store = new MemoryConnectorStore(() => Date.parse("2026-11-19T08:00:00Z"));
+    const user = { kind: "user", profileId: CREATOR } as const;
+    const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T1", accountLabel: "CodeCell", scopes: [], credentials: "c1.x.y.z" });
+    const links = [];
+    for (const h of ["33333333-3333-4333-8333-3333333333a1", "33333333-3333-4333-8333-3333333333a2", "33333333-3333-4333-8333-3333333333a3"]) {
+      store.handovers.set(h, { id: h, creatorProfileId: CREATOR, state: "draft" });
+      const l = await store.linkChannel(user, { installationId: inst.id, handoverId: h, externalChannelId: "C1", channelLabel: "#core-team" });
+      await store.recordCaptureConsent(user, l.id, "connector-capture-v1");
+      links.push(l);
+    }
+    // fill the FIRST link to the limit (plus one known message "keep" we can edit later)
+    const fill: ConnectorMessage[] = [];
+    for (let i = 0; i < LIMIT - 1; i++) fill.push(msg(`f${i}`, "2026-11-19T09:00:00.000Z"));
+    fill.push(msg("keep", "2026-11-19T09:00:00.000Z", "Asha", "original"));
+    for (let i = 0; i < fill.length; i += 1000) await store.bufferMessages(links[0].id, fill.slice(i, i + 1000));
+    assert.equal(store.bufferedFor(links[0].id).length, LIMIT);
+    return { store, links };
+  }
+
+  it("a full first link is skipped; the later links still buffer the message; the delivery fails as buffer_full (503)", async () => {
+    const { store, links } = await threeHandovers();
+    const r = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.deepEqual(r, { status: "failed", code: "buffer_full" });
+    assert.equal(httpStatusFor(r), 503);
+    assert.equal(store.bufferedFor(links[0].id).length, LIMIT, "the per-link limit holds");
+    assert.ok(!store.bufferedFor(links[0].id).some((m) => m.providerMessageId === "n1"));
+    for (const l of links.slice(1)) assert.deepEqual(store.bufferedFor(l.id).map((m) => m.providerMessageId), ["n1"], "later links are not starved");
+    assert.equal(store.events.find((e) => e.deliveryId === "ev-new")?.status, "failed");
+
+    // the provider retries: the ledger reprocesses; links 2 and 3 are unchanged (upsert, no duplicates)
+    const retry = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.deepEqual(retry, { status: "failed", code: "buffer_full" });
+    for (const l of links.slice(1)) assert.equal(store.bufferedFor(l.id).length, 1);
+
+    // after the full link is flushed, the next retry completes the delivery for it too
+    const writer: SourceWriter = { async write() { return { ok: true, sourceId: "src-1" }; } };
+    while (store.bufferedFor(links[0].id).length > 0) await flushLink(store, writer, links[0].id);
+    const done = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.equal(done.status, "processed");
+    assert.deepEqual(store.bufferedFor(links[0].id).map((m) => m.providerMessageId), ["n1"]);
+    for (const l of links.slice(1)) assert.equal(store.bufferedFor(l.id).length, 1, "still exactly one row after three deliveries");
+  });
+
+  it("an edit of an already-buffered message is applied at capacity (no new row)", async () => {
+    const { store, links } = await threeHandovers();
+    const r = await ingestEvent(store, event("ev-edit", [{ ...msg("keep", "2026-11-19T09:00:00.000Z", "Asha", "edited at capacity"), editedAt: "2026-11-19T09:05:00.000Z" }]));
+    assert.equal(r.status, "processed");
+    assert.equal(store.bufferedFor(links[0].id).find((m) => m.providerMessageId === "keep")?.text, "edited at capacity");
+    assert.equal(store.bufferedFor(links[0].id).length, LIMIT);
+  });
+
+  it("a batch that does not fit is refused whole (no partial apply), like the database transaction", async () => {
+    const { store, links } = await threeHandovers();
+    await assert.rejects(
+      store.bufferMessages(links[0].id, [{ ...msg("keep", "2026-11-19T09:00:00.000Z", "Asha", "edit in a mixed batch"), editedAt: "2026-11-19T09:05:00.000Z" }, msg("n2", "2026-11-19T09:31:00.000Z")]),
+      /precondition_failed/,
+    );
+    assert.equal(store.bufferedFor(links[0].id).find((m) => m.providerMessageId === "keep")?.text, "original");
   });
 });

@@ -265,12 +265,12 @@ describe("detectChanges", () => {
   });
 });
 
-// 2026-11-20 (Round 4, Telegram connector version 2): a connector chat_import is classed as a "document" and each
-// flush is a DELTA. Version 1 had no retained evidence (nothing was extracted from it), so version 2 (two new
+// 2026-11-20 (Round 4, Telegram connector version 2): a connector chat_import is a chat (PR #7 finding 2) and each
+// flush is a DELTA (additive, finding 3). Version 1 had no retained evidence (nothing was extracted from it), so version 2 (two new
 // messages) must yield only new_information for its two new points: no evidence_missing, nothing about existing points.
 describe("detectChanges: connector delta version over a version without evidence", () => {
   it("two new messages → two new_information items, zero evidence_missing; existing points are never referenced", () => {
-    assert.equal(sourceFamily("chat_import"), "document");
+    assert.equal(sourceFamily("chat_import"), "chat");
     const existing = [1, 2, 3, 4].map((n) => point(n, { reviewState: n <= 2 ? "approved" : "pending", origin: n <= 2 ? "extracted" : "gap_answer" }));
     const fresh = [point(7, { reviewState: "pending", citedMessageIds: [U(107)] }), point(8, { reviewState: "pending", citedMessageIds: [U(108)] })];
     const links: NewLink[] = [7, 8].map((n) => ({
@@ -278,7 +278,7 @@ describe("detectChanges: connector delta version over a version without evidence
       quoteCheck: "exact", pointHasOtherEvidence: false,
     }));
     const r = detectChanges(input({
-      family: "document", watermark: null,
+      family: "chat", additive: true, watermark: T(36),
       oldEvidence: [], // version 1 retained no evidence
       newMessages: [msg(7, "The finance report is due by Monday."), msg(8, "[PERSON_2] is responsible for the monthly reconciliation.")],
       newLinks: links,
