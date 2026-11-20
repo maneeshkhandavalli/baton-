@@ -20,6 +20,8 @@ import { DraftRow } from "../../components/dashboard/draft-row";
 import type { HandoverCardData } from "../../components/dashboard/handover-card";
 import { PublishedHandoverView } from "../../components/published/published-handover-view";
 import { PointDetailPanel } from "../../components/review/point-detail-panel";
+import { HandoverTimeline } from "../../components/timeline/handover-timeline";
+import type { PublishedEvidenceItem, PublishedHandover, PublishedPointContent } from "../../lib/contracts/dto";
 import { GUARD_RATIONALE } from "../../lib/ai/injection-guard";
 import { mapPointDetail } from "../../lib/db/mappers";
 import { CODECELL_ID } from "../../lib/mocks/fixtures/codecell";
@@ -148,5 +150,88 @@ describe("QA: guarded evidence in the review detail panel", () => {
     // isGuardedVerdict used to match GUARD_RATIONALE's prefix (the DTO had no flag); since 507eedb it follows
     // e.guarded, so a rewording of the server sentence cannot hide the notice.
     assert.match(renderToString(panelElement("Not counted: instructions to an automated checker.")), /Possible instructions to an automated checker/);
+  });
+});
+
+// Decision timeline (docs/product/decision-timeline-plan.md, audit amendment 3): the timeline tab and the demo's
+// Receive step render HandoverTimeline. Same guarantees as above, plus the order and grouping of a fixture that has
+// every kind of point, including quotes either side of midnight India time.
+
+describe("Decision timeline renders deterministically, in date order", async () => {
+  const published = await createMockQueries(PROFILES.neha.id).getPublishedHandover(CODECELL_ID);
+  assert.ok(published.ok);
+
+  let n = 0;
+  const q = (sentAt: string | null, stance: "supports" | "contradicts" = "supports"): PublishedEvidenceItem => ({
+    evidenceId: `00000000-0000-4000-8000-00000000e${String(++n).padStart(3, "0")}`, redacted: false, kind: "source_quote",
+    quote: `Quote ${n} from [PERSON_1]`, authorLabel: "[PERSON_1]", sentAt, sourceTitle: "Telegram: treasurer", stance, authorProfileId: null,
+  });
+  const point = (id: string, title: string, evidence: PublishedEvidenceItem[], over: Partial<PublishedPointContent> = {}) => ({
+    id,
+    content: {
+      title, statement: `${title}, in full.`, attributes: {} as PublishedPointContent["attributes"], evidenceStatus: "sourced", isPotentiallyOutdated: false,
+      isKnownGap: false, inferredConfirmation: null, conflictResolution: null, evidence, evidenceRedacted: evidence.some((e) => e.redacted), ...over,
+    } satisfies PublishedPointContent,
+  });
+  const fixture: PublishedHandover = {
+    ...published.data,
+    sections: [
+      {
+        category: "decision",
+        points: [
+          point("p-venue", "Venue is Lab 2", [q("2026-03-03T05:00:00Z")]),
+          point("p-moved", "Venue moved to the auditorium", [q("2026-04-02T05:00:00Z"), q("2026-04-05T05:00:00Z", "contradicts")], {
+            evidenceStatus: "conflicting",
+          }),
+          // 18:45Z on 31 March is 00:15 on 1 April in India: an April point, whatever the server's time zone
+          point("p-midnight", "Budget frozen at midnight", [q("2026-03-31T18:45:00Z")]),
+          point("p-redacted", "Sponsor list is private", [q("2026-03-10T05:00:00Z"), { evidenceId: "00000000-0000-4000-8000-00000000e999", redacted: true }], {
+            textRedacted: true,
+          }),
+        ],
+      },
+      {
+        category: "open_task",
+        points: [point("p-deposit", "Pay sponsor deposit", [q("2026-03-10T05:00:00Z")], { attributes: { assigneeLabel: null, dueDate: "2026-03-15", progressNote: null } })],
+      },
+      {
+        category: "owner",
+        points: [
+          point("p-gap", "Who holds the bank token", [], { isKnownGap: true, evidenceStatus: "missing" }),
+          point("p-doc", "Treasurer owns reimbursements", [q(null)]),
+        ],
+      },
+    ],
+  };
+
+  it("the CodeCell publication (real route and demo data) renders without a time-zone difference", () => {
+    const html = assertStable("timeline (codecell)", () => createElement(HandoverTimeline, { handover: published.data }));
+    assert.match(html, /<h2[^>]*>Timeline<\/h2>/);
+    assert.match(html, /role="tablist"/, "the section filter renders as segmented tabs");
+  });
+
+  it("orders and groups every kind of point (dated, conflicting, redacted, due date, known gap, undated)", () => {
+    const html = assertStable("timeline (fixture)", () => createElement(HandoverTimeline, { handover: fixture }));
+    const groupOrder = [...html.matchAll(/data-timeline-group="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(groupOrder, ["2026-03", "2026-04", "open-questions", "undated"]);
+    for (const label of ["March 2026", "April 2026", "Open questions", "Undated"]) assert.match(html, new RegExp(`<h3[^>]*>${label}`));
+
+    const pos = (title: string) => {
+      const i = html.indexOf(`>${title}<`);
+      assert.ok(i >= 0, `${title} renders`);
+      return i;
+    };
+    const order = ["Venue is Lab 2", "Sponsor list is private", "Pay sponsor deposit", "Budget frozen at midnight", "Venue moved to the auditorium", "Who holds the bank token", "Treasurer owns reimbursements"];
+    for (let i = 1; i < order.length; i++) assert.ok(pos(order[i - 1]) < pos(order[i]), `${order[i - 1]} before ${order[i]}`);
+    // Same anchor (10 Mar): Decisions before Open work (HANDOVER_SECTIONS order).
+
+    assert.match(html, /<time[^>]*dateTime="2026-03-31T18:45:00Z"[^>]*>1 Apr<\/time>/, "the midnight quote is dated in India time");
+    assert.match(html, /Sources disagree/);
+    assert.match(html, /Supported 2 Apr · Contradicted 5 Apr/);
+    assert.match(html, /<dt[^>]*>Due<\/dt><dd[^>]*>15 Mar 2026<\/dd>/, "the due date is a label");
+    assert.match(html, /No date/, "undated rows say so in text");
+    assert.doesNotMatch(html, /e999/, "redacted evidence leaves no trace");
+    assert.match(html, /aria-expanded="false"/, "evidence is a closed disclosure until asked for");
+    assert.doesNotMatch(html, /<blockquote/, "quotes render lazily, only when opened");
   });
 });

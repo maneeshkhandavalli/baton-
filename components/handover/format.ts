@@ -52,6 +52,30 @@ export function formatDateTime(iso: string | null | undefined): string {
   return `${z.d} ${MONTHS[z.m - 1]} ${z.y}, ${z.hh}:${z.mm}`;
 }
 
+/** Full month names for group headings ("March 2026"); fixed here for the same reason as MONTHS. */
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
+
+/**
+ * Calendar month of an instant in India time, as a sortable key ("2026-03"). Use this, never `iso.slice(0, 7)`:
+ * 20:00Z on 31 March is already 1 April in Asia/Kolkata. Returns null for a missing or unparseable value.
+ */
+export function monthKey(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!valid(d)) return null;
+  const z = zoned(d);
+  return `${z.y}-${String(z.m).padStart(2, "0")}`;
+}
+
+/** "March 2026" in India time (timeline month headings). */
+export function formatMonthYear(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!valid(d)) return iso;
+  const z = zoned(d);
+  return `${MONTHS_LONG[z.m - 1]} ${z.y}`;
+}
+
 export function formatDateRange(from: string | null, to: string | null): string {
   if (!from && !to) return "—";
   return `${formatShortDate(from)} – ${formatDate(to)}`;

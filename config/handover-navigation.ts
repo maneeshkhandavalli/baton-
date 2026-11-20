@@ -17,6 +17,8 @@ export const handoverNav: readonly HandoverNavItem[] = [
   { title: "Changes", href: routes.handover.changes, reviewOnly: true },
   { title: "Settings", href: routes.handover.settings, reviewOnly: true },
   { title: "Published", href: routes.handover.published, reviewOnly: false },
+  // Decision timeline: a read-only view of the publication, so every member who can read it gets the tab
+  { title: "Timeline", href: routes.handover.timeline, reviewOnly: false },
 ];
 
 /**

@@ -13,6 +13,7 @@ import { PointCard, type PointAction } from "@/components/review/point-card";
 import { PointDetailPanel } from "@/components/review/point-detail-panel";
 import { ReviewDialogs, type ReviewDialogState } from "@/components/review/review-dialogs";
 import { MaskedText } from "@/components/shared/masked-text";
+import { HandoverTimeline } from "@/components/timeline/handover-timeline";
 import { ReadinessRing } from "@/components/shared/readiness-ring";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -313,6 +314,10 @@ function ReceiveScreen({ view, pending, dispatch }: { view: DemoView; pending: b
           </section>
           <div className="rounded-2xl border border-border bg-background p-4 sm:p-8">
             <PublishedHandoverView handover={published} viewerLabel="Neha Kulkarni" viewerRole="incoming" preview />
+            {/* Decision timeline: the same publication in date order (docs/product/decision-timeline-plan.md) */}
+            <div className="mt-14 border-t border-border pt-10">
+              <HandoverTimeline handover={published} />
+            </div>
           </div>
         </>
       ) : (
