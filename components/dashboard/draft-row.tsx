@@ -21,7 +21,7 @@ export function DraftRow({ data, preview = false }: { data: HandoverCardData; pr
   const steps = DRAFT_STEPS.length;
   const nextIndex = Math.max(1, DRAFT_STEPS.indexOf(draft.next as (typeof DRAFT_STEPS)[number]));
   return (
-    <li className="group flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-6 sm:px-5">
+    <li className="group flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-6 sm:px-5">
       <div className="min-w-0 flex-1 space-y-1">
         <p className="min-w-0 truncate type-eyebrow text-muted-foreground">{h.teamName}</p>
         <h3 className="type-heading [overflow-wrap:anywhere]">
@@ -42,7 +42,7 @@ export function DraftRow({ data, preview = false }: { data: HandoverCardData; pr
           </p>
           <div className="mt-1.5 flex gap-1" aria-hidden="true">
             {DRAFT_STEPS.map((s, i) => (
-              <span key={s} className={cn("h-1 flex-1 rounded-full", i < nextIndex ? "bg-primary" : i === nextIndex ? "bg-primary/35" : "bg-border")} />
+              <span key={s} className={cn("h-1.5 flex-1 rounded-full", i < nextIndex ? "bg-foreground" : i === nextIndex ? "bg-foreground/35" : "bg-track")} />
             ))}
           </div>
         </div>

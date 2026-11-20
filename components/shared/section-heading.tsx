@@ -36,9 +36,9 @@ export function SectionHeading({
     <div className={cn("flex flex-wrap items-end justify-between gap-x-4 gap-y-3", className)}>
       <div className="min-w-0 space-y-1.5">
         {eyebrow && <p className="type-eyebrow text-muted-foreground">{eyebrow}</p>}
-        <Heading id={id} className={cn("text-foreground", variant === "serif" ? "type-section-title" : "type-heading")}>
+        <Heading id={id} className={cn("text-foreground", variant === "serif" ? "type-section-title" : "font-display text-lg leading-snug font-semibold tracking-[-0.015em]")}>
           {title}
-          {count !== undefined && <span className="ml-2 font-sans text-sm font-normal text-muted-foreground tabular-nums">{count}</span>}
+          {count !== undefined && <span className="ml-2 font-mono text-xs font-normal tracking-normal text-muted-foreground tabular-nums">{count}</span>}
         </Heading>
         {description && (
           <p className={cn("max-w-2xl text-muted-foreground", variant === "serif" ? "type-body" : "text-sm leading-relaxed")}>{description}</p>

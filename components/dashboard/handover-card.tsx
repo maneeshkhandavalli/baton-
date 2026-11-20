@@ -72,15 +72,15 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
   const { handover: h, href, cta, row } = data;
   const progress = row?.progress ?? null;
   return (
-    <article className="group relative flex h-full flex-col rounded-xl border border-border bg-card p-4 shadow-soft transition-[box-shadow,border-color,transform] duration-200 ease-emphasized has-focus-visible:ring-3 has-focus-visible:ring-ring/30 hover:-translate-y-px hover:border-border-strong hover:shadow-raised motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
+    <article className="group relative flex h-full flex-col rounded-2xl border border-border bg-card p-5 transition-[box-shadow,border-color,transform] duration-300 ease-emphasized has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raised motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 truncate text-caption text-muted-foreground" title={h.teamName}>
+        <p className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={h.teamName}>
           {h.teamName}
         </p>
         <HandoverStateBadge state={h.state} size="sm" />
       </div>
-      <h3 className="mt-2 type-title [overflow-wrap:anywhere]">
-        <Link href={href} aria-label={`${h.title}. ${cta}`} className="outline-none after:absolute after:inset-0 after:rounded-xl">
+      <h3 className="mt-3 type-title [overflow-wrap:anywhere]">
+        <Link href={href} aria-label={`${h.title}. ${cta}`} className="outline-none after:absolute after:inset-0 after:rounded-2xl">
           {h.title}
         </Link>
       </h3>
@@ -107,20 +107,23 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(progress * 100)}
-              className="h-1.5 overflow-hidden rounded-full bg-muted ring-1 ring-border/60 ring-inset"
+              className="h-1.5 overflow-hidden rounded-full bg-track"
             >
-              <div className={cn("h-full rounded-full", progress >= 1 ? "bg-success" : "bg-primary")} style={{ width: `${Math.round(progress * 100)}%` }} />
+              <div className={cn("h-full rounded-full", progress >= 1 ? "bg-success" : "bg-foreground")} style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
-            <p className="mt-1 text-caption text-muted-foreground">{row.progressLabel}</p>
+            <p className="mt-1.5 font-mono text-xs text-muted-foreground tabular-nums">{row.progressLabel}</p>
           </div>
         )}
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3 text-caption">
-        <span className="text-muted-foreground">Updated {formatDate(h.updatedAt)}</span>
-        <span className="inline-flex items-center gap-1 font-medium text-primary-fg">
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-caption">
+        <span className="font-mono text-xs text-muted-foreground">Updated {formatDate(h.updatedAt)}</span>
+        {/* The landing's CTA: ink label with the highlighter disc that nudges on hover. */}
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
           {cta}
-          <ArrowRight aria-hidden="true" className="size-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
+          <span aria-hidden="true" className="grid size-7 place-items-center rounded-full bg-highlight text-on-highlight">
+            <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+          </span>
         </span>
       </div>
     </article>
@@ -129,7 +132,7 @@ export function HandoverCard({ data }: { data: HandoverCardData }) {
 
 export function HandoverCardSkeleton() {
   return (
-    <div aria-hidden="true" className="flex h-48 flex-col rounded-xl border border-border bg-card p-5">
+    <div aria-hidden="true" className="flex h-48 flex-col rounded-2xl border border-border bg-card p-5">
       <Skeleton className="h-3 w-24" />
       <Skeleton className="mt-3 h-6 w-3/4" />
       <Skeleton className="mt-2 h-3 w-1/3" />

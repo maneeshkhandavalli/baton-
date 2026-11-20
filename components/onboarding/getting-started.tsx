@@ -77,7 +77,7 @@ function ItemRow({ item, isNext }: { item: ChecklistItem; isNext: boolean }) {
     <li
       className={cn(
         "flex items-start gap-2.5 px-4 py-2.5",
-        isNext && "bg-primary-soft/40",
+        isNext && "bg-muted/70",
       )}
       aria-current={isNext ? "step" : undefined}
     >
@@ -166,15 +166,15 @@ export function GettingStartedView({
     <section
       id="getting-started"
       aria-labelledby={headingId}
-      className="scroll-mt-20 rounded-xl border border-border bg-card"
+      className="scroll-mt-20 overflow-hidden rounded-2xl border border-border bg-card"
     >
-      <div data-tour="checklist" className="rounded-t-xl">
-        <div className="flex items-center gap-2 px-4 pt-3 pb-2.5">
+      <div data-tour="checklist" className="rounded-t-2xl">
+        <div className="flex items-center gap-2 px-4 pt-4 pb-3">
           <div className="min-w-0 flex-1">
-            <h2 id={headingId} className="type-heading">
+            <h2 id={headingId} className="font-display text-lg leading-snug font-semibold tracking-[-0.015em]">
               Getting started
             </h2>
-            <p className="text-caption text-muted-foreground">
+            <p className="font-mono text-xs text-muted-foreground tabular-nums">
               {checklist.complete
                 ? "All done. You can hide this list."
                 : `${checklist.done} of ${checklist.total} done`}
@@ -216,12 +216,12 @@ export function GettingStartedView({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          className="mx-4 mb-3 h-1 overflow-hidden rounded-full bg-muted"
+          className="mx-4 mb-4 h-1.5 overflow-hidden rounded-full bg-track"
         >
           <div
             className={cn(
               "h-full rounded-full",
-              checklist.complete ? "bg-success" : "bg-primary",
+              checklist.complete ? "bg-success" : "bg-foreground",
             )}
             style={{ width: `${pct}%` }}
           />

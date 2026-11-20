@@ -57,19 +57,21 @@ export function upNextItems(cards: readonly HandoverCardData[], limit = 3): UpNe
 function UpNext({ items, total }: { items: UpNextItem[]; total: number }) {
   if (!items.length) return null;
   return (
-    <section aria-labelledby="up-next" className="rounded-xl border border-border bg-card shadow-soft">
-      <div data-tour="up-next" className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-        <h2 id="up-next" className="type-heading">
+    <section aria-labelledby="up-next" className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div data-tour="up-next" className="flex items-baseline justify-between gap-3 border-b border-border px-4 pt-4 pb-3 sm:px-5">
+        <h2 id="up-next" className="font-display text-lg leading-snug font-semibold tracking-[-0.015em]">
           Up next
         </h2>
         {total > items.length && <p className="text-caption text-muted-foreground">{total - items.length} more {total - items.length === 1 ? "handover needs" : "handovers need"} you below</p>}
       </div>
       <ul className="divide-y divide-border">
         {items.map((it) => (
-          <li key={it.key} className="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
-            <it.icon aria-hidden="true" className={cn("hidden size-4 shrink-0 sm:block", it.danger ? "text-destructive-fg" : "text-muted-foreground")} />
+          <li key={it.key} className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
+            <span aria-hidden="true" className={cn("hidden size-9 shrink-0 place-items-center rounded-full border sm:grid", it.danger ? "border-destructive/40 text-destructive-fg" : "border-border-strong text-foreground")}>
+              <it.icon className="size-4" />
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{it.title}</p>
+              <p className="truncate text-md font-semibold">{it.title}</p>
               <p className={cn("text-caption", it.danger ? "text-destructive-fg" : "text-muted-foreground")}>{it.reason}</p>
               {it.also && it.also.length > 0 && <p className="mt-0.5 text-caption text-muted-foreground">Also needs: {it.also.map((l) => l.toLocaleLowerCase()).join(" · ")}</p>}
             </div>
@@ -157,7 +159,7 @@ export function DashboardView({ result, newHandover, demoHref, preview = false }
       {drafts.length > 0 && (
         <section aria-labelledby="drafts" className="space-y-4">
           <SectionHeading id="drafts" title="Drafts to finish" count={drafts.length} />
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+          <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
             {drafts.map((c) => (
               <DraftRow key={c.handover.id} data={c} preview={preview} />
             ))}
