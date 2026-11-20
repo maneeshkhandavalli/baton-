@@ -20,8 +20,14 @@ import "server-only";
  * - Prompts come only from lib/ai/prompts (fixed system text, escaped untrusted user turn, constant schema).
  * - Constrained output: `output_config.format = {type: "json_schema", schema}` (mode "json_schema", the
  *   default). The gateway does not document it; if it rejects it (400) the call fails as request-invalid,
- *   never silently. Mode "prompt" omits the parameter and relies on the prompt; either way lib/ai parses
- *   every answer with the unchanged Zod schemas. The mode is part of `adapterVersion` (provenance).
+ *   never silently. Mode "prompt" omits the parameter; either way lib/ai parses every answer with the
+ *   unchanged Zod schemas. The mode is part of `adapterVersion` (provenance).
+ * - adapter @2 (2026-11-20): live probes showed the gateway ACCEPTS but IGNORES `output_config` (and the beta
+ *   `output_format`): answers are not constrained, so the model never saw the per-category attribute shapes and
+ *   ~40% of candidates failed Zod (`attributes: {}` for owner/contact/account_access, invented keys such as
+ *   `person`). The adapter therefore appends Baton's constant response schema (the full JSON Schema from
+ *   lib/ai/prompts, trusted and never derived from input) as a separate trailing section of the system text,
+ *   in both modes. Baton's prompt text is unchanged and stays first; the untrusted user turn is unchanged.
  * - No tools are declared; a `tool_use` block or stop reason is rejected (§12.10 rule 2).
  * - No sampling parameters: newer Claude models reject `temperature` and the gateway's upstream is unknown.
  *   Output is therefore NOT reproducible (EXT-5); the offline evaluation is the control.
@@ -56,7 +62,7 @@ export type OmegaOutputMode = (typeof OMEGA_OUTPUT_MODES)[number];
 export const OMEGA_MAX_TOKENS = { extract: 16_000, verify: 1_024 } as const;
 
 export function omegaAdapterVersion(mode: OmegaOutputMode): string {
-  return `omega-anthropic@1+${mode}`;
+  return `omega-anthropic@2+${mode}`;
 }
 
 export interface OmegaModels {
@@ -122,13 +128,27 @@ export function toStructuredOutputSchema(schema: unknown): unknown {
   return out;
 }
 
+/** Heading of the adapter-appended schema section (adapter @2). Constant; never contains input. */
+export const OMEGA_SCHEMA_SECTION_HEADING =
+  "Response schema\n- Your answer must be one JSON object that validates against the JSON Schema below. Every property listed in \"required\" must be present (use null where the schema allows null and the value is unknown), and no other property is allowed. For each candidate, \"attributes\" must have exactly the properties of the schema branch whose \"category\" const matches.";
+
+/**
+ * The system text sent to Omega: Baton's fixed prompt first, then the constant response schema as text (the
+ * gateway does not enforce `output_config`, see the header). Pure; `$schema` is dropped (noise).
+ */
+export function omegaSystemText(prompt: AiPrompt): string {
+  const schema: Record<string, unknown> = { ...prompt.responseSchema };
+  delete schema.$schema;
+  return `${prompt.system}\n\n${OMEGA_SCHEMA_SECTION_HEADING}\n${JSON.stringify(schema)}`;
+}
+
 // ── Request / response mapping ───────────────────────────────────────────────
 
 export function buildOmegaRequest(prompt: AiPrompt, model: string, maxTokens: number, mode: OmegaOutputMode): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
-    system: prompt.system,
+    system: omegaSystemText(prompt),
     messages: [{ role: "user", content: prompt.user }],
   };
   if (mode === "json_schema") body.output_config = { format: { type: "json_schema", schema: toStructuredOutputSchema(prompt.responseSchema) } };
