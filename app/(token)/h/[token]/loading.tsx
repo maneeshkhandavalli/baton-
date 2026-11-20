@@ -4,7 +4,7 @@ import { ListSkeleton } from "@/components/shared/skeletons";
 /** Route-level skeleton shown while this page's server work starts (same layout as the page). */
 export default function Loading() {
   return (
-    <PageContainer width="default">
+    <PageContainer width="default" align="center" className="max-w-6xl">
       <ListSkeleton label="Opening the invitation…" rows={1} />
     </PageContainer>
   );

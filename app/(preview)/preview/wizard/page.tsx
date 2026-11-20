@@ -24,9 +24,8 @@ export default function PreviewWizardPage({ searchParams }: { searchParams: Prom
     <PageContainer width="narrow" className="space-y-8 pb-0 lg:pb-0">
       <PageHeader
         back={{ href: "/preview/dashboard", label: "Dashboard" }}
-        eyebrow="New handover"
         title="Start a handover"
-        description="Who is involved, consent, the chats and documents that hold the knowledge, and what Baton may read. Your draft saves as you go."
+        description="Your draft saves as you go."
         divider={false}
       />
       <Suspense fallback={<FormSkeleton label="Opening your draft…" />}>

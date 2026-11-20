@@ -30,7 +30,7 @@ export const metadata: Metadata = { title: "Handover invitation" };
  */
 export default function InvitationPage({ params, searchParams }: PageProps<"/h/[token]">) {
   return (
-    <PageContainer width="default">
+    <PageContainer width="default" align="center" className="max-w-6xl">
       <h1 className="sr-only">Handover invitation</h1>
       <Suspense fallback={<ListSkeleton label="Opening the invitation…" rows={1} />}>
         <InvitationContent params={params} searchParams={searchParams} />

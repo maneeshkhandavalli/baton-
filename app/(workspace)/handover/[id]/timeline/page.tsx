@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Timeline" };
  */
 export default function TimelinePage({ params }: PageProps<"/handover/[id]/timeline">) {
   return (
-    <PageContainer width="default">
+    <PageContainer width="default" className="lg:py-8">
       <Suspense fallback={<DocumentSkeleton />}>
         <TimelineContent params={params} />
       </Suspense>

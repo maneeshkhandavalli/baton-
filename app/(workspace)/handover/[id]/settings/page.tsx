@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Handover settings" };
 
 export default function HandoverSettingsPage({ params }: PageProps<"/handover/[id]/settings">) {
   return (
-    <PageContainer width="narrow" className="lg:py-8">
+    <PageContainer width="medium" frameClassName="lg:py-8">
       <Suspense fallback={<FormSkeleton label="Loading settings…" fields={5} />}>
         <SettingsContent params={params} />
       </Suspense>
