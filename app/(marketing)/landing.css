@@ -664,6 +664,31 @@
     width: 30%;
     height: 30%;
   }
+  /* Below 1024px the statement spans the full width, so a disc pinned mid-screen would sit on its words as they
+     scroll past. There the stage is not sticky (the disc stays in the hero's centre cell, orbit folded away) and the
+     intro gets its own in-flow cluster: a block sized from the same 7-column tile, between the statement and the list. */
+  @media (max-width: 1023px) {
+    .lp-stage {
+      position: relative;
+      top: auto;
+    }
+    .lp-stage .lp-orbit {
+      display: none;
+    }
+  }
+  .lp-cluster {
+    --cols: 7;
+    --tile: calc((100cqw - 2 * var(--frame-x)) / var(--cols));
+    --disc-scale: 1.5;
+    position: relative;
+    pointer-events: none;
+    /* Orbit radius 1.5 tiles + a tilted 0.92-tile item (half-diagonal 0.65) = 2.15 tiles each way, plus a little air. */
+    height: calc(var(--tile) * 4.6);
+    margin-top: calc(48 * var(--u));
+  }
+  .lp-cluster .lp-stage__center {
+    top: 50%;
+  }
 
   /* ── 2 · Intro ──────────────────────────────────── */
   .lp-intro {
@@ -688,11 +713,17 @@
       gap: calc(40 * var(--u));
     }
   }
+  /* Below 1024px the list follows the in-flow cluster; the intro's last 100svh is where the problem panel rises
+     (it has margin-top: -100svh), so that much is kept clear after the list. */
+  @media (max-width: 1023px) {
+    .lp-intro {
+      min-height: 0;
+      padding-top: calc(140 * var(--u));
+      padding-bottom: calc(100svh + 96 * var(--u));
+    }
+  }
   .lp-intro__side {
-    --tile: calc((100vw - 2 * var(--frame-x)) / 7);
-    position: sticky;
-    top: calc(62svh + var(--tile) * 2.3);
-    margin-top: 40svh;
+    margin-top: calc(40 * var(--u));
     max-width: 26rem;
     text-align: center;
     margin-inline: auto;
@@ -700,6 +731,7 @@
   @media (min-width: 1024px) {
     .lp-intro__side {
       --tile: calc((100vw - 2 * var(--frame-x)) / 11);
+      position: sticky;
       top: calc(62svh - 3.5rem);
       margin-top: 30svh;
       margin-left: calc(50% + var(--tile) * 2.75);
