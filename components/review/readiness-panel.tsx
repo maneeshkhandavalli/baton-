@@ -49,7 +49,7 @@ function NavButton({ active, onClick, children, count, dots }: { active: boolean
           ))}
         </span>
       )}
-      <span className="w-5 text-right font-mono text-xs tabular-nums">{count}</span>
+      <span className="w-6 text-right text-sm font-medium tabular-nums">{count}</span>
     </button>
   );
 }
@@ -72,7 +72,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
               </h2>
               <ContextualHelp topic="readiness" label="What does readiness mean?" />
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-caption text-muted-foreground">
               {decided} of {points.length} points decided
             </p>
           </div>
@@ -91,7 +91,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
                     <button
                       type="button"
                       onClick={() => onBlocker(b.kind)}
-                      className="flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-caption text-foreground/85 transition-colors hover:bg-muted hover:text-foreground"
+                      className="flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-sm text-foreground/85 transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <span aria-hidden="true" className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warning" />
                       {blockerLabel[b.kind](b.count)}

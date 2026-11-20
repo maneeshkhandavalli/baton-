@@ -134,7 +134,7 @@ export function EvidenceQuote({
         <span aria-hidden="true" className="mr-0.5 font-display text-base leading-none text-muted-foreground">“</span>
         <MaskedText text={quote} />
       </blockquote>
-      <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
+      <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
         <SourceIcon aria-hidden="true" className="size-3.5 shrink-0" />
         <span className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-y-1">
           {authorLabel && (
@@ -153,7 +153,7 @@ export function EvidenceQuote({
               {sourceTitle}
             </span>
           )}
-          {where && <span className={cn(sep, "font-mono text-2xs")}>{where}</span>}
+          {where && <span className={cn(sep, "font-mono text-xs")}>{where}</span>}
         </span>
         {showVerification && quoteCheck && supportVerdict && (
           <VerificationChip kind={kind} quoteCheck={quoteCheck} supportVerdict={supportVerdict} verdictRationale={verdictRationale} guarded={guarded} />

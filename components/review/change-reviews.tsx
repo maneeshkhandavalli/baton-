@@ -149,7 +149,7 @@ function FilterChip({ active, onClick, count, children }: { active: boolean; onC
       )}
     >
       {children}
-      <span className="font-mono text-xs tabular-nums text-muted-foreground">{count}</span>
+      <span className="text-caption font-medium tabular-nums text-muted-foreground">{count}</span>
     </button>
   );
 }

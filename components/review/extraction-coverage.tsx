@@ -61,7 +61,7 @@ function SourceLine({ s }: { s: SourceExtractionCoverage }) {
           <span className={cn("block font-normal", bad ? "text-warning-fg" : "text-muted-foreground")}>{stateLabel[s.state]}</span>
         </span>
       </p>
-      <p className="pl-5 text-2xs text-muted-foreground tabular-nums">
+      <p className="pl-5 text-caption text-muted-foreground tabular-nums">
         {s.chunksTotal > 0 && `${s.chunksDone} of ${s.chunksTotal} parts · `}
         {plural(s.messagesInspected, "message")} inspected · {s.messagesWithSignals} with signals ({s.signalMessagesLinked} used, {s.signalMessagesUnreviewed} unreviewed)
         {s.oversizeSkipped > 0 && ` · ${s.oversizeSkipped} too long`}
@@ -101,7 +101,7 @@ export function ExtractionCoverageSummary({ report, className }: { report: Extra
       {report.blockers.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-border pt-3" aria-label="Coverage issues">
           {report.blockers.map((b) => (
-            <li key={b.kind} className="flex items-start gap-2 text-caption text-foreground/85">
+            <li key={b.kind} className="flex items-start gap-2 text-sm text-foreground/85">
               <span aria-hidden="true" className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", b.severity === "blocking" ? "bg-warning" : "bg-border-strong")} />
               <span>
                 {extractionBlockerLabel[b.kind](b.count)}
@@ -159,7 +159,7 @@ export function UnreviewedSignals({ handoverId, items, readOnly }: { handoverId:
             <p className="text-sm leading-relaxed [overflow-wrap:anywhere]">
               <SignalText body={m.body.length > 600 ? m.body.slice(0, 600) : m.body} spans={m.signals} />
             </p>
-            <p className="flex flex-wrap items-center gap-2 text-2xs text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {m.authorLabel && <MaskedText text={m.authorLabel} />}
               {m.sentAt && <time dateTime={m.sentAt}>{formatDateTime(m.sentAt)}</time>}
               <span>{[...new Set(m.signals.map((s) => s.kind.replace(/_/g, " ")))].join(", ")}</span>
@@ -227,7 +227,7 @@ export function PointFlags({ flags, readOnly }: { flags: PointReviewFlag[]; read
                   <MaskedText text={f.messageExcerpt} />
                 </p>
               )}
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {f.messageSentAt && `${formatDateTime(f.messageSentAt)} · `}
                 {(f.detail.reasons ?? []).map((r) => reasonLabel[r]).filter(Boolean).join(", ")}. Baton did not change the point or its evidence.
               </p>

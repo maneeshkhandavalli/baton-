@@ -101,7 +101,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
         </button>
       </h3>
       {!statementRepeatsTitle(point.title, point.statement) && (
-        <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
+        <p className={cn("mt-1.5 text-md leading-relaxed text-pretty text-foreground/80", rejected && "line-clamp-2")}>
           <MaskedText text={point.statement} />
         </p>
       )}
@@ -111,21 +111,21 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
         <div className="mt-4 space-y-2.5">
           {status === "conflicting" ? (
             <section aria-label="Sources disagree" className="rounded-lg bg-status-conflicting-soft/60 p-3">
-              <p className="flex items-center gap-1.5 text-caption font-medium text-status-conflicting-fg">
+              <p className="flex items-center gap-1.5 text-sm font-medium text-status-conflicting-fg">
                 <Scale aria-hidden="true" className="size-3.5" />
                 {point.conflictResolution ? "Sources disagreed · resolved" : "Sources disagree · decide what is true now"}
               </p>
               <div className="mt-2.5 grid gap-3 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <p className="type-eyebrow text-status-sourced-fg">Supports</p>
-                  {supports.length === 0 && <p className="text-caption text-muted-foreground">No supporting quote.</p>}
+                  {supports.length === 0 && <p className="text-sm text-muted-foreground">No supporting quote.</p>}
                   {supports.slice(0, 2).map((e) => (
                     <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp showVerification={verificationNeedsAttention(e)} showLocation={false} />
                   ))}
                 </div>
                 <div className="space-y-1.5">
                   <p className="type-eyebrow text-status-conflicting-fg">Contradicts</p>
-                  {contradicts.length === 0 && <p className="text-caption text-muted-foreground">No contradicting quote.</p>}
+                  {contradicts.length === 0 && <p className="text-sm text-muted-foreground">No contradicting quote.</p>}
                   {contradicts.slice(0, 2).map((e) => (
                     <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp showVerification={verificationNeedsAttention(e)} showLocation={false} />
                   ))}
@@ -165,9 +165,9 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
               <MaskedText text={point.inferenceRationale} />
             </p>
           )}
-          {stale && <p className="text-caption text-warning-fg">Edited since its quotes were checked. Re-verifying against the new wording…</p>}
+          {stale && <p className="text-sm text-warning-fg">Edited since its quotes were checked. Re-verifying against the new wording…</p>}
           {point.inferredConfirmation && (
-            <p className="text-caption text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Inferred · confirmed by <span className="font-medium text-foreground">{point.inferredConfirmation.by}</span>
             </p>
           )}
@@ -181,7 +181,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
       )}
 
       <footer className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <span className="mr-auto text-caption text-muted-foreground">
+        <span className="mr-auto text-sm text-muted-foreground">
           {point.evidence.length === 0
             ? "No evidence"
             : `${point.evidence.length} ${point.evidence.length === 1 ? "quote" : "quotes"}${more > 0 && status !== "conflicting" ? ` · ${more} more in details` : ""}`}

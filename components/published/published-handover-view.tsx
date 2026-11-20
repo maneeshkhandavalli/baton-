@@ -78,7 +78,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
               <li key={t.id}>
                 <a href={`#${t.id}`} className="flex justify-between gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                   {t.label}
-                  {t.count !== null && <span className="type-numeric text-xs">{t.count}</span>}
+                  {t.count !== null && <span className="type-numeric text-caption">{t.count}</span>}
                 </a>
               </li>
             ))}
@@ -90,13 +90,13 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         <header className="space-y-6 border-b border-border pb-10" data-tour="published-header">
           <div className="space-y-3">
             {showTitle && (
-              <p className="text-caption text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {handover.teamName}
                 {handover.roleTitle && ` · ${handover.roleTitle}`}
               </p>
             )}
             <h2 className={showTitle ? "type-page-title break-words" : "sr-only"}>{handover.title}</h2>
-            <p className="text-caption text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} (
               {memberRoleLabel[viewerRole].toLowerCase()})
             </p>
@@ -128,7 +128,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
             ))}
           </dl>
 
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-caption text-muted-foreground">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <StatusBadge status="sourced" size="sm" /> backed by a quote you can check
             </span>
@@ -243,7 +243,7 @@ function PublishedPoint({ point }: { point: Point }) {
         <MaskedText text={c.title} />
       </h4>
       <KeyFactsStrip facts={facts} className="mt-2" />
-      <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-foreground/80 [overflow-wrap:anywhere]">
+      <p className="mt-2 max-w-[70ch] text-md leading-relaxed text-foreground/85 [overflow-wrap:anywhere]">
         <MaskedText text={c.statement} />
       </p>
 
@@ -304,7 +304,7 @@ function PublishedPoint({ point }: { point: Point }) {
                   tone={e.stance === "contradicts" ? "contradicts" : "supports"}
                 />
               ))}
-              {redacted > 0 && <p className="text-caption text-muted-foreground">Some evidence was removed at a participant&rsquo;s request.</p>}
+              {redacted > 0 && <p className="text-sm text-muted-foreground">Some evidence was removed at a participant&rsquo;s request.</p>}
             </div>
           )}
         </div>
@@ -395,7 +395,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
                       <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} className="mt-0.5 size-4 shrink-0 accent-[var(--success)] outline-none" />
                       <span className="min-w-0">
                         <span className={cn("block leading-snug", checked && "line-through")}>{item.title}</span>
-                        {item.detail && <span className="mt-0.5 block text-caption text-muted-foreground">{item.detail}</span>}
+                        {item.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{item.detail}</span>}
                       </span>
                     </label>
                   </li>
