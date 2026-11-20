@@ -315,7 +315,7 @@ export function ReviewWorkspace({
   );
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[15.5rem_minmax(0,1fr)_23rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[14rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[15.5rem_minmax(0,1fr)_26rem]">
       {/* Left: readiness, sections, conflicts and gaps */}
       <aside aria-label="Readiness and sections" className="hidden lg:block">
         <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
