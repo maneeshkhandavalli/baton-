@@ -112,7 +112,8 @@ describe("landing: calls to action, anchors and the marketing header", () => {
     const files = [
       "app/(marketing)/page.tsx",
       "app/(marketing)/layout.tsx",
-      ...["cta", "coming-next", "evidence-preview", "for-the-nerds", "hero-mosaic", "how-it-works", "living-handover", "marketing-footer", "marketing-header", "marketing-header-actions", "rotating-word"].map((f) => `components/marketing/${f}.tsx`),
+      "app/(marketing)/loading.tsx",
+      ...["cta", "coming-next", "evidence-preview", "for-the-nerds", "hero-mosaic", "how-it-works", "living-handover", "marketing-footer", "marketing-header", "marketing-header-actions", "intro-splash", "brand-loader", "rotating-word"].map((f) => `components/marketing/${f}.tsx`),
     ];
     for (const f of files) assert.ok(!read(f).includes(String.fromCharCode(0x2014)), f);
   });
@@ -156,3 +157,26 @@ describe("landing: For the nerds", () => {
   });
 });
 
+describe("landing: loading", () => {
+  it("the route fallback is a polite, busy status with the brand loader", () => {
+    const src = read("app/(marketing)/loading.tsx");
+    assert.match(src, /role="status"/);
+    assert.match(src, /aria-busy="true"/);
+    assert.match(src, /<BrandLoader looping \/>/);
+  });
+  it("the intro splash is decorative, once per session, motion-only and never shown without JavaScript", () => {
+    const src = read("components/marketing/intro-splash.tsx");
+    assert.match(src, /^"use client";/);
+    assert.match(src, /aria-hidden="true"/);
+    assert.match(src, /sessionStorage\.getItem/);
+    assert.match(src, /try\{[\s\S]*sessionStorage[\s\S]*\}catch/);
+    assert.match(src, /prefers-reduced-motion: no-preference/);
+    assert.match(src, /setAttribute\("data-show",""\)/, "only the inline script reveals it");
+    assert.match(read("app/(marketing)/page.tsx"), /<IntroSplash \/>/);
+    const css = read("app/(marketing)/landing.css");
+    assert.match(css, /\.lp-splash \{\s*display: none;/, "hidden by default (no JS, reduced motion)");
+    const motion = css.match(/@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n\}\n/g) ?? [];
+    assert.ok(motion.some((b) => /\.lp-splash\[data-show\] \{\s*display: grid;/.test(b)), "shown only inside the motion block");
+    assert.ok(motion.some((b) => /lp-splash-out 0\.3s ease-in 0\.6s forwards/.test(b)), "CSS failsafe fades it by about 900 ms");
+  });
+});

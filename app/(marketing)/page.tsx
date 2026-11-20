@@ -7,6 +7,7 @@ import { EvidencePreview } from "@/components/marketing/evidence-preview";
 import { ForTheNerds } from "@/components/marketing/for-the-nerds";
 import { HeroMosaic } from "@/components/marketing/hero-mosaic";
 import { HowItWorksSteps } from "@/components/marketing/how-it-works";
+import { IntroSplash } from "@/components/marketing/intro-splash";
 import { LandingMotion } from "@/components/marketing/landing-motion";
 import { LivingHandover } from "@/components/marketing/living-handover";
 import { PixelField } from "@/components/marketing/pixel-field";
@@ -161,6 +162,7 @@ export default function HomePage() {
   return (
     <div className="lp">
       <LandingMotion />
+      <IntroSplash />
 
       <div className="lp-loop" data-loop>
         {/* ── 1 · Hero ─────────────────────────────── */}

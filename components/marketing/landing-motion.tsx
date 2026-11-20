@@ -41,12 +41,15 @@ export function LandingMotion() {
         const { motion, desktop } = ctx.conditions as { motion: boolean; desktop: boolean };
         if (!motion) return;
 
-        // ── Hero entrance ──
-        gsap.from(q("[data-hero-line] > span"), { yPercent: 105, duration: 1, ease: IO, stagger: 0.1, delay: 0.1 });
-        gsap.from(q("[data-hero-fade]"), { opacity: 0, y: 24, duration: 0.8, ease: "power3.out", stagger: 0.08, delay: 0.45 });
+        // ── Hero entrance ── (held back while the first-visit splash lifts, so it plays as the splash fades;
+        // intro-splash.tsx starts its fade 350 ms after it appeared)
+        const splash = one("[data-splash][data-show]");
+        const lead = splash ? Math.max(0, 350 - (performance.now() - (Number(splash.dataset.t) || 0))) / 1000 + 0.1 : 0;
+        gsap.from(q("[data-hero-line] > span"), { yPercent: 105, duration: 1, ease: IO, stagger: 0.1, delay: lead + 0.1 });
+        gsap.from(q("[data-hero-fade]"), { opacity: 0, y: 24, duration: 0.8, ease: "power3.out", stagger: 0.08, delay: lead + 0.45 });
         const tiles = q("[data-mosaic] [data-tile]:not(.lp-tile--hole) > i");
-        gsap.from(tiles, { scale: 0, duration: 0.6, ease: "back.out(1.2)", stagger: { each: 0.018, from: "center" }, delay: 0.35 });
-        gsap.from(q("[data-disc]"), { scale: 0, rotate: -90, duration: 0.9, ease: "back.out(1.2)", delay: 0.25 });
+        gsap.from(tiles, { scale: 0, duration: 0.6, ease: "back.out(1.2)", stagger: { each: 0.018, from: "center" }, delay: lead + 0.35 });
+        gsap.from(q("[data-disc]"), { scale: 0, rotate: -90, duration: 0.9, ease: "back.out(1.2)", delay: lead + 0.25 });
 
         // ── Hero exit → intro: mosaic grows, the disc grows, the orbit comes out ──
         const hero = one("[data-hero]");
