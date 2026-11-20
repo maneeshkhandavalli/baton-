@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Published handover" };
  */
 export default function PublishedPage({ params }: PageProps<"/handover/[id]/published">) {
   return (
-    <PageContainer width="default">
+    <PageContainer width="default" className="lg:py-8">
       <Suspense fallback={<DocumentSkeleton />}>
         <PublishedContent params={params} />
       </Suspense>
@@ -49,7 +49,7 @@ async function PublishedContent({ params }: { params: Promise<{ id: string }> })
     <>
       {/* Round 4: the incoming checklist's "Read the handover" is ticked by actually opening it. */}
       {handover.data.viewerRole === "incoming" || handover.data.viewerRole === "lead" ? <PublishedOpenedSignal /> : null}
-      <PublishedHandoverView handover={published.data} viewerLabel={viewer?.displayName ?? "You"} viewerRole={handover.data.viewerRole} />
+      <PublishedHandoverView handover={published.data} viewerLabel={viewer?.displayName ?? "You"} viewerRole={handover.data.viewerRole} showTitle={false} />
     </>
   );
 }

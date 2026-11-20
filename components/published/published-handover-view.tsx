@@ -32,6 +32,11 @@ interface PublishedHandoverViewProps {
   preview?: boolean;
   /** Dev-only design preview: show the incoming member's real acknowledgement form, with the button disabled. */
   ackDisabledReason?: string;
+  /**
+   * Off inside the handover workspace, whose header above already shows the team and title (UI polish: no
+   * repeated title). The h2 stays for screen readers so the heading order is unchanged.
+   */
+  showTitle?: boolean;
 }
 
 type Point = { id: string; content: PublishedPointContent; category: PointCategory };
@@ -47,7 +52,7 @@ const STAT_LABEL: Partial<Record<HandoverSectionId, string>> = { risks: "Risks",
  * first, then the first-week checklist (what to do), then the sections (what to know), open
  * questions (what nobody knew) and the acknowledgement.
  */
-export function PublishedHandoverView({ handover, viewerLabel, viewerRole, preview = false, ackDisabledReason }: PublishedHandoverViewProps) {
+export function PublishedHandoverView({ handover, viewerLabel, viewerRole, preview = false, ackDisabledReason, showTitle = true }: PublishedHandoverViewProps) {
   const points: Point[] = handover.sections.flatMap((s) => s.points.map((p) => ({ ...p, category: s.category })));
   const facts = points.filter((p) => !p.content.isKnownGap);
   const gaps = points.filter((p) => p.content.isKnownGap);
@@ -67,7 +72,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
     <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[13rem_minmax(0,1fr)] xl:gap-14">
       <nav aria-label="On this page" className="hidden lg:block">
         <div className="sticky top-6 space-y-3">
-          <p className="type-eyebrow px-2 text-muted-foreground">On this page</p>
+          <p className="px-2 text-caption font-medium text-muted-foreground">On this page</p>
           <ul className="space-y-0.5 text-sm">
             {toc.map((t) => (
               <li key={t.id}>
@@ -84,11 +89,13 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
       <article className="min-w-0 space-y-14">
         <header className="space-y-6 border-b border-border pb-10" data-tour="published-header">
           <div className="space-y-3">
-            <p className="type-eyebrow text-muted-foreground">
-              {handover.teamName}
-              {handover.roleTitle && ` · ${handover.roleTitle}`}
-            </p>
-            <h2 className="type-page-title break-words">{handover.title}</h2>
+            {showTitle && (
+              <p className="text-caption text-muted-foreground">
+                {handover.teamName}
+                {handover.roleTitle && ` · ${handover.roleTitle}`}
+              </p>
+            )}
+            <h2 className={showTitle ? "type-page-title break-words" : "sr-only"}>{handover.title}</h2>
             <p className="text-caption text-muted-foreground">
               Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} (
               {memberRoleLabel[viewerRole].toLowerCase()})
