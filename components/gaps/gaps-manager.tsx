@@ -187,7 +187,7 @@ function Group({
         {questions.map((q) => {
           const point = q.pointId ? pointById.get(q.pointId) : undefined;
           return (
-            <li key={q.id} className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
+            <li key={q.id} className="rounded-2xl border border-border bg-card p-4 sm:p-5">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className={cn("text-caption", q.priority === "required" ? "font-medium text-warning-fg" : "text-muted-foreground")}>{gapPriorityLabel[q.priority]}</span>
                 {q.category && <span className="text-caption text-muted-foreground">· {categoryLabel[q.category]}</span>}
@@ -209,7 +209,7 @@ function Group({
               {q.answers.length > 0 && (
                 <ul className="mt-4 space-y-2">
                   {q.answers.map((a) => (
-                    <li key={a.id} className={cn("rounded-lg border-l-2 bg-muted/40 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-primary/50")}>
+                    <li key={a.id} className={cn("rounded-lg border-l-2 bg-muted/40 py-2.5 pr-3 pl-3", a.status === "accepted" ? "border-l-status-sourced" : a.status === "rejected" ? "border-l-border opacity-70" : "border-l-foreground/40")}>
                       <p className="text-sm leading-relaxed"><MaskedText text={a.text} /></p>
                       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
                         <span className="font-medium text-foreground/85">{a.answererLabel}</span>
@@ -218,7 +218,7 @@ function Group({
                           {formatDateTime(a.createdAt)}
                         </time>
                         <span aria-hidden="true">·</span>
-                        <span className={cn(a.status === "accepted" && "font-medium text-status-sourced-fg", a.status === "submitted" && "font-medium text-primary-fg")}>
+                        <span className={cn(a.status === "accepted" && "font-medium text-status-sourced-fg", a.status === "submitted" && "font-semibold text-foreground")}>
                           {ANSWER_STATUS[a.status]}
                         </span>
                         {a.status === "submitted" && canManage && (

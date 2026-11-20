@@ -78,7 +78,7 @@ export function ExtractionCoverageSummary({ report, className }: { report: Extra
   const unsettled = unsettledSourceUpdates(report);
   const incomplete = report.completion === "partial" || report.completion === "failed" || unsettled.length > 0;
   return (
-    <section aria-labelledby="coverage-heading" className={cn("rounded-xl border border-border bg-card p-4 shadow-soft", className)}>
+    <section aria-labelledby="coverage-heading" className={cn("rounded-2xl border border-border bg-card p-4", className)}>
       <div className="flex items-center gap-1">
         <h2 id="coverage-heading" className="type-subheading">
           Source coverage
@@ -148,7 +148,7 @@ export function UnreviewedSignals({ handoverId, items, readOnly }: { handoverId:
   const { run, isPending } = useAction();
   if (items.length === 0) return null;
   return (
-    <details className="rounded-xl border border-border bg-card p-4 shadow-soft">
+    <details className="rounded-2xl border border-border bg-card p-4">
       <summary className="cursor-pointer text-sm font-medium">Messages no point uses yet ({items.length})</summary>
       <p className="mt-1 text-xs text-muted-foreground">
         Baton&apos;s pattern check found deadlines, amounts, decisions or assignments here. They are hints, not facts: add a point if one matters.

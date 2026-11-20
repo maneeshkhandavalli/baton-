@@ -62,7 +62,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
 
   return (
     <div className={cn("space-y-5", className)}>
-      <section aria-labelledby="readiness-heading" className="rounded-xl border border-border bg-card p-4 shadow-soft">
+      <section aria-labelledby="readiness-heading" className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-3">
           <ReadinessRing value={readiness?.score ?? 0} />
           <div className="min-w-0">
@@ -144,7 +144,7 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
           </span>
         </NavButton>
         {gapsHref && (
-          <Link href={gapsHref} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-caption font-medium text-primary-fg hover:underline">
+          <Link href={gapsHref} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-caption font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
             Manage the Gap Interview
             <ArrowUpRight aria-hidden="true" className="size-3" />
           </Link>

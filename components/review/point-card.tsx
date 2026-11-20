@@ -74,7 +74,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
       className={cn(
-        "group relative scroll-mt-24 overflow-hidden rounded-xl border bg-card py-4 pr-4 pl-5 shadow-soft transition-[box-shadow,border-color] duration-150 before:absolute before:inset-y-0 before:left-0 before:w-1 sm:py-5 sm:pr-5 sm:pl-6",
+        "group relative scroll-mt-24 overflow-hidden rounded-2xl border bg-card py-4 pr-4 pl-5 transition-[box-shadow,border-color] duration-150 before:absolute before:inset-y-0 before:left-0 before:w-1 sm:py-5 sm:pr-5 sm:pl-6",
         RAIL[status],
         selected ? "border-primary/50 ring-3 ring-primary/12" : "border-border hover:border-border-strong",
         rejected && "bg-muted/40 before:opacity-40",

@@ -52,7 +52,7 @@ export function TimelineRow({ entry, group }: { entry: TimelineEntry; group: Tim
 
       <div
         className={cn(
-          "min-w-0 rounded-xl border bg-card p-4 shadow-soft sm:px-5",
+          "min-w-0 rounded-2xl border bg-card p-4 sm:px-5",
           conflict ? "border-status-conflicting/25" : "border-border",
           group === "open_questions" && "border-dashed border-status-missing/45 bg-status-missing-soft/50 shadow-none",
         )}
@@ -150,7 +150,7 @@ function EvidenceDisclosure({ entry }: { entry: TimelineEntry }) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen(!open)}
-        className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-primary-fg outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/40 max-sm:h-10"
+        className="inline-flex h-8 items-center gap-1 rounded-md text-caption font-medium text-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring/40 max-sm:h-10"
       >
         <ChevronDown aria-hidden="true" className={cn("size-3.5 motion-safe:transition-transform motion-safe:duration-200", open && "rotate-180")} />
         {evidence.length === 0
