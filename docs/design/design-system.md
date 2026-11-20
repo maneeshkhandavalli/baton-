@@ -5,6 +5,17 @@ Tokens live in `app/globals.css`; primitives in `components/ui/**`; product-leve
 `components/shared/**`; frames in `components/layout/**`. This document is the contract every page follows
 in milestone 2.
 
+> **Round 4 (2026-11-20, branch `work/dashboard-theme`): the identity is now app-wide.** The signed-in app uses the
+> landing's "Graphite & Highlighter" values in `:root` / `.dark` (`app/globals.css`) and its three faces from
+> `lib/fonts.ts` (Host Grotesk display, Atkinson Hyperlegible Next text, Atkinson Hyperlegible Mono data and technical
+> labels; the marketing layout imports the same instances). Primary is ink; buttons are pills (ink primary, hairline
+> outline ghost); cards are flat hairline sheets with a 22px corner (`rounded-2xl`, base radius 14px); `type-*` titles
+> are Host Grotesk heavy with tight tracking; `type-eyebrow` is mono caps. Lifecycle state pills are white pills whose
+> dot carries the state in the Baton mark's colours (draft graphite, processing blue, in review ochre, approved ink),
+> and "Acknowledged" is the highlighter pill. The sidebar and the mobile header are drawn as the landing's hairline
+> header pill. `.brand-identity` keeps its scoped values (and pins the old 10px radius) so the landing is unchanged.
+> The notes below describe the earlier states and stay for history.
+
 > **Identity preview (2026-11-15, branch `ui3/agent1-identity`), NOT yet app-wide.** Direction "Graphite & Highlighter"
 > (rationale and alternatives: `docs/design/AI-SLOP-AUDIT.md`, dev-only `/design/directions`). Scoped to the marketing
 > routes by `.brand-identity` in `app/(marketing)/identity.css`; same token names as below, so adoption = moving the

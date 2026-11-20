@@ -56,7 +56,7 @@ const badgeDotClass: Record<NonNullable<VariantProps<typeof badgeVariants>["tone
   success: "bg-success",
   warning: "bg-warning",
   danger: "bg-destructive",
-  inverse: "bg-inverse-foreground",
+  inverse: "bg-on-highlight",
   sourced: "bg-status-sourced",
   inferred: "bg-status-inferred",
   conflicting: "bg-status-conflicting",
