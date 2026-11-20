@@ -37,6 +37,44 @@ export function newSourcesAwaitingProcessing<S extends ControlSource>(sources: r
   return sources.filter((s) => !((s.version?.versionNumber ?? 1) > 1 && s.version?.updateState) && (s.state !== "parsed" || !s.consentRecordedAt));
 }
 
+/**
+ * 2026-11-20 (Round 4, connector version 2+): an UPLOADED candidate version (version number null) that has no consent
+ * yet. A connector flush creates one with no consent step of its own, so the processing page must offer the consent
+ * checklist for it; recording consent activates it server-side (record_source_consent) and the next run is the
+ * scoped source-update run. Pass ALL sources of the handover (candidates are not current versions).
+ */
+export function pendingCandidatesAwaitingConsent<S extends ControlSource>(sources: readonly S[]): S[] {
+  return sources.filter((s) => !!s.version && s.version.versionNumber === null && s.state === "uploaded" && !s.consentRecordedAt);
+}
+
+/** The number the candidate will get when activated: one more than the highest version of its lineage. */
+export function candidateVersionNumber(
+  candidate: { id: string; version?: { lineageId?: string; versionNumber: number | null } | null },
+  all: ReadonlyArray<{ id: string; version?: { lineageId?: string; versionNumber: number | null } | null }>,
+): number {
+  const lineage = candidate.version?.lineageId ?? candidate.id;
+  const highest = all
+    .filter((s) => (s.version?.lineageId ?? s.id) === lineage)
+    .reduce((n, s) => Math.max(n, s.version?.versionNumber ?? 0), 0);
+  return highest + 1;
+}
+
+/**
+ * Records consent for each source in order, and starts processing ONLY when every recording succeeded. A failed
+ * recording stops at that source (nothing after it is recorded, processing is not started).
+ */
+export async function recordConsentThenStart<S>(
+  toConsent: readonly S[],
+  record: (s: S) => Promise<boolean>,
+  start: () => Promise<void>,
+): Promise<{ started: boolean; failedAt: S | null }> {
+  for (const s of toConsent) {
+    if (!(await record(s))) return { started: false, failedAt: s };
+  }
+  await start();
+  return { started: true, failedAt: null };
+}
+
 export type StartLabel =
   | "Process the new version"
   | "Process the new versions"
@@ -55,6 +93,9 @@ export interface ControlsInput {
   sourceCount: number;
   pendingUpdates: number;
   newSources: number;
+  /** Uploaded candidate versions awaiting consent (pendingCandidatesAwaitingConsent). */
+  pendingCandidates?: number;
+  /** Sources needing consent, INCLUDING pending candidates. */
   needsConsent: number;
   consentComplete: boolean;
   isPending: boolean;
@@ -71,18 +112,21 @@ export interface Controls {
 
 export function processingControls(i: ControlsInput): Controls {
   const editable = i.handoverState === "draft" || i.handoverState === "in_review";
-  const somethingToProcess = i.runStatus !== "succeeded" || i.pendingUpdates > 0 || i.newSources > 0 || i.needsConsent > 0;
+  const somethingToProcess =
+    i.runStatus !== "succeeded" || i.pendingUpdates > 0 || i.newSources > 0 || i.needsConsent > 0 || (i.pendingCandidates ?? 0) > 0;
   const showStart = !i.active && i.canStart && editable && somethingToProcess;
   const startDisabled = i.isPending || i.sourceCount === 0 || (i.needsConsent > 0 && !i.consentComplete);
   return { showStart, showConsent: showStart && i.needsConsent > 0, startDisabled, label: startLabel(i) };
 }
 
 function startLabel(i: ControlsInput): StartLabel {
+  // a candidate becomes a pending update once its consent is recorded (the same click), so it counts as one
+  const updates = i.pendingUpdates + (i.pendingCandidates ?? 0);
   if (i.runStatus === "succeeded" && i.newSources > 0) {
-    if (i.pendingUpdates > 0) return "Process the new sources and versions";
+    if (updates > 0) return "Process the new sources and versions";
     return i.newSources === 1 ? "Process the new source" : "Process the new sources";
   }
-  if (i.pendingUpdates > 0 && i.handoverState === "in_review") return i.pendingUpdates === 1 ? "Process the new version" : "Process the new versions";
+  if (updates > 0 && i.handoverState === "in_review") return updates === 1 ? "Process the new version" : "Process the new versions";
   if (i.runStatus === "failed" || i.runStatus === "cancelled") return "Try again";
   return "Start processing";
 }

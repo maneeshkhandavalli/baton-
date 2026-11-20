@@ -8,7 +8,16 @@ import { planProcessingRun, type AiRunConfig } from "@/lib/pipeline/plan";
 import { emptyConsent, consentComplete } from "@/components/wizard/consent-state";
 import { sourcesNeedingConsent } from "@/components/shared/run-status";
 
-import { isPendingUpdate, newSourcesAwaitingProcessing, processingControls, type ControlSource, type ControlsInput } from "../processing-controls";
+import {
+  candidateVersionNumber,
+  isPendingUpdate,
+  newSourcesAwaitingProcessing,
+  pendingCandidatesAwaitingConsent,
+  processingControls,
+  recordConsentThenStart,
+  type ControlSource,
+  type ControlsInput,
+} from "../processing-controls";
 import { processingHeadline } from "../processing-headline";
 
 const processed = (over: Partial<ControlSource> = {}): ControlSource => ({ state: "parsed", consentRecordedAt: "2026-11-19T18:19:10Z", version: { versionNumber: 1, updateState: null }, ...over });
@@ -118,5 +127,131 @@ describe("processing controls: a source added after a succeeded run", () => {
     assert.equal(controlsFor(sources, { handoverState: "approved" }).showStart, false);
     const h = processingHeadline({ active: false, runStatus: "succeeded", startedAt: null, finishedAt: null, pendingUpdates: 0, newSources: 1, openReviews: 0, handoverState: "approved" });
     assert.equal(h.title, "Processing complete");
+  });
+});
+
+// 2026-11-20 (connector version 2+): a flush creates an UPLOADED CANDIDATE version (version number null, no consent).
+// It is not a current version, so the page used to show nothing to do and no way to give its consent.
+describe("processing controls: a pending connector version awaiting consent", () => {
+  type S = ControlSource & { id: string; title: string; version: { lineageId: string; versionNumber: number | null; updateState?: string | null } };
+  const v1: S = { id: "v1", title: "Telegram · baton bot testing group", state: "parsed", consentRecordedAt: "2026-11-20T05:00:28Z", version: { lineageId: "v1", versionNumber: 1, updateState: null } };
+  const v2: S = { id: "v2", title: "Telegram · baton bot testing group", state: "uploaded", consentRecordedAt: null, version: { lineageId: "v1", versionNumber: null } };
+  const others: S[] = [
+    { id: "wa", title: "WhatsApp", state: "parsed", consentRecordedAt: "2026-11-19T18:19:10Z", version: { lineageId: "wa", versionNumber: 1, updateState: null } },
+    { id: "md", title: "Notes", state: "parsed", consentRecordedAt: "2026-11-19T18:19:10Z", version: { lineageId: "md", versionNumber: 1, updateState: null } },
+  ];
+  const all = [...others, v1, v2];
+  const current = all.filter((s) => s.version.versionNumber !== null);
+
+  function controls(over: Partial<ControlsInput> = {}) {
+    const candidates = pendingCandidatesAwaitingConsent(all);
+    const needsConsent = [...sourcesNeedingConsent(current, false), ...candidates];
+    return processingControls({
+      active: false,
+      canStart: true,
+      handoverState: "in_review",
+      runStatus: "succeeded",
+      sourceCount: current.length,
+      pendingUpdates: current.filter(isPendingUpdate).length,
+      newSources: newSourcesAwaitingProcessing(current, "succeeded").length,
+      pendingCandidates: candidates.length,
+      needsConsent: needsConsent.length,
+      consentComplete: false,
+      isPending: false,
+      ...over,
+    });
+  }
+
+  it("the uploaded candidate is found among ALL sources; it is neither current nor a 'new source'", () => {
+    assert.deepEqual(pendingCandidatesAwaitingConsent(all).map((s) => s.id), ["v2"]);
+    assert.equal(newSourcesAwaitingProcessing(current, "succeeded").length, 0, "v1 and the others are processed");
+    assert.equal(sourcesNeedingConsent(current, false).length, 0, "the old checklist saw nothing to consent to");
+  });
+
+  it("only an UPLOADED candidate without consent qualifies (not one still uploading, not one already consented)", () => {
+    assert.equal(pendingCandidatesAwaitingConsent([{ ...v2, state: "pending_upload" }]).length, 0);
+    assert.equal(pendingCandidatesAwaitingConsent([{ ...v2, consentRecordedAt: "2026-11-20T06:00:00Z" }]).length, 0);
+    assert.equal(pendingCandidatesAwaitingConsent([v1]).length, 0);
+  });
+
+  it("the start section and consent checklist are visible; the candidate is shown as 'new version 2'", () => {
+    const c = controls();
+    assert.equal(c.showStart, true);
+    assert.equal(c.showConsent, true);
+    assert.equal(candidateVersionNumber(v2, all), 2);
+    assert.equal(candidateVersionNumber({ ...v2, id: "v3" }, [...all, { ...v2, id: "v2b", version: { lineageId: "v1", versionNumber: 2 } }]), 3);
+  });
+
+  it("processing is disabled until every consent statement is ticked", () => {
+    assert.equal(controls({ consentComplete: false }).startDisabled, true);
+    assert.equal(controls({ consentComplete: true }).startDisabled, false);
+    assert.equal(controls({ consentComplete: true, isPending: true }).startDisabled, true);
+  });
+
+  it("the button says 'Process the new version' (never 'Try again'); the headline asks for consent, not 'complete'", () => {
+    assert.equal(controls().label, "Process the new version");
+    const h = processingHeadline({ active: false, runStatus: "succeeded", startedAt: null, finishedAt: "20 Nov 2026, 10:30", pendingUpdates: 0, newSources: 0, pendingCandidates: 1, openReviews: 0, handoverState: "in_review" });
+    assert.equal(h.title, "A new version needs your consent");
+    assert.doesNotMatch(h.title + h.description, /complete/i);
+  });
+
+  it("nothing is offered on a published handover", () => {
+    assert.equal(controls({ handoverState: "approved" }).showStart, false);
+  });
+
+  it("consent is recorded for the candidate FIRST, and processing starts only after it succeeded", async () => {
+    const calls: string[] = [];
+    const ok = await recordConsentThenStart([v2], async (s) => (calls.push(`consent:${s.id}`), true), async () => void calls.push("start"));
+    assert.deepEqual(calls, ["consent:v2", "start"]);
+    assert.deepEqual(ok, { started: true, failedAt: null });
+  });
+
+  it("a failed consent recording stops: nothing later is recorded and processing never starts (v2 stays a candidate)", async () => {
+    const calls: string[] = [];
+    const v2b = { ...v2, id: "v2b" };
+    const r = await recordConsentThenStart(
+      [v2, v2b],
+      async (s) => {
+        calls.push(`consent:${s.id}`);
+        return s.id !== "v2"; // the server refused v2's consent
+      },
+      async () => void calls.push("start"),
+    );
+    assert.deepEqual(calls, ["consent:v2"]);
+    assert.equal(r.started, false);
+    assert.equal(r.failedAt?.id, "v2");
+  });
+});
+
+// Provider-agnostic: a candidate version from ANY connector (all write kind chat_import through the shared flush)
+// is offered for consent by the same shared rules; nothing keys on the provider or the source kind.
+describe("processing controls: pending versions from every connector", () => {
+  type S = ControlSource & { id: string; title: string; kind: string; version: { lineageId: string; versionNumber: number | null; updateState?: string | null } };
+  const providers = [
+    ["telegram", "Telegram - Treasurer group"],
+    ["discord", "Discord - #treasury"],
+    ["slack", "Slack - #core-team"],
+    ["github", "GitHub - acme sponsors"],
+  ] as const;
+  const v1s: S[] = providers.map(([p, title]) => ({ id: `${p}-v1`, title, kind: "chat_import", state: "parsed", consentRecordedAt: "2026-11-20T05:00:00Z", version: { lineageId: `${p}-v1`, versionNumber: 1, updateState: null } }));
+  const v2s: S[] = providers.map(([p, title]) => ({ id: `${p}-v2`, title, kind: "chat_import", state: "uploaded", consentRecordedAt: null, version: { lineageId: `${p}-v1`, versionNumber: null } }));
+  const all = [...v1s, ...v2s];
+
+  it("each provider's candidate version appears for consent, numbered as version 2 of its own lineage", () => {
+    assert.deepEqual(pendingCandidatesAwaitingConsent(all).map((s) => s.id), v2s.map((s) => s.id));
+    for (const v2 of v2s) assert.equal(candidateVersionNumber(v2, all), 2, v2.id);
+  });
+
+  it("one consent click covers all of them, then starts processing; the label counts them", async () => {
+    const c = processingControls({
+      active: false, canStart: true, handoverState: "in_review", runStatus: "succeeded", sourceCount: v1s.length,
+      pendingUpdates: 0, newSources: 0, pendingCandidates: v2s.length, needsConsent: v2s.length, consentComplete: true, isPending: false,
+    });
+    assert.equal(c.showConsent, true);
+    assert.equal(c.label, "Process the new versions");
+    const order: string[] = [];
+    const r = await recordConsentThenStart(pendingCandidatesAwaitingConsent(all), async (s) => (order.push(s.id), true), async () => void order.push("start"));
+    assert.deepEqual(order, [...v2s.map((s) => s.id), "start"]);
+    assert.equal(r.started, true);
   });
 });

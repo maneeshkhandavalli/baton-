@@ -18,6 +18,8 @@ export interface HeadlineInput {
   pendingUpdates: number;
   /** Sources added since the last succeeded run and not processed yet (processing-controls.ts). */
   newSources?: number;
+  /** Uploaded candidate versions (e.g. a connector's version 2) waiting for consent before they are used. */
+  pendingCandidates?: number;
   openReviews: number;
   handoverState: HandoverState;
 }
@@ -28,6 +30,14 @@ export function processingHeadline(i: HeadlineInput): { title: string; descripti
     return {
       title: "Processing your sources",
       description: `You can leave this page. Baton keeps working and the review opens when it's done.${i.startedAt ? ` Started ${i.startedAt}.` : ""}`,
+    };
+  }
+  const candidates = i.pendingCandidates ?? 0;
+  if (i.runStatus === "succeeded" && candidates > 0 && (i.handoverState === "draft" || i.handoverState === "in_review")) {
+    const one = candidates === 1;
+    return {
+      title: one ? "A new version needs your consent" : "New versions need your consent",
+      description: `The last run finished${i.finishedAt ? ` ${i.finishedAt}` : ""}. ${one ? "A new version of a source has" : `${candidates} new source versions have`} arrived since then and ${one ? "isn't" : "aren't"} used until you confirm consent. Then only ${one ? "that version is" : "those versions are"} processed and compared with what you already have.`,
     };
   }
   if (i.runStatus === "succeeded" && i.pendingUpdates > 0) {

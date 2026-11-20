@@ -264,3 +264,31 @@ describe("detectChanges", () => {
     assert.deepEqual(r.items, []);
   });
 });
+
+// 2026-11-20 (Round 4, Telegram connector version 2): a connector chat_import is classed as a "document" and each
+// flush is a DELTA. Version 1 had no retained evidence (nothing was extracted from it), so version 2 (two new
+// messages) must yield only new_information for its two new points: no evidence_missing, nothing about existing points.
+describe("detectChanges: connector delta version over a version without evidence", () => {
+  it("two new messages → two new_information items, zero evidence_missing; existing points are never referenced", () => {
+    assert.equal(sourceFamily("chat_import"), "document");
+    const existing = [1, 2, 3, 4].map((n) => point(n, { reviewState: n <= 2 ? "approved" : "pending", origin: n <= 2 ? "extracted" : "gap_answer" }));
+    const fresh = [point(7, { reviewState: "pending", citedMessageIds: [U(107)] }), point(8, { reviewState: "pending", citedMessageIds: [U(108)] })];
+    const links: NewLink[] = [7, 8].map((n) => ({
+      evidenceId: U(600 + n), pointId: U(300 + n), messageId: U(100 + n), quoteStart: 0, quoteEnd: 30, verdict: "supports",
+      quoteCheck: "exact", pointHasOtherEvidence: false,
+    }));
+    const r = detectChanges(input({
+      family: "document", watermark: null,
+      oldEvidence: [], // version 1 retained no evidence
+      newMessages: [msg(7, "The finance report is due by Monday."), msg(8, "[PERSON_2] is responsible for the monthly reconciliation.")],
+      newLinks: links,
+      points: [...existing, ...fresh],
+    }));
+    assert.equal(r.counts.evidenceMissing, 0);
+    assert.equal(r.items.filter((i) => i.kind === "evidence_missing").length, 0);
+    const info = r.items.filter((i) => i.kind === "new_information");
+    assert.deepEqual(info.map((i) => i.candidatePointId).sort(), [U(307), U(308)]);
+    const touched = new Set(r.items.flatMap((i) => [i.pointId, i.candidatePointId]).filter(Boolean));
+    for (const p of existing) assert.ok(!touched.has(p.pointId), `existing point ${p.pointId} is not referenced`);
+  });
+});

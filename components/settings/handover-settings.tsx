@@ -1,6 +1,7 @@
 "use client";
 
 import type { ConsentDisclosure } from "@/lib/contracts/consent";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Clock, Crown, FileText, MessageCircle, RotateCcw, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
@@ -334,7 +335,19 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
                   )}
                   {pending && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="text-muted-foreground">A new version is being added and is not used yet.</span>
+                      {pending.state === "uploaded" && !pending.consentRecordedAt ? (
+                        // 2026-11-20: e.g. a connector's version 2+ (no upload form of its own): consent is collected on
+                        // the Processing page, which activates the version and processes only it.
+                        <span className="text-muted-foreground">
+                          A new version arrived and is not used yet. Confirm its consent on the{" "}
+                          <Link href={routes.handover.processing(h.id)} className="font-medium text-primary-fg underline-offset-4 hover:underline">
+                            Processing page
+                          </Link>{" "}
+                          to process it.
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">A new version is being added and is not used yet.</span>
+                      )}
                       {creator && h.state !== "processing" && (
                         <Button size="sm" variant="ghost" onClick={() => run(() => removeSource({ sourceId: pending.id }), { success: "New version discarded" })}>
                           Discard

@@ -25,7 +25,13 @@ import { ExtractionCoverageSummary } from "@/components/review/extraction-covera
 import type { ExtractionReport } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
-import { newSourcesAwaitingProcessing, processingControls } from "./processing-controls";
+import {
+  candidateVersionNumber,
+  newSourcesAwaitingProcessing,
+  pendingCandidatesAwaitingConsent,
+  processingControls,
+  recordConsentThenStart,
+} from "./processing-controls";
 import { processingHeadline } from "./processing-headline";
 import { sourceErrorText } from "./source-error";
 
@@ -89,7 +95,10 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
     return acc;
   }, {});
   const totalMasked = Object.values(masking).reduce((a, b) => a + (b ?? 0), 0);
-  const needsConsent = sourcesNeedingConsent(sources, reconsentAll);
+  // 2026-11-20: an uploaded candidate version awaiting consent (a connector's version 2+) is not a current version,
+  // but its consent is collected HERE: recording it activates the version, then the scoped update run starts.
+  const candidates = pendingCandidatesAwaitingConsent(status.sources);
+  const needsConsent = [...sourcesNeedingConsent(sources, reconsentAll), ...candidates];
   // 2026-11-20: sources ADDED since the last succeeded run (first versions, e.g. a connector's chat_import) also
   // keep the consent checklist and the start button visible; they are not "updates" (processing-controls.ts).
   const newSources = newSourcesAwaitingProcessing(sources, r?.status ?? null);
@@ -101,6 +110,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
     sourceCount: sources.length,
     pendingUpdates: pendingUpdates.length,
     newSources: newSources.length,
+    pendingCandidates: candidates.length,
     needsConsent: needsConsent.length,
     consentComplete: consentComplete(consent),
     isPending,
@@ -116,6 +126,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
     finishedAt: r?.finishedAt ? formatDateTime(r.finishedAt) : null,
     pendingUpdates: pendingUpdates.length,
     newSources: newSources.length,
+    pendingCandidates: candidates.length,
     openReviews,
     handoverState,
   });
@@ -129,33 +140,38 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
 
   async function start() {
     setStartError(null);
-    for (const s of needsConsent) {
-      const res = await run(() =>
-        recordSourceConsent({
-          sourceId: s.id,
-          consentStatementVersion: consentDisclosure.statementVersion,
-          consentConfirmed: true,
-          accessLevel: s.accessLevel,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
-        }),
-      );
-      if (!res.ok) {
-        setStartError(`Couldn't record consent for ${s.title}. ${res.error.message}`);
-        return;
-      }
-    }
-    const started = await run(() => startProcessing({ handoverId }), {
-      success: "Processing started",
-      onError: (e) => {
-        if (e.details?.reason !== CONSENT_REQUIRED_REASON) {
-          setStartError(e.message);
-          return;
-        }
-        setReconsentAll(true);
-        setConsent(emptyConsent());
+    // Consent first (for a candidate this ACTIVATES the new version server-side); processing starts only when every
+    // recording succeeded (processing-controls.ts recordConsentThenStart).
+    await recordConsentThenStart(
+      needsConsent,
+      async (s) => {
+        const res = await run(() =>
+          recordSourceConsent({
+            sourceId: s.id,
+            consentStatementVersion: consentDisclosure.statementVersion,
+            consentConfirmed: true,
+            accessLevel: s.accessLevel,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+          }),
+        );
+        if (!res.ok) setStartError(`Couldn't record consent for ${s.title}. ${res.error.message}`);
+        return res.ok;
       },
-    });
-    if (started.ok) setReconsentAll(false);
+      async () => {
+        const started = await run(() => startProcessing({ handoverId }), {
+          success: "Processing started",
+          onError: (e) => {
+            if (e.details?.reason !== CONSENT_REQUIRED_REASON) {
+              setStartError(e.message);
+              return;
+            }
+            setReconsentAll(true);
+            setConsent(emptyConsent());
+          },
+        });
+        if (started.ok) setReconsentAll(false);
+      },
+    );
   }
 
   return (
@@ -307,6 +323,16 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                       : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
                   </p>
                 </div>
+                {candidates.length > 0 && (
+                  <ul aria-label="New versions waiting for consent" className="space-y-1 text-sm">
+                    {candidates.map((c) => (
+                      <li key={c.id}>
+                        <span className="font-medium">{c.title}</span>, new version {candidateVersionNumber(c, status.sources)}
+                        <span className="text-muted-foreground"> · not used until you confirm consent</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <ConsentChecklist value={consent} onChange={setConsent} disclosure={consentDisclosure} />
               </div>
             )}
