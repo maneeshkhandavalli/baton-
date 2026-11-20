@@ -46,7 +46,8 @@ export function MarketingHeader() {
           ))}
         </nav>
         <div className="flex items-center gap-1">
-          <ThemeToggle />
+          {/* Pinned to its original square shape: the shared Button became a pill app-wide. */}
+          <ThemeToggle className="rounded-md sm:size-9" />
           <Suspense fallback={<MarketingHeaderActionsFallback />}>
             <MarketingHeaderActions />
           </Suspense>

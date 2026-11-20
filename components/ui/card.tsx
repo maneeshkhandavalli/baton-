@@ -2,7 +2,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * A white sheet on the paper background. Use a Card only for (a) a repeated, independently
+ * A white sheet on the paper background, drawn like the landing's cards: a hairline border, a generous round
+ * corner, flat at rest and lifting a little on hover when interactive. Use a Card only for (a) a repeated, independently
  * actionable object (a handover, a point, a gap question) or (b) a sheet that holds one form or
  * document. Page sections are NOT cards: separate them with whitespace and hairlines
  * (docs/design/design-system.md → Surfaces).
@@ -18,9 +19,9 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-soft [--card-spacing:--spacing(5)] has-data-[slot=card-footer]:pb-0 data-[size=lg]:[--card-spacing:--spacing(6)] data-[size=sm]:[--card-spacing:--spacing(4)] data-[size=sm]:has-data-[slot=card-footer]:pb-0",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-2xl border border-border bg-card py-(--card-spacing) text-sm text-card-foreground [--card-spacing:--spacing(5)] has-data-[slot=card-footer]:pb-0 data-[size=lg]:[--card-spacing:--spacing(6)] data-[size=sm]:[--card-spacing:--spacing(4)] data-[size=sm]:has-data-[slot=card-footer]:pb-0",
         interactive &&
-          "transition-[box-shadow,border-color,transform] duration-200 ease-emphasized hover:-translate-y-px hover:border-border-strong hover:shadow-raised focus-ring-within motion-reduce:hover:translate-y-0",
+          "transition-[box-shadow,border-color,transform] duration-300 ease-emphasized hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raised focus-ring-within motion-reduce:hover:translate-y-0",
         className
       )}
       {...props}
@@ -89,7 +90,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center gap-2 border-t border-border bg-muted/40 px-(--card-spacing) py-3",
+        "flex items-center gap-2 border-t border-border px-(--card-spacing) py-3",
         className
       )}
       {...props}

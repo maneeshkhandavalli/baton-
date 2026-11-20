@@ -20,7 +20,7 @@ function ChoiceCard({ type = "radio", title, description, icon, className, disab
     <label
       data-slot="choice-card"
       className={cn(
-        "group/choice relative flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm shadow-xs transition-[border-color,box-shadow,background-color] duration-150 hover:border-border-strong has-checked:border-primary/60 has-checked:bg-primary-soft/40 has-checked:ring-3 has-checked:ring-primary/12 focus-ring-within",
+        "group/choice relative flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3.5 text-sm transition-[border-color,box-shadow,background-color] duration-150 hover:border-border-strong has-checked:border-primary/60 has-checked:bg-primary-soft/40 has-checked:ring-3 has-checked:ring-primary/12 focus-ring-within",
         disabled && "cursor-not-allowed opacity-60",
         className
       )}
