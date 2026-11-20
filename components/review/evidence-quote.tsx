@@ -114,7 +114,7 @@ export function EvidenceQuote({
 }: EvidenceQuoteProps) {
   const SourceIcon = kind === "testimony" ? UserRound : sentAt ? MessageCircle : FileText;
   const where = showLocation && location
-    ? [location.page ? `p. ${location.page}` : null, location.heading ?? null].filter(Boolean).join(" · ")
+    ? [location.page ? `p. ${location.page}` : null, location.heading ?? null, `line ${location.lineStart}`].filter(Boolean).join(" · ")
     : null;
   // Separator dots between metadata items (decorative; screen readers hear the items themselves).
   const sep = "before:mr-2 before:text-border-strong before:content-['·'] first:before:hidden";
