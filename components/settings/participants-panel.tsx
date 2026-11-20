@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useAction } from "@/hooks/use-action";
 import type { ExclusionSummary, SourceParticipantSummary, SourceSummary } from "@/lib/contracts/dto";
 import { eraseParticipant } from "@/lib/actions/privacy";
+import { DEMO_ACCOUNT_REFUSAL } from "@/lib/demo-accounts";
 
 interface ParticipantsPanelProps {
   handoverId: string;
@@ -18,6 +19,8 @@ interface ParticipantsPanelProps {
   exclusions: ExclusionSummary[];
   sources: SourceSummary[];
   creator: boolean;
+  /** A shared demo account (lib/demo-accounts.ts): erasure is turned off and the server refuses it too. */
+  demoAccount?: boolean;
 }
 
 function exclusionDetail(e: ExclusionSummary, sourceTitle: (id: string | null) => string) {
@@ -31,7 +34,7 @@ function exclusionDetail(e: ExclusionSummary, sourceTitle: (id: string | null) =
  * Review roles: who was parsed from each chat, and what was left out (§12.2, `listParticipants`,
  * `listExclusions`). Exclusions never name the person. Erasure (§12.8) is creator-only.
  */
-export function ParticipantsPanel({ handoverId, participants, exclusions, sources, creator }: ParticipantsPanelProps) {
+export function ParticipantsPanel({ handoverId, participants, exclusions, sources, creator, demoAccount = false }: ParticipantsPanelProps) {
   const { run } = useAction();
   const sourceTitle = (id: string | null) => sources.find((s) => s.id === id)?.title ?? "a removed source";
   const bySource = new Map<string, SourceParticipantSummary[]>();
@@ -59,7 +62,13 @@ export function ParticipantsPanel({ handoverId, participants, exclusions, source
                         {p.excluded && " · left out"}
                       </p>
                     </div>
-                    {creator && !p.excluded && (
+                    {creator && !p.excluded && demoAccount && (
+                      <Button size="xs" variant="ghost" className="max-sm:h-10" disabled title={DEMO_ACCOUNT_REFUSAL} aria-label={`Erase ${maskedTextToPlain(p.displayLabel)}. ${DEMO_ACCOUNT_REFUSAL}`}>
+                        <UserX aria-hidden="true" data-icon="inline-start" />
+                        Erase
+                      </Button>
+                    )}
+                    {creator && !p.excluded && !demoAccount && (
                       <ConfirmDialog
                         trigger={
                           <Button size="xs" variant="ghost" className="max-sm:h-10" aria-label={`Erase ${maskedTextToPlain(p.displayLabel)}`}>

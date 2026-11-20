@@ -47,6 +47,8 @@ interface HandoverSettingsProps {
   exclusions: ExclusionSummary[];
   /** R3 Task 05D: the consent wording for this server's actual AI configuration (a new version needs consent). */
   consentDisclosure?: ConsentDisclosure;
+  /** The viewer is a shared demo account (lib/demo-accounts.ts): destructive account actions are turned off. */
+  demoAccount?: boolean;
 }
 
 /**
@@ -61,7 +63,7 @@ function Panel({ children, id }: { children: React.ReactNode; id?: string }) {
 }
 
 
-export function HandoverSettings({ handover: h, members, sources, tokens, participants, exclusions, consentDisclosure }: HandoverSettingsProps) {
+export function HandoverSettings({ handover: h, members, sources, tokens, participants, exclusions, consentDisclosure, demoAccount = false }: HandoverSettingsProps) {
   const router = useRouter();
   const { run, isPending } = useAction();
   const creator = h.viewerIsCreator;
@@ -425,7 +427,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
         </ul>
         {review && (
           <div>
-            <ParticipantsPanel handoverId={h.id} participants={participants} exclusions={exclusions} sources={sources} creator={creator} />
+            <ParticipantsPanel handoverId={h.id} participants={participants} exclusions={exclusions} sources={sources} creator={creator} demoAccount={demoAccount} />
           </div>
         )}
       </Panel>

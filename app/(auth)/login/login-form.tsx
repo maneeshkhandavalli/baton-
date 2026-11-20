@@ -11,6 +11,7 @@
 
 import { useActionState, useId, useState, useTransition } from "react";
 
+import { DemoAccountPanel } from "@/components/auth/demo-account-panel";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ export function LoginForm({
           {callbackMessage}
         </Alert>
       ) : null}
+      <DemoAccountPanel next={next} signIn={signInWithPassword} />
       <GoogleSignInButton start={() => startGoogleSignIn(next)} autoStart={autoStartGoogle} siteOrigin={siteOrigin} />
       <div className="flex items-center gap-3 text-caption text-muted-foreground" aria-hidden="true">
         <span className="h-px flex-1 bg-border" />

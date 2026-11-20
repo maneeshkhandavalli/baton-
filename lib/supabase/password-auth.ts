@@ -12,6 +12,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { DEMO_ACCOUNT_REFUSAL, isDemoAccountEmail } from "../demo-accounts";
 import { createSupabaseServerClient } from "./server";
 import { authCallbackUrl } from "./site-url";
 
@@ -111,6 +112,8 @@ export async function setOwnPassword(password: unknown, confirm: unknown): Promi
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { status: "error", message: "Your session has ended. Sign in again, then set your password." };
+  // Shared demo accounts keep their published password (lib/demo-accounts.ts).
+  if (isDemoAccountEmail(userData.user.email)) return { status: "error", message: DEMO_ACCOUNT_REFUSAL };
   const { error } = await supabase.auth.updateUser({ password: password as string });
   if (!error) return { status: "ok", message: "Your password is set. You can now sign in with your email and password, or with Google." };
   if (error.code === "same_password") return { status: "error", field: "password", message: "That's your current password. Choose a different one." };
