@@ -189,10 +189,8 @@ function Group({
           return (
             <li key={q.id} className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge shape="tag" size="sm" tone={q.priority === "required" ? "warning" : "neutral"}>
-                  {gapPriorityLabel[q.priority]}
-                </Badge>
-                {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
+                <span className={cn("text-caption", q.priority === "required" ? "font-medium text-warning-fg" : "text-muted-foreground")}>{gapPriorityLabel[q.priority]}</span>
+                {q.category && <span className="text-caption text-muted-foreground">· {categoryLabel[q.category]}</span>}
                 <Badge size="sm" className="ml-auto capitalize" tone={q.status === "open" ? "primary" : q.status === "answered" ? "warning" : "neutral"} dot>
                   {q.status}
                 </Badge>
