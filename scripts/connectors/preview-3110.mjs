@@ -8,6 +8,7 @@
  *       # same, but REAL Gemini (production's model ids) for a synthetic-data end-to-end run. The file holds one line
  *       # AI_API_KEY=<key>; it is read here and passed to next dev only, never printed. next dev runs with
  *       # NODE_ENV=development, the documented synthetic-data mode (no data-governance gate); production keeps the gate.
+ *       # A file with OMEGA_API_KEY=<key> instead selects Omega Plus (evaluation only), see scripts/ai/ai-key-file.mjs.
  *
  * Values from the given file are put in the process environment, which Next.js gives precedence over .env.local,
  * so every Supabase URL/key, BATON_SITE_URL and connector variable comes from that file. Runs `next dev` (the test
@@ -15,8 +16,8 @@
  * provider groups are filled in — never a value. Stop any running 3110 server first.
  */
 import { spawn } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
-import { relative, resolve, isAbsolute } from "node:path";
+import { readFileSync } from "node:fs";
+import { applyAiKeyFile } from "../ai/ai-key-file.mjs";
 
 const argv = process.argv.slice(2);
 const aiIdx = argv.indexOf("--ai-key-file");
@@ -31,17 +32,7 @@ if (file) {
 }
 const env = { ...process.env, ...extra, BATON_DEV_WORKER: "0" };
 let aiLabel = "from env file";
-if (aiKeyFile) {
-  const abs = realpathSync(resolve(aiKeyFile));
-  const rel = relative(process.cwd(), abs);
-  if (!rel.startsWith("..") && !isAbsolute(rel)) throw new Error("--ai-key-file must be outside the repository");
-  const m = readFileSync(abs, "utf8").match(/^\s*AI_API_KEY\s*=\s*["']?([^"'\r\n]+)["']?\s*$/m);
-  if (!m || m[1].trim().length < 20) throw new Error("--ai-key-file: no AI_API_KEY=<key> line");
-  Object.assign(env, { AI_PROVIDER: "gemini", AI_MODEL_EXTRACT: "gemini-3.6-flash", AI_MODEL_VERIFY: "gemini-3.5-flash-lite", AI_API_KEY: m[1].trim() });
-  delete env.BATON_ALLOW_FAKE_AI;
-  delete env.AI_DATA_GOVERNANCE;
-  aiLabel = "REAL gemini (gemini-3.6-flash / gemini-3.5-flash-lite), synthetic data only";
-}
+if (aiKeyFile) aiLabel = applyAiKeyFile(env, aiKeyFile, process.cwd()).label;
 if (!extra.BATON_SITE_URL) env.BATON_SITE_URL = "http://localhost:3110";
 // A tunnel origin (e.g. https://x.ngrok-free.app) must be allowed to load Next's dev assets (next.config.ts).
 try {
