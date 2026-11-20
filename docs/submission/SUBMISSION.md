@@ -1,10 +1,11 @@
-# Baton — hackathon submission (DRAFT)
+# Baton: hackathon submission (Round 3)
 
-> Draft. Items marked **[to confirm]** are filled in only after they are verified live. Do not submit claims that the
-> status checklist (`docs/status/STATUS.md`) does not back.
+Every claim below is backed by `docs/status/STATUS.md`, `docs/status/AI_RECOVERY.md`,
+`docs/ai/ai-extraction-and-verification.md` §9 and `docs/review/browser/VERIFICATION.md`.
 
-**Project link:** [to confirm — hosting option and AI provider pending; see `DEPLOYMENT_PLAN.md`] · **Code:** https://github.com/maneeshkhandavalli/baton- (branch
-`work/r4-integration`) · **Demo without an account:** `<link>/demo`
+**Project link:** https://baton-seven-alpha.vercel.app · **Demo without an account:**
+https://baton-seven-alpha.vercel.app/demo · **Code:** https://github.com/maneeshkhandavalli/baton- (public; `master` is
+the deployed code) · **Run it locally:** [`README.md`](../../README.md#run-it-locally)
 
 ## One line
 
@@ -20,29 +21,51 @@ stale the week after, and can't be checked.
 ## What Baton does
 
 1. **Sources in, with consent.** The outgoing person uploads chat exports and documents, or connects a live channel
-   (GitHub, Discord, Telegram, Slack). Nothing from a channel is saved until the handover's creator reads and accepts
-   a capture statement, and the bot tells the channel when saving starts, pauses or stops.
+   (Telegram verified live; GitHub, Discord and Slack built, not verified live). Nothing from a channel is saved until
+   the handover's creator reads and accepts a capture statement, and the bot tells the channel when saving starts,
+   pauses or stops.
 2. **A handover that cites its evidence.** Baton extracts decisions, owners, tasks, risks and open questions. Every
    point links to the exact messages it came from, flagged sourced, inferred, conflicting or missing.
-3. **Review before anyone sees it.** The creator reviews each point and fills gaps, then publishes.
+3. **Review before anyone sees it.** The creator reviews each point and fills gaps (Gap Interview), then publishes.
 4. **Invite the incoming person.** A single-use, expiring invitation gives them the published handover only, with
    a guided first week and acknowledgements.
 5. **Living Handover.** When a source changes (a new export, new channel messages), Baton processes only what changed,
    shows the differences against the published version, and the creator reviews them before publishing a new version.
+6. **Decision Timeline.** The published points in the order things happened, by the date of the cited message.
 
 ## For the judges: how to try it
 
-* `/demo` — a fictional college coding club, no sign-in.
-* `/login` → create an account → the welcome tour and Getting Started checklist guide the creator journey:
-  New handover → consent → "Use sample data" → processing → review → Gap Interview link (answer it signed out in
-  another browser) → publish → Settings → invite → open the invitation in another browser and accept.
+* `/demo`: a fictional college coding club, no sign-in, no AI calls.
+* `/login` → **Continue with Google** (email and password sign-up exists, but the default Supabase mailer only
+  delivers to team addresses, so confirmation emails will not reach judges). The welcome tour and Getting Started
+  checklist guide the creator journey: New handover → consent → "Use sample data" → processing (keep the page open) →
+  review → Gap Interview link (answer it signed out in another browser) → publish → Published and Timeline tabs →
+  Settings → invite (copy the link) → open the invitation in another browser and accept.
 * Living Handover: Settings → Start a revision → New version of the chat → Process the new version → Changes.
-* [to confirm] Connected channels on a test handover: Settings → Connected channels (needs provider setup on the
-  deployment; otherwise every provider honestly shows "Not set up on this server").
+* Connected channels: Settings → Connected channels. A provider that is not configured on the deployment honestly
+  shows "Not set up on this server". The Telegram connector was verified live on a local isolated stack.
+
+## Round 2 commitments (as stated by the team; exact wording in the Round 2 form)
+
+| # | Commitment | Status |
+|---|---|---|
+| 1 | GitHub integration (commits, issues and pull requests; repository activity connected with project decisions) | **GitHub App connector built** (issues, comments, pull requests, reviews, default-branch commit messages, releases; never code), tested with synthetic signed events. Repository activity becomes cited points through the normal pipeline; the new **Decision Timeline** (real app tab + demo) shows points from every source in date order. No explicit commit-to-decision link. |
+| 2 | Communication bots for Discord, Telegram and Slack on one shared service with consistent permissions | **One shared connector service** (consent gate, capture windows, buffer, versioned `chat_import` sources, the same permission checks). **Telegram** verified live (2026-11-20, local isolated stack); **Discord** and **Slack** built and tested with synthetic signed events. The bots capture and announce; they do not answer questions in the chat. |
+| 3 | Living Handover | **Delivered and browser-verified** (versions 2 and 3, Playwright, 2026-11-19) and verified live with Telegram data (2026-11-20). |
+
+**Ask the handover** (original Round 1 proposal, not a Round 2 commitment): **not built.** We prioritised a reliable
+real-AI pipeline (recall 58.7% → 100% on labelled synthetic data), consent and privacy over a Q&A layer built on
+unreliable extraction. Next on the roadmap.
+
+Production status of each connector on the deployed site is recorded in the submission form, not here.
 
 ## Privacy and safety (implemented)
 
 * Consent gate before any channel message is stored (enforced in application code, SQL and a CHECK constraint).
+* Masking of phone numbers, emails, UPI IDs, bank accounts, IFSC codes, cards, government IDs, passwords, API keys and
+  secrets; participant names are replaced by pseudonyms before any AI call, and the mapping is encrypted.
+* AI consent statement `omega-owner-approved-2026-11-20-v1` names the Omega Plus gateway and says its retention and
+  training terms are not documented.
 * Provider tokens sealed with AES-256-GCM, decrypted only server-side; never sent to the browser or logs.
 * Minimal provider permissions (Slack: public channels, names and the channel notice only; private channels and the
   slash command are opt-in). Telegram connect links are sent privately to the admin who asked.
@@ -52,27 +75,46 @@ stale the week after, and can't be checked.
 
 ## Architecture
 
-Next.js 16 (App Router, Cache Components) · React 19 · TypeScript · Tailwind v4 · Supabase (Postgres + RLS, Auth,
-Storage) · Zod · background processing worker · node:test suites (≈3,000 tests) and SQL suites in throwaway Postgres
-containers. Details: `docs/architecture/`, connectors: `docs/connectors/connectors-contract.md`.
+Next.js 16 (App Router, Cache Components) · React 19 · TypeScript · Tailwind v4 · shadcn/ui · Supabase (Postgres 17 +
+RLS, Auth, Storage; 57 migrations) · Zod · fenced background processing worker · AI through one provider interface
+(Omega Plus live: `claude-sonnet-5-5` extract, `claude-sonnet-5` verify; Gemini adapter; dev-only test adapter) ·
+Vercel. Details: `docs/architecture/`, connectors: `docs/connectors/connectors-contract.md`.
 
 ## Verification (honest status)
 
 See `docs/status/STATUS.md`.
 
+* **Production (2026-11-20):** real AI processing had failed closed since 2026-11-17 (missing governance setting,
+  18 unapplied migrations, missing identity-map key; `docs/status/AI_RECOVERY.md`). Fixed tonight: migrations applied
+  after an upgrade rehearsal (41/41), Omega Plus configured under the owner-approved governance profile, redeployed.
+* **Real-model evaluation (synthetic datasets only, `ai-extraction-and-verification.md` §9):** extraction recall
+  100% (46/46) with adapter `omega-anthropic@3` (58.7% before the schema-in-instructions fix), citation accuracy
+  93.6% to 96.2% across runs, unsupported claims about 2%. Live prompt-injection suite 20/25; the 5 failures are
+  verifier verdicts that the deterministic PI-11 guard catches every time (documented residual). Real Gemini
+  `extract@2`: recall 93.5%.
 * **Browser-verified (Playwright, real interactions, 2026-11-19; local stack, built-in test AI adapter):** sign-up,
   welcome and tours with saved progress, the full creator journey, Gap Interview without an account, publish,
   invitation (reissue, accept, already-used), incoming-member restrictions and acknowledgement, and Living Handover
   (new version → 2 contradictions → corrections → version 2 → re-acknowledge; version 3 → new information).
   Evidence: `docs/review/browser/VERIFICATION.md`.
-* **Automated:** ≈3,000 unit/integration tests plus SQL suites in throwaway Postgres containers, all passing.
+* **Automated:** 2,916 node:test tests (1 todo) plus SQL suites in throwaway Postgres containers, all passing; a fresh
+  clone of `master` passes `npm ci` + `npm test` (2026-11-20).
 * **Live provider delivery:** **Telegram verified live on 2026-11-20** (local isolated stack via an ngrok tunnel,
   development bot, real group messages; capture consent and capture windows, import as versions 1 and 2, processing
   with the test adapter, publication v2, incoming acknowledgement, channel and group disconnect; evidence in
-  `docs/status/STATUS.md`). **GitHub, Discord, Slack:** [to confirm per provider] — implemented on the same shared
-  connector infrastructure and tested with synthetic events only; no live event verified.
-* **Processing with a real AI provider:** [to confirm] — verified with the deterministic test adapter only.
+  `docs/status/STATUS.md`). **GitHub, Discord, Slack:** implemented on the same shared connector infrastructure and
+  tested with synthetic events only; no live event verified at the time of writing.
+
+## Known limitations
+
+* GitHub, Discord and Slack connectors were not verified with live events at the time of writing.
+* Ask the handover (Round 1 proposal) is not built; the bots do not answer questions in the chat.
+* The verifier model can answer "supports" on injected quotes; the deterministic guard is the backstop and human
+  approval is mandatory.
+* Contradiction retrieval is lexical; extraction is not reproducible between runs.
+* Omega Plus does not document retention, training use or upstream processors: synthetic data only.
+* No email provider: invitation and Gap Interview links are copied by hand.
 
 ## Team
 
-[to confirm]
+Autistic Griffindors: Rithika Gampa (Team Leader, Product / Research) and Maneesh Khandavalli (Design & Development).

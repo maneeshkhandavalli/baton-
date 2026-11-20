@@ -27,7 +27,7 @@ import {
   submitGapAnswer,
   writeStoredSession,
 } from "../demo-dispatch";
-import { adjacentStep, DEMO_FRAMING, DEMO_STEP_GUIDE, DEMO_STORAGE_KEY, parseStepParam, stepNumber } from "../demo-guide";
+import { adjacentStep, DEMO_FRAMING, DEMO_STEP_GUIDE, DEMO_STORAGE_KEY, initialStepFromQuery, parseStepParam, stepNumber } from "../demo-guide";
 import { answersToReview, gapForPoint, loadDemoView, SCREEN_NEEDS } from "../demo-view-model";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -50,6 +50,10 @@ describe("demo guide", () => {
   it("step parsing and navigation", () => {
     assert.equal(parseStepParam("review"), "review");
     for (const bad of ["nope", "", undefined, ["review"], 3]) assert.equal(parseStepParam(bad), null);
+    // a link: no step resumes this tab's demo; an unknown step opens the first step (never the last-seen one)
+    assert.equal(initialStepFromQuery(undefined), null);
+    assert.equal(initialStepFromQuery("review"), "review");
+    for (const bad of ["bogus", "", ["review"]]) assert.equal(initialStepFromQuery(bad), DEMO_STEPS[0].id);
     assert.equal(stepNumber("sources"), 1);
     assert.equal(adjacentStep("sources", -1), null);
     assert.equal(adjacentStep("sources", 1), "draft");

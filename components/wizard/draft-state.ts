@@ -121,3 +121,17 @@ export function confirmFailure(
     message: transient ? "Baton couldn't confirm the upload. Check your connection and retry." : "The uploaded file didn't match what was sent. Retry the upload.",
   };
 }
+
+/** Shown instead of "Ready" when a file added as a chat export holds no chat message. */
+export const NO_CHAT_MESSAGES = "We couldn't find any chat messages in this file. If it's a plain text document, switch it to Plain text.";
+
+/**
+ * What happens to a .txt once its contents are checked (judge break test: an empty WhatsApp export or a random
+ * .txt added under "WhatsApp chat exports" was quietly read as Plain text and shown "Ready"). Under chat exports a
+ * file without any chat line is NOT uploaded: its row says so and offers the Plain text switch. Under documents a
+ * .txt that is really a chat export is still read as one.
+ */
+export function txtUploadKind(group: "chat" | "doc", looksLikeChat: boolean): "whatsapp_export" | "text" | "no_chat_messages" {
+  if (looksLikeChat) return "whatsapp_export";
+  return group === "chat" ? "no_chat_messages" : "text";
+}

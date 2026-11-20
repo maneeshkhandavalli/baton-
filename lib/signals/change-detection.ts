@@ -378,8 +378,12 @@ export function detectChanges(input: DetectionInput): DetectionResult {
   // 3. possible contradictions of live points by new content (Task 03 retrieval, new content only as candidates)
   const live = input.points.filter((p) => p.reviewState !== "rejected" && !p.redacted && p.statement !== null && p.privacyReview !== "required");
   if (coverage.size > 0 && live.length > 0) {
-    const anchors = [...input.anchors].sort((a, b) => (a.id < b.id ? -1 : 1));
     const fresh = messages.filter((m) => coverage.has(m.id));
+    // A new-version message that this run's extraction already cites is ALSO an anchor (anchors are every cited
+    // message of the handover). Listed twice, it would be ranked twice for the same point and give two items with
+    // one dedupe key, which the database refuses for the whole update. Keep it once, as new content.
+    const freshIds = new Set(fresh.map((m) => m.id));
+    const anchors = input.anchors.filter((a) => !freshIds.has(a.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
     // one synthetic order: every anchor before every new message; real chat timestamps still decide when both exist
     const pool: RetrievalMessage[] = [
       ...anchors.map((a, i) => ({ ...a, sourceId: "cmp", seq: i })),
@@ -394,8 +398,12 @@ export function detectChanges(input: DetectionInput): DetectionResult {
       { perPoint: Number.MAX_SAFE_INTEGER, minScore: CONTRADICTION_LIMITS.minScore },
     );
     const perPoint = new Map<string, number>();
+    const seenPairs = new Set<string>();
     for (const c of ranked) {
       if (!coverage.has(c.messageId)) continue;
+      const pair = `${id(c.pointId)}:${id(c.messageId)}`;
+      if (seenPairs.has(pair)) continue; // one item per point and message, whatever the retrieval returned
+      seenPairs.add(pair);
       const n = perPoint.get(c.pointId) ?? 0;
       if (n >= CONTRADICTION_LIMITS.perPoint) continue;
       const rev = baseRevision(c.pointId);
@@ -403,7 +411,7 @@ export function detectChanges(input: DetectionInput): DetectionResult {
       perPoint.set(c.pointId, n + 1);
       counts.possibleContradictions += 1;
       items.push({
-        kind: "possible_contradiction", dedupeKey: `possible_contradiction:${id(c.pointId)}:${id(c.messageId)}`,
+        kind: "possible_contradiction", dedupeKey: `possible_contradiction:${pair}`,
         pointId: c.pointId, baseRevisionId: rev, newMessageId: c.messageId,
         detail: { reasons: [...c.reasons], score: c.score, coverage: coverage.get(c.messageId) as string },
       });

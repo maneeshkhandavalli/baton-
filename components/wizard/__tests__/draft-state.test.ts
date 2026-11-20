@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 
 import type { SourceSummary } from "@/lib/contracts/dto";
 
-import { fromSummary, maxStepFor, resumeStep, signedTarget } from "../draft-state";
+import { fromSummary, maxStepFor, NO_CHAT_MESSAGES, resumeStep, signedTarget, txtUploadKind } from "../draft-state";
 
 const src = (over: Partial<SourceSummary>): SourceSummary => ({
   id: "4f1c2a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b",
@@ -89,5 +89,19 @@ describe("fromSummary: prototype sample sources keep their Sample badge after a 
   });
   it("the user's own files are never marked sample", () => {
     assert.equal(fromSummary(src({ title: "WhatsApp Chat with CodeCell.txt" }), true).sample, undefined);
+  });
+});
+
+describe("a .txt added under chat exports without any chat line (judge break test)", () => {
+  it("is not uploaded as Plain text behind the user's back: the row says no chat messages were found", () => {
+    assert.equal(txtUploadKind("chat", false), "no_chat_messages");
+    assert.match(NO_CHAT_MESSAGES, /^We couldn't find any chat messages in this file\./);
+    assert.doesNotMatch(NO_CHAT_MESSAGES, /—/);
+  });
+
+  it("valid files are unchanged: a chat stays a chat, a document .txt stays text, a chat under documents is read as a chat", () => {
+    assert.equal(txtUploadKind("chat", true), "whatsapp_export");
+    assert.equal(txtUploadKind("doc", false), "text");
+    assert.equal(txtUploadKind("doc", true), "whatsapp_export");
   });
 });

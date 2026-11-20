@@ -26,7 +26,10 @@ const storageKey = (token: string) => `baton:gap-draft:${token.slice(0, 12)}`;
 export function GapInterview({ token, data }: { token: string; data: GapInterviewData }) {
   const reduceMotion = useReducedMotion();
   const { run, isPending, error } = useAction();
-  const [draft, setDraft] = useState<Draft>({ name: "", answers: {} });
+  // The first render's empty draft is never written over a saved one: on a refresh (and in React's dev double
+  // effects) the save effect runs before the restored draft arrives and used to erase the unsent answers.
+  const [blankDraft] = useState<Draft>(() => ({ name: "", answers: {} }));
+  const [draft, setDraft] = useState<Draft>(blankDraft);
   const [index, setIndex] = useState(-1); // -1 = intro, questions.length = review
   // After moving between questions, focus the new heading so keyboard/screen-reader users start there.
   // The flag is set with the navigation itself, because the heading's ref runs before any effect.
@@ -55,12 +58,13 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
     }
   }, [token]);
   useEffect(() => {
+    if (draft === blankDraft) return;
     try {
       window.localStorage.setItem(storageKey(token), JSON.stringify(draft));
     } catch {
       /* storage unavailable */
     }
-  }, [draft, token]);
+  }, [draft, token, blankDraft]);
 
   const answered = qs.filter((q) => (draft.answers[q.id] ?? "").trim().length > 0);
 

@@ -24,9 +24,12 @@ import type {
   RespondToCreatorTransferInput,
   UpdateHandoverDetailsInput,
 } from "../../contracts/schemas";
+import type { SourceSummary } from "../../contracts/dto";
+import { isChatSourceKind } from "../../contracts/enums";
 import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
-import { deleteHandoverRawObjects } from "../../db/storage";
+import { getParseExclusions } from "../../db/pipeline";
+import { deleteHandoverRawObjects, loadRawSourceForPreview } from "../../db/storage";
 import { createInputMasker } from "./mask";
 import { action, failWith, ok, parseInput } from "./run";
 import type { ActionDeps } from "./types";
@@ -38,6 +41,43 @@ export const STALE_DRAFT_REASON = "stale_draft";
 /** startProcessing refused by the consent check: every source needs consent for the configured provider. */
 export const CONSENT_REQUIRED_REASON = "consent_required";
 export const CONSENT_REQUIRED_MESSAGE = "Every source needs consent for the current AI provider. Confirm the consent statement again, then start processing.";
+
+/** startProcessing refused: a chat in this run keeps no message after what was left out (judge break test). */
+export const NOTHING_TO_PROCESS_REASON = "nothing_to_process";
+export const nothingToProcessMessage = (titles: readonly string[]) =>
+  `Nothing is left to read in ${titles.length === 1 ? titles[0] : `${titles.length} chats`} after what was left out. Include at least one conversation, or remove that chat from the handover.`;
+
+/**
+ * Chats about to be read for the first time (uploaded, raw kept) that keep NO message once their recorded
+ * exclusions are applied: a run would spend an AI call on nothing. The same parse as the wizard's preview.
+ * Best effort: a source that cannot be checked here is left to the run (its parse job reports the problem).
+ */
+async function chatsWithNothingToRead(deps: ActionDeps, actor: Parameters<typeof loadRawSourceForPreview>[2], sources: readonly SourceSummary[]): Promise<SourceSummary[]> {
+  const candidates = sources.filter((s) => isChatSourceKind(s.kind) && s.state === "uploaded" && s.rawDeletedAt === null);
+  if (candidates.length === 0) return [];
+  const pepper = deps.verifiedPepper();
+  if (!pepper.ok) return [];
+  const empty: SourceSummary[] = [];
+  for (const s of candidates) {
+    try {
+      const db = deps.adminDb();
+      const raw = await loadRawSourceForPreview(db, deps.adminStorage(), actor, s.id);
+      const preview = await deps.previewParser({
+        kind: raw.kind,
+        fileName: raw.originalFilename,
+        bytes: raw.bytes,
+        timezone: raw.timezone,
+        ...(raw.dateOrder ? { dateOrder: raw.dateOrder } : {}),
+        exclusions: await getParseExclusions(db, s.id),
+        identityPepper: pepper.data.pepper,
+      });
+      if (preview.ok && preview.data.stats.messagesKept === 0) empty.push(s);
+    } catch {
+      // not checkable here: the run's own parse decides
+    }
+  }
+  return empty;
+}
 
 /**
  * R3 C2: a double-click or a retried submission with the same details returns the SAME draft (the database
@@ -123,6 +163,14 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
       ...(scope.mode === "scoped" ? { scopeSourceIds: scope.sourceIds } : {}),
     });
     if (!plan.ok) return plan;
+    const inRun = sources.data.filter(isCurrentSourceVersion).filter((s) => scope.mode !== "scoped" || scope.sourceIds.includes(s.id));
+    const empty = await chatsWithNothingToRead(deps, actor, inRun);
+    if (empty.length > 0) {
+      return failWith("validation_failed", {
+        message: nothingToProcessMessage(empty.map((s) => s.title)),
+        details: { reason: NOTHING_TO_PROCESS_REASON, sourceId: empty[0].id, sources: empty.length },
+      });
+    }
     let runId: string;
     try {
       const start = scope.mode === "scoped" ? mutations.startSourceUpdateProcessing : mutations.startProcessing;

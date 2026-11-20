@@ -96,6 +96,15 @@ export function parseStepParam(value: unknown): DemoStepId | null {
   return typeof value === "string" && (DEMO_STEP_IDS as readonly string[]).includes(value) ? (value as DemoStepId) : null;
 }
 
+/**
+ * The step a demo link opens: none asked for (null, resume this tab's demo), a known step, or the FIRST step for an
+ * unknown `?step=` value (judge break test: `?step=bogus` resumed the last-seen step instead).
+ */
+export function initialStepFromQuery(value: unknown): DemoStepId | null {
+  if (value === undefined) return null;
+  return parseStepParam(value) ?? DEMO_STEP_IDS[0];
+}
+
 export function stepNumber(step: DemoStepId): number {
   return DEMO_STEP_IDS.indexOf(step) + 1;
 }

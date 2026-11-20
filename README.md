@@ -1,19 +1,135 @@
 # Baton
 
-Source-backed knowledge handovers for student clubs, project teams and volunteer organisations.
+Baton turns a team's chats and documents into a handover for the next person. Every decision, owner, task and risk
+links back to the exact message it came from, and is marked Sourced, Inferred, Conflicting or Missing. A human
+reviews every point before anyone else sees it. Built for student clubs, project teams and volunteer groups that
+change people every term.
+
+* **Live app:** https://baton-seven-alpha.vercel.app
+* **Demo without an account:** https://baton-seven-alpha.vercel.app/demo
+* **Submission summary and honest status:** [`docs/submission/SUBMISSION.md`](docs/submission/SUBMISSION.md),
+  [`docs/status/STATUS.md`](docs/status/STATUS.md)
+
+## Try it in 30 seconds
+
+1. Open **/demo**. No sign-in. Follow the guided steps: sources, review, publish, and what the incoming member sees,
+   including the decision timeline. The demo runs in your browser and makes no AI calls.
+2. For the real app, open **/login** and choose **Continue with Google**. (Email and password sign-up exists, but our
+   email sender only reaches team addresses, so confirmation emails will not arrive for you.)
+3. **New handover** → fill in the details → accept the consent statements → **Use sample data** → **Start processing**.
+   Keep the Processing page open until the run finishes. Processing uses real AI (Omega Plus gateway,
+   `claude-sonnet-5-5` to extract, `claude-sonnet-5` to verify).
+4. **Review**: open a point to see its quotes, approve or edit it, then **Publish**. Open the **Published** and
+   **Timeline** tabs.
+5. Optional: **Settings** → create an invitation link, copy it, and open it in another browser signed in as a second
+   account to see the incoming member's view. **Settings → Start a revision** shows the Living Handover flow.
+
+Connected channels (Settings → Connected channels): one shared connector service for Telegram, Discord, Slack and
+GitHub. Telegram was verified live with a real group on a local stack; Discord, Slack and GitHub are built and tested
+with synthetic signed events. A provider that is not configured on a deployment shows "Not set up on this server".
+
+## Run it locally
+
+Verified on 2026-11-20 on Windows 11 with Node 24.14: a fresh `git clone` of `master`, `npm ci` (about 35 s) and
+`npm test` (2,916 tests passed, 1 todo, 0 failed, about 1 min 40 s).
+
+### Prerequisites
+
+* **Node.js 24** with npm (tested with 24.14; Next.js 16 needs at least 20.9). There is no `.nvmrc` or `engines` field.
+* **Docker** (Docker Desktop on Windows and macOS), running. The local Supabase stack and some tests use it.
+* **Supabase CLI 2.122.1**, run through `npx supabase@2.122.1` (no global install needed).
+* **Git**. On Windows, Git Bash is needed only for the optional SQL suites (`npm run test:sql`).
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/maneeshkhandavalli/baton-.git baton
+cd baton
+npm ci
+```
+
+### 2. Start a local Supabase stack (applies the migrations)
+
+```bash
+npx supabase@2.122.1 start
+npx supabase@2.122.1 status
+```
+
+`start` creates the local stack described in `supabase/config.toml` (Postgres 17, Auth, Storage) and applies every
+file in `supabase/migrations/` (57) to its fresh database. `status` prints the API URL (normally
+`http://127.0.0.1:54321`) and the keys you need in the next step. If you already had this stack from an older
+checkout, `npx supabase@2.122.1 migration up` applies only the new migrations, and `npx supabase@2.122.1 db reset`
+rebuilds the local database from scratch (this deletes local data).
+
+### 3. Create `.env.local`
+
+```bash
+cp .env.example .env.local
+```
+
+Then set these values (everything else in `.env.example` can stay empty for a local run):
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | the API URL from `supabase status` (e.g. `http://127.0.0.1:54321`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon key (or publishable key) from `supabase status` |
+| `SUPABASE_SERVICE_ROLE_KEY` | the service_role key (or secret key) from `supabase status`; server only |
+| `BATON_SITE_URL` | `http://localhost:3000` (already set in the example) |
+| `IDENTITY_PEPPER`, `IDENTITY_PEPPER_CANARY` | generated below; `IDENTITY_PEPPER_VERSION=p1` is already set |
+| `IDENTITY_MAP_KEY` | generated below; `IDENTITY_MAP_KEY_VERSION=k1` is already set |
+| `CRON_SECRET` | generated below (at least 32 characters) |
+| `AI_PROVIDER` | `fake` |
+| `BATON_ALLOW_FAKE_AI` | `1` |
+
+Generate the secrets (prints four lines to paste into `.env.local`):
+
+```bash
+node -e "const c=require('crypto');const p=c.randomBytes(32).toString('hex');console.log('IDENTITY_PEPPER='+p);console.log('IDENTITY_PEPPER_CANARY='+c.createHmac('sha256',Buffer.from(p,'utf8')).update('baton:identity-pepper-canary:p1').digest('hex'));console.log('IDENTITY_MAP_KEY='+c.randomBytes(32).toString('hex'));console.log('CRON_SECRET='+c.randomBytes(32).toString('base64url'))"
+```
+
+The canary is `HMAC-SHA256(pepper, "baton:identity-pepper-canary:p1")` in hex (`lib/privacy/identity.ts`); parsing
+refuses to run if the pepper and canary do not match.
+
+**No AI key needed.** `AI_PROVIDER=fake` with `BATON_ALLOW_FAKE_AI=1` turns on the built-in test adapter: deterministic
+keyword rules, no network, and labelled as the test adapter in each run's provenance. It only runs when `NODE_ENV` is `development` or
+`test` (that is, under `npm run dev`); a production build refuses it. Its extraction is far weaker than a real model,
+so expect fewer points than on the live site. To use a real model instead, see `.env.example` (Gemini or Omega Plus)
+and `docs/ai/ai-extraction-and-verification.md`.
+
+### 4. Run the app
+
+```bash
+npm run dev
+```
+
+Open http://localhost:3000. Google sign-in is not configured locally, so use **Continue with email and password →
+Create an account** (the local stack does not require email confirmation). Processing runs in the background: under
+`next dev` a development worker drains the job queue automatically when Supabase is local. Invitation and Gap Interview
+links are copied from the app, since no email provider is configured.
+
+### 5. Run the tests
+
+```bash
+npm test             # all node:test suites (contracts, db, parsers, ui, connectors, ai, actions, pipeline, selftest, integration)
+npm run typecheck
+npm run lint
+npm run test:sql     # optional: SQL suites in a throwaway Postgres container (needs bash and Docker)
+```
+
+Stop the local stack with `npx supabase@2.122.1 stop`.
 
 ## Stack
 
 Next.js 16 (App Router, Turbopack, Cache Components) · React 19 · TypeScript (strict) · Tailwind CSS v4 · shadcn/ui (Base UI primitives) · Framer Motion · Lucide · Zod · React Hook Form · Sonner
 
 ```bash
-npm install
+npm ci
 npm run dev     # http://localhost:3000
 npm run lint
 npm run build
 
 # Shared-contract tests (Node's built-in runner; no extra dependency)
-node --import ./lib/contracts/__tests__/resolve-ts.mjs --test "lib/contracts/__tests__/*.test.ts"
+npm run test:contracts
 ```
 
 Shared contracts (enums, Zod schemas, DTOs, parser and identity contracts, the read facade) live in
