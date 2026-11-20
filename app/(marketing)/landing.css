@@ -994,21 +994,6 @@
     padding: calc(10 * var(--u)) calc(14 * var(--u)) calc(16 * var(--u));
     font-size: var(--fs-small);
   }
-  .lp-framed-cta {
-    display: flex;
-    justify-content: center;
-    margin-top: calc(40 * var(--u));
-  }
-  .lp-framed-cta > div {
-    position: relative;
-    padding: calc(10 * var(--u));
-    border-radius: calc(26 * var(--u));
-    background: color-mix(in srgb, var(--t-apricot) 70%, var(--t-paper));
-    box-shadow:
-      0 0 0 1px var(--hair),
-      0 0 0 calc(8 * var(--u)) var(--background),
-      0 0 0 calc(9 * var(--u)) var(--hair);
-  }
 
   /* ── 5 · How it works: stacked sticky cards ─────── */
   .lp-steps {
@@ -1706,6 +1691,20 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+
+  /* ── Header action (session-aware, marketing-header-actions.tsx) ── */
+  .lp-nav__actions {
+    display: contents;
+  }
+  /* Signed in, the header's "Open workspace" is the page's primary action, so the hero's demo pill steps back to
+     the outlined style: one ink pill per screen. (Same size, so nothing shifts when the session streams in.) */
+  .brand-identity:has(.lp-nav [data-session="in"]) .lp-hero__ctas [data-cta="primary"] {
+    color: var(--foreground);
+  }
+  .brand-identity:has(.lp-nav [data-session="in"]) .lp-hero__ctas [data-cta="primary"] :is(.lp-cta__disc, .lp-cta__label) {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--hair);
+  }
 }
 
 /* Accordion height animation (reference: grid-template-rows .6s); motion only. */
@@ -1739,3 +1738,4 @@
     transition: none;
   }
 }
+

@@ -78,8 +78,7 @@ export function ForTheNerds() {
   return (
     <section id="for-the-nerds" aria-labelledby="nerds-title" className="lp-faq">
       <div className="min-w-0" data-reveal>
-        <p className="lp-hand">For the nerds</p>
-        <h2 id="nerds-title" className="lp-h2 mt-3 max-w-[12ch]">
+        <h2 id="nerds-title" className="lp-h2 max-w-[12ch]">
           How Baton keeps AI honest.
         </h2>
         <p className="lp-body mt-5 max-w-[44ch]">Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.</p>

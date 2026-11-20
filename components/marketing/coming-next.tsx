@@ -50,8 +50,8 @@ const STAGES: Stage[] = [
     title: "Connectors for GitHub, Discord, Telegram and Slack",
     items: [
       "Built in code, not yet set up with real apps or verified live.",
-      "Type /handover in the group where the work happens.",
-      "Living Handovers that watch a connected channel and flag changes for a person.",
+      "Once set up: type /handover in the group where the work happens.",
+      "Once set up: Living Handovers that watch a connected channel and flag changes for a person.",
     ],
   },
   {
@@ -61,9 +61,10 @@ const STAGES: Stage[] = [
     label: <PreviewLabel />,
     title: "Ask the Handover",
     items: [
-      "The incoming person asks in plain words.",
-      "Answers come only from the handover and its sources, each with references.",
-      "It says so when nothing covers the question.",
+      "Not built yet. Nothing here works today.",
+      "The idea: the incoming person asks in plain words.",
+      "Answers would come only from the handover and its sources, each with references.",
+      "It would say so when nothing covers the question.",
     ],
   },
 ];
@@ -73,12 +74,11 @@ export function ComingNext() {
     <section id="coming-next" aria-labelledby="coming-next-title" className="lp-roadmap" data-roadmap>
       <div className="lp-roadmap__pin">
         <div className="lp-roadmap__head" data-reveal>
-          <p className="lp-hand">what&rsquo;s real, what&rsquo;s next</p>
-          <h2 id="coming-next-title" className="lp-h2 mx-auto mt-4 max-w-[16ch]">
+          <h2 id="coming-next-title" className="lp-h2 mx-auto max-w-[16ch]">
             Where handovers go next.
           </h2>
           <p className="lp-body mx-auto mt-4 max-w-[52ch]">
-            Each stage carries its label. Early access is built but not yet connected to live apps; previews are ideas with invented CodeCell content, not
+            Each stage carries its label. Early access is built but not yet connected to live apps. Preview means not built yet: an idea, not
             features you can use today.
           </p>
         </div>

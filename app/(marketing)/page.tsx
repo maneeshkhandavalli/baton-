@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
-import Link from "next/link";
-import { ArrowUpRight, CalendarClock, Check, Contact, Gavel, KeyRound, ListChecks, Lock, OctagonX, TriangleAlert, UserRound } from "lucide-react";
+import { CalendarClock, Check, Contact, Gavel, KeyRound, ListChecks, Lock, OctagonX, TriangleAlert, UserRound } from "lucide-react";
 
 import { ComingNext } from "@/components/marketing/coming-next";
 import { LandingCtas } from "@/components/marketing/cta";
@@ -13,7 +12,6 @@ import { LivingHandover } from "@/components/marketing/living-handover";
 import { PixelField } from "@/components/marketing/pixel-field";
 import { RotatingWord } from "@/components/marketing/rotating-word";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { routes } from "@/lib/routes";
 import { EVIDENCE_STATUSES } from "@/types/status";
 
 /**
@@ -21,7 +19,8 @@ import { EVIDENCE_STATUSES } from "@/types/status";
  * (docs/design/landing/loopsii-reference-breakdown.md; styles in app/(marketing)/landing.css; scroll choreography in
  * components/marketing/landing-motion.tsx, motion-allowed only). Section order follows the reference:
  * hero mosaic → statement + orbit → dark pinned band → lime band with the product window → stacked step cards →
- * stage tiles → split panels → roadmap wheel → FAQ → stair-stepped outro → closing card.
+ * stage tiles → split panels → roadmap wheel → FAQ → stair-stepped outro → closing card. Calls to action: the hero
+ * and the closing card only (components/marketing/cta.tsx); the header carries the session's action.
  * Every illustration is a piece of Baton with the fictional CodeCell demo data (lib/demo/scenario). Claims are the
  * product's real behaviour; connectors are "Early access", Ask the Handover is a "Preview".
  */
@@ -231,8 +230,7 @@ export default function HomePage() {
         {/* ── 2 · Intro: the statement ─────────────── */}
         <section data-intro aria-labelledby="problem-title" className="lp-intro lp-graph">
           <div className="lp-wrap lp-intro__head" data-intro-head data-reveal>
-            <p className="lp-hand">the problem</p>
-            <div>
+            <div className="lg:col-start-2">
               <h2 id="problem-title" className="sr-only">
                 What leaves with the person who leaves.
               </h2>
@@ -349,23 +347,12 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
-        <div className="lp-framed-cta">
-          <div>
-            <Link href={routes.handover.new} className="lp-cta">
-              <span aria-hidden="true" className="lp-cta__disc">
-                <ArrowUpRight className="size-4" />
-              </span>
-              <span className="lp-cta__label">Start a handover</span>
-            </Link>
-          </div>
-        </div>
       </div>
 
       {/* ── 5 · How it works: stacked cards ───────── */}
       <section id="how-it-works" aria-labelledby="how-title" className="lp-steps">
         <div className="lp-steps__head" data-reveal>
-          <p className="lp-hand">how it works</p>
-          <h2 id="how-title" className="lp-h2 mx-auto mt-3 max-w-[18ch]">
+          <h2 id="how-title" className="lp-h2 mx-auto max-w-[18ch]">
             From the team chat to a handover, in four steps.
           </h2>
         </div>
@@ -375,18 +362,16 @@ export default function HomePage() {
       {/* ── 6 · Evidence: stage tiles ─────────────── */}
       <section id="evidence" aria-labelledby="evidence-title" className="lp-features lp-wrap">
         <div data-reveal>
-          <p className="lp-hand">evidence</p>
-          <h2 id="evidence-title" className="lp-h2 mt-3 max-w-[16ch]">
+          <h2 id="evidence-title" className="lp-h2 max-w-[16ch]">
             Every point says how sure you can be.
           </h2>
         </div>
 
         <div className="lp-stage-group">
           <div className="lp-stage-group__head">
-            <span className="lp-pill-tag">Labels</span>
-            <h3 className="lp-h3 mt-4 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">Four labels, worked out from the evidence.</h3>
+            <h3 className="lp-h3 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">Four labels, worked out from the evidence.</h3>
             <p className="lp-body mt-3 max-w-[36ch]">
-              Baton never presents a guess as a fact. Each point carries one of four labels, worked out from the evidence rather than set by hand.
+              Baton never presents a guess as a fact, and nobody sets a label by hand.
             </p>
           </div>
           <dl className="lp-tiles">
@@ -409,8 +394,7 @@ export default function HomePage() {
 
         <div className="lp-stage-group">
           <div className="lp-stage-group__head">
-            <span className="lp-pill-tag">Sign-off</span>
-            <h3 className="lp-h3 mt-4 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">A person signs off before anything is published.</h3>
+            <h3 className="lp-h3 max-w-[18ch] text-[max(1.25rem,calc(34*var(--u)))]">A person signs off before anything is published.</h3>
             <p className="lp-body mt-3 max-w-[36ch]">Publishing stays locked while:</p>
           </div>
           <ul className="lp-tiles">
@@ -436,7 +420,6 @@ export default function HomePage() {
       {/* ── 7 · Privacy: split card + sky panel ───── */}
       <section id="privacy" aria-labelledby="privacy-title" className="lp-split">
         <div className="lp-split__card" data-reveal>
-          <p className="lp-hand">privacy</p>
           <h2 id="privacy-title" className="lp-statement max-w-[16ch]">
             Built for group chats full of phone numbers.
           </h2>
