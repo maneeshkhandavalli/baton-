@@ -7,11 +7,13 @@ import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DEMO_ACCOUNT_REFUSAL } from "@/lib/demo-accounts";
 import type { PasswordResult } from "@/lib/supabase/password-auth";
 
 import { setPassword } from "./actions";
 
-export function SetPasswordForm() {
+/** `demoAccount`: the viewer is a shared demo account; the form is turned off (the server refuses it too). */
+export function SetPasswordForm({ demoAccount = false }: { demoAccount?: boolean }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PasswordResult | null>(null);
   const err = result?.status === "error" ? result : null;
@@ -57,7 +59,12 @@ export function SetPasswordForm() {
         <Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" required aria-invalid={err?.field === "confirm" ? true : undefined} />
       </div>
       {err ? <Alert tone="danger">{err.message}</Alert> : null}
-      <Button type="submit" disabled={pending} aria-busy={pending}>
+      {demoAccount ? (
+        <p id="set-password-demo" className="text-caption text-muted-foreground">
+          {DEMO_ACCOUNT_REFUSAL}
+        </p>
+      ) : null}
+      <Button type="submit" disabled={pending || demoAccount} aria-busy={pending} aria-describedby={demoAccount ? "set-password-demo" : undefined}>
         {pending ? "Saving…" : "Save password"}
       </Button>
     </form>

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useAction } from "@/hooks/use-action";
 import type { AccountDeletionBlockers } from "@/lib/contracts/dto";
 import { ACCOUNT_DELETION_CONFIRMATION } from "@/lib/contracts/schemas";
+import { DEMO_ACCOUNT_REFUSAL } from "@/lib/demo-accounts";
 import { deleteAccount } from "@/lib/actions/account";
 
 import { accountDeletionRequest } from "./deletion-confirmation";
@@ -29,6 +30,8 @@ interface AccountDeletionProps {
   blockers: AccountDeletionBlockers;
   /** handoverId → the open offer, for handovers the viewer is transferring. */
   offers: Record<string, OutgoingOffer>;
+  /** A shared demo account (lib/demo-accounts.ts): deletion is turned off, and the server refuses it too. */
+  demoAccount?: boolean;
 }
 
 /**
@@ -37,7 +40,7 @@ interface AccountDeletionProps {
  * for permanent deletion. The user must type DELETE; the typed word itself is sent and checked on the server,
  * which deletes the data in one transaction, removes the files and the sign-in, and ends the session.
  */
-export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
+export function AccountDeletion({ blockers, offers, demoAccount = false }: AccountDeletionProps) {
   const router = useRouter();
   const { run, isPending, error, clearError } = useAction();
   const created = blockers.createdHandovers;
@@ -162,10 +165,20 @@ export function AccountDeletion({ blockers, offers }: AccountDeletionProps) {
         </p>
       )}
 
-      <Button variant="destructive" disabled={!allResolved} onClick={() => setDialog(true)}>
+      <Button
+        variant="destructive"
+        disabled={!allResolved || demoAccount}
+        aria-describedby={demoAccount ? "account-deletion-demo" : undefined}
+        onClick={() => setDialog(true)}
+      >
         <Trash2 aria-hidden="true" data-icon="inline-start" />
         Delete account
       </Button>
+      {demoAccount ? (
+        <p id="account-deletion-demo" className="text-xs text-muted-foreground">
+          {DEMO_ACCOUNT_REFUSAL}
+        </p>
+      ) : null}
 
       <Dialog open={open} onOpenChange={setDialog}>
         <DialogContent>

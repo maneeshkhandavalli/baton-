@@ -25,6 +25,7 @@ import type { VerifiedActor } from "../../db/actor-rules";
 import { isDbError } from "../../db/errors";
 import * as mutations from "../../db/mutations";
 import { removeHandoverRawPrefix } from "../../db/storage";
+import { refuseDemoAccount } from "./demo-guard";
 import { action, failWith, ok, withActor } from "./run";
 import type { ActionDeps } from "./types";
 
@@ -54,6 +55,8 @@ export async function deleteAccount(deps: ActionDeps, input: DeleteAccountInput)
     deleteAccountInput,
     input,
     async (actor, request) => {
+      const demo = refuseDemoAccount(actor); // shared demo accounts can't be deleted (lib/demo-accounts.ts)
+      if (demo) return demo;
       const db = deps.adminDb();
 
       let purgeIds: string[];
