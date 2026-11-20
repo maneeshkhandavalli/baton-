@@ -1,0 +1,20 @@
+# Baton: https://baton-seven-alpha.vercel.app
+# Public pages may be crawled. Signed-in workspaces, private invitation and
+# Gap Interview links, owner diagnostics and API endpoints may not.
+# A plain-language guide for AI agents is at /llms.txt
+
+User-agent: *
+Allow: /
+Allow: /demo
+Allow: /login
+Allow: /llms.txt
+Disallow: /dashboard
+Disallow: /handover/
+Disallow: /account
+Disallow: /connect
+Disallow: /test
+Disallow: /preview
+Disallow: /h/
+Disallow: /g/
+Disallow: /api/
+Disallow: /auth/
