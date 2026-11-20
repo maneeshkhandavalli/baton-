@@ -15,8 +15,9 @@ import { inviteErrorMessage } from "@/components/settings/invite-delivery";
 import { InviteResult } from "@/components/settings/invite-result";
 import { ParticipantsPanel } from "@/components/settings/participants-panel";
 import { SourceVersionUpload } from "@/components/settings/source-version-upload";
-import { accessLevelMeta, maskKindLabel, memberRoleLabel, sourceKindLabel, sourceStateLabel } from "@/components/handover/labels";
+import { accessLevelMeta, memberRoleLabel, sourceKindLabel, sourceStateLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { maskedCountsText } from "@/components/settings/privacy-summary";
 import { SectionHeading } from "@/components/shared/section-heading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +83,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
     for (const [k, v] of Object.entries(s.maskingCounts ?? {})) acc[k as MaskKind] = (acc[k as MaskKind] ?? 0) + (v ?? 0);
     return acc;
   }, {});
+  const maskedCounts = maskedCountsText(masking);
   const reviewRole = invite.role === "outgoing" || invite.role === "reviewer";
   // R3 Task 05B: one row per source (its current version); earlier versions and a pending update are shown on it
   const lineageOf = (s: SourceSummary) => s.version?.lineageId ?? s.id;
@@ -407,17 +409,7 @@ export function HandoverSettings({ handover: h, members, sources, tokens, partic
           <li>
             <span>
               Personal and financial details were masked before storage
-              {Object.keys(masking).length > 0 && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  (
-                  {(Object.entries(masking) as Array<[MaskKind, number]>)
-                    .filter(([, n]) => n > 0)
-                    .map(([k, n]) => `${n} ${maskKindLabel[k].label.toLowerCase()}`)
-                    .join(", ")}
-                  )
-                </span>
-              )}
+              {maskedCounts && <span className="text-muted-foreground"> ({maskedCounts})</span>}
               . Masked values are never revealed.
             </span>
           </li>
