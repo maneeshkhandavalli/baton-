@@ -9,7 +9,7 @@ import "server-only";
  * The prompt-injection suite (fixtures/ai/prompt-injection) must pass before any bump (§11.8 rule 7).
  */
 
-export const EXTRACT_PROMPT_VERSION = "extract@1";
+export const EXTRACT_PROMPT_VERSION = "extract@2";
 export const SUPPORT_PROMPT_VERSION = "support@1";
 
 export const EXTRACT_SCHEMA_VERSION = "extraction@1";

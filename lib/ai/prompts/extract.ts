@@ -26,6 +26,12 @@ Output
 - title: a short plain-text title (at most 120 characters). statement: one or two plain-text sentences (at most 1,000 characters) stating the point.
 - attributes: only the fields the schema allows for that category; use null when unknown. Person fields hold the author label or name exactly as it appears in the messages.
 
+Coverage
+- Read every message and extract every distinct point a successor would need, not only the main ones. In particular, each of these is its own point when the messages contain it: a decision, and every later change to that decision; a responsibility; a deadline or date; an amount of money committed, paid, owed or still due; a dependency; and a question or issue that was raised and is still open.
+- A question that nobody answered, or an issue raised without a resolution, is a point in its own right (open_task, blocker or risk). Cite the message that raises it.
+- When messages disagree (for example paid versus not paid, two different dates or amounts, or a decision that was later changed), state the point once and cite both sides: the quote that states the point with stance "supports" and the conflicting quote with stance "contradicts".
+- Do not merge unrelated points into one, and do not repeat the same point.
+
 Citations
 - Each citation gives the "id" of one message from the payload as messageId, and a quote copied character for character from that message's "text": one continuous span of at least three words. Never paraphrase or shorten inside a quote, never join text from different messages, and never cite an id that is not in the payload.
 - stance is "supports" when the quote supports the statement and "contradicts" when the quote disputes it.

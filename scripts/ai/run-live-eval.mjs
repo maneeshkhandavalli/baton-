@@ -4,6 +4,8 @@
 // identifiers. Billed or quota-counted calls (about 2 per dataset chunk). Never touches a database.
 //
 //   node scripts/ai/run-live-eval.mjs <key-file outside the repo> [--out report.json]
+//   node scripts/ai/run-live-eval.mjs <key-file outside the repo> --injection   # the live prompt-injection suite
+//     (lib/ai/__tests__/prompt-injection.live.test.ts; required before any prompt-version bump, §11.8 rule 7)
 //
 // <key-file> holds one line `AI_API_KEY=<key>` (a Gemini API key). It must live OUTSIDE this repository. The key is
 // passed to the child process environment only; it is never printed, logged or written.
@@ -46,7 +48,10 @@ delete env.BATON_ALLOW_FAKE_AI;
 delete env.AI_DATA_GOVERNANCE;
 
 const out = rest.includes("--out") ? rest[rest.indexOf("--out") + 1] : join(repo, "eval-live-gemini.json");
-const r = spawnSync(process.execPath, ["--import", "./lib/ai/__tests__/resolve-ai.mjs", "lib/eval/cli.ts", "--provider", "configured", "--out", out], {
+const childArgs = rest.includes("--injection")
+  ? ["--import", "./lib/ai/__tests__/resolve-ai.mjs", "--test", "lib/ai/__tests__/prompt-injection.live.test.ts"]
+  : ["--import", "./lib/ai/__tests__/resolve-ai.mjs", "lib/eval/cli.ts", "--provider", "configured", "--out", out];
+const r = spawnSync(process.execPath, childArgs, {
   cwd: repo,
   env,
   stdio: "inherit",
