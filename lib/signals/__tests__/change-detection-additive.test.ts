@@ -18,6 +18,7 @@ import {
   classifyEvidence,
   detectChanges,
   isAdditiveSourceKind,
+  samePlace,
   sourceFamily,
   type DetectionInput,
   type DetectionPoint,
@@ -70,6 +71,14 @@ describe("finding 2: chat_import is matched as a chat", () => {
     assert.equal(classifyEvidence(family, ev(1), [msg(1, `${QUOTE}.`)]).kind, "present");
   });
 
+  it("different messages with null headings are NOT the same place for a chat_import", () => {
+    const a = ev(1);
+    assert.equal(samePlace(family, a, msg(1, "x", { authorLabel: "Ravi" })), false);
+    assert.equal(samePlace(family, a, msg(1, "x", { sentAt: "2026-11-20T10:15:00.000Z" })), false);
+    assert.equal(samePlace(family, a, msg(1, "x")), true, "same author and time is the same place");
+    assert.equal(samePlace("document", a, msg(1, "x", { authorLabel: "Ravi" })), true, "document matching would (wrongly) say same place");
+  });
+
   it("before the fix (document matching, null headings) the moved quotation was wrongly 'present'", () => {
     assert.equal(classifyEvidence("document", ev(1), [msg(1, `${QUOTE}.`, { authorLabel: "Ravi" })]).kind, "present");
   });
@@ -106,6 +115,18 @@ describe("finding 3: additive (delta) versions", () => {
     const r = detectChanges(input({ additive: true, oldEvidence: [ev(1)], newMessages: [msg(1, `${QUOTE}, starting next week.`)], points: [point(1)] }));
     assert.deepEqual(kinds(r), []);
     assert.equal(r.counts.evidencePresent, 1);
+  });
+
+  it("new information in a later delta is still detected (new_information), while old evidence is carried", () => {
+    const fresh = point(7, { reviewState: "pending", citedMessageIds: [U(107)] });
+    const r = detectChanges(input({
+      additive: true, oldEvidence: [ev(1)], points: [point(1), fresh],
+      newMessages: [msg(7, "The finance report is due by Monday.", { sentAt: "2026-11-20T11:00:00.000Z", authorLabel: "Ravi" })],
+      newLinks: [{ evidenceId: U(607), pointId: U(307), messageId: U(107), quoteStart: 0, quoteEnd: 30, verdict: "supports", quoteCheck: "exact", pointHasOtherEvidence: false }],
+    }));
+    assert.deepEqual(kinds(r), ["new_information"]);
+    assert.equal(r.items[0].candidatePointId, U(307));
+    assert.equal(r.counts.evidenceCarried, 1);
   });
 
   it("an edit that moves the quotation to another new message is evidence_moved", () => {
@@ -174,6 +195,11 @@ describe("finding 3, end to end: three successive connector source versions", ()
     await c.send(cm("12", "2026-11-20T09:10:00.000Z", "Asha", `${OWNER}.`));
     const v2 = await c.flush();
     assert.deepEqual([v1.length, v2.length], [1, 1], "each version is a delta");
+
+    // v2 over v1: the v1 message cited by a published point is not repeated in v2 → still valid
+    const r2 = detect("chat_import", [cite(1, v1[0], DEADLINE)], v2, [pt(1, v1[0])], v1[0].sentAt as string);
+    assert.equal(r2.counts.evidenceMissing, 0);
+    assert.equal(r2.counts.evidenceCarried, 1);
 
     // published points cite one message of v1 and one of v2
     const old = [cite(1, v1[0], DEADLINE), cite(2, v2[0], OWNER)];

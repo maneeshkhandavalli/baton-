@@ -376,6 +376,12 @@ describe("ingest fan-out with a full buffer", () => {
     assert.equal(done.status, "processed");
     assert.deepEqual(store.bufferedFor(links[0].id).map((m) => m.providerMessageId), ["n1"]);
     for (const l of links.slice(1)) assert.equal(store.bufferedFor(l.id).length, 1, "still exactly one row after three deliveries");
+
+    // a duplicate delivery of the now-processed event is acknowledged and changes nothing
+    const dup = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.deepEqual(dup, { status: "duplicate" });
+    assert.equal(httpStatusFor(dup), 200);
+    for (const l of links) assert.equal(store.bufferedFor(l.id).length, 1);
   });
 
   it("an edit of an already-buffered message is applied at capacity (no new row)", async () => {

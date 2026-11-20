@@ -28,7 +28,7 @@ pending-version consent) is shared by all four providers and covered by syntheti
 ## Last full regression (2026-11-20, PR #7 review fixes)
 
 Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 282 ·
-pipeline 249 · connectors 192 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
+pipeline 251 · connectors 192 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
 (incl. `99_connectors_r4` §12 history invariant and §13 capacity, `99_connector_version_consent`) · integration SQL
 15/15, 0 open findings.
 

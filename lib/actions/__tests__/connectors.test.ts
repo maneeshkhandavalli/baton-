@@ -100,6 +100,10 @@ describe("recordCaptureConsent: history days only for providers that can import 
     assert.equal(after?.state, "pending_consent");
     assert.deepEqual(after?.settings ?? {}, {}, "historyDays was not persisted");
     assert.equal(after?.consentedAt, null);
+    const windows = (store as unknown as { captureWindows: Map<string, unknown[]> }).captureWindows.get(link.id);
+    assert.equal(windows?.length ?? 0, 0, "no capture window was opened or back-dated");
+    const r2 = await store.bufferMessages(link.id, [{ providerMessageId: "x", sentAt: "2026-11-15T09:00:00.000Z", authorLabel: "Asha", kind: "text", text: "earlier" }]);
+    assert.equal(r2.refused, true, "nothing can be buffered for the refused link");
   });
 
   it("Telegram: the store refuses a back-dating setting saved by any other path (mirrors the database trigger)", async () => {

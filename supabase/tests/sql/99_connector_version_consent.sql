@@ -50,6 +50,7 @@ create function tests.v1_snapshot() returns jsonb language sql security definer 
 $$;
 grant execute on all functions in schema tests to anon, authenticated, service_role;
 select tests.kv_put('points_before', tests.points_snapshot());
+select tests.kv_put('pub1_snapshot', (select jsonb_agg(to_jsonb(pp) order by pp.id) from public.publication_points pp where pp.publication_id = tests.id('pub1')));
 select tests.kv_put('v1_before', tests.v1_snapshot());
 
 -- ── the flush: an uploaded chat_import candidate, NO consent ────────────────────
@@ -121,6 +122,8 @@ select tests.eq((select count(*)::int from public.processing_jobs where run_id =
                 1, 'v2 is parsed (it was never parsed)');
 select tests.eq(tests.points_snapshot(), tests.kv('points_before'), 'starting the update run changes no point either');
 select tests.eq(tests.v1_snapshot(), tests.kv('v1_before'), 'v1 still intact');
+select tests.eq((select jsonb_agg(to_jsonb(pp) order by pp.id) from public.publication_points pp where pp.publication_id = tests.id('pub1')),
+                tests.kv('pub1_snapshot'), 'the published snapshot is byte-for-byte unchanged by the new version and its run');
 
 -- ── provider-agnostic: four connector lineages (Telegram, Discord, Slack, GitHub) in one handover ──
 -- Every connector writes kind chat_import through the shared flush, so the database path is identical; this pins it
