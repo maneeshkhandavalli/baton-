@@ -367,7 +367,7 @@ export function TourOverlay() {
             id={titleId}
             ref={headingRef}
             tabIndex={-1}
-            className="type-heading rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="type-heading outline-none"
           >
             {step.title}
           </h2>

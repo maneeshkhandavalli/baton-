@@ -157,8 +157,9 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         <FirstWeek handover={handover} />
 
         {groups.map((g, i) => (
-          <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="space-y-5" data-tour={i === 0 ? "published-sections" : undefined}>
-            <h3 id={`${g.id}-h`} className="type-section-title">
+          <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="space-y-5">
+            {/* The tour points at the heading, not the whole (tall) section, so its card never covers it. */}
+            <h3 id={`${g.id}-h`} className="type-section-title" data-tour={i === 0 ? "published-sections" : undefined}>
               {g.label}
               <span className="ml-3 align-middle font-sans text-sm text-muted-foreground tabular-nums">{g.points.length}</span>
             </h3>
@@ -354,8 +355,8 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
   if (total === 0) return null;
 
   return (
-    <section id="first-week" aria-labelledby="fw-h" className="space-y-5" data-tour="first-week">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <section id="first-week" aria-labelledby="fw-h" className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="first-week">
         <div className="space-y-1.5">
           <h3 id="fw-h" className="type-section-title">
             Your first 7 days
@@ -414,7 +415,16 @@ function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handov
   const acked = handover.viewerAcknowledgedAt;
 
   return (
-    <section id="acknowledge" aria-labelledby="ack-h" className="scroll-mt-6 rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8" data-tour="acknowledge">
+    <section
+      id="acknowledge"
+      aria-labelledby="ack-h"
+      // Only the incoming member's own action gets the inverse slab; for everyone else it's a quiet note (UI polish).
+      className={cn(
+        "scroll-mt-6",
+        !acked && (viewerRole !== "incoming" || preview) ? "rounded-xl border border-border px-5 py-4 sm:px-6" : "rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8",
+      )}
+      data-tour="acknowledge"
+    >
       {acked ? (
         <div className="flex items-start gap-3">
           <CheckCircle2 aria-hidden="true" className="mt-1 size-6 shrink-0 text-status-sourced" />
@@ -427,10 +437,10 @@ function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handov
         </div>
       ) : viewerRole !== "incoming" || preview ? (
         <div>
-          <h3 id="ack-h" className="type-section-title">
+          <h3 id="ack-h" className="type-heading">
             Acknowledgement
           </h3>
-          <p className="mt-1.5 text-sm text-inverse-muted">
+          <p className="mt-1 text-sm text-muted-foreground">
             {preview ? "In the real handover, the incoming member confirms here that they've read it." : "Only incoming members acknowledge a handover."}
           </p>
         </div>
