@@ -29,7 +29,7 @@ function zoned(d: Date): { y: number; m: number; d: number; hh: string; mm: stri
 const valid = (d: Date) => !Number.isNaN(d.getTime());
 
 export function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "Not set";
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00+05:30` : iso);
   if (!valid(d)) return iso;
   const z = zoned(d);
@@ -37,7 +37,7 @@ export function formatDate(iso: string | null | undefined): string {
 }
 
 export function formatShortDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "Not set";
   const d = new Date(iso);
   if (!valid(d)) return iso;
   const z = zoned(d);
@@ -45,15 +45,39 @@ export function formatShortDate(iso: string | null | undefined): string {
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "Not set";
   const d = new Date(iso);
   if (!valid(d)) return iso;
   const z = zoned(d);
   return `${z.d} ${MONTHS[z.m - 1]} ${z.y}, ${z.hh}:${z.mm}`;
 }
 
+/** Full month names for group headings ("March 2026"); fixed here for the same reason as MONTHS. */
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
+
+/**
+ * Calendar month of an instant in India time, as a sortable key ("2026-03"). Use this, never `iso.slice(0, 7)`:
+ * 20:00Z on 31 March is already 1 April in Asia/Kolkata. Returns null for a missing or unparseable value.
+ */
+export function monthKey(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!valid(d)) return null;
+  const z = zoned(d);
+  return `${z.y}-${String(z.m).padStart(2, "0")}`;
+}
+
+/** "March 2026" in India time (timeline month headings). */
+export function formatMonthYear(iso: string | null | undefined): string {
+  if (!iso) return "Not set";
+  const d = new Date(iso);
+  if (!valid(d)) return iso;
+  const z = zoned(d);
+  return `${MONTHS_LONG[z.m - 1]} ${z.y}`;
+}
+
 export function formatDateRange(from: string | null, to: string | null): string {
-  if (!from && !to) return "—";
+  if (!from && !to) return "No dates";
   return `${formatShortDate(from)} – ${formatDate(to)}`;
 }
 
@@ -64,7 +88,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatCount(n: number | null | undefined): string {
-  return n === null || n === undefined ? "—" : n.toLocaleString("en-IN");
+  return n === null || n === undefined ? "Not set" : n.toLocaleString("en-IN");
 }
 
 export function plural(n: number, one: string, many = `${one}s`) {

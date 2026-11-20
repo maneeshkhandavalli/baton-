@@ -1,0 +1,500 @@
+// Round 4 connector core (Main): the shared ingest, memory store rules, transcript ⇄ parser round trip, request
+// verification, signed state, credential sealing and flush. Synthetic data only; no network, no database.
+import assert from "node:assert/strict";
+import { createHmac, generateKeyPairSync, sign } from "node:crypto";
+import { describe, it } from "node:test";
+
+import { TEST_PEPPER } from "../../../fixtures/parser/load";
+import { parseSource } from "../../parsers/parse-source";
+import { connectorConfigured, connectorUrls } from "../config";
+import { flushDueLinks, flushLink, type SourceWriter } from "../flush";
+import { historyBatches, historyDeliveryId, httpStatusFor, ingestEvent, ingestHistory, sanitizeMessages } from "../ingest";
+import { openCredentials, parseConnectorSecretKey, sealCredentials } from "../secrets";
+import { signConnectorState, verifyConnectorState } from "../state";
+import { MemoryConnectorStore } from "../store-memory";
+import { serializeTranscript, transcriptFileName } from "../transcript";
+import { CONNECTOR_MESSAGE_LIMITS, type ConnectorMessage, type NormalizedEvent } from "../types";
+import { safeEqual, verifyDiscordSignature, verifyGithubSignature, verifySlackSignature, verifyTelegramSecret } from "../verify";
+
+const CREATOR = "11111111-1111-4111-8111-111111111111";
+const OTHER = "22222222-2222-4222-8222-222222222222";
+const HANDOVER = "33333333-3333-4333-8333-333333333333";
+
+const msg = (id: string, at: string, author = "Asha", text = `message ${id}`): ConnectorMessage => ({ providerMessageId: id, sentAt: at, authorLabel: author, kind: "text", text });
+
+async function setup() {
+  // Consent is recorded at 08:00, before the 09:00–10:00 fixture messages (capture windows: messages must be sent after consent).
+  const store = new MemoryConnectorStore(() => Date.parse("2026-11-19T08:00:00Z"));
+  store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
+  const user = { kind: "user", profileId: CREATOR } as const;
+  const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T1", accountLabel: "CodeCell", scopes: ["channels:history"], credentials: "c1.x.y.z" });
+  const link = await store.linkChannel(user, { installationId: inst.id, handoverId: HANDOVER, externalChannelId: "C1", channelLabel: "#core-team" });
+  return { store, user, inst, link };
+}
+
+const event = (deliveryId: string, messages: ConnectorMessage[], over: Partial<NormalizedEvent> = {}): NormalizedEvent => ({
+  provider: "slack", deliveryId, eventType: "message", externalAccountId: "T1", externalChannelId: "C1", messages, ...over,
+});
+
+describe("connector ingest: consent gate, de-duplication, lifecycle", () => {
+  it("drops events for a linked channel until the creator consents; nothing is buffered", async () => {
+    const { store, link } = await setup();
+    const r = await ingestEvent(store, event("e1", [msg("1", "2026-11-19T09:00:00.000Z")]));
+    assert.deepEqual(r, { status: "ignored", reason: "no_capturing_link" });
+    assert.equal(store.bufferedFor(link.id).length, 0);
+  });
+
+  it("only the handover creator can link or consent", async () => {
+    const { store, inst, link } = await setup();
+    await assert.rejects(store.recordCaptureConsent({ kind: "user", profileId: OTHER }, link.id, "connector-capture-v1"), /forbidden/);
+    await assert.rejects(store.linkChannel({ kind: "provider" }, { installationId: inst.id, handoverId: HANDOVER, externalChannelId: "C2", channelLabel: "#x" }), /forbidden/);
+  });
+
+  it("buffers after consent, de-duplicates deliveries and replaces edited messages", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const first = await ingestEvent(store, event("e1", [msg("1", "2026-11-19T09:00:00.000Z")]));
+    assert.deepEqual(first, { status: "processed", buffered: 1, links: 1 });
+    assert.deepEqual(await ingestEvent(store, event("e1", [msg("1", "2026-11-19T09:00:00.000Z")])), { status: "duplicate" });
+    await ingestEvent(store, event("e2", [{ ...msg("1", "2026-11-19T09:00:00.000Z", "Asha", "edited"), editedAt: "2026-11-19T09:05:00.000Z" }]));
+    assert.deepEqual(store.bufferedFor(link.id).map((m) => m.text), ["edited"]);
+  });
+
+  it("a failed delivery is processed again on the provider's retry; a processed one is not", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const r1 = await store.recordEvent({ provider: "slack", deliveryId: "e9", externalAccountId: "T1", eventType: "message" });
+    await store.finishEvent(r1.eventId, { status: "failed", code: "internal" });
+    const r2 = await ingestEvent(store, event("e9", [msg("9", "2026-11-19T09:00:00.000Z")]));
+    assert.equal(r2.status, "processed");
+    assert.equal(store.events.find((e) => e.deliveryId === "e9")?.attempts, 2);
+  });
+
+  it("other channels, paused links and unknown installations store nothing", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    assert.deepEqual(await ingestEvent(store, event("a", [msg("1", "2026-11-19T09:00:00.000Z")], { externalChannelId: "C-other" })), { status: "ignored", reason: "no_capturing_link" });
+    assert.deepEqual(await ingestEvent(store, event("b", [msg("1", "2026-11-19T09:00:00.000Z")], { externalAccountId: "T-unknown" })), { status: "ignored", reason: "no_installation" });
+    await store.setLinkState(user, link.id, "paused");
+    assert.deepEqual(await ingestEvent(store, event("c", [msg("1", "2026-11-19T09:00:00.000Z")])), { status: "ignored", reason: "no_capturing_link" });
+    assert.equal(store.bufferedFor(link.id).length, 0);
+  });
+
+  it("an uninstall revokes the installation, its links and deletes buffered content", async () => {
+    const { store, user, inst, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await ingestEvent(store, event("e1", [msg("1", "2026-11-19T09:00:00.000Z")]));
+    await ingestEvent(store, event("u1", [], { externalChannelId: null, eventType: "app_uninstalled", lifecycle: { kind: "uninstalled", reason: "provider_uninstalled" } }));
+    assert.equal((await store.getInstallation(inst.id))?.status, "revoked");
+    assert.equal(await store.getInstallationCredentials(inst.id), null);
+    assert.equal((await store.getLink(link.id))?.state, "revoked");
+    assert.equal(store.bufferedFor(link.id).length, 0);
+    assert.ok(store.audit.some((a) => a.action === "connector.installation_revoked" && a.actor === "provider"));
+  });
+
+  it("resuming capture needs a person and earlier consent; a provider can only pause", async () => {
+    const { store, user, link } = await setup();
+    await assert.rejects(store.setLinkState(user, link.id, "capturing"), /invalid_transition/);
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await store.setLinkState({ kind: "provider" }, link.id, "paused");
+    await assert.rejects(store.setLinkState({ kind: "provider" }, link.id, "capturing"), /forbidden/);
+    assert.equal((await store.setLinkState(user, link.id, "capturing")).state, "capturing");
+  });
+
+  it("sanitizes adapter output: control characters, bad timestamps, missing authors, oversized text", () => {
+    const out = sanitizeMessages([
+      { ...msg("1", "2026-11-19T09:00:00Z"), text: "a\u0000b\r\nc" },
+      { ...msg("2", "not a date") },
+      { ...msg("3", "2026-11-19T09:00:00Z"), authorLabel: "  " },
+      { ...msg("4", "2026-11-19T09:00:00Z"), text: "x".repeat(30_000) },
+    ]);
+    assert.deepEqual(out.map((m) => m.providerMessageId), ["1", "4"]);
+    assert.equal(out[0].text, "ab\nc");
+    assert.equal(out[0].sentAt, "2026-11-19T09:00:00.000Z");
+    assert.equal(out[1].text.length, 20_000);
+  });
+
+  it("maps outcomes to HTTP: every failure is retryable (503), including buffer_full; final outcomes are 200", () => {
+    assert.equal(httpStatusFor({ status: "failed", code: "store_unavailable" }), 503);
+    assert.equal(httpStatusFor({ status: "failed", code: "buffer_full" }), 503); // PR #7 finding 4: the buffer frees at the next flush
+    assert.equal(httpStatusFor({ status: "duplicate" }), 200);
+    assert.equal(httpStatusFor({ status: "ignored", reason: "no_capturing_link" }), 200);
+  });
+});
+
+describe("chat_import transcript ⇄ parser", () => {
+  it("round-trips through parseSource with masking and stable people", async () => {
+    const bytes = serializeTranscript("slack", "#core-team", [
+      msg("2", "2026-11-19T09:05:00.000Z", "Ravi", "Call me on +91 98765 43210 about sponsors"),
+      msg("1", "2026-11-19T09:00:00.000Z", "Asha", "Asha owns reimbursements from now on"),
+    ]);
+    const r = await parseSource({ kind: "chat_import", fileName: "Slack - #core-team.jsonl", bytes, timezone: "Asia/Kolkata", exclusions: [], identityPepper: TEST_PEPPER });
+    assert.ok(r.ok, JSON.stringify(!r.ok && r.error));
+    assert.equal(r.data.messages.length, 2);
+    assert.match(r.data.messages[0].body, /reimbursements/); // oldest first regardless of input order
+    assert.doesNotMatch(r.data.messages[1].body, /98765/); // masked by the shared masker
+    assert.deepEqual(r.data.participants.map((p) => p.identityKind), ["name", "name"]);
+  });
+
+  it("is deterministic and rejects tampering", async () => {
+    const a = serializeTranscript("discord", "#x", [msg("1", "2026-11-19T09:00:00.000Z")]);
+    const b = serializeTranscript("discord", "#x", [msg("1", "2026-11-19T09:00:00.000Z")]);
+    assert.deepEqual(a, b);
+    const bad = new TextEncoder().encode('{"format":"baton.chat_import","version":1,"provider":"x","channel":"y"}\n{"at":"yesterday"}\n');
+    const r = await parseSource({ kind: "chat_import", fileName: "x.jsonl", bytes: bad, timezone: "UTC", exclusions: [], identityPepper: TEST_PEPPER });
+    assert.equal(r.ok, false);
+  });
+
+  it("names the file without unsafe characters", () => {
+    assert.equal(transcriptFileName("github", "owner/repo"), "GitHub - owner repo.jsonl");
+  });
+});
+
+describe("flush: buffer → source through a writer", () => {
+  it("writes a source, then a new version, and deletes only flushed rows", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await ingestEvent(store, event("e1", [msg("1", "2026-11-19T09:00:00.000Z")]));
+    const writes: Array<{ previousSourceId: string | null; text: string }> = [];
+    const writer: SourceWriter = {
+      async write(i) {
+        writes.push({ previousSourceId: i.previousSourceId, text: new TextDecoder().decode(i.bytes) });
+        return { ok: true, sourceId: `src-${writes.length}` };
+      },
+    };
+    assert.equal((await flushLink(store, writer, link.id)).status, "flushed");
+    assert.equal(store.bufferedFor(link.id).length, 0);
+    await ingestEvent(store, event("e2", [msg("2", "2026-11-19T09:30:00.000Z")]));
+    await flushDueLinks(store, writer, { maxLinks: 10, deadlineMs: 10_000 });
+    assert.deepEqual(writes.map((w) => w.previousSourceId), [null, "src-1"]);
+    assert.doesNotMatch(writes[1].text, /message 1/); // a version holds only new messages (delta)
+  });
+
+  it("a refusal keeps the messages buffered and records why", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await ingestEvent(store, event("e1", [msg("1", "2026-11-19T09:00:00.000Z")]));
+    const r = await flushLink(store, { write: async () => ({ ok: false, refusal: "handover_not_accepting_updates" }) }, link.id);
+    assert.deepEqual(r, { status: "refused", refusal: "handover_not_accepting_updates" });
+    assert.equal(store.bufferedFor(link.id).length, 1);
+    assert.equal((await store.getLink(link.id))?.lastFlushError, "handover_not_accepting_updates");
+  });
+});
+
+describe("request verification", () => {
+  const body = '{"x":1}';
+  it("GitHub sha256 signature", () => {
+    const sig = "sha256=" + createHmac("sha256", "s3cret").update(body).digest("hex");
+    assert.equal(verifyGithubSignature("s3cret", body, sig), true);
+    assert.equal(verifyGithubSignature("s3cret", body + " ", sig), false);
+    assert.equal(verifyGithubSignature("", body, sig), false);
+  });
+  it("Slack v0 signature with replay window", () => {
+    const now = Date.parse("2026-11-19T10:00:00Z");
+    const ts = String(now / 1000);
+    const sig = "v0=" + createHmac("sha256", "signing").update(`v0:${ts}:${body}`).digest("hex");
+    assert.equal(verifySlackSignature("signing", body, ts, sig, now), true);
+    assert.equal(verifySlackSignature("signing", body, ts, sig, now + 6 * 60_000), false);
+  });
+  it("Discord Ed25519 signature", () => {
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+    const raw = publicKey.export({ format: "der", type: "spki" }).subarray(-32).toString("hex");
+    const ts = "1700000000";
+    const sig = sign(null, Buffer.from(ts + body), privateKey).toString("hex");
+    assert.equal(verifyDiscordSignature(raw, body, sig, ts), true);
+    assert.equal(verifyDiscordSignature(raw, body + "x", sig, ts), false);
+  });
+  it("Telegram secret token and constant-time compare", () => {
+    assert.equal(verifyTelegramSecret("abc", "abc"), true);
+    assert.equal(verifyTelegramSecret("abc", "abd"), false);
+    assert.equal(safeEqual("a", "ab"), false);
+  });
+});
+
+describe("signed state, sealed credentials, config", () => {
+  const secret = "x".repeat(40);
+  it("state is signed, expires and rejects tampering", () => {
+    const tok = signConnectorState(secret, { t: "oauth", p: "slack", profileId: CREATOR, handoverId: HANDOVER, nonce: "n", exp: 2_000_000_000 });
+    assert.equal(verifyConnectorState(secret, tok, Date.now()).ok, true);
+    assert.deepEqual(verifyConnectorState(secret, tok.replace(/.$/, (c) => (c === "A" ? "B" : "A")), Date.now()), { ok: false, reason: "bad_signature" });
+    assert.deepEqual(verifyConnectorState(secret, tok, 2_000_000_001_000), { ok: false, reason: "expired" });
+  });
+  it("credentials decrypt only for the same account and key", () => {
+    const k = parseConnectorSecretKey(Buffer.alloc(32, 7).toString("base64url"), "c1");
+    assert.ok(k.ok);
+    const env = sealCredentials(k.key, "slack", "T1", "xoxb-synthetic");
+    assert.equal(openCredentials(k.key, "slack", "T1", env), "xoxb-synthetic");
+    assert.equal(openCredentials(k.key, "slack", "T2", env), null);
+    assert.doesNotMatch(env, /xoxb/);
+    assert.deepEqual(parseConnectorSecretKey("short", "c1"), { ok: false, reason: "invalid" });
+  });
+  it("endpoints come from BATON_SITE_URL; a provider is enabled only when fully configured", () => {
+    assert.equal(connectorUrls("github", { BATON_SITE_URL: "https://baton.example/" }).webhook, "https://baton.example/api/connectors/github/webhook");
+    assert.equal(connectorConfigured("telegram", { BATON_SITE_URL: "https://b.example", CONNECTOR_STATE_SECRET: "s", CONNECTOR_SECRET_KEY: "k", TELEGRAM_BOT_TOKEN: "t", TELEGRAM_BOT_USERNAME: "u" }), false);
+  });
+});
+
+describe("scheduled sync: pull-based providers and flush", () => {
+  it("pulls new messages after the cursor, buffers them, advances the cursor and flushes", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const { runConnectorSync } = await import("../sync");
+    const pulls: Array<string | null> = [];
+    const adapter = {
+      provider: "slack" as const,
+      async listChannels() { return []; },
+      async describeChannel() { return null; },
+      async pullNew(_ctx: unknown, _i: unknown, l: { pullCursor: string | null }) {
+        pulls.push(l.pullCursor);
+        return l.pullCursor ? { messages: [], cursor: l.pullCursor } : { messages: [msg("p1", "2026-11-19T09:00:00.000Z")], cursor: "p1" };
+      },
+    };
+    const writes: string[] = [];
+    const deps = {
+      store, adapter: async () => adapter, ctx: {} as never, enabled: (p: string) => p === "slack", now: () => 0,
+      writer: { write: async () => (writes.push("w"), { ok: true as const, sourceId: "src-1" }) },
+    };
+    const r1 = await runConnectorSync(deps, { maxLinks: 10, deadlineMs: 10_000 });
+    assert.equal(r1.pulledMessages, 1);
+    assert.equal(r1.flushed, 1);
+    assert.equal((await store.getLink(link.id))?.pullCursor, "p1");
+    const r2 = await runConnectorSync(deps, { maxLinks: 10, deadlineMs: 10_000 });
+    assert.equal(r2.pulledMessages, 0);
+    assert.deepEqual(pulls, [null, "p1"]);
+    assert.equal(writes.length, 1);
+  });
+
+  it("a pulled page goes only to the link that pulled it, never to another link of the same channel", async () => {
+    const { store, user, inst, link } = await setup();
+    const H2 = "00000000-0000-4000-8000-0000000000h2".replace("h2", "b2");
+    store.handovers.set(H2, { id: H2, creatorProfileId: CREATOR, state: "draft" });
+    const other = await store.linkChannel(user, { installationId: inst.id, handoverId: H2, externalChannelId: "C1", channelLabel: "#core-team" });
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await store.recordCaptureConsent(user, other.id, "connector-capture-v1");
+    const { pullLink } = await import("../sync");
+    const adapter = {
+      provider: "slack" as const,
+      async listChannels() { return []; },
+      async describeChannel() { return null; },
+      async pullNew() { return { messages: [msg("old1", "2026-11-19T09:00:00.000Z")], cursor: "c1" }; },
+    };
+    assert.equal(await pullLink(store, adapter, {} as never, (await store.getLink(link.id))!), 1);
+    assert.equal(store.bufferedFor(link.id).length, 1);
+    assert.equal(store.bufferedFor(other.id).length, 0);
+  });
+
+  it("a second flush cannot take a link's batch while the first holds it", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await ingestEvent(store, event("E-lease", [msg("m1", "2026-11-19T09:00:00.000Z")]));
+    const first = await store.takeFlushBatch(link.id);
+    assert.equal(first?.messages.length, 1);
+    assert.equal(await store.takeFlushBatch(link.id), null);
+    await store.recordFlushError(link.id, "internal");
+    assert.equal((await store.takeFlushBatch(link.id))?.messages.length, 1, "released by the error");
+  });
+
+  it("losing access pauses the link instead of retrying forever", async () => {
+    const { store, user, link } = await setup();
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const { pullLink } = await import("../sync");
+    const { ProviderError } = await import("../providers/adapter");
+    const adapter = { provider: "slack" as const, listChannels: async () => [], describeChannel: async () => null, pullNew: async () => { throw new ProviderError("forbidden"); } };
+    assert.equal(await pullLink(store, adapter, {} as never, (await store.getLink(link.id))!), 0);
+    const after = await store.getLink(link.id);
+    assert.equal(after?.state, "paused");
+    assert.equal(after?.lastFlushError, "provider_forbidden");
+  });
+
+  it("another Baton user cannot take over a live installation", async () => {
+    const { store } = await setup();
+    await assert.rejects(store.upsertInstallation({ kind: "user", profileId: OTHER }, { provider: "slack", externalAccountId: "T1", accountLabel: "x", scopes: [], credentials: null }), /conflict/);
+  });
+});
+
+describe("per-link selection (ingest filter)", () => {
+  it("each capturing link keeps only what its own settings allow; a link that keeps nothing stores nothing", async () => {
+    const { store, user, inst, link } = await setup();
+    const H2 = "44444444-4444-4444-8444-444444444444";
+    store.handovers.set(H2, { id: H2, creatorProfileId: CREATOR, state: "draft" });
+    const link2 = await store.linkChannel(user, { installationId: inst.id, handoverId: H2, externalChannelId: "C1", channelLabel: "#core-team", settings: { off: true } });
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    await store.recordCaptureConsent(user, link2.id, "connector-capture-v1");
+    const r = await ingestEvent(store, event("f1", [msg("1", "2026-11-19T09:00:00.000Z")]), undefined, { filter: (l, m) => (l.settings.off ? [] : m) });
+    assert.deepEqual(r, { status: "processed", buffered: 1, links: 1 });
+    assert.equal(store.bufferedFor(link.id).length, 1);
+    assert.equal(store.bufferedFor(link2.id).length, 0);
+    const none = await ingestEvent(store, event("f2", [msg("2", "2026-11-19T09:01:00.000Z")]), undefined, { filter: () => [] });
+    assert.deepEqual(none, { status: "ignored", reason: "unsupported_event" });
+  });
+});
+
+// PR #7 review, finding 4: one full buffer must not starve the other handovers linked to the same channel; an edit of
+// an already-buffered message is applied at capacity; the 20,000-per-link limit still holds; a provider retry of the
+// incomplete delivery is idempotent for the links that already took it.
+describe("ingest fan-out with a full buffer", () => {
+  const LIMIT = 20_000;
+  async function threeHandovers() {
+    const store = new MemoryConnectorStore(() => Date.parse("2026-11-19T08:00:00Z"));
+    const user = { kind: "user", profileId: CREATOR } as const;
+    const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T1", accountLabel: "CodeCell", scopes: [], credentials: "c1.x.y.z" });
+    const links = [];
+    for (const h of ["33333333-3333-4333-8333-3333333333a1", "33333333-3333-4333-8333-3333333333a2", "33333333-3333-4333-8333-3333333333a3"]) {
+      store.handovers.set(h, { id: h, creatorProfileId: CREATOR, state: "draft" });
+      const l = await store.linkChannel(user, { installationId: inst.id, handoverId: h, externalChannelId: "C1", channelLabel: "#core-team" });
+      await store.recordCaptureConsent(user, l.id, "connector-capture-v1");
+      links.push(l);
+    }
+    // fill the FIRST link to the limit (plus one known message "keep" we can edit later)
+    const fill: ConnectorMessage[] = [];
+    for (let i = 0; i < LIMIT - 1; i++) fill.push(msg(`f${i}`, "2026-11-19T09:00:00.000Z"));
+    fill.push(msg("keep", "2026-11-19T09:00:00.000Z", "Asha", "original"));
+    for (let i = 0; i < fill.length; i += 1000) await store.bufferMessages(links[0].id, fill.slice(i, i + 1000));
+    assert.equal(store.bufferedFor(links[0].id).length, LIMIT);
+    return { store, links };
+  }
+
+  it("a full first link is skipped; the later links still buffer the message; the delivery fails as buffer_full (503)", async () => {
+    const { store, links } = await threeHandovers();
+    const r = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.deepEqual(r, { status: "failed", code: "buffer_full" });
+    assert.equal(httpStatusFor(r), 503);
+    assert.equal(store.bufferedFor(links[0].id).length, LIMIT, "the per-link limit holds");
+    assert.ok(!store.bufferedFor(links[0].id).some((m) => m.providerMessageId === "n1"));
+    for (const l of links.slice(1)) assert.deepEqual(store.bufferedFor(l.id).map((m) => m.providerMessageId), ["n1"], "later links are not starved");
+    assert.equal(store.events.find((e) => e.deliveryId === "ev-new")?.status, "failed");
+
+    // the provider retries: the ledger reprocesses; links 2 and 3 are unchanged (upsert, no duplicates)
+    const retry = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.deepEqual(retry, { status: "failed", code: "buffer_full" });
+    for (const l of links.slice(1)) assert.equal(store.bufferedFor(l.id).length, 1);
+
+    // after the full link is flushed, the next retry completes the delivery for it too
+    const writer: SourceWriter = { async write() { return { ok: true, sourceId: "src-1" }; } };
+    while (store.bufferedFor(links[0].id).length > 0) await flushLink(store, writer, links[0].id);
+    const done = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.equal(done.status, "processed");
+    assert.deepEqual(store.bufferedFor(links[0].id).map((m) => m.providerMessageId), ["n1"]);
+    for (const l of links.slice(1)) assert.equal(store.bufferedFor(l.id).length, 1, "still exactly one row after three deliveries");
+
+    // a duplicate delivery of the now-processed event is acknowledged and changes nothing
+    const dup = await ingestEvent(store, event("ev-new", [msg("n1", "2026-11-19T09:30:00.000Z")]));
+    assert.deepEqual(dup, { status: "duplicate" });
+    assert.equal(httpStatusFor(dup), 200);
+    for (const l of links) assert.equal(store.bufferedFor(l.id).length, 1);
+  });
+
+  it("an edit of an already-buffered message is applied at capacity (no new row)", async () => {
+    const { store, links } = await threeHandovers();
+    const r = await ingestEvent(store, event("ev-edit", [{ ...msg("keep", "2026-11-19T09:00:00.000Z", "Asha", "edited at capacity"), editedAt: "2026-11-19T09:05:00.000Z" }]));
+    assert.equal(r.status, "processed");
+    assert.equal(store.bufferedFor(links[0].id).find((m) => m.providerMessageId === "keep")?.text, "edited at capacity");
+    assert.equal(store.bufferedFor(links[0].id).length, LIMIT);
+  });
+
+  it("a batch that does not fit is refused whole (no partial apply), like the database transaction", async () => {
+    const { store, links } = await threeHandovers();
+    await assert.rejects(
+      store.bufferMessages(links[0].id, [{ ...msg("keep", "2026-11-19T09:00:00.000Z", "Asha", "edit in a mixed batch"), editedAt: "2026-11-19T09:05:00.000Z" }, msg("n2", "2026-11-19T09:31:00.000Z")]),
+      /precondition_failed/,
+    );
+    assert.equal(store.bufferedFor(links[0].id).find((m) => m.providerMessageId === "keep")?.text, "original");
+  });
+});
+
+// PR #7 second review, fix 1: a consent-time history import is split into ≤ 100-message batches through the ordinary
+// ingest path (sanitizeMessages keeps at most messagesPerEvent per event, so one big event silently lost the rest).
+describe("history import in batches (ingestHistory)", () => {
+  const HIST = (n: number) => Array.from({ length: n }, (_, i) =>
+    msg(`h${String(i).padStart(4, "0")}`, new Date(Date.parse("2026-11-19T08:30:00Z") + i * 1000).toISOString(), "Asha", `history message ${i}`));
+  /** A memory store that records every bufferMessages batch and can fail chosen batches (by first message id). */
+  class SpyStore extends MemoryConnectorStore {
+    sizes: number[] = [];
+    failFirstIds = new Set<string>();
+    async bufferMessages(linkId: string, messages: readonly ConnectorMessage[]) {
+      this.sizes.push(messages.length);
+      if (messages.length > 0 && this.failFirstIds.has(messages[0].providerMessageId)) throw new Error("transient store failure");
+      return super.bufferMessages(linkId, messages);
+    }
+  }
+  async function hist() {
+    const store = new SpyStore(() => Date.parse("2026-11-19T08:00:00Z"));
+    store.handovers.set(HANDOVER, { id: HANDOVER, creatorProfileId: CREATOR, state: "draft" });
+    const user = { kind: "user", profileId: CREATOR } as const;
+    const inst = await store.upsertInstallation(user, { provider: "slack", externalAccountId: "T1", accountLabel: "CodeCell", scopes: [], credentials: "c1.x.y.z" });
+    const link = await store.linkChannel(user, { installationId: inst.id, handoverId: HANDOVER, externalChannelId: "C1", channelLabel: "#core-team" });
+    await store.recordCaptureConsent(user, link.id, "connector-capture-v1");
+    const base = { provider: "slack" as const, externalAccountId: "T1", externalChannelId: "C1", deliveryPrefix: `history:${link.id}:t0` };
+    return { store, link, base };
+  }
+
+  it("historyBatches keeps order and never exceeds 100 per batch; ids are deterministic and distinct", () => {
+    const b = historyBatches(HIST(250));
+    assert.deepEqual(b.map((x) => x.length), [100, 100, 50]);
+    assert.deepEqual(b.flat().map((m) => m.providerMessageId), HIST(250).map((m) => m.providerMessageId));
+    const ids = b.map((batch, i) => historyDeliveryId("history:L:t0", i, batch));
+    assert.deepEqual(ids.map((id) => id.split(":").slice(0, 4).join(":")), ["history:L:t0:000", "history:L:t0:001", "history:L:t0:002"]);
+    assert.ok(ids.every((id) => /^history:L:t0:[0-9]{3}:[0-9a-f]{16}$/.test(id)));
+    assert.equal(new Set(ids).size, 3);
+    assert.deepEqual(historyBatches(HIST(250)).map((batch, i) => historyDeliveryId("history:L:t0", i, batch)), ids, "same input → same ids");
+    // a batch whose messages differ (an edit, a deletion, a newly arrived message) gets a different id
+    const edited = b[1].map((m, k) => (k === 5 ? { ...m, editedAt: "2026-11-19T09:00:00.000Z" } : m));
+    assert.notEqual(historyDeliveryId("history:L:t0", 1, edited), ids[1]);
+    assert.notEqual(historyDeliveryId("history:L:t0", 1, b[1].slice(1)), ids[1]);
+  });
+
+  it("250 history messages are ALL buffered (not just the first 100), each batch ≤ 100, one ledger row per batch", async () => {
+    const { store, link, base } = await hist();
+    const r = await ingestHistory(store, base, HIST(250), undefined, { filter: (l, m) => (l.id === link.id ? m : []) });
+    assert.deepEqual(r, { batches: 3, buffered: 250, failed: [] });
+    assert.equal(store.bufferedFor(link.id).length, 250);
+    assert.ok(store.sizes.every((n) => n <= CONNECTOR_MESSAGE_LIMITS.messagesPerEvent));
+    const ids = historyBatches(HIST(250)).map((batch, i) => historyDeliveryId(base.deliveryPrefix, i, batch));
+    assert.deepEqual(store.events.filter((e) => e.deliveryId.startsWith(base.deliveryPrefix)).map((e) => [e.deliveryId, e.status]),
+      ids.map((id) => [id, "processed"]));
+  });
+
+  it("reprocessing completed batches is a duplicate: nothing is buffered twice", async () => {
+    const { store, link, base } = await hist();
+    await ingestHistory(store, base, HIST(250));
+    const again = await ingestHistory(store, base, HIST(250));
+    assert.deepEqual(again, { batches: 3, buffered: 0, failed: [] });
+    assert.equal(store.bufferedFor(link.id).length, 250);
+  });
+
+  it("a failed batch is surfaced (after one retry) and a later run completes it without duplicates", async () => {
+    const { store, link, base } = await hist();
+    store.failFirstIds.add("h0100"); // the second batch fails (twice: first try and the immediate retry)
+    const r = await ingestHistory(store, base, HIST(250));
+    assert.equal(r.failed.length, 1);
+    const id1 = historyDeliveryId(base.deliveryPrefix, 1, historyBatches(HIST(250))[1]);
+    assert.deepEqual(r.failed[0], { index: 1, deliveryId: id1, code: "internal" });
+    assert.equal(r.buffered, 150, "the other batches are buffered");
+    assert.equal(store.events.find((e) => e.deliveryId === id1)?.status, "failed");
+    store.failFirstIds.clear();
+    const retry = await ingestHistory(store, base, HIST(250));
+    assert.deepEqual(retry.failed, []);
+    assert.equal(retry.buffered, 100, "only the failed batch is reprocessed (the others are ledger duplicates)");
+    assert.equal(store.bufferedFor(link.id).length, 250);
+    assert.equal(new Set(store.bufferedFor(link.id).map((m) => m.providerMessageId)).size, 250, "no duplicates");
+  });
+
+  it("≤ 100 messages: one batch, as before; an empty or fully ignored import is neither a failure nor a fake success", async () => {
+    const { store, link, base } = await hist();
+    assert.deepEqual(await ingestHistory(store, base, HIST(100)), { batches: 1, buffered: 100, failed: [] });
+    assert.equal(store.bufferedFor(link.id).length, 100);
+    assert.deepEqual(await ingestHistory(store, { ...base, deliveryPrefix: "history:x:empty" }, []), { batches: 0, buffered: 0, failed: [] });
+    const blank = [{ ...msg("b1", "2026-11-19T08:30:00.000Z"), text: "   " }]; // sanitised to nothing
+    assert.deepEqual(await ingestHistory(store, { ...base, deliveryPrefix: "history:x:blank" }, blank), { batches: 1, buffered: 0, failed: [] });
+    const old = [msg("o1", "2026-11-01T08:30:00.000Z")]; // outside the capture window
+    assert.deepEqual(await ingestHistory(store, { ...base, deliveryPrefix: "history:x:old" }, old), { batches: 1, buffered: 0, failed: [] });
+  });
+
+  it("the 5,000-message upper limit is kept", async () => {
+    const { store, base } = await hist();
+    const many = Array.from({ length: 5_050 }, (_, i) => msg(`m${i}`, new Date(Date.parse("2026-11-19T08:01:00Z") + i).toISOString()));
+    const r = await ingestHistory(store, base, many);
+    assert.equal(r.batches, 50);
+    assert.ok(store.sizes.every((n) => n <= 100));
+  });
+});

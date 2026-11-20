@@ -1,9 +1,11 @@
-import { ChevronDown } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 /**
- * "For the nerds": how Baton is built, for technical readers. Every statement here mirrors the code:
+ * "For the nerds": how Baton is built, for technical readers (reference: the FAQ: handwritten label and heading on
+ * the left, large accordion rows on hairlines on the right, a + that turns into × as the row opens with a
+ * `grid-template-rows`-style height animation). Every statement here mirrors the code:
  *   pipeline stages      lib/pipeline/stages (parse → extract → verify-quotes → verify-support → prepare-review)
  *   quote check          lib/ai/quote-check.ts (normalised tier, grapheme boundaries, ≥ 12 chars and 3 words)
  *   support check        lib/pipeline/stages/verify-support.ts (claim + quote + ≤ 3 neighbours, never the rationale)
@@ -74,60 +76,73 @@ const STACK = ["Next.js 16", "Supabase Postgres, Auth, Storage", "Vercel", "Gemi
 
 export function ForTheNerds() {
   return (
-    <section id="for-the-nerds" aria-labelledby="nerds-title" className="border-t border-border">
-      <div className="bi-wrap py-20 sm:py-24">
-        <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-16">
-          <h2 id="nerds-title" className="bi-h2">
-            For the nerds: how Baton keeps AI honest.
-          </h2>
-          <p className="bi-lede">Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.</p>
-        </div>
+    <section id="for-the-nerds" aria-labelledby="nerds-title" className="lp-faq">
+      <div className="min-w-0" data-reveal>
+        <p className="lp-hand">For the nerds</p>
+        <h2 id="nerds-title" className="lp-h2 mt-3 max-w-[12ch]">
+          How Baton keeps AI honest.
+        </h2>
+        <p className="lp-body mt-5 max-w-[44ch]">Deterministic checks, database rules and people sit between every AI output and what the incoming person reads.</p>
 
-        <div className="mt-12 grid gap-12 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
-          {/* The pipeline, in order */}
-          <figure>
-            <figcaption className="bi-mono text-xs text-muted-foreground">From upload to published handover</figcaption>
-            <ol className="mt-3 border-b border-border">
-              {FLOW.map((f, i) => (
-                <li key={f.step} className="grid grid-cols-[2rem_1fr] gap-x-4 border-t border-border py-3 sm:grid-cols-[2rem_8rem_1fr] [&>*]:min-w-0">
-                  <span className="bi-mono text-sm text-muted-foreground tabular-nums">
-                    <span className="sr-only">Step </span>
-                    {String(i + 1).padStart(2, "0")}
+        {/* The pipeline, in order */}
+        <figure className="mt-10 max-w-[34rem]">
+          <figcaption className="lp-mono text-muted-foreground">From upload to published handover</figcaption>
+          <ol className="mt-4">
+            {FLOW.map((f, i) => (
+              <li key={f.step} className="grid grid-cols-[2.25rem_1fr] gap-x-3 border-t border-border py-2.5 [&>*]:min-w-0">
+                <span className="bi-mono pt-0.5 text-xs text-muted-foreground tabular-nums">
+                  <span className="sr-only">Step </span>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <p className="text-sm">
+                  <span className="font-semibold">{f.step}</span>{" "}
+                  <span
+                    className={cn(
+                      "bi-mono ml-1 rounded-full border px-1.5 py-px text-[0.6875rem]",
+                      f.where === "people" ? "border-transparent bg-[var(--highlight)] text-[var(--on-highlight)]" : "border-border text-muted-foreground",
+                    )}
+                  >
+                    {f.where}
                   </span>
-                  <span>
-                    <span className="bi-h3 block text-[0.9375rem]">{f.step}</span>
-                    <span className={cn("bi-mono text-xs", f.where === "people" ? "text-foreground" : "text-muted-foreground")}>{f.where}</span>
+                  <span className="mt-0.5 block text-muted-foreground">{f.body}</span>
+                </p>
+              </li>
+            ))}
+          </ol>
+        </figure>
+
+        <ul aria-label="Built with" className="mt-8 flex flex-wrap gap-2">
+          {STACK.map((s) => (
+            <li key={s} className="bi-tag">
+              {s}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* The details, collapsed by default */}
+      <div className="min-w-0 lg:pt-[calc(40*var(--u))]">
+        {TOPICS.map((t) => (
+          <details key={t.title} className="lp-acc group">
+            <summary>
+              <span className="min-w-0">
+                <span className="lp-h3 block text-[max(1.1875rem,calc(34*var(--u)))]">{t.title}</span>
+                <span className="lp-body mt-1 block">{t.summary}</span>
+              </span>
+              <Plus aria-hidden="true" strokeWidth={1.5} className="lp-acc__icon" />
+            </summary>
+            <ul className="space-y-2.5 pb-6">
+              {t.points.map((p) => (
+                <li key={p} className="lp-body flex gap-3 text-foreground">
+                  <span aria-hidden="true" className="bi-mono text-[var(--highlight-ink)]">
+                    →
                   </span>
-                  <p className="bi-body col-start-2 text-sm sm:col-start-3">{f.body}</p>
+                  <span>{p}</span>
                 </li>
               ))}
-            </ol>
-          </figure>
-
-          {/* The details, collapsed by default */}
-          <div className="border-b border-border">
-            {TOPICS.map((t) => (
-              <details key={t.title} className="group border-t border-border">
-                <summary className="flex cursor-pointer list-none items-start justify-between gap-4 py-3 [&::-webkit-details-marker]:hidden">
-                  <span className="min-w-0">
-                    <span className="bi-h3 block text-[0.9375rem]">{t.title}</span>
-                    <span className="bi-body block text-sm">{t.summary}</span>
-                  </span>
-                  <ChevronDown aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none" />
-                </summary>
-                <ul className="space-y-2 pb-4">
-                  {t.points.map((p) => (
-                    <li key={p} className="bi-body text-sm">
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            ))}
-          </div>
-        </div>
-
-        <p className="bi-mono mt-12 text-xs text-muted-foreground">Built with {STACK.join(" · ")}</p>
+            </ul>
+          </details>
+        ))}
       </div>
     </section>
   );

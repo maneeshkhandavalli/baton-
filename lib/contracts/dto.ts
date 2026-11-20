@@ -94,6 +94,8 @@ export interface AccessTokenSummary {
   useCount: number;
   revokedAt: string | null;
   createdAt: string;
+  /** R3 Task 06: the latest invitation email outcome (member_invite, creator only); null when never attempted. */
+  deliveryStatus: InvitationDeliveryStatus | null;
 }
 
 /** Returned once by inviteMember and createGapInterviewLink; `url` contains the raw token. */
@@ -102,6 +104,64 @@ export interface CreatedLink {
   url: string;
   expiresAt: string;
 }
+
+// ── R3 Task 06: invitations (docs/history/round3/task06-contract.md §6.1) ──────────────────────────────────────
+
+/** What happened to the invitation email. The creator always also gets the copyable `url` (D6). */
+export type InvitationDelivery =
+  | { status: "sent" }
+  | { status: "not_sent"; reason: "email_not_configured" | "provider_failed" | "demo" };
+
+/** Stored outcome of one delivery attempt (AccessTokenSummary.deliveryStatus). */
+export const INVITATION_DELIVERY_STATUSES = ["sent", "not_sent", "failed"] as const;
+export type InvitationDeliveryStatus = (typeof INVITATION_DELIVERY_STATUSES)[number];
+
+/** Returned once by inviteMember and reissueInvitation; `url` contains the raw token. */
+export interface CreatedInvitation extends CreatedLink {
+  delivery: InvitationDelivery;
+}
+
+/** The signed-in viewer of a pending invitation (computed on the server from the verified session). */
+export interface InvitationViewer {
+  emailMatches: boolean;
+  emailConfirmed: boolean;
+  alreadyMember: boolean;
+}
+
+/** getInvitation: what a holder of an invitation link may see before accepting (D3: pending state only). */
+export type InvitationDetails =
+  | {
+      state: "pending";
+      handoverTitle: string;
+      inviterName: string;
+      role: MemberRole;
+      expiresAt: string;
+      /** e.g. "n***@example.com"; the full address never reaches the browser. */
+      recipientEmailMasked: string;
+      /** null = signed out. */
+      viewer: InvitationViewer | null;
+      /** Only when `viewer.alreadyMember`: where the viewer already reads this handover (contract §4.1 already_member). */
+      memberHref?: string;
+    }
+  | { state: "accepted"; handoverId: string; memberHref: string };
+
+/** acceptInvitation. `replayed` = this user had already accepted this link; nothing was written. */
+export interface AcceptedInvitation {
+  handoverId: string;
+  role: MemberRole;
+  redirectTo: string;
+  replayed: boolean;
+}
+
+/** `AppError.details.reason` for token_invalid on the invitation path only (contract D1-contract). */
+export type InvitationFailureReason =
+  | "invalid"
+  | "expired"
+  | "revoked"
+  | "used"
+  | "unavailable"
+  | "email_mismatch"
+  | "email_unconfirmed";
 
 /** Returned by publishHandover (§9.2). */
 export interface PublicationSummary {
@@ -127,7 +187,35 @@ export interface SourceSummary {
   messageCount: number | null;
   maskingCounts: Partial<Record<MaskKind, number>> | null;
   errorCode: string | null;
+  /**
+   * R3 Task 05B: the source's place in its version chain. Absent on a database without migration
+   * 20261117500100 (every source is then its own, current, version 1).
+   */
+  version?: SourceVersionInfo;
 }
+
+/** R3 Task 05B: versions of one source are separate, immutable source rows linked by a lineage. */
+export interface SourceVersionInfo {
+  /** The version-1 source of the chain. */
+  lineageId: string;
+  /** 1, 2, 3 …; null for a pending update that is not active yet (it awaits its upload or consent). */
+  versionNumber: number | null;
+  supersedesSourceId: string | null;
+  supersededAt: string | null;
+  supersededBySourceId: string | null;
+  /** R3 Task 05C: where this version's update stands (null for a first version or an older database). */
+  updateState?: "awaiting_processing" | "processing" | "awaiting_detection" | "ready" | "failed" | "superseded" | null;
+  updateError?: string | null;
+  /** R3 Task 05D: open (or investigating) change-review items of this version's update. */
+  openReviews?: number;
+}
+
+/** R3 Task 05B: what create_source_version decided. Only `upload` needs the signed ticket. */
+export type SourceVersionUploadResult =
+  | { status: "upload"; ticket: SourceUploadTicket }
+  | { status: "awaiting_confirmation"; sourceId: string }
+  | { status: "awaiting_consent"; sourceId: string }
+  | { status: "unchanged"; sourceId: string };
 
 /** A parsed chat participant (§6.6). Review roles only, within clearance. The identity hash is never returned. */
 export interface SourceParticipantSummary {
@@ -325,6 +413,8 @@ export const READINESS_BLOCKERS = [
   "no_incoming_recipient", // no incoming member AND no pending incoming member_invite token
   "no_approved_points",
   "privacy_review_required", // any visible point with privacyReview = "required" (§5.5)
+  "source_updates_pending", // R3 Task 05D: a new source version not yet processed and checked (the 05C gate)
+  "change_reviews_open", // R3 Task 05D: open change-review items from a source update
 ] as const;
 export type ReadinessBlocker = (typeof READINESS_BLOCKERS)[number];
 

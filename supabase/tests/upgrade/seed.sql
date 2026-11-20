@@ -101,12 +101,20 @@ update public.processing_jobs set status = 'failed', finished_at = now(), error_
 update public.processing_jobs set next_attempt_at = now() + interval '1 day'
  where run_id = tests.id('run_hx') and status = 'queued';
 
+-- ── R3 Task 06: a pending member invitation created BEFORE the upgrade (for 20261118700100–700300) ──
+-- To an address with no account yet, so no member's reads change.
+select tests.as_user('ann');
+select tests.put('inv_up', public.invite_member(tests.actor(), tests.id('hr'), 'lee@example.test', 'lead', null,
+                                                sha256(convert_to('upgrade-invite', 'UTF8')), now() + interval '7 days'));
+select tests.as_owner();
+
 -- ── snapshot helpers (schema "upgrade", local only) ─────────────────────────
 create schema upgrade;
 grant usage on schema upgrade to anon, authenticated, service_role;
 
 -- Removes keys that a Round 3 migration ADDS on purpose (HandoverSummary.description, 20261113100400, from
--- handover objects; EvidenceItem guarded/model_verdict, 20261113300900, from api_get_point evidence items), so the remaining read is compared byte for byte.
+-- handover objects; EvidenceItem guarded/model_verdict, 20261113300900, from api_get_point evidence items;
+-- SourceSummary.version, 20261117500100, from source objects), so the remaining read is compared byte for byte.
 create function upgrade.strip(j jsonb) returns jsonb language plpgsql immutable as $$
 declare
   k text;
@@ -120,6 +128,8 @@ begin
       if k = 'description' and j ? 'viewer_role' then continue; end if;
       -- PI-11 guard fields that 20261113300900 adds to each api_get_point evidence item (checked in verify.sql)
       if k in ('guarded', 'model_verdict') and j ? 'point_evidence_id' then continue; end if;
+      -- R3 Task 05B: the source version object that 20261117500100 adds to each source read (checked in verify.sql)
+      if k = 'version' and j ? 'masking_counts' then continue; end if;
       out := out || jsonb_build_object(k, upgrade.strip(j -> k));
     end loop;
     return out;

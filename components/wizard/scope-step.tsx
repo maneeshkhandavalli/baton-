@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ChoiceCard } from "@/components/ui/choice-card";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ACCESS_LEVELS } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, isChatSourceKind } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 import { deselectAll, selectAll, selectionSummary, toggleConversation } from "./conversation-selection";
@@ -31,9 +31,9 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
       {sources.map((s) => {
         const p = s.preview;
         const keptConversations = p?.conversations.filter((c) => !s.excludedConversations.includes(c.localId)) ?? [];
-        const KindIcon = s.kind === "whatsapp_export" ? MessageCircle : FileText;
+        const KindIcon = isChatSourceKind(s.kind) ? MessageCircle : FileText;
         return (
-          <section key={s.localId} className="overflow-hidden rounded-xl border border-border bg-card shadow-soft" aria-labelledby={`${s.localId}-name`}>
+          <section key={s.localId} className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby={`${s.localId}-name`}>
             <header className="flex items-center gap-2.5 border-b border-border bg-muted/40 px-4 py-3 sm:px-5">
               <KindIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
               <h3 id={`${s.localId}-name`} className="min-w-0 truncate type-subheading" title={s.name}>
@@ -42,7 +42,7 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
             </header>
 
             <div className="space-y-8 p-4 sm:p-5">
-              {s.kind === "whatsapp_export" && p ? (
+              {isChatSourceKind(s.kind) && p ? (
                 <>
                   <FieldGroup legend="Dates to read" description={`The export covers ${formatDate(p.firstMessageAt)} to ${formatDate(p.lastMessageAt)}.`}>
                     <div className="grid gap-4 sm:grid-cols-2">

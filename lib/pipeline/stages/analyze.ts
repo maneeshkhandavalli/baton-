@@ -10,6 +10,9 @@
  * R3 Task 03 (VER-2, VER-3): it also stores review flags (lib/pipeline/review-flags.ts): possible
  * contradictions found in LATER messages beyond the cited ones, and person fields the model wrote that the
  * evidence does not back. Deterministic, no AI; reporting only (a database without the migration skips it).
+ *
+ * R3 Task 05D: then the deterministic change detection of every source update this run processed
+ * (lib/pipeline/change-detection.ts); its single atomic record per update is what lets the update become ready.
  */
 
 import type { PointCategory } from "../../contracts/enums";
@@ -22,6 +25,7 @@ import {
   type PipelinePoint,
 } from "../../db/pipeline";
 import type { RetrievalMessage } from "../../signals/contradictions";
+import { runChangeDetection } from "../change-detection";
 import { CoverageWriter, storeFlagsInBatches } from "../coverage";
 import { buildReviewFlags } from "../review-flags";
 import { EXPECTED_KNOWLEDGE_CHECKLIST, gapPriority, type ChecklistItem } from "../checklist";
@@ -66,7 +70,12 @@ export async function runAnalyze(ctx: StageContext): Promise<StageOutcome> {
   const messages = await loadHandoverMessages(ctx);
   const flags = buildReviewFlags(points, messages);
   const flagsStored = await storeFlagsInBatches(ctx, new CoverageWriter(ctx), flags);
-  ctx.logger.info("analyze_done", { jobId: ctx.claimed.id, points: points.length, checklistQuestions: created, reviewFlags: flags.length, flagsStored });
+  // R3 Task 05D: compare each source update with the previous version (after the flags, so items can link them)
+  const changes = await runChangeDetection(ctx, points);
+  ctx.logger.info("analyze_done", {
+    jobId: ctx.claimed.id, points: points.length, checklistQuestions: created, reviewFlags: flags.length, flagsStored,
+    sourceUpdates: changes.updates, changeItems: changes.items,
+  });
   return { kind: "succeeded", progress: { done: 1, total: 1 } };
 }
 

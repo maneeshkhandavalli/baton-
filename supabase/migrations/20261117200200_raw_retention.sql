@@ -1,8 +1,8 @@
--- Round 3 Task 02 (PRIV-2): raw-upload retention (docs/proposals/retention.md §7, policy defaults from §6).
+-- Round 3 Task 02 (PRIV-2): raw-upload retention (docs/architecture/proposals/retention.md §7, policy defaults from §6).
 -- ADDITIVE: two tables and new service_role-only functions. No existing function is replaced; nothing here
 -- deletes a database row of a handover or any normalized / published content (the purge stays behind D27).
 -- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY, and the sweep stays OFF until the owner enables it
--- (BATON_RETENTION_MODE, docs/round3/privacy-and-data-protection.md).
+-- (BATON_RETENTION_MODE, docs/architecture/privacy-and-data-protection.md).
 --
 -- Model:
 --   * raw_retention_inventory(...)  read-only: what the policy WOULD clean (the dry run), with protection.

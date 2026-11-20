@@ -19,11 +19,12 @@
  */
 
 import type { SourceUploadTicket } from "../contracts/dto";
-import type { DateOrder, SourceKind } from "../contracts/enums";
+import { isChatSourceKind, type DateOrder, type SourceKind } from "../contracts/enums";
 import type { VerifiedActor } from "./actor-rules";
 import type { DbClient } from "./client";
 import { DbError } from "./errors";
-import { createSource, removeSource } from "./mutations";
+import type { SourceVersionOutcome } from "../contracts/source-versions";
+import { createSource, createSourceVersion, removeSource } from "./mutations";
 import { markSourceParseFailed, type JobClaim } from "./pipeline";
 import { callRpc } from "./rpc";
 
@@ -38,6 +39,15 @@ export interface StorageBucketApi {
   createSignedUploadUrl(path: string): PromiseLike<{ data: { signedUrl: string; token: string; path: string } | null; error: StorageError | null }>;
   download(path: string): PromiseLike<{ data: Blob | null; error: StorageError | null }>;
   remove(paths: string[]): PromiseLike<{ data: unknown; error: StorageError | null }>;
+  /**
+   * Round 4: server-side upload with the service-role client (connector transcripts only; browsers keep using
+   * signed upload URLs). Optional so narrow fakes need not implement it.
+   */
+  upload?(
+    path: string,
+    body: Uint8Array,
+    options?: { contentType?: string; upsert?: boolean },
+  ): PromiseLike<{ data: unknown; error: StorageError | null }>;
   /** Objects directly under a folder (Supabase Storage `list`). Optional so narrow fakes need not implement it. */
   list?(
     prefix: string,
@@ -75,6 +85,7 @@ export const SOURCE_KIND_EXTENSIONS: Readonly<Record<SourceKind, readonly string
   docx: ["docx"],
   markdown: ["md", "markdown"],
   text: ["txt", "text"],
+  chat_import: ["jsonl"],
 };
 
 /**
@@ -88,6 +99,7 @@ export const SOURCE_KIND_MIME_TYPES: Readonly<Record<SourceKind, readonly string
   docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", ...GENERIC_MIME],
   markdown: ["text/markdown", "text/x-markdown", "text/plain", ...GENERIC_MIME],
   text: ["text/plain", ...GENERIC_MIME],
+  chat_import: ["application/x-ndjson", "application/jsonl", ...GENERIC_MIME],
 };
 
 export interface SourceUploadRequest {
@@ -157,6 +169,8 @@ export function bytesMatchKind(bytes: Uint8Array, kind: SourceKind): boolean {
       return isZip || (text && !isCfb && !startsAsPdf);
     case "markdown":
     case "text":
+      return !isZip && !isCfb && text && !startsAsPdf;
+    case "chat_import": // Round 4: server-written JSON Lines; the parser checks the format header
       return !isZip && !isCfb && text && !startsAsPdf;
     default:
       return false;
@@ -260,7 +274,7 @@ async function download(storage: StorageClient, path: string): Promise<Uint8Arra
   return new Uint8Array(await data.arrayBuffer());
 }
 
-/** Best-effort removal; failures are left to the retention sweep (docs/proposals/retention.md). */
+/** Best-effort removal; failures are left to the retention sweep (docs/architecture/proposals/retention.md). */
 async function removeQuietly(storage: StorageClient, path: string): Promise<void> {
   try {
     await storage.from(SOURCE_BUCKET).remove([path]);
@@ -310,6 +324,52 @@ export async function createSourceUpload(
     signedUploadUrl: signed.signedUrl,
     token: signed.token,
     expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString(),
+  };
+}
+
+/**
+ * R3 Task 05B: step 1 for a NEW VERSION of an existing source. The same request checks and the same signing
+ * as a new source; the database decides whether a candidate row awaits an upload (`created` / `resumed`: a
+ * ticket is signed for raw/{handover}/{candidate}) or why not (every other outcome; nothing is signed).
+ * Steps 2 and 3 are unchanged: confirmSourceUpload, then record consent, which activates the version.
+ */
+export async function createSourceVersionUpload(
+  db: DbClient,
+  actor: VerifiedActor,
+  userStorage: StorageClient,
+  input: Omit<SourceUploadRequest, "handoverId"> & { previousSourceId: string },
+): Promise<{ outcome: SourceVersionOutcome; sourceId: string | null; ticket: SourceUploadTicket | null }> {
+  // the handover only matters for the path, which the database derives; the request checks do not use it
+  checkSourceUploadRequest({ ...input, handoverId: "" });
+  const r = await createSourceVersion(db, actor, input);
+  if ((r.outcome !== "created" && r.outcome !== "resumed") || r.sourceId === null) {
+    return { outcome: r.outcome, sourceId: r.sourceId, ticket: null };
+  }
+  const sourceId = r.sourceId;
+  const path = rawSourcePath(r.handoverId, sourceId);
+  let signed: { signedUrl: string; token: string; path: string } | null = null;
+  try {
+    const { data, error } = await userStorage.from(SOURCE_BUCKET).createSignedUploadUrl(path);
+    if (!error && data && (data.path === undefined || data.path === path)) signed = data;
+  } catch {
+    signed = null;
+  }
+  if (!signed) {
+    if (r.outcome === "created") {
+      // nobody could finish this pending update: discard it (the current version is untouched)
+      try {
+        await removeSource(db, actor, sourceId);
+        await callRpc(db, "mark_source_raw_deleted", { p_source_id: sourceId });
+      } catch {
+        // left for the retention sweep (pending_upload_expired)
+      }
+    }
+    throw new DbError("internal");
+  }
+  return {
+    outcome: r.outcome,
+    sourceId,
+    ticket: { sourceId, signedUploadUrl: signed.signedUrl, token: signed.token, expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString() },
   };
 }
 
@@ -441,7 +501,7 @@ export async function readRawSourceForPeople(
     const source = (await callRpc(db, "raw_source_for_processing", { p_source_id: sourceId })) as
       | (RawSourceRow & { state?: string })
       | null;
-    if (!source || !source.raw_storage_path || source.kind !== "whatsapp_export") return null;
+    if (!source || !source.raw_storage_path || !isChatSourceKind(source.kind)) return null;
     if (source.state !== "uploaded" && source.state !== "parsing" && source.state !== "failed") return null;
     if (!isOwnedRawPath(source.raw_storage_path, sourceId, handoverId)) return null;
     const bytes = await download(adminStorage, source.raw_storage_path);
@@ -545,7 +605,7 @@ export async function deleteRawSource(db: DbClient, adminStorage: StorageClient,
  * `mark_source_raw_deleted` (idempotent). Database rows are never deleted (the purge stays behind D27).
  *
  * Never throws for Storage or marking failures or for a foreign path: those count as `failed`, keep
- * their raw path and are retried by the retention sweep (docs/proposals/retention.md). Throws a DbError
+ * their raw path and are retried by the retention sweep (docs/architecture/proposals/retention.md). Throws a DbError
  * only when the listing itself is refused (not_found, precondition_failed, unauthenticated, …).
  */
 export async function deleteHandoverRawObjects(

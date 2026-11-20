@@ -1,6 +1,6 @@
 -- Integration support for the pipeline worker and server actions (overnight integration, 2026-11-12).
 -- Lead-owned, ADDITIVE: new functions only, plus one bug fix (DB-11) by CREATE OR REPLACE with the same
--- signature. No table, column, policy or existing grant changes. Requests: docs/integration/interfaces.md.
+-- signature. No table, column, policy or existing grant changes. Requests: docs/history/integration/interfaces.md.
 --
 -- Worker (service_role only, §9.3, §10, §11.8):
 --   DB-1  claim_ready_processing_jobs   claim only jobs whose earlier stages are terminal; reap dead leases

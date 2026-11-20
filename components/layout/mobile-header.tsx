@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BatonLogo } from "@/components/shared/baton-logo";
+import { HelpMenu } from "@/components/onboarding/help-menu";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { routes } from "@/lib/routes";
 
@@ -15,6 +16,7 @@ export function MobileHeader() {
           <BatonLogo size="sm" />
         </Link>
         <div className="flex items-center gap-1">
+          <HelpMenu size="lg" />
           <ThemeToggle size="icon-lg" />
           <MobileNav />
         </div>

@@ -8,6 +8,8 @@ import { FormSkeleton } from "@/components/shared/skeletons";
 import { PageHeader } from "@/components/shared/page-header";
 import { resumeStep } from "@/components/wizard/draft-state";
 import { NewHandoverWizard, type WizardInitial } from "@/components/wizard/new-handover-wizard";
+import { isCurrentSourceVersion } from "@/lib/contracts/source-versions";
+import { getConsentDisclosure } from "@/lib/ai/consent-disclosure";
 import { getQueries } from "@/lib/data";
 import { routes } from "@/lib/routes";
 
@@ -17,12 +19,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function NewHandoverPage({ searchParams }: PageProps<"/handover/new">) {
   return (
-    <PageContainer width="narrow" className="space-y-8 pb-0 lg:pb-0">
+    <PageContainer width="narrow" className="space-y-8" frameClassName="pb-0 lg:pb-0">
       <PageHeader
         back={{ href: routes.dashboard, label: "Dashboard" }}
-        eyebrow="New handover"
         title="Start a handover"
-        description="Who is involved, consent, the chats and documents that hold the knowledge, and what Baton may read. Your draft saves as you go."
         divider={false}
       />
       <Suspense fallback={<FormSkeleton label="Opening your draft…" />}>
@@ -39,7 +39,7 @@ export default function NewHandoverPage({ searchParams }: PageProps<"/handover/n
 async function WizardLoader({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams;
   const draft = typeof query.draft === "string" ? query.draft : null;
-  if (!draft) return <NewHandoverWizard />;
+  if (!draft) return <NewHandoverWizard consentDisclosure={getConsentDisclosure()} />;
   if (!UUID.test(draft)) notFound();
 
   await connection(); // session reads check token expiry against the current time (auth-js)
@@ -48,7 +48,8 @@ async function WizardLoader({ searchParams }: { searchParams: Promise<Record<str
   if (!handover.ok) notFound();
   const h = handover.data;
   const manages = h.viewerIsCreator || h.viewerRole === "outgoing";
-  const live = sources.ok ? sources.data.filter((s) => s.state !== "removed") : [];
+  // R3 Task 05B: one row per source (its current version)
+  const live = sources.ok ? sources.data.filter((s) => s.state !== "removed" && isCurrentSourceVersion(s)) : [];
   // Only a draft that has not been processed belongs in the wizard; anything else continues on its own page.
   if (h.state !== "draft" || !manages || live.some((s) => s.state === "parsed" || s.state === "parsing")) {
     redirect(routes.handover.processing(h.id));
@@ -68,5 +69,5 @@ async function WizardLoader({ searchParams }: { searchParams: Promise<Record<str
     sources: live,
     step: resumeStep(typeof query.step === "string" ? query.step : undefined, live.length),
   };
-  return <NewHandoverWizard initial={initial} />;
+  return <NewHandoverWizard initial={initial} consentDisclosure={getConsentDisclosure()} />;
 }

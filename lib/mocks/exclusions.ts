@@ -109,6 +109,7 @@ export function toAccessTokenSummary(t: MockToken, viewerIsCreator: boolean): Ac
     useCount: t.useCount,
     revokedAt: t.revokedAt,
     createdAt: t.createdAt,
+    deliveryStatus: null,
   };
 }
 

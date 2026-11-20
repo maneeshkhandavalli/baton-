@@ -6,6 +6,8 @@ import { ArrowLeft, ArrowRight, Link2, Lock, Trash2, UserCheck, UserX } from "lu
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
+import type { HelpTopicId } from "@/components/shared/help-topics";
 import { identityKindLabel } from "@/components/handover/labels";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { SaveIndicator } from "@/components/shared/save-indicator";
@@ -20,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
-import { MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type SourceKind } from "@/lib/contracts/enums";
+import { isUserUploadSourceKind, MASK_KINDS, type AccessLevel, type DateOrder, type IdentityMatchDecision, type MaskKind, type UserUploadSourceKind } from "@/lib/contracts/enums";
 import type { HandoverSummary, SourceSummary } from "@/lib/contracts/dto";
 import type { SourcePreview } from "@/lib/contracts/parser";
 import { MAX_SOURCE_BYTES, createHandoverInput, type AddExclusionInput } from "@/lib/contracts/schemas";
@@ -32,7 +34,8 @@ import { routes } from "@/lib/routes";
 import { createSupabaseUploadClient } from "@/lib/supabase/client";
 
 import { blankSource, confirmFailure, fromSummary, maxStepFor, phaseOf, signedTarget, TOO_LARGE_MESSAGE, type DraftSource } from "./draft-state";
-import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, GroupNotice, MaskingTable, consentComplete, emptyConsent } from "./consent";
+import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import type { DetailsValues } from "./details-save";
 import { ScopeStep } from "./scope-step";
 import { SourcesStep } from "./sources-step";
@@ -73,7 +76,7 @@ export interface WizardInitial {
   step: number;
 }
 
-function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
+function kindFor(fileName: string, group: "chat" | "doc"): UserUploadSourceKind | null {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
   // A .txt is decided by its contents (looksLikeChatExport); this is only the starting guess.
   if (ext === "txt") return group === "chat" ? "whatsapp_export" : "text";
@@ -85,7 +88,7 @@ function kindFor(fileName: string, group: "chat" | "doc"): SourceKind | null {
 }
 
 /** "This file isn't a valid …" */
-const KIND_NOUN: Record<SourceKind, string> = {
+const KIND_NOUN: Record<UserUploadSourceKind, string> = {
   whatsapp_export: "WhatsApp chat export",
   pdf: "PDF",
   docx: "Word document",
@@ -93,7 +96,7 @@ const KIND_NOUN: Record<SourceKind, string> = {
   text: "text file",
 };
 
-const MIME: Record<SourceKind, string> = {
+const MIME: Record<UserUploadSourceKind, string> = {
   whatsapp_export: "text/plain",
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -166,7 +169,7 @@ const valuesOf = (d: Pick<Details, "title" | "teamName" | "roleTitle" | "descrip
   ...(d.description !== undefined ? { description: d.description } : {}),
 });
 
-export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
+export function NewHandoverWizard({ initial, consentDisclosure = DEFAULT_CONSENT_DISCLOSURE }: { initial?: WizardInitial; consentDisclosure?: ConsentDisclosure }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { run, isPending } = useAction();
@@ -290,13 +293,13 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
     async (localId: string, sourceId: string, accessLevel: AccessLevel, dateOrder?: DateOrder) => {
       update(localId, { status: "consent", error: undefined, errorPhase: undefined, needsDateOrder: false });
       const c = await saving(() =>
-        recordSourceConsent({ sourceId, consentStatementVersion: CONSENT_STATEMENT_VERSION, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
+        recordSourceConsent({ sourceId, consentStatementVersion: consentDisclosure.statementVersion, consentConfirmed: true, accessLevel, timezone: timeZone, dateOrder }),
       );
       if (!c.ok) return update(localId, { status: "error", errorPhase: "failed", error: c.error.message });
       update(localId, { status: "previewing", dateOrder });
       applyPreview(localId, await previewSource({ sourceId }));
     },
-    [applyPreview, saving, timeZone, update],
+    [applyPreview, saving, timeZone, update, consentDisclosure.statementVersion],
   );
 
   // Reopened draft: preview sources that are uploaded (recording consent first where it is missing).
@@ -389,7 +392,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   }
 
   // ── Step 3: real signed upload → server verification → consent → preview ─
-  async function uploadSource(localId: string, entry: { name: string; size: number; kind: SourceKind; file: File }) {
+  async function uploadSource(localId: string, entry: { name: string; size: number; kind: UserUploadSourceKind; file: File }) {
     if (!handoverId) return;
     if (entry.size > MAX_SOURCE_BYTES) return update(localId, { status: "error", errorPhase: "too_large", error: TOO_LARGE_MESSAGE });
     if (entry.size === 0) return update(localId, { status: "error", errorPhase: "empty", error: "This file is empty." });
@@ -509,7 +512,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
       setSources((list) => [...list, blankSource({ localId, name: file.name, size: file.size, kind, status: "hashing", file })]);
       if (isTxt(file.name)) {
         void (async () => {
-          const detected: SourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
+          const detected: UserUploadSourceKind = (await looksLikeChatExport(file)) ? "whatsapp_export" : "text";
           if (detected !== kind) update(localId, { kind: detected });
           await uploadSource(localId, { name: file.name, size: file.size, kind: detected, file });
         })();
@@ -555,7 +558,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   }
 
   function retry(s: DraftSource) {
-    if (!s.file || phaseOf(s) !== "failed" || (s.kind === "text" && !isTxt(s.name))) return;
+    if (!s.file || phaseOf(s) !== "failed" || !isUserUploadSourceKind(s.kind) || (s.kind === "text" && !isTxt(s.name))) return;
     void uploadSource(s.localId, { name: s.name, size: s.size, kind: s.kind, file: s.file });
   }
 
@@ -673,7 +676,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
           run(() =>
             recordSourceConsent({
               sourceId: s.sourceId!,
-              consentStatementVersion: CONSENT_STATEMENT_VERSION,
+              consentStatementVersion: consentDisclosure.statementVersion,
               consentConfirmed: true,
               accessLevel: s.accessLevel,
               timezone: tz,
@@ -732,7 +735,9 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
   return (
     <div className="space-y-8">
       <div className="space-y-5 border-b border-border pb-6">
-        <Stepper steps={STEPS} current={shownStep} onStepClick={submitting ? undefined : (i) => setStep(i)} label="New handover steps" />
+        <div data-tour="wizard-steps">
+          <Stepper steps={STEPS} current={shownStep} onStepClick={submitting ? undefined : (i) => setStep(i)} label="New handover steps" />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <SaveIndicator
             state={save}
@@ -755,9 +760,6 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
             />
           )}
         </div>
-        {handoverId && (
-          <p className="text-caption text-muted-foreground">Everything is saved as you go. Leave any time and continue from the dashboard.</p>
-        )}
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
@@ -777,10 +779,11 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
               <StepHeading
                 index={1}
                 title="Privacy and consent"
+                help="consent"
                 description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
               />
               <GroupNotice teamName={details.teamName} />
-              <ConsentChecklist value={consent} onChange={setConsent} />
+              <ConsentChecklist value={consent} onChange={setConsent} disclosure={consentDisclosure} />
             </div>
           )}
           {shownStep === 2 && (
@@ -788,6 +791,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
               <StepHeading
                 index={2}
                 title="Add the team’s record"
+                help="source_connections"
                 description="Export WhatsApp chats without media (Chat → More → Export chat → Without media) and add any handbooks or notes. Up to 10 files, 25 MB each."
               />
               {skipped > 0 && (
@@ -812,7 +816,7 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
               <StepHeading
                 index={3}
                 title="Choose what Baton reads"
-                description="Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and decide who may see evidence from each source."
+                description="Narrow each chat to the relevant dates, leave out off-topic conversations and anyone who opted out, and set who may see each source."
               />
               {(matches.length > 0 || decisions.length > 0) && (
                 <MatchesSection matches={matches} decisions={decisions.filter((d) => ready.some((s) => s.sourceId === d.sourceId))} onAnswer={answerMatch} disabled={isPending} />
@@ -830,21 +834,21 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
         </Alert>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+      <div data-tour-avoid className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">
-          <Button variant="ghost" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
+          <Button variant="ghost" className="max-sm:h-10" onClick={() => setStep(Math.max(0, shownStep - 1))} disabled={shownStep === 0 || submitting}>
             <ArrowLeft aria-hidden="true" data-icon="inline-start" />
             Back
           </Button>
           <div className="flex min-w-0 items-center gap-3">
             {blockedReason && <p className="hidden text-right text-caption text-muted-foreground md:block">{blockedReason}</p>}
             {shownStep < LAST_STEP ? (
-              <Button size="lg" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
+              <Button size="lg" className="max-sm:h-10" disabled={!canNext || isPending} aria-busy={isPending} onClick={() => (shownStep === 0 ? submitDetails() : setStep(shownStep + 1))}>
                 {isPending && shownStep === 0 ? "Creating…" : shownStep === 0 && !handoverId ? "Create draft" : "Continue"}
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>
             ) : (
-              <Button size="lg" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
+              <Button size="lg" className="max-sm:h-10" disabled={!canNext || submitting} onClick={finish} aria-busy={submitting || savingScope}>
                 {submitting || savingScope ? "Saving…" : pendingPeople ? "Save and review" : "Start processing"}
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>
@@ -860,10 +864,10 @@ export function NewHandoverWizard({ initial }: { initial?: WizardInitial }) {
 /** Set when the step changes; the next StepHeading to mount takes focus (then clears it). */
 const focusNextStep = { current: false };
 
-export function StepHeading({ index, title, description }: { index: number; title: string; description: string }) {
+export function StepHeading({ index, title, description, help }: { index: number; title: string; description: string; help?: HelpTopicId }) {
   return (
     <header className="space-y-2">
-      <p className="type-eyebrow text-muted-foreground">
+      <p className="sr-only">
         Step {index + 1} of {STEPS.length}
       </p>
       <h2
@@ -877,6 +881,7 @@ export function StepHeading({ index, title, description }: { index: number; titl
         }}
       >
         {title}
+        {help && <ContextualHelp topic={help} className="ml-1" />}
       </h2>
       <p className="max-w-2xl type-body text-muted-foreground">{description}</p>
     </header>
@@ -930,7 +935,7 @@ export function DetailsStep({
         </Alert>
       )}
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-6 sm:grid-cols-2" data-tour="wizard-details">
         <Field id="title" label="Handover title" hint={hint.title} error={errors.title} className="sm:col-span-2">
           <Input
             id="title"
@@ -1093,7 +1098,7 @@ export function MatchesSection({
       {matches.length > 0 && (
         <ul className="space-y-2" aria-label="Waiting for your answer">
           {matches.map((m) => (
-            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-xs sm:flex-row sm:items-center">
+            <li key={`${m.sourceId}-${m.exclusionId}-${m.participantLocalId}`} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{m.label}</span> <span className="text-muted-foreground">in {m.sourceName}</span>
                 <span className="block text-caption text-muted-foreground">{identityKindLabel[m.kind].label} match · no decision yet</span>

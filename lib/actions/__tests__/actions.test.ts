@@ -334,9 +334,12 @@ describe("links: absolute url from BATON_SITE_URL, checked before the token exis
     assert.ok(r.data.url.startsWith(`${ORIGIN}/h/`));
     assert.match(raw, /^[A-Za-z0-9_-]{43}$/);
     assert.equal(r.data.tokenId, NEW_ID);
-    const sent = allStrings(f.calls[0].args);
+    // R3 Task 06: the two send limits are consumed first, then the invitation is created.
+    assert.deepEqual(f.fns().slice(0, 3), ["consume_rate_limit", "consume_rate_limit", "invite_member"]);
+    const invite = f.calls.find((c) => c.fn === "invite_member")!;
+    const sent = allStrings(f.calls.map((c) => c.args));
     assert.ok(!sent.some((s) => s.includes(raw)), "the raw token never reaches the database");
-    assert.equal(f.calls[0].args?.p_token_hash, `\\x${createHash("sha256").update(raw).digest("hex")}`);
+    assert.equal(invite.args?.p_token_hash,`\\x${createHash("sha256").update(raw).digest("hex")}`);
   });
 
   it("createGapInterviewLink returns an absolute /g/ url and fails closed without a site URL", async () => {
@@ -423,7 +426,7 @@ describe("sources", () => {
   it("recordSourceConsent without a configured provider writes nothing (provider_not_configured)", async () => {
     const f = fakeDeps();
     const r = await sources.recordSourceConsent(f.deps, {
-      sourceId: S, consentStatementVersion: "v1", consentConfirmed: true, timezone: "Asia/Kolkata",
+      sourceId: S, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, timezone: "Asia/Kolkata",
     });
     assert.equal(!r.ok && r.error.code, "precondition_failed");
     assert.equal(!r.ok && r.error.details?.reason, "provider_not_configured");
@@ -436,12 +439,15 @@ describe("sources", () => {
       rpc: { api_get_source: { data: { id: S } } },
     });
     await sources.recordSourceConsent(f.deps, {
-      sourceId: S, consentStatementVersion: "v1", consentConfirmed: true, timezone: "Asia/Kolkata", aiProvider: "evil",
+      sourceId: S, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, timezone: "Asia/Kolkata", aiProvider: "evil",
     } as never);
-    assert.equal(f.calls[0].fn, "record_source_consent");
-    assert.equal(f.calls[0].args?.p_ai_provider, "fake");
-    assert.equal(f.calls[0].args?.p_access_level, "everyone");
-    assert.deepEqual([f.calls[1].fn, f.calls[1].client], ["api_get_source", "user"]);
+    // R3 Task 05B: the source is read first (under RLS) to know whether this consent activates a new version
+    assert.deepEqual([f.calls[0].fn, f.calls[0].client], ["api_get_source", "user"]);
+    assert.equal(f.calls[1].fn, "record_source_consent");
+    assert.equal(f.calls[1].client, "admin");
+    assert.equal(f.calls[1].args?.p_ai_provider, "fake");
+    assert.equal(f.calls[1].args?.p_access_level, "everyone");
+    assert.deepEqual([f.calls[2].fn, f.calls[2].client], ["api_get_source", "user"]);
   });
 
   it("confirmSourceUploaded measures the object, then re-reads the source under RLS", async () => {
@@ -667,19 +673,20 @@ describe("startProcessing (I3)", () => {
   it("scheduleDrain runs only after a successful start", async () => {
     const f = startDeps();
     await handovers.startProcessing(f.deps, { handoverId: H });
-    assert.deepEqual(f.events, ["start_processing", "scheduleDrain"]);
+    // R3 Task 05C: the read-only scope lookup (scoped vs full run) precedes the start
+    assert.deepEqual(f.events, ["source_update_processing_scope", "start_processing", "scheduleDrain"]);
 
     const refused = startDeps({ rpc: { start_processing: { error: { code: "BTPF0", message: "x" } } } });
     const r = await handovers.startProcessing(refused.deps, { handoverId: H });
     assert.equal(!r.ok && r.error.code, "precondition_failed");
-    assert.deepEqual(refused.events, ["start_processing"], "no drain when the run was not created");
+    assert.deepEqual(refused.events, ["source_update_processing_scope", "start_processing"], "no drain when the run was not created");
 
     const badPlan = startDeps({
       planProcessingRun: () => ({ ok: false, error: { code: "validation_failed", message: "m", retryable: false } }),
     });
     const r2 = await handovers.startProcessing(badPlan.deps, { handoverId: H });
     assert.equal(!r2.ok && r2.error.code, "validation_failed");
-    assert.deepEqual(badPlan.events, []);
+    assert.deepEqual(badPlan.events, ["source_update_processing_scope"], "nothing is started from a refused plan");
   });
 
   it("start_processing's consent refusal (e.g. consent recorded for another provider) is consent_required with an actionable message", async () => {
@@ -691,7 +698,7 @@ describe("startProcessing (I3)", () => {
     assert.equal(handovers.CONSENT_REQUIRED_REASON, "consent_required", "components/shared/run-status.ts uses the same literal");
     assert.equal(r.error.message, handovers.CONSENT_REQUIRED_MESSAGE);
     assert.ok(!r.error.message.includes("configured AI provider"), "the database message never reaches the client");
-    assert.deepEqual(f.events, ["start_processing"], "no drain");
+    assert.deepEqual(f.events, ["source_update_processing_scope", "start_processing"], "no drain");
 
     const other = startDeps({ rpc: { start_processing: { error: { code: "BTCF0", message: "a run is already active" } } } });
     const r2 = await handovers.startProcessing(other.deps, { handoverId: H });

@@ -1,42 +1,56 @@
 "use client";
 
-import { Check, Copy, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
 import { maskKindLabel } from "@/components/handover/labels";
 import { Button } from "@/components/ui/button";
 import { MASK_KINDS, type MaskKind } from "@/lib/contracts/enums";
+import { consentDisclosure, type ConsentDisclosure } from "@/lib/contracts/consent";
 import { cn } from "@/lib/utils";
 
-/** Version of the consent statement below. Bump it whenever the wording changes (§12.2). */
-export const CONSENT_STATEMENT_VERSION = "gemini-free-2026-11-14-v1";
+import { type ConsentItemId } from "./consent-state";
 
 /**
- * D11 (2026-11-14): the configured provider is the Google Gemini Developer API on the FREE tier
- * (lib/ai/providers/gemini.ts, GEMINI_DISPLAY_NAME). The server records the configured provider id with
- * each consent, and processing refuses a source whose consent names a different provider.
+ * R3 Task 05D: the AI-processing statement is decided by the SERVER from the actual configuration
+ * (lib/ai/consent-disclosure.ts → ConsentDisclosure) and passed down: a local fake adapter is never presented as
+ * Gemini, and a real provider is named exactly. The server records the configured provider id with each consent,
+ * and processing refuses a source whose consent names a different provider. Each wording has its own version.
  */
-export const AI_PROVIDER_LABEL = "Google Gemini (Gemini Developer API, free tier)";
+export const DEFAULT_CONSENT_DISCLOSURE: ConsentDisclosure = consentDisclosure("not_configured");
 
-export const CONSENT_ITEMS = [
-  { id: "informed", label: "I told the group (or document owners) that I'm using this content for a Baton handover." },
-  {
-    id: "provider",
-    label: `I understand masked content will be sent to ${AI_PROVIDER_LABEL} for processing. Phone numbers, emails, payment details and secrets are masked before anything is sent. On the free tier, Google may use this content to improve its products, which can include review by people, so do not upload anything you would not share with Google. The raw file is deleted after processing.`,
-  },
-  { id: "optout", label: "I told members they can ask to be left out, and I've excluded anyone who did." },
-] as const;
+/** @deprecated the statement version depends on the configuration: use `disclosure.statementVersion`. */
+export const CONSENT_STATEMENT_VERSION = consentDisclosure("gemini_free").statementVersion;
 
-export type ConsentItemId = (typeof CONSENT_ITEMS)[number]["id"];
+export { CONSENT_ITEM_IDS, consentComplete, emptyConsent, type ConsentItemId } from "./consent-state";
 
-export function ConsentChecklist({ value, onChange, className }: { value: Record<ConsentItemId, boolean>; onChange: (v: Record<ConsentItemId, boolean>) => void; className?: string }) {
+export function consentItems(disclosure: ConsentDisclosure): ReadonlyArray<{ id: ConsentItemId; label: string }> {
+  return [
+    { id: "informed", label: "I told the group (or document owners) that I'm using this content for a Baton handover." },
+    { id: "provider", label: disclosure.providerStatement },
+    { id: "optout", label: "I told members they can ask to be left out, and I've excluded anyone who did." },
+  ];
+}
+
+export function ConsentChecklist({
+  value,
+  onChange,
+  disclosure = DEFAULT_CONSENT_DISCLOSURE,
+  className,
+}: {
+  value: Record<ConsentItemId, boolean>;
+  onChange: (v: Record<ConsentItemId, boolean>) => void;
+  disclosure?: ConsentDisclosure;
+  className?: string;
+}) {
+  const items = consentItems(disclosure);
   return (
     <fieldset className={cn("space-y-3", className)}>
       <legend className="sr-only">Consent</legend>
-      {CONSENT_ITEMS.map((item) => (
+      {items.map((item) => (
         <label
           key={item.id}
-          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm leading-relaxed shadow-xs transition-colors hover:border-border-strong has-checked:border-success/40 has-checked:bg-success-soft/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35"
+          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3.5 text-sm leading-relaxed transition-colors hover:border-border-strong has-checked:border-success/40 has-checked:bg-success-soft/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35"
         >
           <input
             type="checkbox"
@@ -46,9 +60,8 @@ export function ConsentChecklist({ value, onChange, className }: { value: Record
           />
           <span className="min-w-0">
             {item.id === "provider" && (
-              <span aria-hidden="true" className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold tracking-wide text-warning-fg uppercase">
-                <Sparkles className="size-3" />
-                AI provider · free tier
+              <span aria-hidden="true" className="mb-1 block text-caption font-medium text-warning-fg">
+                {disclosure.badge}
               </span>
             )}
             <span className="block text-pretty">{item.label}</span>
@@ -56,20 +69,17 @@ export function ConsentChecklist({ value, onChange, className }: { value: Record
         </label>
       ))}
       <p className="text-caption text-muted-foreground">
-        {CONSENT_ITEMS.filter((i) => value[i.id]).length} of {CONSENT_ITEMS.length} confirmed · statement version {CONSENT_STATEMENT_VERSION}, recorded with each source.
+        {items.filter((i) => value[i.id]).length} of {items.length} confirmed · statement version {disclosure.statementVersion}, recorded with each source.
       </p>
     </fieldset>
   );
 }
 
-export const emptyConsent = (): Record<ConsentItemId, boolean> => ({ informed: false, provider: false, optout: false });
-export const consentComplete = (v: Record<ConsentItemId, boolean>) => CONSENT_ITEMS.every((i) => v[i.id]);
 
 export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, number>> }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
-        <ShieldCheck aria-hidden="true" className="size-4 text-success" />
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-4 py-3">
         <p className="type-subheading">Masked before anything is stored or sent to AI</p>
       </div>
       <ul className="divide-y divide-border text-sm">
@@ -78,7 +88,7 @@ export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, num
             <span>{maskKindLabel[k].label}</span>
             <code className="hidden font-mono text-2xs text-muted-foreground sm:block">{maskKindLabel[k].token}</code>
             <span className="text-right font-mono text-xs tabular-nums">
-              {counts ? (counts[k] ?? 0) : "—"}
+              {counts ? (counts[k] ?? 0) : "…"}
               {counts && <span className="sr-only"> found</span>}
             </span>
           </li>
@@ -92,10 +102,10 @@ export function MaskingTable({ counts }: { counts?: Partial<Record<MaskKind, num
 }
 
 export function GroupNotice({ teamName }: { teamName: string }) {
-  const text = `Hi all — I'm preparing a handover for ${teamName || "our team"} using Baton. It will read this chat to pull out decisions, owners and open tasks, with quotes as evidence. Phone numbers, emails and payment details are masked first, and the original export is deleted after processing. If you'd rather your messages were left out, reply here or message me in the next few days, before I start processing.`;
+  const text = `Hi all, I'm preparing a handover for ${teamName || "our team"} using Baton. It will read this chat to pull out decisions, owners and open tasks, with quotes as evidence. Phone numbers, emails and payment details are masked first, and the original export is deleted after processing. If you'd rather your messages were left out, reply here or message me in the next few days, before I start processing.`;
   const [copied, setCopied] = useState(false);
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="type-subheading">Tell the group first</p>
@@ -104,6 +114,7 @@ export function GroupNotice({ teamName }: { teamName: string }) {
         <Button
           size="sm"
           variant="outline"
+          className="max-sm:h-10"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(text);

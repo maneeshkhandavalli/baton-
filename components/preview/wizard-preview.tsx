@@ -8,7 +8,11 @@ import { SaveIndicator } from "@/components/shared/save-indicator";
 import { Stepper } from "@/components/shared/stepper";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { CONSENT_STATEMENT_VERSION, ConsentChecklist, GroupNotice, MaskingTable, emptyConsent } from "@/components/wizard/consent";
+import { ConsentChecklist, GroupNotice, MaskingTable, emptyConsent } from "@/components/wizard/consent";
+import { consentDisclosure } from "@/lib/contracts/consent";
+
+// a design preview sends nothing anywhere: it shows the local-test wording
+const PREVIEW_DISCLOSURE = consentDisclosure("local_test");
 import type { DraftSource } from "@/components/wizard/draft-state";
 import { DetailsStep, MatchesSection, STEPS, StepHeading, type Details, type PendingMatch } from "@/components/wizard/new-handover-wizard";
 import { ScopeStep } from "@/components/wizard/scope-step";
@@ -51,7 +55,9 @@ export function WizardPreview({
   return (
     <div className="space-y-8">
       <div className="space-y-5 border-b border-border pb-6">
-        <Stepper steps={STEPS} current={step} label="New handover steps" />
+        <div data-tour="wizard-steps">
+          <Stepper steps={STEPS} current={step} label="New handover steps" />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <SaveIndicator state={{ kind: "saved", at: savedAt }} className="min-w-0 flex-1" />
           <Button size="sm" variant="destructive-ghost" disabled>
@@ -80,8 +86,8 @@ export function WizardPreview({
             description="Before any file is read, confirm how Baton may use it. Personal and financial details are masked in memory before anything is saved, the raw upload is deleted once processing succeeds, and only masked, permitted evidence is kept."
           />
           <GroupNotice teamName={details.teamName} />
-          <ConsentChecklist value={consent} onChange={setConsent} />
-          <p className="sr-only">Statement {CONSENT_STATEMENT_VERSION}</p>
+          <ConsentChecklist value={consent} onChange={setConsent} disclosure={PREVIEW_DISCLOSURE} />
+          <p className="sr-only">Statement {PREVIEW_DISCLOSURE.statementVersion}</p>
         </div>
       )}
       {step === 2 && (
@@ -110,7 +116,7 @@ export function WizardPreview({
         </div>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
+      <div data-tour-avoid className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-backdrop-filter:bg-background/75 sm:mx-0 sm:px-0">
         <div className="flex items-center justify-between gap-3">
           {step > 0 ? (
             <Link href={href(step - 1)} className={buttonVariants({ variant: "ghost" })}>

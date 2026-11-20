@@ -32,6 +32,11 @@ interface PublishedHandoverViewProps {
   preview?: boolean;
   /** Dev-only design preview: show the incoming member's real acknowledgement form, with the button disabled. */
   ackDisabledReason?: string;
+  /**
+   * Off inside the handover workspace, whose header above already shows the team and title (UI polish: no
+   * repeated title). The h2 stays for screen readers so the heading order is unchanged.
+   */
+  showTitle?: boolean;
 }
 
 type Point = { id: string; content: PublishedPointContent; category: PointCategory };
@@ -47,7 +52,7 @@ const STAT_LABEL: Partial<Record<HandoverSectionId, string>> = { risks: "Risks",
  * first, then the first-week checklist (what to do), then the sections (what to know), open
  * questions (what nobody knew) and the acknowledgement.
  */
-export function PublishedHandoverView({ handover, viewerLabel, viewerRole, preview = false, ackDisabledReason }: PublishedHandoverViewProps) {
+export function PublishedHandoverView({ handover, viewerLabel, viewerRole, preview = false, ackDisabledReason, showTitle = true }: PublishedHandoverViewProps) {
   const points: Point[] = handover.sections.flatMap((s) => s.points.map((p) => ({ ...p, category: s.category })));
   const facts = points.filter((p) => !p.content.isKnownGap);
   const gaps = points.filter((p) => p.content.isKnownGap);
@@ -67,7 +72,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
     <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[13rem_minmax(0,1fr)] xl:gap-14">
       <nav aria-label="On this page" className="hidden lg:block">
         <div className="sticky top-6 space-y-3">
-          <p className="type-eyebrow px-2 text-muted-foreground">On this page</p>
+          <p className="px-2 text-caption font-medium text-muted-foreground">On this page</p>
           <ul className="space-y-0.5 text-sm">
             {toc.map((t) => (
               <li key={t.id}>
@@ -82,13 +87,15 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
       </nav>
 
       <article className="min-w-0 space-y-14">
-        <header className="space-y-6 border-b border-border pb-10">
+        <header className="space-y-6 border-b border-border pb-10" data-tour="published-header">
           <div className="space-y-3">
-            <p className="type-eyebrow text-muted-foreground">
-              {handover.teamName}
-              {handover.roleTitle && ` · ${handover.roleTitle}`}
-            </p>
-            <h2 className="type-page-title break-words">{handover.title}</h2>
+            {showTitle && (
+              <p className="text-caption text-muted-foreground">
+                {handover.teamName}
+                {handover.roleTitle && ` · ${handover.roleTitle}`}
+              </p>
+            )}
+            <h2 className={showTitle ? "type-page-title break-words" : "sr-only"}>{handover.title}</h2>
             <p className="text-caption text-muted-foreground">
               Version {handover.version} · published {formatDate(handover.publishedAt)} by {handover.publishedByLabel} · reading as {viewerLabel} (
               {memberRoleLabel[viewerRole].toLowerCase()})
@@ -149,9 +156,10 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
 
         <FirstWeek handover={handover} />
 
-        {groups.map((g) => (
+        {groups.map((g, i) => (
           <section key={g.id} id={g.id} aria-labelledby={`${g.id}-h`} className="space-y-5">
-            <h3 id={`${g.id}-h`} className="type-section-title">
+            {/* The tour points at the heading, not the whole (tall) section, so its card never covers it. */}
+            <h3 id={`${g.id}-h`} className="type-section-title" data-tour={i === 0 ? "published-sections" : undefined}>
               {g.label}
               <span className="ml-3 align-middle font-sans text-sm text-muted-foreground tabular-nums">{g.points.length}</span>
             </h3>
@@ -167,7 +175,7 @@ export function PublishedHandoverView({ handover, viewerLabel, viewerRole, previ
         ))}
 
         {gaps.length > 0 && (
-          <section id="open-questions" aria-labelledby="oq-h" className="space-y-5">
+          <section id="open-questions" aria-labelledby="oq-h" className="space-y-5" data-tour="open-questions">
             <div className="space-y-1.5">
               <h3 id="oq-h" className="type-section-title">
                 Open questions
@@ -348,7 +356,7 @@ function FirstWeek({ handover }: { handover: PublishedHandover }) {
 
   return (
     <section id="first-week" aria-labelledby="fw-h" className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="first-week">
         <div className="space-y-1.5">
           <h3 id="fw-h" className="type-section-title">
             Your first 7 days
@@ -407,7 +415,16 @@ function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handov
   const acked = handover.viewerAcknowledgedAt;
 
   return (
-    <section id="acknowledge" aria-labelledby="ack-h" className="rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8">
+    <section
+      id="acknowledge"
+      aria-labelledby="ack-h"
+      // Only the incoming member's own action gets the inverse slab; for everyone else it's a quiet note (UI polish).
+      className={cn(
+        "scroll-mt-6",
+        !acked && (viewerRole !== "incoming" || preview) ? "rounded-xl border border-border px-5 py-4 sm:px-6" : "rounded-2xl bg-inverse p-6 text-inverse-foreground sm:p-8",
+      )}
+      data-tour="acknowledge"
+    >
       {acked ? (
         <div className="flex items-start gap-3">
           <CheckCircle2 aria-hidden="true" className="mt-1 size-6 shrink-0 text-status-sourced" />
@@ -420,10 +437,10 @@ function Acknowledge({ handover, viewerRole, preview, disabledReason }: { handov
         </div>
       ) : viewerRole !== "incoming" || preview ? (
         <div>
-          <h3 id="ack-h" className="type-section-title">
+          <h3 id="ack-h" className="type-heading">
             Acknowledgement
           </h3>
-          <p className="mt-1.5 text-sm text-inverse-muted">
+          <p className="mt-1 text-sm text-muted-foreground">
             {preview ? "In the real handover, the incoming member confirms here that they've read it." : "Only incoming members acknowledge a handover."}
           </p>
         </div>

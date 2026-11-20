@@ -1,4 +1,4 @@
--- Read-only. Phase D prerequisites (docs/round3/migrations.md §5 pre-check, adapted to "Phase A already applied").
+-- Read-only. Phase D prerequisites (docs/operations/migrations.md §5 pre-check, adapted to "Phase A already applied").
 -- Output: check | value | ok. Every row must be ok = t before r3phaseD may run.
 -- Fingerprint: only baton-dev has Phase A (31 rows, newest 20261113300400); the original project still has the
 -- 18-row baseline, so this check also refuses the wrong database.

@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FlaskConical, Keyboard, ListFilter, Lock, Plus, SearchX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { formatDate } from "@/components/handover/format";
 import { HANDOVER_SECTIONS } from "@/components/handover/labels";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Alert } from "@/components/ui/alert";
@@ -20,11 +22,19 @@ import { useHotkeys } from "@/hooks/use-hotkeys";
 import type { GapQuestionSummary, HandoverSummary, PointDetail, ReadinessReport, SourceSummary } from "@/lib/contracts/dto";
 import { EVIDENCE_STATUSES, type EvidenceStatus, type PointCategory, type ReviewState } from "@/lib/contracts/enums";
 import type { ReviewPointInput } from "@/lib/contracts/schemas";
-import { blockingExtractionGaps, type ExtractionReport, type PointReviewFlag, type UnreviewedSignalMessage } from "@/lib/contracts/extraction";
+import {
+  blockingExtractionGaps,
+  blockingSourceUpdates,
+  sourceUpdateBlockText,
+  type ExtractionReport,
+  type PointReviewFlag,
+  type UnreviewedSignalMessage,
+} from "@/lib/contracts/extraction";
 import { createGapQuestion } from "@/lib/actions/gaps";
 import { publishHandover } from "@/lib/actions/handovers";
 import { reviewPoint } from "@/lib/actions/review";
 import { SAMPLE_DATA_ENABLED } from "@/lib/prototype/flags";
+import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 import { AddPointDialog } from "./add-point-dialog";
@@ -79,6 +89,9 @@ export function ReviewWorkspace({
   preview = false,
 }: ReviewWorkspaceProps) {
   const extractionGaps = extraction ? blockingExtractionGaps(extraction) : [];
+  // R3 Task 05C: a source update not processed and checked yet; it cannot be acknowledged away
+  const updateBlocks = extraction ? blockingSourceUpdates(extraction) : [];
+  const router = useRouter();
   const [acknowledgeGaps, setAcknowledgeGaps] = useState(false);
   const [section, setSection] = useState<SectionFilter>("all");
   const [status, setStatus] = useState<EvidenceStatus | "all">("all");
@@ -221,6 +234,17 @@ export function ReviewWorkspace({
   );
 
   function onBlocker(kind: ReadinessReport["blockers"][number]["kind"]) {
+    // Round 4 (journey audit #2): publishing needs an incoming person; the creator invites them in Settings → Members
+    if (kind === "no_incoming_recipient") {
+      if (!preview) router.push(`${routes.handover.settings(handover.id)}#members`);
+      return;
+    }
+    // R3 Task 05D: source updates and their change reviews are listed on the processing page
+    if (kind === "source_updates_pending" || kind === "change_reviews_open") {
+      // R3 Task 05E: open change reviews are decided on their own page
+      if (!preview) router.push(kind === "change_reviews_open" ? routes.handover.changes(handover.id) : routes.handover.processing(handover.id));
+      return;
+    }
     setStatus("all");
     setReview("all");
     if (kind === "unresolved_conflicts") setSection("conflicts");
@@ -280,6 +304,7 @@ export function ReviewWorkspace({
       gapsHref={gapsHref}
       canPublish={!!readiness?.canPublish}
       onPublish={canPublishNow ? () => (preview ? toast.info("Preview only: publishing is turned off.") : setPublishOpen(true)) : null}
+      publishNote={!canPublishNow && !readOnly && handover.state === "in_review" ? "Only the creator can publish. They'll see it's ready." : undefined}
       extra={
         <>
           <ExtractionCoverageSummary report={extraction} />
@@ -290,7 +315,7 @@ export function ReviewWorkspace({
   );
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[15.5rem_minmax(0,1fr)_23rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[14rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[15.5rem_minmax(0,1fr)_26rem]">
       {/* Left: readiness, sections, conflicts and gaps */}
       <aside aria-label="Readiness and sections" className="hidden lg:block">
         <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
@@ -369,6 +394,16 @@ export function ReviewWorkspace({
             Shortcuts
           </Button>
         </div>
+
+        {!readOnly && handover.state === "in_review" && (
+          <p className="flex items-start gap-1 text-sm text-muted-foreground" data-tour="review-decisions">
+            <span>
+              Baton drafted each point from your sources. Approve what the evidence supports, edit what&rsquo;s nearly right, reject what&rsquo;s wrong.
+              Nothing is shared until the handover is published.
+            </span>
+            <ContextualHelp topic="review_decisions" label="How do review decisions work?" className="-mt-0.5" />
+          </p>
+        )}
 
         <p className="text-caption text-muted-foreground" aria-live="polite">
           Showing {visible.length} of {points.length} points
@@ -464,6 +499,15 @@ export function ReviewWorkspace({
               placeholder="A few sentences for the incoming member. Only include information everyone may see."
             />
           </div>
+          {updateBlocks.length > 0 && (
+            <div role="alert" className="space-y-1 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-fg">
+              <p className="font-medium">This handover can&rsquo;t be published yet.</p>
+              {updateBlocks.map((u) => (
+                <p key={u.sourceId}>{sourceUpdateBlockText(u)}</p>
+              ))}
+              <p>The published version stays available to the incoming member in the meantime.</p>
+            </div>
+          )}
           {extractionGaps.length > 0 && (
             <div className="space-y-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-fg">
               <p>
@@ -480,7 +524,7 @@ export function ReviewWorkspace({
               Cancel
             </Button>
             <Button
-              disabled={isPending || (extractionGaps.length > 0 && !acknowledgeGaps)}
+              disabled={isPending || updateBlocks.length > 0 || (extractionGaps.length > 0 && !acknowledgeGaps)}
               onClick={() =>
                 run(
                   () =>
@@ -536,7 +580,7 @@ function FilterChip({ active, className, ...props }: React.ComponentProps<"butto
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium max-sm:h-10 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+        "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium max-sm:h-10 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
         active ? "border-foreground/25 bg-card text-foreground shadow-xs ring-1 ring-foreground/10" : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}

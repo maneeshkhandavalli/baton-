@@ -11,6 +11,13 @@ import type { HandoverCardData } from "@/components/dashboard/handover-card";
 import { DRAFT_STEPS, loadDashboard, type DashboardRoutes } from "@/components/dashboard/load";
 import { classify } from "@/components/dashboard/model";
 import { PageContainer } from "@/components/layout/page-container";
+import { GettingStarted } from "@/components/onboarding/getting-started";
+import { previewQueries } from "@/components/onboarding/preview-guidance-data";
+import type { PreviewGuide } from "@/components/onboarding/preview-guidance";
+import type { ChecklistLinks } from "@/lib/onboarding/checklist";
+import { loadChecklist, loadGuidanceRoles } from "@/lib/onboarding/load";
+import { resolveGuideRoles } from "@/lib/onboarding/role";
+import { EMPTY_ONBOARDING } from "@/lib/onboarding/state";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import type { HandoverSummary } from "@/lib/contracts/dto";
@@ -39,14 +46,14 @@ const PREVIEW_ROUTES: DashboardRoutes = {
 export default function PreviewDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (process.env.NODE_ENV !== "development") notFound();
   const newHandoverLink = (
-    <Link href="/preview/wizard?step=1" className={buttonVariants({ size: "lg" })}>
+    <Link href="/preview/wizard?step=1" className={buttonVariants({ size: "lg" })} data-tour="new-handover">
       <FilePlus2 aria-hidden="true" data-icon="inline-start" />
       New handover
     </Link>
   );
   return (
     <PageContainer width="wide" className="space-y-8 lg:space-y-10">
-      <PageHeader title="Your handovers" description="What needs you comes first. Drafts, reviews and handovers you've received are below." actions={newHandoverLink} />
+      <PageHeader title="Your handovers" actions={newHandoverLink} />
       <Suspense fallback={<DashboardBodySkeleton />}>
         <Content searchParams={searchParams} newHandoverLink={newHandoverLink} />
       </Suspense>
@@ -86,9 +93,41 @@ function previewDrafts(base: HandoverSummary): HandoverCardData[] {
   ];
 }
 
+const PREVIEW_CHECKLIST_LINKS: ChecklistLinks = {
+  newHandover: "/preview/wizard?step=1",
+  draft: () => "/preview/wizard?step=2",
+  processing: () => "/preview/processing",
+  review: () => "/preview/review",
+  gaps: () => "/preview/review",
+  changes: () => "/preview/review",
+  settings: () => "/preview/review",
+  published: () => "/preview/published",
+};
+
+/** Round 4: `?guide=creator|incoming|new` adds the Getting Started checklist for that synthetic user. */
+async function PreviewChecklist({ guide, forced }: { guide: PreviewGuide; forced: boolean }) {
+  const loaded = guide === "new" ? { handovers: [], roles: resolveGuideRoles([]) } : await loadGuidanceRoles(previewQueries(guide));
+  if (!loaded) return null;
+  const checklist = await loadChecklist(previewQueries(guide), loaded.handovers, loaded.roles, loaded.roles.primary, EMPTY_ONBOARDING, PREVIEW_CHECKLIST_LINKS);
+  return <GettingStarted key={forced ? "shown" : "default"} checklist={checklist} dismissed={false} forced={forced} />;
+}
+
 async function Content({ searchParams, newHandoverLink }: { searchParams: Promise<Record<string, string | string[] | undefined>>; newHandoverLink: React.ReactNode }) {
   await connection();
   const query = await searchParams;
+  const guide = query.guide === "creator" || query.guide === "incoming" || query.guide === "new" ? query.guide : null;
+  if (guide) {
+    const cards =
+      guide === "new"
+        ? { ok: true as const, cards: [] }
+        : await loadDashboard(previewQueries(guide), PREVIEW_ROUTES);
+    return (
+      <div className="space-y-8 lg:space-y-10">
+        <PreviewChecklist guide={guide} forced={query.checklist === "show"} />
+        <DashboardView result={cards} newHandover={newHandoverLink} demoHref="/demo" preview />
+      </div>
+    );
+  }
   if (query.empty === "1") return <DashboardView result={{ ok: true, cards: [] }} newHandover={newHandoverLink} demoHref="/demo" preview />;
   const result = await loadDashboard(createMockQueries(MOCK_VIEWER_ID), PREVIEW_ROUTES);
   const withDrafts = result.ok && result.cards[0] ? { ok: true as const, cards: [...previewDrafts(result.cards[0].handover), ...result.cards] } : result;

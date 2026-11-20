@@ -29,6 +29,7 @@ import type {
   reviewPointInput,
 } from "../contracts/schemas";
 import { ACCOUNT_DELETION_CONFIRMATION, deleteAccountInput } from "../contracts/schemas";
+import { SOURCE_VERSION_OUTCOMES, type SourceVersionOutcome } from "../contracts/source-versions";
 import type { ErasureReport } from "../contracts/dto";
 import type { VerifiedActor } from "./actor-rules";
 import { canRedeemInvitation } from "./actor-rules";
@@ -103,6 +104,45 @@ export async function startProcessing(
   },
 ): Promise<{ runId: string }> {
   const runId = asUuid(await call(db, actor, "start_processing", {
+    p_handover_id: input.handoverId,
+    p_pipeline_version: input.pipelineVersion,
+    p_ai_config: input.aiConfig,
+    p_jobs: input.jobs.map((j) => ({ stage: j.stage, sourceId: j.sourceId, inputHash: j.inputHashHex })),
+  }));
+  return { runId };
+}
+
+/**
+ * R3 Task 05C: what to start, decided by the database: `scoped` (only these sources get source-specific jobs:
+ * pending source updates and never-extracted current sources) or `full`. Read-only; actor-checked.
+ */
+export async function sourceUpdateProcessingScope(
+  db: DbClient,
+  actor: VerifiedActor,
+  handoverId: string,
+): Promise<{ mode: "scoped" | "full"; sourceIds: string[] }> {
+  const r = (await call(db, actor, "source_update_processing_scope", { p_handover_id: handoverId })) as
+    | { mode?: unknown; sourceIds?: unknown }
+    | null;
+  if (r?.mode === "scoped" && Array.isArray(r.sourceIds) && r.sourceIds.length > 0) {
+    return { mode: "scoped", sourceIds: r.sourceIds.map(asUuid) };
+  }
+  if (r?.mode === "full") return { mode: "full", sourceIds: [] };
+  throw new DbError("internal");
+}
+
+/** R3 Task 05C: a scoped run for source updates; the database re-derives the scope and checks the job set. */
+export async function startSourceUpdateProcessing(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: {
+    handoverId: string;
+    pipelineVersion: string;
+    aiConfig: { provider: string } & Record<string, unknown>;
+    jobs: Array<{ stage: PipelineStage; sourceId: string | null; inputHashHex: string }>;
+  },
+): Promise<{ runId: string }> {
+  const runId = asUuid(await call(db, actor, "start_source_update_processing", {
     p_handover_id: input.handoverId,
     p_pipeline_version: input.pipelineVersion,
     p_ai_config: input.aiConfig,
@@ -363,6 +403,35 @@ export const removeMember = async (db: DbClient, actor: VerifiedActor, memberId:
   void (await call(db, actor, "remove_member", { p_member_id: memberId }));
 
 // ── Sources (§6.5, §10.3) ────────────────────────────────────────────────────
+
+/**
+ * R3 Task 05B: starts a new version of an existing source (creator only; the database derives the handover from
+ * the previous source and locks its lineage). Refusals that need their own explanation come back as an outcome,
+ * not an error: nothing is written for them.
+ */
+export async function createSourceVersion(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { previousSourceId: string; kind: SourceKind; fileName: string; mimeType: string; sizeBytes: number; sha256: string },
+): Promise<{ outcome: SourceVersionOutcome; sourceId: string | null; handoverId: string }> {
+  const r = await call(db, actor, "create_source_version", {
+    p_previous_source_id: input.previousSourceId,
+    p_kind: input.kind,
+    p_file_name: input.fileName,
+    p_mime_type: input.mimeType,
+    p_size_bytes: input.sizeBytes,
+    p_sha256_hex: input.sha256,
+  });
+  const o = (r ?? {}) as { outcome?: unknown; source_id?: unknown; handover_id?: unknown };
+  if (typeof o.outcome !== "string" || !(SOURCE_VERSION_OUTCOMES as readonly string[]).includes(o.outcome)) {
+    throw new DbError("internal");
+  }
+  return {
+    outcome: o.outcome as SourceVersionOutcome,
+    sourceId: o.source_id === null || o.source_id === undefined ? null : asUuid(o.source_id),
+    handoverId: asUuid(o.handover_id),
+  };
+}
 
 export async function createSource(
   db: DbClient,
@@ -635,15 +704,132 @@ export async function redeemMemberInvite(
   actor: VerifiedActor,
   rawToken: string,
   clientIp: string | null,
-): Promise<{ handoverId: string; role: MemberRole; memberId: string }> {
+): Promise<{ handoverId: string; role: MemberRole; memberId: string; replayed: boolean }> {
   const tokenHashHex = await sha256Hex(rawToken);
   await consumeRateLimits(db, "invite_redeem", { client: await clientSubject(clientIp), tokenHashHex }); // M6
   if (!canRedeemInvitation(actor)) throw new DbError("token_invalid");
   const data = (await callRpc(db, "redeem_member_invite", {
     p_token_hash: hexToBytea(tokenHashHex),
     p_profile_id: actor.profileId,
-  })) as { handover_id: string; role: MemberRole; member_id: string };
-  return { handoverId: data.handover_id, role: data.role, memberId: data.member_id };
+  })) as { handover_id: string; role: MemberRole; member_id: string; replayed?: boolean };
+  // R3 Task 06 (20261118700100): the same user redeeming the same token again is a replay; nothing was written.
+  return { handoverId: data.handover_id, role: data.role, memberId: data.member_id, replayed: data.replayed === true };
+}
+
+// ── R3 Task 06: invitation details, reissue and delivery (migrations 20261118700100–20261118700300) ─────
+
+const INVITE_STATES = ["pending", "accepted", "expired", "revoked", "used", "unavailable"] as const;
+const ROLES: readonly MemberRole[] = ["outgoing", "incoming", "lead", "reviewer"];
+
+/** Raw shape of get_member_invite_details, validated here; nothing else from the row reaches the caller. */
+export type MemberInviteDetailsRow =
+  | {
+      state: "pending";
+      handoverTitle: string;
+      inviterName: string;
+      role: MemberRole;
+      expiresAt: string;
+      recipientEmailMasked: string;
+      viewer: { emailMatches: boolean; emailConfirmed: boolean; alreadyMember: boolean } | null;
+      /** Only when the viewer is already a member of the handover. */
+      member: { handoverId: string; role: MemberRole } | null;
+    }
+  | { state: "accepted"; handoverId: string; role: MemberRole }
+  | { state: "expired" | "revoked" | "used" | "unavailable" };
+
+function parseInviteDetails(raw: unknown): MemberInviteDetailsRow {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const state = r.state as (typeof INVITE_STATES)[number];
+  if (!INVITE_STATES.includes(state)) throw new DbError("internal");
+  if (state === "accepted") {
+    if (typeof r.handover_id !== "string" || !ROLES.includes(r.role as MemberRole)) throw new DbError("internal");
+    return { state, handoverId: r.handover_id, role: r.role as MemberRole };
+  }
+  if (state !== "pending") return { state };
+  const v = r.viewer as Record<string, unknown> | null | undefined;
+  if (
+    typeof r.handover_title !== "string" || typeof r.inviter_name !== "string" || typeof r.expires_at !== "string" ||
+    typeof r.recipient_email_masked !== "string" || !ROLES.includes(r.role as MemberRole)
+  ) {
+    throw new DbError("internal");
+  }
+  return {
+    state,
+    handoverTitle: r.handover_title,
+    inviterName: r.inviter_name,
+    role: r.role as MemberRole,
+    expiresAt: new Date(r.expires_at).toISOString(),
+    recipientEmailMasked: r.recipient_email_masked,
+    viewer: v
+      ? { emailMatches: v.email_matches === true, emailConfirmed: v.email_confirmed === true, alreadyMember: v.already_member === true }
+      : null,
+    member:
+      typeof r.member_handover_id === "string" && ROLES.includes(r.member_role as MemberRole)
+        ? { handoverId: r.member_handover_id, role: r.member_role as MemberRole }
+        : null,
+  };
+}
+
+/**
+ * Invitation details for the holder of a link (service role). The viewer, when given, is the VERIFIED session actor.
+ * `consume` = false skips the view limits: acceptInvitation classifies its own failure under the redeem limits.
+ * Throws `DbError("token_invalid")` for an unknown token.
+ */
+export async function getMemberInviteDetails(
+  db: DbClient,
+  rawToken: string,
+  viewer: VerifiedActor | null,
+  clientIp: string | null,
+  options: { consume?: boolean } = {},
+): Promise<MemberInviteDetailsRow> {
+  const tokenHashHex = await sha256Hex(rawToken);
+  if (options.consume !== false) {
+    await consumeRateLimits(db, "invite_view", { client: await clientSubject(clientIp), tokenHashHex });
+  }
+  return parseInviteDetails(
+    await callRpc(db, "get_member_invite_details", {
+      p_token_hash: hexToBytea(tokenHashHex),
+      p_viewer_profile_id: viewer?.profileId ?? null,
+    }),
+  );
+}
+
+/** Creator only: revokes the invitation and issues a new one for the same address and role, atomically. */
+export async function reissueMemberInvite(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { tokenId: string; expiresInDays: number },
+): Promise<{ rawToken: string; tokenId: string; expiresAt: string; recipientEmail: string }> {
+  const rawToken = generateRawToken();
+  const expiresAt = new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString();
+  const data = (await call(db, actor, "reissue_member_invite", {
+    p_token_id: input.tokenId,
+    p_token_hash: await tokenHashParam(rawToken),
+    p_expires_at: expiresAt,
+  })) as { token_id?: unknown; recipient_email?: unknown } | null;
+  if (typeof data?.recipient_email !== "string") throw new DbError("internal");
+  return { rawToken, tokenId: asUuid(data.token_id), expiresAt, recipientEmail: data.recipient_email };
+}
+
+/** Creator only: the invited address of an invitation (server only; used for the send limit before a reissue). */
+export async function memberInviteRecipient(db: DbClient, actor: VerifiedActor, tokenId: string): Promise<string> {
+  const email = await call(db, actor, "member_invite_recipient", { p_token_id: tokenId });
+  if (typeof email !== "string") throw new DbError("internal");
+  return email;
+}
+
+/** Creator only: what happened when the server tried to email an invitation. Never the address or the link. */
+export async function recordInvitationDelivery(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: { tokenId: string; status: "sent" | "not_sent" | "failed"; reason: "email_not_configured" | "provider_failed" | "rate_limited" | null; providerRef: string | null },
+): Promise<void> {
+  await call(db, actor, "record_invitation_delivery", {
+    p_token_id: input.tokenId,
+    p_status: input.status,
+    p_reason: input.reason,
+    p_provider_ref: input.providerRef,
+  });
 }
 
 // ── R3 Task 03: extraction signals and review flags (migration 20261117300100) ──────────────────────
@@ -665,3 +851,38 @@ export async function reviewExtractionSignals(
 /** Review roles who can see the point: a flag dismissed, confirmed or reopened. */
 export const reviewPointFlag = async (db: DbClient, actor: VerifiedActor, input: { flagId: string; state: "open" | "dismissed" | "confirmed" }) =>
   void (await call(db, actor, "review_point_flag", { p_flag_id: input.flagId, p_state: input.state }));
+
+// ── R3 Task 05E: change-review decisions ──────────────────────────────────────
+
+export interface ChangeReviewDecisionResult {
+  outcome: "decided" | "unchanged";
+  itemId: string;
+  state: string;
+  pointRevisionId?: string;
+  pointEvidenceId?: string;
+}
+
+/** decide_change_review_item: the only way to decide an item (verified actor; every rule is enforced in SQL). */
+export async function decideChangeReviewItem(
+  db: DbClient,
+  actor: VerifiedActor,
+  input: {
+    itemId: string;
+    decision: "investigate" | "accept" | "reject";
+    expectedState: "open" | "investigating";
+    expectedPointRevisionId: string;
+    note: string | null;
+    payload: Record<string, unknown> | null;
+  },
+): Promise<ChangeReviewDecisionResult> {
+  const data = (await call(db, actor, "decide_change_review_item", {
+    p_item_id: input.itemId,
+    p_decision: input.decision,
+    p_expected_state: input.expectedState,
+    p_expected_point_revision_id: input.expectedPointRevisionId,
+    p_note: input.note,
+    p_payload: input.payload,
+  })) as ChangeReviewDecisionResult | null;
+  if (!data || (data.outcome !== "decided" && data.outcome !== "unchanged")) throw new DbError("internal");
+  return data;
+}

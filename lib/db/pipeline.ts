@@ -260,7 +260,7 @@ export async function createSystemGapQuestion(
   })) as string;
 }
 
-// ── Integration worker support (migration 20261112000100, docs/integration/interfaces.md) ─────────────
+// ── Integration worker support (migration 20261112000100, docs/history/integration/interfaces.md) ─────────────
 // Service role only. Every read returns masked, persisted data; nothing here touches raw uploads.
 
 /** DB-1: claims only jobs whose earlier stages are terminal; reaps leases that expired on the last attempt. */
@@ -650,4 +650,82 @@ export interface NewPointFlag {
 export async function storePointFlags(adminDb: DbClient, claim: JobClaim, flags: NewPointFlag[]): Promise<number> {
   const data = await fencedRpc(adminDb, "pipeline_store_point_flags", claim, { p_flags: flags });
   return typeof data === "number" ? data : 0;
+}
+
+// ── R3 Task 05D: change detection ────────────────────────────────────────────
+
+export type ChangeReviewKind = "evidence_missing" | "evidence_moved" | "possible_contradiction" | "support_changed" | "new_information";
+
+/** One detected impact of a source update. References only; `detail` holds tokens and numbers (checked in SQL). */
+export interface NewChangeReviewItem {
+  kind: ChangeReviewKind;
+  dedupeKey: string;
+  pointId?: string;
+  baseRevisionId?: string;
+  oldEvidenceId?: string;
+  newEvidenceId?: string;
+  newMessageId?: string;
+  newQuoteStart?: number;
+  newQuoteEnd?: number;
+  candidatePointId?: string;
+  detail: Record<string, string | number | boolean | string[]>;
+}
+
+export interface ChangeDetectionChange {
+  changeId: string;
+  fromSourceId: string;
+  toSourceId: string;
+  fromVersion: number;
+  toVersion: number;
+  sourceKind: string;
+  toSourceState: string;
+  fromLastMessageAt: string | null;
+  basePublicationId: string | null;
+  basePoints: Record<string, string>;
+  oldEvidence: Array<{
+    evidenceId: string; pointId: string; linkVerdict: string; quoteText: string; messageId: string | null;
+    sentAt: string | null; authorLabel: string | null; heading: string | null;
+  }>;
+  newLinks: Array<{
+    evidenceId: string; pointId: string; messageId: string | null; quoteStart: number | null; quoteEnd: number | null;
+    verdict: string; quoteCheck: string; pointHasOtherEvidence: boolean;
+  }>;
+  headings: Record<string, string | null>;
+}
+
+export interface ChangeDetectionInput {
+  changes: ChangeDetectionChange[];
+  anchors: Array<{ id: string; sourceId: string; seq: number; sentAt: string | null; authorLabel: string | null; body: string }>;
+}
+
+/**
+ * Service read (analyze): every update this run is processing, with the previous version's retained evidence.
+ * A database without migration 20261118500100 → PipelineSchemaError (detection is then skipped, and the run-close
+ * trigger of that older database never marks an update ready either).
+ */
+export async function listChangeDetectionInput(adminDb: DbClient, runId: string): Promise<ChangeDetectionInput> {
+  try {
+    const data = (await callRpc(adminDb, "list_change_detection_input", { p_run_id: runId })) as ChangeDetectionInput | null;
+    return { changes: data?.changes ?? [], anchors: data?.anchors ?? [] };
+  } catch (e) {
+    if (e instanceof DbError && e.sqlState !== undefined && MISSING_FUNCTION_STATES.has(e.sqlState)) {
+      throw new PipelineSchemaError("list_change_detection_input");
+    }
+    throw e;
+  }
+}
+
+/** Fenced (analyze): the whole detection of one update, in one transaction. A stale worker gets ClaimLostError. */
+export async function recordChangeDetection(
+  adminDb: DbClient,
+  claim: JobClaim,
+  input: { changeId: string; detectorVersion: string; items: NewChangeReviewItem[]; counts: Record<string, number> },
+): Promise<{ inserted: number; items: number }> {
+  const data = (await fencedRpc(adminDb, "pipeline_record_change_detection", claim, {
+    p_change_id: input.changeId,
+    p_detector_version: input.detectorVersion,
+    p_items: input.items,
+    p_counts: input.counts,
+  })) as { inserted?: number; items?: number } | null;
+  return { inserted: Number(data?.inserted ?? 0), items: Number(data?.items ?? 0) };
 }

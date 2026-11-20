@@ -1,4 +1,4 @@
--- Round 3 PHASE A verification: the runbook's Verify queries for #1-#13 only (docs/round3/migrations.md §3).
+-- Round 3 PHASE A verification: the runbook's Verify queries for #1-#13 only (docs/operations/migrations.md §3).
 -- Read-only. Expected: 14 rows (#4 returns two), ok = true on every row.
 select '#1' as migration, ok from (
   select to_regprocedure('public.update_handover_details(uuid,uuid,timestamptz,text,text,text,text)') is not null

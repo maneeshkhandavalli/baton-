@@ -16,6 +16,7 @@ import type { GapQuestionSummary, PointDetail } from "@/lib/contracts/dto";
 import type { EvidenceStatus } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
+import { statementRepeatsTitle, verificationNeedsAttention } from "./card-evidence";
 import { EvidenceQuote } from "./evidence-quote";
 import { isStaleEvidence } from "./evidence-state";
 
@@ -99,15 +100,17 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
           <MaskedText text={point.title} />
         </button>
       </h3>
-      <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
-        <MaskedText text={point.statement} />
-      </p>
+      {!statementRepeatsTitle(point.title, point.statement) && (
+        <p className={cn("mt-1 text-sm leading-relaxed text-pretty text-muted-foreground", rejected && "line-clamp-2")}>
+          <MaskedText text={point.statement} />
+        </p>
+      )}
       {!rejected && <KeyFactsStrip facts={keyFacts(point.category, point.attributes)} className="mt-3" />}
 
       {!rejected && (
         <div className="mt-4 space-y-2.5">
           {status === "conflicting" ? (
-            <section aria-label="Sources disagree" className="rounded-lg border border-status-conflicting/25 bg-status-conflicting-soft/60 p-3">
+            <section aria-label="Sources disagree" className="rounded-lg bg-status-conflicting-soft/60 p-3">
               <p className="flex items-center gap-1.5 text-caption font-medium text-status-conflicting-fg">
                 <Scale aria-hidden="true" className="size-3.5" />
                 {point.conflictResolution ? "Sources disagreed · resolved" : "Sources disagree · decide what is true now"}
@@ -117,26 +120,26 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
                   <p className="type-eyebrow text-status-sourced-fg">Supports</p>
                   {supports.length === 0 && <p className="text-caption text-muted-foreground">No supporting quote.</p>}
                   {supports.slice(0, 2).map((e) => (
-                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp showVerification />
+                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="supports" clamp showVerification={verificationNeedsAttention(e)} showLocation={false} />
                   ))}
                 </div>
                 <div className="space-y-1.5">
                   <p className="type-eyebrow text-status-conflicting-fg">Contradicts</p>
                   {contradicts.length === 0 && <p className="text-caption text-muted-foreground">No contradicting quote.</p>}
                   {contradicts.slice(0, 2).map((e) => (
-                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp showVerification />
+                    <EvidenceQuote key={e.pointEvidenceId} {...e} tone="contradicts" clamp showVerification={verificationNeedsAttention(e)} showLocation={false} />
                   ))}
                 </div>
               </div>
             </section>
           ) : status === "missing" ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-status-missing/45 bg-status-missing-soft/60 px-3 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 rounded-lg bg-status-missing-soft/60 px-3 py-3 sm:flex-row sm:items-center">
               <CircleHelp aria-hidden="true" className="size-4 shrink-0 text-status-missing-fg" />
               <p className="flex-1 text-sm text-status-missing-fg">
                 {gapQuestion ? (
                   <>
                     <span className="font-medium">Knowledge gap · in the Gap Interview</span>
-                    {" — "}
+                    {": "}
                     {gapQuestion.status === "open" ? "waiting for an answer" : gapQuestion.status === "answered" ? "answer waiting for review" : "waived"}
                   </>
                 ) : (
@@ -153,7 +156,7 @@ export const PointCard = forwardRef<HTMLElement, PointCardProps>(function PointC
               )}
             </div>
           ) : (
-            lead && <EvidenceQuote {...lead} tone={lead.supportVerdict === "supports" ? "supports" : "default"} clamp showVerification />
+            lead && <EvidenceQuote {...lead} tone={lead.supportVerdict === "supports" ? "supports" : "default"} clamp showVerification={verificationNeedsAttention(lead)} showLocation={false} />
           )}
 
           {status === "inferred" && point.inferenceRationale && !lead && (

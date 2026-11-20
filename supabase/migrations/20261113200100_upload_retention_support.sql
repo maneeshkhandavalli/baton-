@@ -4,7 +4,7 @@
 
 -- ── D3: orphan-upload and raw-retention candidates (detection only) ──────────
 -- One row per source whose raw upload (or upload slot) has outlived its purpose, with the reason.
--- A future retention sweep (docs/proposals/retention.md) would act on these; this function only
+-- A future retention sweep (docs/architecture/proposals/retention.md) would act on these; this function only
 -- reports. Reasons, in priority order (a source is reported once):
 --   handover_deleted     the handover is soft-deleted (discarded draft) and the source still has a
 --                        raw path. remove_source can no longer run there (the handover is "not found").

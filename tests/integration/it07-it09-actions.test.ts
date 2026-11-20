@@ -40,7 +40,7 @@ const ACTIONS: Record<string, Call> = {
     mimeType: "text/plain", sizeBytes: 10, sha256: "ab".repeat(32) }),
   confirmSourceUploaded: (w) => sources.confirmSourceUploaded({ sourceId: w.ids.source }),
   previewSource: (w) => sources.previewSource({ sourceId: w.ids.source }),
-  recordSourceConsent: (w) => sources.recordSourceConsent({ sourceId: w.ids.source, consentStatementVersion: "c@1", consentConfirmed: true,
+  recordSourceConsent: (w) => sources.recordSourceConsent({ sourceId: w.ids.source, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true,
     accessLevel: "everyone", timezone: "Asia/Kolkata" }),
   addExclusion: (w) => sources.addExclusion({ kind: "date_range", sourceId: w.ids.source, scope: "source",
     rangeStart: "2026-01-01T00:00:00Z", rangeEnd: "2026-01-02T00:00:00Z" }),
@@ -140,7 +140,8 @@ describe("IT-07 (action side): processing never approves or publishes", () => {
     const w = actionWorld();
     allowFakeAi();
     w.userDb.returns("api_list_sources", [sourceRow(w.ids.source, w.ids.handover, { state: "parsed" })]);
-    w.adminDb.returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", [])
+    w.adminDb.returns("source_update_processing_scope", { mode: "full", sourceIds: [] }) // R3 Task 05C: read-only scope lookup
+      .returns("start_processing", randomUUID()).returns("claim_ready_processing_jobs", [])
       .returns("list_finishable_runs", []); // DB-15: read-only sweep the drain starts with
     workerSlot(w.adminDb); // Task 01B: the after() drain holds the global worker slot
     const result = await handovers.startProcessing({ handoverId: w.ids.handover });

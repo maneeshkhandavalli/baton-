@@ -44,7 +44,7 @@ hosted access is a read (pg_dump / psql `select` / Storage list + download).
 
 ## Recovery path
 - **Undo a Round 3 migration** (the realistic case): each migration's §3 Rollback in
-  `docs/round3/migrations.md` restores the previous function definitions from the baseline files; the data is
+  `docs/operations/migrations.md` restores the previous function definitions from the baseline files; the data is
   untouched by those migrations (two add one nullable column each).
 - **Full restore of Baton data into this or a new dev project**: restore `public.dump` (drop/recreate the
   `public` schema first), then `auth_storage_data.dump` data, then re-upload `storage/`. Auth users keep their ids,

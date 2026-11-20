@@ -19,7 +19,7 @@
  * A name word shared by two or more people ("Ravi" for "Ravi Kumar" and "Ravi Shankar") is ambiguous: it
  * becomes `[PERSON]` (a person, unnumbered), never a guess. A whole name always wins over a shared word.
  *
- * Limitations (documented in docs/round3/privacy-and-data-protection.md): only KNOWN participants are
+ * Limitations (documented in docs/architecture/privacy-and-data-protection.md): only KNOWN participants are
  * detected. Names of people who never sent a message in any chat source of the handover, nicknames,
  * misspellings, transliterations into another script, names glued to other words ("Ravibhai") and common
  * words used as names are not replaced. This is not a general named-entity recogniser.

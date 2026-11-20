@@ -155,37 +155,61 @@
   --elevation-overlay: inset 0 1px 0 0 rgb(255 255 255 / 0.06), 0 28px 56px -14px rgb(0 0 0 / 0.7);
 }
 
+/* Everything below sits in the components layer, so Tailwind utilities on the same element win (bg-*, border-*). */
+@layer components {
 /* ── Landing type and layout (bi-*) ──────────────────────────────────────────── */
+.brand-identity {
+  /* Motion: a smooth in-out for reveals and size changes, a small overshoot for hover nudges. */
+  --bi-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  --bi-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --bi-spring: cubic-bezier(0.3, 1.3, 0.4, 1);
+  --bi-radius: 1.5rem;
+  --bi-radius-lg: 2rem;
+}
+/* Content column, aligned with the site header (max-w-6xl, px-4 / sm:px-6). `.bi-wide` lets a product stage
+   break out a little wider on large screens. */
 .bi-wrap {
-  width: min(1160px, 100% - 2.5rem);
+  width: min(1104px, 100% - 2rem);
   margin-inline: auto;
+}
+.bi-wide {
+  width: min(1280px, 100% - 2rem);
+  margin-inline: auto;
+}
+@media (min-width: 640px) {
+  .bi-wrap {
+    width: min(1104px, 100% - 3rem);
+  }
+  .bi-wide {
+    width: min(1280px, 100% - 3rem);
+  }
 }
 .bi-display {
   font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
-  font-weight: 620;
-  font-size: clamp(2.25rem, 1.6rem + 2.2vw, 3.5rem);
-  line-height: 1.05;
-  letter-spacing: -0.028em;
+  font-weight: 640;
+  font-size: clamp(2.6rem, 1.55rem + 4.3vw, 5.75rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 .bi-h2 {
   font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
-  font-weight: 600;
-  font-size: clamp(1.6rem, 1.3rem + 1vw, 2.25rem);
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-weight: 620;
+  font-size: clamp(2rem, 1.35rem + 2.3vw, 3.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
   text-wrap: balance;
 }
 .bi-h3 {
   font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
   font-weight: 600;
-  font-size: 1.0625rem;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
+  font-size: 1.125rem;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
 }
 .bi-lede {
-  font-size: 1.125rem;
-  line-height: 1.55;
+  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
+  line-height: 1.5;
   color: var(--muted-foreground);
   text-wrap: pretty;
 }
@@ -252,4 +276,329 @@
 }
 .dark .brand-identity {
   --track: #3e3e44;
+}
+
+/* ── Landing components (Round 4 redesign) ──────────────────────────────────────
+ * Soft round surfaces, pill controls, a handwritten margin voice and short, eased motion. Every animation below is
+ * inside `prefers-reduced-motion: no-preference`; hover effects only apply to devices that can hover. */
+
+/* Eyebrow tag: mono, pill. `data-tone="live"` marks what works today, "preview" what does not exist yet. */
+.bi-tag {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-family: var(--font-atkinson-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+}
+.bi-tag[data-tone="live"] {
+  border-color: transparent;
+  background: var(--highlight);
+  color: var(--on-highlight);
+}
+.bi-tag[data-tone="preview"] {
+  border-style: dashed;
+}
+/* Built but not yet connected to live apps: dotted, so it reads as neither "Works today" nor "Preview". */
+.bi-tag[data-tone="early"] {
+  border-style: dotted;
+  border-width: 1.5px;
+  color: var(--foreground);
+}
+
+/* Handwritten margin notes. Short, never body copy; decorative copies are aria-hidden. */
+.bi-hand {
+  font-family: var(--font-caveat), "Comic Sans MS", cursive;
+  font-weight: 600;
+  font-size: 1.5rem;
+  line-height: 1.05;
+  letter-spacing: 0;
+  color: var(--highlight-ink);
+}
+
+/* Pill calls to action with a lime arrow disc. */
+.bi-cta {
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  border-radius: 999px;
+  padding: 0.375rem 0.375rem 0.375rem 1.4rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  font-size: 1rem;
+  white-space: nowrap;
+  transition: background-color 300ms ease;
+}
+.bi-cta__disc {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--highlight);
+  color: var(--on-highlight);
+  transition: transform 450ms var(--bi-spring);
+}
+.bi-cta--ghost {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--foreground);
+  padding-inline: 1.4rem;
+  justify-content: center;
+}
+@media (hover: hover) {
+  .bi-cta:hover {
+    background: var(--primary-hover);
+  }
+  .bi-cta:hover .bi-cta__disc {
+    transform: translateX(3px) rotate(-12deg);
+  }
+  .bi-cta--ghost:hover {
+    background: var(--card);
+  }
+}
+/* On the dark band the primary pill turns paper, the ghost pill keeps a light rule. */
+.bi-band .bi-cta:not(.bi-cta--ghost) {
+  background: var(--inverse-foreground);
+  color: var(--inverse);
+}
+.bi-band .bi-cta--ghost {
+  border-color: rgb(255 255 255 / 0.28);
+}
+
+/* The closing band: full-bleed highlighter with ink text and an ink pill in both themes. */
+.bi-lime {
+  --foreground: var(--on-highlight);
+  --muted-foreground: color-mix(in srgb, var(--on-highlight) 74%, transparent);
+  --border-strong: color-mix(in srgb, var(--on-highlight) 38%, transparent);
+  --card: color-mix(in srgb, #ffffff 35%, transparent);
+  --primary: #18181b;
+  --primary-hover: #2e2e33;
+  --primary-foreground: #ffffff;
+  --ring: #18181b;
+  background: var(--highlight);
+  color: var(--foreground);
+}
+.bi-lime .bi-cta__disc {
+  background: #ffffff;
+  color: #18181b;
+}
+
+/* Highlighter swipe across a key phrase (the identity's evidence mark, used once per heading at most). */
+.bi-swipe {
+  background-image: linear-gradient(var(--highlight), var(--highlight));
+  background-repeat: no-repeat;
+  background-position: 0 92%;
+  background-size: 100% 0.36em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding-inline: 0.04em;
+}
+
+/* On dark paper the full-strength band would sit under light text; a softer band keeps the letters legible. */
+.dark .bi-swipe {
+  background-image: linear-gradient(color-mix(in srgb, var(--highlight) 55%, transparent), color-mix(in srgb, var(--highlight) 55%, transparent));
+}
+
+/* Surfaces */
+.bi-card {
+  border: 1px solid var(--border);
+  border-radius: var(--bi-radius);
+  background: var(--card);
+}
+.bi-inset {
+  border-radius: calc(var(--bi-radius) - 0.5rem);
+  background: var(--muted);
+}
+.bi-stage {
+  position: relative;
+  border-radius: var(--bi-radius-lg);
+  background-color: var(--sunken);
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--foreground) 14%, transparent) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+/* Blueprint frame: hairline box on graph paper with square corner ticks and mono corner labels. Used for the
+   hero's product stage, where it reads as "the actual product, measured". */
+.bi-blueprint {
+  position: relative;
+  border: 1px solid var(--border-strong);
+  background-color: var(--sunken);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+.bi-blueprint::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--foreground), var(--foreground)) 0 0 / 7px 7px no-repeat,
+    linear-gradient(var(--foreground), var(--foreground)) 100% 0 / 7px 7px no-repeat,
+    linear-gradient(var(--foreground), var(--foreground)) 0 100% / 7px 7px no-repeat,
+    linear-gradient(var(--foreground), var(--foreground)) 100% 100% / 7px 7px no-repeat;
+}
+.bi-corner {
+  font-family: var(--font-atkinson-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.bi-lift {
+  transition:
+    transform 500ms var(--bi-out),
+    box-shadow 500ms var(--bi-out),
+    border-color 300ms ease;
+}
+@media (hover: hover) {
+  .bi-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--elevation-raised);
+    border-color: var(--border-strong);
+  }
+}
+
+/* Week-one questions, scattered like notes on a desk. They straighten on hover. */
+.bi-sticker {
+  rotate: var(--r, 0deg);
+  transition:
+    rotate 450ms var(--bi-spring),
+    translate 450ms var(--bi-spring);
+}
+@media (hover: hover) {
+  .bi-sticker:hover {
+    rotate: 0deg;
+    translate: 0 -3px;
+  }
+}
+
+/* The dark band (For the nerds). Re-points the tokens so shared classes keep working on ink. */
+.bi-band {
+  --foreground: var(--inverse-foreground);
+  --muted-foreground: var(--inverse-muted);
+  --faint-foreground: var(--inverse-muted);
+  --border: rgb(255 255 255 / 0.12);
+  --border-strong: rgb(255 255 255 / 0.24);
+  --muted: rgb(255 255 255 / 0.06);
+  --card: rgb(255 255 255 / 0.04);
+  --highlight-ink: var(--highlight);
+  --ring: var(--highlight);
+  background: var(--inverse);
+  color: var(--foreground);
+}
+.dark .bi-band {
+  --inverse: #1c1c1f;
+}
+
+/* Accordion that animates its height where the browser can (::details-content), and simply opens elsewhere. */
+.bi-details > summary {
+  list-style: none;
+}
+.bi-details > summary::-webkit-details-marker {
+  display: none;
+}
+.bi-details__icon {
+  transition: rotate 450ms var(--bi-spring);
+}
+.bi-details[open] .bi-details__icon {
+  rotate: 45deg;
+}
+
+/* ── Motion (all of it opt-in) ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .brand-identity {
+    interpolate-size: allow-keywords;
+  }
+  .bi-details::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition:
+      block-size 550ms var(--bi-ease),
+      content-visibility 550ms var(--bi-ease) allow-discrete;
+  }
+  .bi-details[open]::details-content {
+    block-size: auto;
+  }
+
+  /* Hero entrance: staged rise on first paint (CSS only, so it runs before hydration). */
+  .bi-rise {
+    animation: bi-rise 900ms var(--bi-out) both;
+    animation-delay: calc(var(--d, 0) * 90ms + 60ms);
+  }
+  .bi-swipe {
+    animation: bi-swipe 1100ms var(--bi-ease) 650ms both;
+  }
+  .bi-pop {
+    animation: bi-pop 700ms var(--bi-spring) both;
+    animation-delay: calc(var(--d, 0) * 70ms + 500ms);
+  }
+}
+@keyframes bi-rise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bi-swipe {
+  from {
+    background-size: 0% 0.36em;
+  }
+  to {
+    background-size: 100% 0.36em;
+  }
+}
+@keyframes bi-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Touch screens: no hover nudges, stickers lie flatter so nothing feels unstable while scrolling. */
+@media (hover: none) {
+  .bi-sticker {
+    rotate: calc(var(--r, 0deg) * 0.5);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bi-cta,
+  .bi-cta__disc,
+  .bi-lift,
+  .bi-sticker,
+  .bi-details__icon {
+    transition: none;
+  }
+}
+
+/* Below the hero, a heading's highlighter swipe follows the scroll into view instead of running on load. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal .bi-swipe {
+      animation: bi-swipe linear both;
+      animation-timeline: view();
+      animation-range: entry 40% cover 40%;
+    }
+  }
+}
 }

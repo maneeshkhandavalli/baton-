@@ -9,12 +9,17 @@ import {
   buildOmegaRequest,
   createOmegaProvider,
   mapOmegaHttpError,
+  OMEGA_DISPLAY_NAME,
+  OMEGA_PRODUCTION_DISPLAY_NAME,
   OMEGA_PROVIDER_ID,
+  OMEGA_SCHEMA_SECTION_HEADING,
   omegaRunConfig,
+  omegaSystemText,
   toStructuredOutputSchema,
   type OmegaFetch,
 } from "../providers/omega";
-import { buildExtractPrompt } from "../prompts/extract";
+import { buildExtractPrompt, EXTRACT_RESPONSE_SCHEMA, EXTRACT_SYSTEM_PROMPT } from "../prompts/extract";
+import { buildSupportPrompt, SUPPORT_SYSTEM_PROMPT } from "../prompts/support";
 import { verifySupport } from "../verify-support";
 
 const SECRET = "sk-omega-synthetic-test-key-0000";
@@ -86,13 +91,13 @@ describe("Omega configuration gate", () => {
     assert.ok(c.ok && c.mode === "evaluation");
     assert.ok(c.ok && c.runConfig.provider === OMEGA_PROVIDER_ID);
     assert.ok(c.ok && c.runConfig.extract.model === MODELS.extract && c.runConfig.verify.model === MODELS.verify);
-    assert.ok(c.ok && c.runConfig.adapterVersion === "omega-anthropic@1+json_schema");
+    assert.ok(c.ok && c.runConfig.adapterVersion === "omega-anthropic@3+json_schema");
     assert.ok(!JSON.stringify(c).includes(SECRET), "the key is never in the configuration");
   });
 
-  it("is never available in production, with or without a governance profile", () => {
+  it("is never available in production without the owner-approved profile (any other profile is refused)", () => {
     for (const NODE_ENV of ["production", undefined, "staging"]) {
-      for (const AI_DATA_GOVERNANCE of [undefined, "gemini-paid-dpa", "omega"]) {
+      for (const AI_DATA_GOVERNANCE of [undefined, "", "gemini-paid-dpa", "omega", "OMEGA-OWNER-APPROVED", "omega-owner-approved-x", "omega owner approved"]) {
         const c = getAiConfiguration({ ...evalEnv, NODE_ENV, AI_DATA_GOVERNANCE });
         assert.equal(c.ok, false, `${NODE_ENV}/${AI_DATA_GOVERNANCE}`);
       }
@@ -124,6 +129,105 @@ describe("Omega configuration gate", () => {
     assert.equal(getAiProviderForRun(runConfig, { ...evalEnv, OMEGA_OUTPUT_MODE: "prompt" }).ok, false, "mode change = config changed");
     assert.equal(getAiProviderForRun(runConfig, { ...evalEnv, AI_MODEL_VERIFY: "claude-opus-5-5" }).ok, false, "model change = config changed");
     assert.ok(getAiProviderForRun(runConfig, evalEnv).ok);
+  });
+});
+
+// Owner decision 2026-11-20: Omega on the public site, only through the explicit, auditable profile.
+describe("Omega production (owner-approved profile)", () => {
+  const prodEnv = {
+    NODE_ENV: "production",
+    AI_PROVIDER: "omega",
+    OMEGA_API_KEY: SECRET,
+    AI_MODEL_EXTRACT: MODELS.extract,
+    AI_MODEL_VERIFY: MODELS.verify,
+    AI_DATA_GOVERNANCE: "omega-owner-approved",
+  };
+
+  it("production NODE_ENV + the profile → ok, mode production, provider omega, same provenance shape", () => {
+    const c = getAiConfiguration(prodEnv);
+    assert.ok(c.ok);
+    assert.equal(c.mode, "production");
+    assert.equal(c.provider.id, OMEGA_PROVIDER_ID);
+    assert.equal(c.provider.displayName, OMEGA_PRODUCTION_DISPLAY_NAME);
+    assert.doesNotMatch(c.provider.displayName, /evaluation|synthetic/i, "production is not labelled evaluation-only");
+    assert.deepEqual(c.runConfig, omegaRunConfig(MODELS, "json_schema"));
+    assert.equal(c.runConfig.adapterVersion, "omega-anthropic@3+json_schema");
+    assert.ok(!JSON.stringify(c).includes(SECRET), "the key is never in the configuration");
+    const p = getAiConfiguration({ ...prodEnv, OMEGA_OUTPUT_MODE: "prompt" });
+    assert.ok(p.ok && p.runConfig.adapterVersion === "omega-anthropic@3+prompt");
+  });
+
+  it("the profile is trimmed and accepted in any NODE_ENV (including unset), but is case-sensitive", () => {
+    for (const NODE_ENV of ["production", undefined, "", "staging", "development", "test"]) {
+      const c = getAiConfiguration({ ...prodEnv, NODE_ENV });
+      assert.ok(c.ok && c.mode === "production" && c.provider.id === "omega", String(NODE_ENV));
+    }
+    assert.ok(getAiConfiguration({ ...prodEnv, AI_DATA_GOVERNANCE: "  omega-owner-approved 	" }).ok);
+    assert.equal(getAiConfiguration({ ...prodEnv, AI_DATA_GOVERNANCE: "Omega-Owner-Approved" }).ok, false);
+  });
+
+  it("production without the profile is refused (data_governance_unapproved)", () => {
+    assert.deepEqual(getAiConfiguration({ ...prodEnv, AI_DATA_GOVERNANCE: undefined }), {
+      ok: false,
+      reason: "provider_not_configured",
+      detail: "data_governance_unapproved",
+    });
+    assert.deepEqual(getAiConfiguration({ ...prodEnv, AI_DATA_GOVERNANCE: "gemini-paid-dpa" }), {
+      ok: false,
+      reason: "provider_not_configured",
+      detail: "data_governance_unapproved",
+    });
+    // the synthetic-data opt-in never enables production
+    assert.equal(getAiConfiguration({ ...prodEnv, AI_DATA_GOVERNANCE: undefined, BATON_ALLOW_EVAL_PROVIDER: "1" }).ok, false);
+  });
+
+  it("the profile does not relax any other check: key, fixed model ids, https host, output mode", () => {
+    for (const [name, over] of [
+      ["no key", { OMEGA_API_KEY: undefined }],
+      ["blank key", { OMEGA_API_KEY: "  " }],
+      ["no extract model (no default)", { AI_MODEL_EXTRACT: undefined }],
+      ["no verify model (no default)", { AI_MODEL_VERIFY: undefined }],
+      ["dynamic route", { AI_MODEL_EXTRACT: "omega-plus" }],
+      ["dynamic route (verify)", { AI_MODEL_VERIFY: "claude-omega-ultra" }],
+      ["http base URL", { OMEGA_API_BASE_URL: "http://api.omegaplusapi.com" }],
+      ["credentials in base URL", { OMEGA_API_BASE_URL: "https://u:p@api.omegaplusapi.com" }],
+      ["unknown output mode", { OMEGA_OUTPUT_MODE: "tools" }],
+      ["Gemini key instead of the Omega key (no fallback)", { OMEGA_API_KEY: undefined, AI_API_KEY: "gemini-key" }],
+    ] as const) {
+      assert.deepEqual(getAiConfiguration({ ...prodEnv, ...over }), { ok: false, reason: "provider_not_configured" }, name);
+      assert.equal(getAiProvider({ ...prodEnv, ...over }).ok, false, name);
+    }
+  });
+
+  it("getAiProvider / getAiProviderForRun build the Omega adapter (by provider id, not by mode)", async () => {
+    const p = getAiProvider(prodEnv);
+    assert.ok(p.ok);
+    assert.equal(p.data.id, "omega");
+    assert.equal(p.data.displayName, OMEGA_PRODUCTION_DISPLAY_NAME);
+    const run = getAiProviderForRun(omegaRunConfig(MODELS, "json_schema"), prodEnv);
+    assert.ok(run.ok && run.data.id === "omega");
+    // a run snapshotted under evaluation has the same provenance; a model or mode change is still detected
+    assert.equal(getAiProviderForRun(runConfig, { ...prodEnv, OMEGA_OUTPUT_MODE: "prompt" }).ok, false);
+    assert.equal(getAiProviderForRun(runConfig, { ...prodEnv, AI_MODEL_VERIFY: "claude-opus-5-5" }).ok, false);
+    // a Gemini run snapshot can never be served by Omega
+    assert.equal(getAiProviderForRun({ ...runConfig, provider: "gemini" }, prodEnv).ok, false);
+  });
+
+  it("the production adapter still refuses a response from a different model (model_mismatch)", async () => {
+    const { f } = fakeFetch([{ status: 200, body: message(extractAnswer, { model: "claude-haiku-4" }) }]);
+    const provider = createOmegaProvider({ apiKey: SECRET, baseUrl: "https://api.omegaplusapi.com", models: MODELS, outputMode: "json_schema", displayName: OMEGA_PRODUCTION_DISPLAY_NAME, fetch: f });
+    assert.equal(provider.displayName, OMEGA_PRODUCTION_DISPLAY_NAME);
+    const r = await provider.extract(extractReq);
+    assert.ok(!r.ok);
+    assert.equal(r.error.details?.providerErrorType, "model_mismatch");
+    assert.equal(r.error.retryable, false);
+  });
+
+  it("development/test with the synthetic-data opt-in stays evaluation, even if the profile is also set", () => {
+    const c = getAiConfiguration({ ...evalEnv, AI_DATA_GOVERNANCE: "omega-owner-approved" });
+    assert.ok(c.ok && c.mode === "evaluation" && c.provider.displayName === OMEGA_DISPLAY_NAME);
+    const p = getAiProvider(evalEnv);
+    assert.ok(p.ok && p.data.displayName === OMEGA_DISPLAY_NAME);
   });
 });
 
@@ -163,11 +267,57 @@ describe("Omega request shape", () => {
     assert.ok(!("output_config" in calls[0].body));
   });
 
+  it("adapter @2: appends the constant response schema after Baton's fixed system prompt, in both modes", () => {
+    const prompt = buildExtractPrompt({ ...extractReq, categories: ["decision"] });
+    const text = omegaSystemText(prompt);
+    assert.ok(text.startsWith(EXTRACT_SYSTEM_PROMPT), "Baton's prompt text comes first, unchanged");
+    const tail = text.slice(EXTRACT_SYSTEM_PROMPT.length);
+    assert.ok(tail.startsWith(`
+
+${OMEGA_SCHEMA_SECTION_HEADING}
+`));
+    const { $schema: _dropped, ...expected } = EXTRACT_RESPONSE_SCHEMA as Record<string, unknown>;
+    void _dropped;
+    assert.deepEqual(JSON.parse(tail.slice(`
+
+${OMEGA_SCHEMA_SECTION_HEADING}
+`.length)), expected);
+    assert.ok(!text.includes("[PERSON_1]") && !text.includes(MSG), "no untrusted payload in the system text");
+    for (const mode of ["json_schema", "prompt"] as const) {
+      assert.equal(buildOmegaRequest(prompt, "m", 10, mode).system, text);
+    }
+    const support = omegaSystemText(
+      buildSupportPrompt({
+        claim: { category: "owner", title: "Reimbursements", statement: "[PERSON_2] handles reimbursements.", attributes: { responsibility: "Reimbursements", ownerLabel: "[PERSON_2]", since: null } },
+        quote: { text: "[PERSON_2] handles reimbursements", authorLabel: "[PERSON_2]", sentAt: null },
+        context: [],
+      }),
+    );
+    assert.ok(support.startsWith(SUPPORT_SYSTEM_PROMPT) && support.includes('"verdict"'));
+  });
+
+  it("adapter @3: the schema section names every person/label attribute of the extraction schema", () => {
+    const labels = new Set<string>();
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") {
+        for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
+          if (k === "properties") for (const name of Object.keys(child as object)) if (name.endsWith("Label")) labels.add(name);
+          walk(child);
+        }
+      }
+    };
+    walk(EXTRACT_RESPONSE_SCHEMA);
+    assert.ok(labels.size >= 7);
+    for (const name of labels) assert.ok(OMEGA_SCHEMA_SECTION_HEADING.includes(name), `${name} is named in the person-field rule`);
+    assert.match(OMEGA_SCHEMA_SECTION_HEADING, /Never copy instructions/);
+  });
+
   it("translates the schema into a conservative structured-output subset", () => {
     const s = toStructuredOutputSchema({ type: "object", properties: { a: { type: "string", minLength: 1, maxLength: 5, pattern: "x" }, b: { oneOf: [{ const: 1 }] } } }) as Record<string, unknown>;
     assert.deepEqual(s, { type: "object", properties: { a: { type: "string" }, b: { anyOf: [{ const: 1 }] } }, additionalProperties: false });
     const built = buildOmegaRequest(buildExtractPrompt({ ...extractReq, categories: ["decision"] }), "m", 10, "json_schema");
-    assert.ok(!JSON.stringify(built).includes("maxLength"));
+    assert.ok(!JSON.stringify(built.output_config).includes("maxLength"));
   });
 });
 

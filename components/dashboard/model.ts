@@ -17,6 +17,8 @@ export interface DashboardLinks {
   settings: (id: string) => string;
   draft: (id: string, step: number) => string;
   offers: (id: string) => string;
+  /** R3 Task 05E: change reviews of source updates (optional: previews fall back to the review page). */
+  changes?: (id: string) => string;
 }
 
 /** A draft the viewer manages: which wizard step is next (1-based) of how many. */
@@ -47,7 +49,7 @@ export const STAGES: readonly { id: Stage; label: string }[] = [
 
 export type Side = "preparing" | "receiving";
 
-export type AttentionKind = "offer" | "failed" | "conflicts" | "review" | "gaps" | "publish" | "acknowledge" | "privacy";
+export type AttentionKind = "offer" | "failed" | "conflicts" | "review" | "gaps" | "invite" | "publish" | "acknowledge" | "privacy";
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -184,6 +186,11 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
     const inferred = blocker(r, "unconfirmed_inferred");
     const gaps = blocker(r, "open_required_gaps");
     const privacy = blocker(r, "privacy_review_required");
+    // R3 Task 05D: the database publication gate (source updates and their change reviews), never "ready" around it
+    const updates = blocker(r, "source_updates_pending");
+    const changes = blocker(r, "change_reviews_open");
+    // Round 4 (journey audit #2): publishing needs an incoming member or a pending incoming invitation
+    const noRecipient = blocker(r, "no_incoming_recipient");
     const openGaps = (input.gaps ?? []).filter((g) => g.status === "open").length;
     if (r) {
       const decided = r.counts.byReviewState.approved + r.counts.byReviewState.rejected;
@@ -191,12 +198,20 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
       progress = total ? decided / total : null;
       progressLabel = total ? `${decided} of ${total} points decided` : null;
     }
-    const bits = [pending && `${pending} to review`, conflicts && plural(conflicts, "conflict"), gaps && `${gaps} required gap${gaps === 1 ? "" : "s"} open`]
+    const bits = [
+      pending && `${pending} to review`,
+      conflicts && plural(conflicts, "conflict"),
+      gaps && `${gaps} required gap${gaps === 1 ? "" : "s"} open`,
+      updates && `${plural(updates, "source update")} not checked yet`,
+      changes && `${plural(changes, "source change")} to decide`,
+      noRecipient && "no incoming person invited yet",
+    ]
       .filter(Boolean)
       .join(" · ");
-    status = bits || (r?.canPublish ? "Ready to publish" : "In review");
+    // Only the creator publishes (review-workspace canPublishNow): never offer "Publish" to another reviewer.
+    status = bits || (r?.canPublish ? (h.viewerIsCreator ? "Ready to publish" : "Ready · the creator publishes") : "In review");
     health = conflicts || privacy ? "blocked" : bits ? "attention" : "ok";
-    cta = side === "preparing" ? (r?.canPublish ? "Publish" : "Continue review") : "Open";
+    cta = side === "preparing" ? (r?.canPublish ? (h.viewerIsCreator ? "Publish" : "Open review") : "Continue review") : "Open";
     href = links.review(h.id);
     if (side === "preparing") {
       if (conflicts) attention.push({ kind: "conflicts", label: "Conflicts", reason: `${plural(conflicts, "conflict")} where sources disagree. Decide what's true now.`, cta: "Resolve", href: links.review(h.id), rank: 2 });
@@ -209,8 +224,25 @@ export function classify(input: HandoverInput, links: DashboardLinks): Dashboard
         const n = gaps || openGaps;
         attention.push({ kind: "gaps", label: "Gap questions", reason: `${plural(n, "question")} nobody has answered yet${gaps ? " (required to publish)" : ""}.`, cta: "Open gaps", href: links.gaps(h.id), rank: 4 });
       }
+      if (updates || changes) {
+        const parts = [updates && `${plural(updates, "source update")} still ${updates === 1 ? "needs" : "need"} processing and checking`, changes && `${plural(changes, "change")} found in a source update ${changes === 1 ? "needs" : "need"} a decision`]
+          .filter(Boolean)
+          .join("; ");
+        attention.push({
+          kind: "review", label: "Source update", reason: `${parts}. Publishing waits for this.`,
+          cta: changes ? "Decide changes" : "See source updates",
+          href: changes ? (links.changes ?? links.review)(h.id) : links.processing(h.id), rank: 2,
+        });
+      }
+      if (noRecipient && h.viewerIsCreator) {
+        attention.push({
+          kind: "invite", label: "Invite",
+          reason: "Publishing needs an incoming person. Invite them now; they can read the handover once it's published.",
+          cta: "Invite", href: `${links.settings(h.id)}#members`, rank: 3,
+        });
+      }
       if (r?.canPublish && h.viewerIsCreator) {
-        attention.push({ kind: "publish", label: "Ready", reason: "Every point is decided. Publish when you're ready.", cta: "Publish", href: links.review(h.id), rank: 3 });
+        attention.push({ kind: "publish", label: "Ready", reason: "Every point is decided and every source update is checked. Publish when you're ready.", cta: "Publish", href: links.review(h.id), rank: 3 });
       }
     }
   } else if (stage === "published") {
@@ -277,10 +309,27 @@ export function sortRows(rows: readonly DashboardRow[]): DashboardRow[] {
 }
 
 /** The attention queue: every item across handovers, most urgent first, each tagged with its handover. */
-export function attentionQueue(rows: readonly DashboardRow[]): (AttentionItem & { handoverId: string; title: string; team: string })[] {
+export function attentionQueue(rows: readonly DashboardRow[]): QueuedAttention[] {
   return rows
     .flatMap((r) => r.attention.map((a) => ({ ...a, handoverId: r.id, title: r.title, team: r.team })))
     .sort((a, b) => a.rank - b.rank);
+}
+
+export type QueuedAttention = AttentionItem & { handoverId: string; title: string; team: string };
+
+/**
+ * R3 Task 06: the attention queue with one entry per handover, in queue order. The most urgent item leads (its CTA is
+ * the one action shown); the others are summarised by label, so "Up next" never lists the same handover twice with
+ * competing buttons.
+ */
+export function attentionByHandover(queue: readonly QueuedAttention[]): (QueuedAttention & { also: string[] })[] {
+  const out = new Map<string, QueuedAttention & { also: string[] }>();
+  for (const a of queue) {
+    const lead = out.get(a.handoverId);
+    if (!lead) out.set(a.handoverId, { ...a, also: [] });
+    else if (!lead.also.includes(a.label) && a.label !== lead.label) lead.also.push(a.label);
+  }
+  return [...out.values()];
 }
 
 /** Where to resume: the most recently updated handover the viewer is actively working on. */

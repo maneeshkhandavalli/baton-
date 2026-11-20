@@ -338,4 +338,144 @@ select tests.eq(coalesce((select jsonb_object_agg(s ->> 'stage', s ->> 'status')
                 '300700: pre-upgrade mixed run: extract failed → partial, verify_quotes failed → queued (a job is still open)');
 select tests.as_owner();
 
+-- ── 500100: source versions on PRE-UPGRADE rows ─────────────────────────────
+select tests.eq((select count(*)::int from public.sources
+                  where lineage_id is distinct from id or version_number is distinct from 1 or supersedes_source_id is not null
+                     or superseded_at is not null or superseded_by_source_id is not null), 0,
+                '500100: every existing source is version 1 of its own lineage');
+select tests.eq((select count(*)::int from public.source_version_changes), 0, '500100: no transition is invented for existing rows');
+select tests.ok(has_function_privilege('service_role', 'public.create_source_version(uuid,uuid,text,text,text,bigint,text,text)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.create_source_version(uuid,uuid,text,text,text,bigint,text,text)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.create_source_version(uuid,uuid,text,text,text,bigint,text,text)', 'EXECUTE'),
+                '500100: create_source_version is server-only');
+select tests.as_user('ann');
+select tests.ok((select bool_and(s -> 'version' ->> 'lineage_id' = s ->> 'id' and (s -> 'version' ->> 'version_number')::int = 1)
+                   from jsonb_array_elements(tests.read(format('select public.api_list_sources(%L)', tests.id('hr')))) s),
+                '500100: api_list_sources reports version 1 for a pre-upgrade source');
+-- a new version of the source of the PRE-UPGRADE published handover: the published read does not move
+select public.start_revision(tests.actor(), tests.id('hpub'));
+select tests.put('spub_v2', (public.create_source_version(tests.actor(), tests.id('spub'), 'whatsapp_export', 'chat v2.txt', 'text/plain', 100,
+                                                          repeat('c', 64)) ->> 'source_id')::uuid);
+select tests.as_owner();
+insert into storage.objects (bucket_id, name, metadata)
+select 'source-uploads', raw_storage_path, '{"size": 100}' from public.sources where id = tests.id('spub_v2');
+select tests.as_user('ann');
+select public.confirm_source_uploaded(tests.actor(), tests.id('spub_v2'), 100, repeat('c', 64));
+select public.record_source_consent(tests.actor(), tests.id('spub_v2'), 'consent@1', 'fake', 'everyone', 'Asia/Kolkata');
+select tests.as_owner();
+select tests.ok((select superseded_by_source_id = tests.id('spub_v2') from public.sources where id = tests.id('spub'))
+                and (select version_number = 2 and lineage_id = tests.id('spub') from public.sources where id = tests.id('spub_v2')),
+                '500100: a pre-upgrade source receives version 2');
+select tests.ok((select bool_and(pe.excluded_at is null) from public.point_evidence pe where pe.point_id = tests.id('ppub1')),
+                '500100: the evidence of the pre-upgrade version stays active');
+select tests.as_user('inc');
+select tests.eq(upgrade.strip(tests.read(format('select public.api_get_published_handover(%L)', tests.id('hpub')))),
+                (select reads -> 'inc:hpub:published' from upgrade.snapshot where id = 1),
+                '500100: the incoming member reads the pre-upgrade publication unchanged after a new source version');
+select tests.as_owner();
+
+-- ── 500200: scoped update processing and the publication gate on PRE-UPGRADE rows ─
+select tests.ok(has_function_privilege('service_role', 'public.start_source_update_processing(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.start_source_update_processing(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.source_update_processing_scope(uuid,uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.source_update_processing_scope(uuid,uuid)', 'EXECUTE'),
+                '500200: scoped processing is server-only');
+select tests.eq((select state from public.source_version_changes where to_source_id = tests.id('spub_v2')), 'awaiting_processing',
+                '500200: the pre-upgrade source''s new version awaits processing');
+select tests.as_user('ann');
+select tests.eq(public.source_update_processing_scope(tests.actor(), tests.id('hpub')) ->> 'mode', 'full',
+                '500200: a handover never processed by a run is processed in full');
+select tests.throws(format('select public.publish_handover(%L, %L)', tests.actor(), tests.id('hpub')), 'BTPF0',
+                    '500200: the unprocessed update blocks republishing the pre-upgrade handover');
+select tests.as_owner();
+select tests.eq((select count(*)::int from public.handover_publications where handover_id = tests.id('hpub')), 1,
+                '500200: the pre-upgrade publication is the only one');
+select tests.as_user('inc');
+select tests.eq(upgrade.strip(tests.read(format('select public.api_get_published_handover(%L)', tests.id('hpub')))),
+                (select reads -> 'inc:hpub:published' from upgrade.snapshot where id = 1),
+                '500200: the incoming member still reads the pre-upgrade publication unchanged');
+select tests.as_owner();
+-- Task 04 scope on the pre-upgrade mixed run: identical to the latest-run view (a full run extracted every source)
+select tests.eq((select count(*)::int from public._extraction_publish_gaps(tests.id('hx'))), 1,
+                '500200: the pre-upgrade mixed run still has exactly its one failed source as a gap');
+
+-- ── 18500100 (R3 Task 05D): change detection on PRE-UPGRADE rows ────────────
+select tests.eq((select base_publication_id from public.source_version_changes where to_source_id = tests.id('spub_v2')),
+                (select current_publication_id from public.handovers where id = tests.id('hpub')),
+                '18500100: the pre-upgrade handover''s update records its current publication as the baseline');
+select tests.eq((select count(*)::int from public.source_change_review_items), 0, '18500100: no review item is invented for existing rows');
+select tests.ok(has_table_privilege('authenticated', 'public.source_change_review_items', 'SELECT')
+                and not has_table_privilege('authenticated', 'public.source_change_review_items', 'INSERT')
+                and not has_table_privilege('authenticated', 'public.source_change_review_items', 'UPDATE')
+                and not has_table_privilege('service_role', 'public.source_change_review_items', 'INSERT')
+                and not has_table_privilege('anon', 'public.source_change_review_items', 'SELECT'),
+                '18500100: review items are read-only for API roles');
+select tests.ok(has_function_privilege('service_role', 'public.pipeline_record_change_detection(uuid,integer,uuid,text,jsonb,jsonb,bigint)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.pipeline_record_change_detection(uuid,integer,uuid,text,jsonb,jsonb,bigint)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.list_change_detection_input(uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.list_change_detection_input(uuid)', 'EXECUTE')
+                and not has_function_privilege('service_role', 'public._blocking_change_reviews(uuid)', 'EXECUTE'),
+                '18500100: the detector functions are server-only; internals are not executable');
+select tests.as_user('ann');
+select tests.ok((select bool_or(b ->> 'kind' = 'source_updates_pending')
+                   from jsonb_array_elements(tests.read(format('select public.api_get_readiness(%L)', tests.id('hpub'))) -> 'blockers') b),
+                '18500100: readiness of the pre-upgrade handover reports its pending source update (never "ready")');
+select tests.eq(tests.read(format('select public.api_list_change_review_items(%L)', tests.id('hpub'))), '[]'::jsonb,
+                '18500100: the review-item read API works on the pre-upgrade handover');
+select tests.as_owner();
+
+-- ── 18600100 (R3 Task 05E): change-review decisions on PRE-UPGRADE rows ──────
+select tests.eq((select count(*)::int from public.source_change_review_decisions), 0, '18600100: no decision is invented');
+select tests.ok(has_function_privilege('service_role', 'public.decide_change_review_item(uuid,uuid,text,text,uuid,text,jsonb)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.decide_change_review_item(uuid,uuid,text,text,uuid,text,jsonb)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.decide_change_review_item(uuid,uuid,text,text,uuid,text,jsonb)', 'EXECUTE')
+                and not has_table_privilege('authenticated', 'public.source_change_review_decisions', 'INSERT')
+                and has_table_privilege('authenticated', 'public.source_change_review_decisions', 'SELECT'),
+                '18600100: deciding is server-only; decisions are read-only for API roles');
+select tests.eq((select count(*)::int from public.review_actions where action = 'change_review'), 0, '18600100: existing review history is unchanged');
+select tests.as_user('ann');
+select tests.eq(tests.read(format('select public.api_get_change_reviews(%L)', tests.id('hpub'))), '[]'::jsonb,
+                '18600100: the reviewer read API works on the pre-upgrade handover');
+select tests.as_owner();
+
+-- ── 18700100–18700300 (R3 Task 06): invitations on PRE-UPGRADE rows ──────────
+select tests.as_service();
+select tests.eq(public.get_member_invite_details(sha256(convert_to('upgrade-invite', 'UTF8')), null) ->> 'state', 'pending',
+                '18700100: a pre-upgrade invitation reads as pending');
+select tests.eq(public.get_member_invite_details(sha256(convert_to('upgrade-invite', 'UTF8')), null) ->> 'recipient_email_masked', 'l***@example.test',
+                '18700100: with a masked address');
+select tests.as_owner();
+select tests.user('lee');
+select tests.as_service();
+select tests.eq((public.redeem_member_invite(sha256(convert_to('upgrade-invite', 'UTF8')), tests.id('lee')) ->> 'replayed')::boolean, false,
+                '18700100: the pre-upgrade invitation redeems');
+select tests.eq((public.redeem_member_invite(sha256(convert_to('upgrade-invite', 'UTF8')), tests.id('lee')) ->> 'replayed')::boolean, true,
+                '18700100: and replays for the same user');
+select tests.eq(public.get_member_invite_details(sha256(convert_to('upgrade-invite', 'UTF8')), tests.id('lee')) ->> 'state', 'accepted',
+                '18700100: the member sees it as accepted');
+select tests.as_owner();
+select tests.eq((select count(*)::int from public.handover_members where handover_id = tests.id('hr') and profile_id = tests.id('lee')), 1,
+                '18700100: one membership');
+select tests.as_reader('ann');
+select tests.ok((select bool_and(t ? 'delivery_status') from jsonb_array_elements(public.list_access_tokens(tests.id('hr'), 'member_invite', false)) t),
+                '18700200: the invitation listing carries delivery_status');
+select tests.ok((select bool_and(t -> 'delivery_status' = 'null'::jsonb) from jsonb_array_elements(public.list_access_tokens(tests.id('hr'), 'member_invite', false)) t),
+                '18700200: null for invitations never emailed');
+select tests.as_owner();
+select tests.ok(has_function_privilege('service_role', 'public.get_member_invite_details(bytea,uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.get_member_invite_details(bytea,uuid)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.reissue_member_invite(uuid,uuid,bytea,timestamp with time zone)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.reissue_member_invite(uuid,uuid,bytea,timestamp with time zone)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.record_invitation_delivery(uuid,uuid,text,text,text)', 'EXECUTE')
+                and not has_function_privilege('anon', 'public.member_invite_recipient(uuid,uuid)', 'EXECUTE')
+                and not has_function_privilege('authenticated', 'public.redeem_member_invite(bytea,uuid)', 'EXECUTE')
+                and has_function_privilege('service_role', 'public.redeem_member_invite(bytea,uuid)', 'EXECUTE')
+                and not has_table_privilege('authenticated', 'public.invitation_deliveries', 'SELECT')
+                and not has_table_privilege('service_role', 'public.invitation_deliveries', 'INSERT'),
+                '18700100/200: the invitation functions are server-only; delivery records are unreadable by API roles');
+select tests.as_service();
+select tests.ok(public.consume_rate_limit('invite_redeem_client', repeat('cd', 32)) and public.consume_rate_limit('invite_send_actor', repeat('cd', 32)),
+                '18700300: existing and new rate-limit scopes both work');
+select tests.as_owner();
+
 select 'upgrade verified' as result;

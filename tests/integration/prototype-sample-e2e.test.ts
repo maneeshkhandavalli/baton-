@@ -61,7 +61,7 @@ describe("Prototype sample data through the normal pipeline", { skip: !ENABLED &
     const ticket = ok(await createSourceUpload({ handoverId, kind: s.kind, fileName: s.fileName, mimeType: s.mimeType, sizeBytes: bytes.byteLength, sha256: shaOf(bytes) }), `upload ${s.fileName}`);
     await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${ticket.sourceId}`, bytes);
     ok(await confirmSourceUploaded({ sourceId: ticket.sourceId }), `confirm ${s.fileName}`);
-    ok(await recordSourceConsent({ sourceId: ticket.sourceId, consentStatementVersion: "consent@1", consentConfirmed: true, accessLevel: "everyone", timezone: "Asia/Kolkata" }), `consent ${s.fileName}`);
+    ok(await recordSourceConsent({ sourceId: ticket.sourceId, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, accessLevel: "everyone", timezone: "Asia/Kolkata" }), `consent ${s.fileName}`);
     const preview = ok(await previewSource({ sourceId: ticket.sourceId }), `preview ${s.fileName}`);
     assert.ok(preview.stats.messagesKept > 0, `${s.fileName} previews with messages`);
     return ticket.sourceId;

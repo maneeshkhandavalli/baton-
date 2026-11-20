@@ -25,7 +25,7 @@
 -- delegates; the new overload review_gap_answer(uuid, uuid, text, text, text) is server-only (service_role).
 -- Existing rows are NOT modified. `gap_answer_points_missing_attributes()` (service_role, read-only, no text)
 -- lists points created in the invalid form, for the reviewed repair procedure in
--- docs/round3/release-guard.md.
+-- docs/operations/release-guard.md.
 
 -- The required attribute of a category, or null when the category has none.
 create function public._gap_point_required_field(p_category text)

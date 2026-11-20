@@ -26,7 +26,7 @@ import type {
   SourceParticipantSummary,
   SourceSummary,
 } from "../contracts/dto";
-import { READINESS_BLOCKERS } from "../contracts/dto";
+import { INVITATION_DELIVERY_STATUSES, READINESS_BLOCKERS } from "../contracts/dto";
 import {
   ACCESS_LEVELS,
   ACCESS_TOKEN_STATUSES,
@@ -200,6 +200,8 @@ const accessTokenRow = z.strictObject({
   use_count: count,
   revoked_at: nullableTimestamp,
   created_at: timestamp,
+  // R3 Task 06 (20261118700200); optional so a database without that migration still maps
+  delivery_status: z.enum(INVITATION_DELIVERY_STATUSES).nullable().optional(),
 });
 
 export function mapAccessTokenSummary(raw: unknown): AccessTokenSummary {
@@ -216,6 +218,7 @@ export function mapAccessTokenSummary(raw: unknown): AccessTokenSummary {
     useCount: r.use_count,
     revokedAt: r.revoked_at,
     createdAt: r.created_at,
+    deliveryStatus: r.purpose === "member_invite" ? (r.delivery_status ?? null) : null,
   };
 }
 
@@ -339,10 +342,26 @@ const sourceRow = z.object({
   message_count: z.number().int().nullable(),
   masking_counts: z.record(z.enum(MASK_KINDS), z.number()).nullable(),
   error_code: nullableText,
+  // R3 Task 05B (migration 20261117500100); absent on older databases
+  version: z
+    .object({
+      lineage_id: id,
+      version_number: z.number().int().min(1).nullable(),
+      supersedes_source_id: id.nullable(),
+      superseded_at: nullableTimestamp,
+      superseded_by_source_id: id.nullable(),
+      // R3 Task 05C (migration 20261117500200)
+      update_state: z.enum(["awaiting_processing", "processing", "awaiting_detection", "ready", "failed", "superseded"]).nullable().optional(),
+      update_error: nullableText.optional(),
+      // R3 Task 05D (migration 20261118500100)
+      open_reviews: z.number().int().min(0).nullable().optional(),
+    })
+    .optional(),
 });
 
 export function mapSourceSummary(raw: unknown): SourceSummary {
   const r = parse(sourceRow, raw);
+  const v = r.version;
   return {
     id: r.id,
     handoverId: r.handover_id,
@@ -358,6 +377,19 @@ export function mapSourceSummary(raw: unknown): SourceSummary {
     messageCount: r.message_count,
     maskingCounts: r.masking_counts,
     errorCode: r.error_code,
+    ...(v
+      ? {
+          version: {
+            lineageId: v.lineage_id,
+            versionNumber: v.version_number,
+            supersedesSourceId: v.supersedes_source_id,
+            supersededAt: v.superseded_at,
+            supersededBySourceId: v.superseded_by_source_id,
+            ...(v.update_state !== undefined ? { updateState: v.update_state, updateError: v.update_error ?? null } : {}),
+            ...(typeof v.open_reviews === "number" ? { openReviews: v.open_reviews } : {}),
+          },
+        }
+      : {}),
   };
 }
 

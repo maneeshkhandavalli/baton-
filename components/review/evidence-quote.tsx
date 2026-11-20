@@ -23,6 +23,8 @@ interface EvidenceQuoteProps {
    * Needs `quoteCheck` and `supportVerdict`; review cards pass the whole EvidenceItem.
    */
   showVerification?: boolean;
+  /** Show the line/page location (technical; the evidence panel shows it, review cards do not). */
+  showLocation?: boolean;
   quoteCheck?: QuoteCheck;
   supportVerdict?: SupportVerdict;
   verdictRationale?: string | null;
@@ -60,10 +62,10 @@ function VerificationChip({
     <>
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
-          quoteOk && "bg-status-sourced-soft text-status-sourced-fg",
-          quoteBad && "bg-status-conflicting-soft text-status-conflicting-fg",
-          !quoteOk && !quoteBad && "bg-muted text-muted-foreground",
+          "inline-flex items-center gap-1 font-medium",
+          quoteOk && "text-status-sourced-fg",
+          quoteBad && "text-status-conflicting-fg",
+          !quoteOk && !quoteBad && "text-muted-foreground",
         )}
       >
         <QuoteIcon aria-hidden="true" className="size-3 shrink-0" />
@@ -73,11 +75,11 @@ function VerificationChip({
       {aiLabel && (
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium",
-            layers.ai === "guarded" && "bg-warning-soft text-warning-fg",
-            aiGood && "bg-muted text-foreground/80",
-            aiBad && "bg-status-conflicting-soft text-status-conflicting-fg",
-            !aiGood && !aiBad && layers.ai !== "guarded" && "bg-muted text-muted-foreground",
+            "inline-flex items-center gap-1 font-medium",
+            layers.ai === "guarded" && "text-warning-fg",
+            aiGood && "text-foreground/80",
+            aiBad && "text-status-conflicting-fg",
+            !aiGood && !aiBad && layers.ai !== "guarded" && "text-muted-foreground",
           )}
         >
           {layers.ai === "guarded" ? <ShieldAlert aria-hidden="true" className="size-3 shrink-0" /> : <Sparkles aria-hidden="true" className="size-3 shrink-0" />}
@@ -103,6 +105,7 @@ export function EvidenceQuote({
   tone = "default",
   clamp = false,
   showVerification = false,
+  showLocation = true,
   quoteCheck,
   supportVerdict,
   verdictRationale,
@@ -110,7 +113,7 @@ export function EvidenceQuote({
   className,
 }: EvidenceQuoteProps) {
   const SourceIcon = kind === "testimony" ? UserRound : sentAt ? MessageCircle : FileText;
-  const where = location
+  const where = showLocation && location
     ? [location.page ? `p. ${location.page}` : null, location.heading ?? null, `line ${location.lineStart}`].filter(Boolean).join(" · ")
     : null;
   // Separator dots between metadata items (decorative; screen readers hear the items themselves).
@@ -133,7 +136,7 @@ export function EvidenceQuote({
       </blockquote>
       <figcaption className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
         <SourceIcon aria-hidden="true" className="size-3.5 shrink-0" />
-        <span className="flex min-w-0 flex-wrap items-center gap-y-1">
+        <span className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-y-1">
           {authorLabel && (
             <span className={cn(sep, "font-medium text-foreground/85")}>
               <MaskedText text={authorLabel} />

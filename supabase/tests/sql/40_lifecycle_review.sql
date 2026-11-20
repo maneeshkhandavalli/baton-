@@ -259,8 +259,14 @@ begin
   perform tests.as_service();
   v_member := public.redeem_member_invite(sha256('invite-inc2'), tests.id('inc2'));
   perform tests.eq(v_member ->> 'role', 'incoming', 'H3: the confirmed invited address redeems');
-  perform tests.throws(format('select public.redeem_member_invite(%L, %L)', sha256('invite-inc2'), tests.id('inc2')),
-                       'BTTI0', 'single-use invite cannot be redeemed twice');
+  -- R3 Task 06 (20261118700100): the same user redeeming again is a replay (same membership, nothing written);
+  -- the token still cannot be used by anyone else.
+  perform tests.eq((public.redeem_member_invite(sha256('invite-inc2'), tests.id('inc2')) ->> 'replayed')::boolean, true,
+                   'single-use invite: a second redemption by the same user is a replay');
+  perform tests.eq((select use_count from public.access_tokens where token_hash = sha256('invite-inc2')), 1,
+                   'single-use invite: the replay does not consume it again');
+  perform tests.throws(format('select public.redeem_member_invite(%L, %L)', sha256('invite-inc2'), tests.id('rev')),
+                       'BTTI0', 'single-use invite cannot be redeemed by anyone else');
   perform tests.as_user('inc2');
   perform public.acknowledge_publication(tests.actor(), tests.id('pub1'), 'ack-v1');
   perform tests.as_owner();

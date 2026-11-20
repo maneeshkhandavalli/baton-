@@ -123,7 +123,7 @@ function PasswordPanel({ next }: { next: string | null }) {
   };
 
   return (
-    <section aria-labelledby={`${id}-h`} className="space-y-4 rounded-xl border border-border p-4 sm:p-5">
+    <section aria-labelledby={`${id}-h`} className="space-y-4 border-t border-border pt-6">
       <div className="space-y-1">
         <h2 id={`${id}-h`} className="type-heading">
           {headings[mode]}

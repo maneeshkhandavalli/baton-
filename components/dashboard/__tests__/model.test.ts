@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { HandoverSummary, ReadinessReport } from "@/lib/contracts/dto";
 
-import { attentionQueue, classify, filterRows, groupActivityByDay, relativeTime, resumeTarget, sortRows, stageOf, type ActivityItem, type DashboardLinks } from "../model";
+import { attentionByHandover, attentionQueue, classify, filterRows, groupActivityByDay, relativeTime, resumeTarget, sortRows, stageOf, type ActivityItem, type DashboardLinks, type QueuedAttention } from "../model";
 
 const LINKS: DashboardLinks = {
   review: (id) => `/r/${id}`,
@@ -99,6 +99,24 @@ describe("dashboard classify()", () => {
     assert.equal(row.status, "Ready to publish");
     assert.equal(row.cta, "Publish");
   });
+
+  it("never offers Publish to a reviewer who is not the creator", () => {
+    const row = classify({ summary: base({ viewerIsCreator: false, viewerRole: "reviewer" }), readiness: readiness([], true) }, LINKS);
+    assert.equal(row.status, "Ready · the creator publishes");
+    assert.equal(row.cta, "Open review");
+    assert.ok(!row.attention.some((a) => a.kind === "publish"));
+  });
+
+  it("says when publishing waits for an incoming person, and links the creator to Members", () => {
+    const blocked = readiness([{ kind: "no_incoming_recipient", count: 1, pointIds: [] }]);
+    const row = classify({ summary: base(), readiness: blocked }, LINKS);
+    assert.match(row.status, /no incoming person invited yet/);
+    const invite = row.attention.find((a) => a.kind === "invite");
+    assert.ok(invite, "an Invite item");
+    assert.equal(invite.href, "/s/h1#members");
+    const reviewer = classify({ summary: base({ viewerIsCreator: false, viewerRole: "reviewer" }), readiness: blocked }, LINKS);
+    assert.ok(!reviewer.attention.some((a) => a.kind === "invite"), "only the creator invites");
+  });
 });
 
 describe("dashboard filtering and ordering", () => {
@@ -139,4 +157,36 @@ describe("activity timeline grouping", () => {
     );
     assert.deepEqual(groups.map((g) => [g.label, g.items.map((i) => i.id)]), [["Today", ["a"]], ["Yesterday", ["b"]], ["Earlier this week", ["c"]], ["Earlier", ["d"]]]);
   });
+});
+
+// R3 Task 06: "Up next" shows each handover once, led by its most urgent item.
+describe("attentionByHandover", () => {
+  const q = (handoverId: string, kind: QueuedAttention["kind"], label: string, rank: number): QueuedAttention => ({
+    kind,
+    label,
+    reason: `${label} reason`,
+    cta: label,
+    href: `/${handoverId}/${kind}`,
+    rank,
+    handoverId,
+    title: `T ${handoverId}`,
+    team: "Team",
+  });
+  it("keeps queue order, one entry per handover, the rest summarised by label", () => {
+    const out = attentionByHandover([
+      q("a", "conflicts", "Conflicts", 2),
+      q("b", "review", "Review", 3),
+      q("a", "review", "Review", 3),
+      q("a", "gaps", "Gap questions", 4),
+      q("a", "gaps", "Gap questions", 4),
+    ]);
+    assert.deepEqual(
+      out.map((o) => [o.handoverId, o.kind, o.also]),
+      [
+        ["a", "conflicts", ["Review", "Gap questions"]],
+        ["b", "review", []],
+      ],
+    );
+  });
+  it("an empty queue stays empty", () => assert.deepEqual(attentionByHandover([]), []));
 });

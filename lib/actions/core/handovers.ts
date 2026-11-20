@@ -1,6 +1,12 @@
 /** Handover lifecycle actions (§9, §11.3, §12.9). */
 
-import { blockingExtractionGaps, extractionAcknowledgements } from "../../contracts/extraction";
+import {
+  blockingExtractionGaps,
+  blockingSourceUpdates,
+  extractionAcknowledgements,
+  sourceUpdateBlockText,
+} from "../../contracts/extraction";
+import { isCurrentSourceVersion } from "../../contracts/source-versions";
 import type { Result } from "../../contracts/api";
 import type { HandoverSummary, PublicationSummary } from "../../contracts/dto";
 import {
@@ -98,15 +104,29 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
     if (!sources.ok) return sources;
     const ai = deps.aiRunConfig();
     if (!ai.ok) return ai;
+    // R3 Task 05C: a source update in review is processed on its own (scoped run): the database says which sources
+    // need source-specific work. A database without that function (older) answers nothing usable: full run.
+    let scope: { mode: "scoped" | "full"; sourceIds: string[] } = { mode: "full", sourceIds: [] };
+    try {
+      scope = await mutations.sourceUpdateProcessingScope(deps.adminDb(), actor, v.handoverId);
+    } catch (error) {
+      if (!(isDbError(error) && error.code === "internal")) throw error;
+    }
     const plan = deps.planProcessingRun({
       handoverId: v.handoverId,
-      sources: sources.data.map((s) => ({ id: s.id, state: s.state, rawAvailable: s.rawDeletedAt === null })),
+      // R3 Task 05B: only the current version of each source is processed (mirrors start_processing); earlier
+      // versions keep their evidence, and a pending update is not active until its consent is recorded.
+      sources: sources.data
+        .filter(isCurrentSourceVersion)
+        .map((s) => ({ id: s.id, state: s.state, rawAvailable: s.rawDeletedAt === null })),
       aiConfig: ai.data,
+      ...(scope.mode === "scoped" ? { scopeSourceIds: scope.sourceIds } : {}),
     });
     if (!plan.ok) return plan;
     let runId: string;
     try {
-      ({ runId } = await mutations.startProcessing(deps.adminDb(), actor, {
+      const start = scope.mode === "scoped" ? mutations.startSourceUpdateProcessing : mutations.startProcessing;
+      ({ runId } = await start(deps.adminDb(), actor, {
         handoverId: v.handoverId,
         pipelineVersion: plan.data.pipelineVersion,
         aiConfig: { ...plan.data.aiConfig },
@@ -131,7 +151,7 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
 }
 
 /**
- * Accelerator (JOB-1): the scheduled worker (app/api/pipeline/drain, docs/round3/autonomous-worker.md) advances
+ * Accelerator (JOB-1): the scheduled worker (app/api/pipeline/drain, docs/architecture/autonomous-worker.md) advances
  * runs with no page open; this only adds drains between its ticks. The
  * processing page calls this every ~20 s while its run is queued/running; it schedules ONE more fenced
  * drain (`scheduleDrain`, the same `after()` drain startProcessing uses, with the same budget). Claim
@@ -168,12 +188,29 @@ export async function cancelProcessing(deps: ActionDeps, input: { handoverId: st
   });
 }
 
+/** R3 Task 05C: details.reason when a source update keeps the handover from being published. */
+export const SOURCE_UPDATE_PENDING_REASON = "source_update_pending";
+/** R3 Task 05D: details.reason when only open change reviews (from a processed and checked update) remain. */
+export const CHANGE_REVIEW_OPEN_REASON = "change_review_open";
+
 export async function publishHandover(deps: ActionDeps, input: PublishHandoverInput): Promise<Result<PublicationSummary>> {
   return action(deps, publishHandoverInput, input, async (actor, v) => {
     // R3 Task 03 (EXT-3): a source that was only partly analysed (or failed while others succeeded) must be
     // acknowledged explicitly; the handover can otherwise look complete when it is not.
     const report = await deps.queries.getExtractionReport(v.handoverId);
     if (!report.ok && report.error.code === "internal") return report;
+    // R3 Task 05C: a new source version that is not processed and checked yet cannot be published (the database
+    // enforces it too). Unlike an extraction gap, this cannot be acknowledged.
+    const updates = report.ok ? blockingSourceUpdates(report.data) : [];
+    if (updates.length > 0) {
+      return failWith("precondition_failed", {
+        details: {
+          reason: updates.every((u) => u.state === "ready" && u.openReviewItems > 0) ? CHANGE_REVIEW_OPEN_REASON : SOURCE_UPDATE_PENDING_REASON,
+          sources: updates.length,
+        },
+        message: updates.map(sourceUpdateBlockText).join(" "),
+      });
+    }
     const gaps = report.ok ? blockingExtractionGaps(report.data) : [];
     if (gaps.length > 0 && v.acknowledgeExtractionGaps !== true) {
       return failWith("precondition_failed", {
@@ -219,7 +256,7 @@ export async function deleteHandover(deps: ActionDeps, input: { handoverId: stri
     try {
       await deleteHandoverRawObjects(db, deps.adminStorage(), actor, v.handoverId);
     } catch {
-      // retried by the retention sweep (docs/proposals/retention.md)
+      // retried by the retention sweep (docs/architecture/proposals/retention.md)
     }
     return ok(null);
   });

@@ -5,6 +5,13 @@ import { securityHeaders } from "./lib/security/headers";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // Development only: hosts allowed to load dev assets / HMR through a tunnel (Next blocks other origins). Set by
+  // scripts/connectors/preview-3110.mjs from BATON_SITE_URL when it is not localhost; empty otherwise.
+  allowedDevOrigins: (process.env.BATON_DEV_ORIGINS ?? "").split(",").map((h) => h.trim()).filter(Boolean),
+  // R3 Task 06 (security): Next logs every Server Function call WITH ITS ARGUMENTS during development by default.
+  // Those arguments include passwords (signInWithPassword) and invitation tokens (acceptInvitation), which must
+  // never reach a log. Keep it off.
+  logging: { serverFunctions: false },
   partialPrefetching: true,
   turbopack: {
     rules: {

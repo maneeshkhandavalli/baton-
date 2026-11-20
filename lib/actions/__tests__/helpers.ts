@@ -1,10 +1,12 @@
 // Test doubles for lib/actions/core (no database, no Next.js). Synthetic data only.
+import { consentDisclosure, type ConsentDisclosure } from "../../contracts/consent";
 import type { Result } from "../../contracts/api";
 import type { PreviewSourceFn, PreviewSourceInput } from "../../contracts/parser";
 import type { BatonQueries } from "../../contracts/queries";
 import type { VerifiedActor } from "../../db/actor-rules";
 import type { DbClient } from "../../db/client";
 import type { StorageClient } from "../../db/storage";
+import type { EmailMessage, EmailTransport } from "../../email/core";
 import type { AiRunConfig, PlanInput, ProcessingPlan } from "../../pipeline/plan";
 import type { ActionDeps } from "../core/types";
 
@@ -65,6 +67,7 @@ const QUERY_NAMES = [
   "listGapQuestions",
   "getReadiness",
   "getExtractionReport",
+  "getChangeReviews",
   "listUnreviewedSignals",
   "listPointFlags",
   "getPublishedHandover",
@@ -79,6 +82,8 @@ export interface FakeOptions {
   queries?: Partial<Record<keyof BatonQueries, (...args: unknown[]) => Promise<Result<unknown>>>>;
   siteOrigin?: () => string;
   aiRunConfig?: () => Result<AiRunConfig>;
+  /** R3 Task 05E: the expected consent wording (default: the one for the injected run config's provider). */
+  consentDisclosure?: () => ConsentDisclosure;
   verifiedPepper?: () => Result<{ pepper: string; version: "p1" }>;
   previewParser?: PreviewSourceFn;
   planProcessingRun?: (input: PlanInput) => Result<ProcessingPlan>;
@@ -93,6 +98,8 @@ export interface FakeOptions {
   /** Account deletion: the auth side. */
   softDeleteUser?: (profileId: string) => Promise<void>;
   clientIp?: string | null;
+  /** R3 Task 06: the email transport (default: not configured, so nothing is ever sent). */
+  email?: EmailTransport;
 }
 
 export function fakeDeps(options: FakeOptions = {}) {
@@ -108,13 +115,14 @@ export function fakeDeps(options: FakeOptions = {}) {
   let listCalls = 0;
   const authCalls: Array<{ op: "softDeleteUser" | "endSession"; profileId?: string }> = [];
   const issues: Array<{ event: string; details: Record<string, string | number> }> = [];
+  const emails: EmailMessage[] = [];
   const folders = new Map(Object.entries(options.storage?.folders ?? {}).map(([k, v]) => [k, [...v]]));
 
   const client = (kind: "admin" | "user"): DbClient => ({
     rpc: async (fn, args) => {
       calls.push({ fn, args, client: kind });
       events.push(fn);
-      const handler = options.rpc?.[fn];
+      const handler = options.rpc?.[fn] ?? (fn === "consume_rate_limit" ? { data: true } : undefined);
       const r = typeof handler === "function" ? handler(args) : (handler ?? { data: null });
       return { data: r.data ?? null, error: r.error ?? null };
     },
@@ -176,6 +184,12 @@ export function fakeDeps(options: FakeOptions = {}) {
     clientIp: async () => (options.clientIp === undefined ? "203.0.113.7" : options.clientIp),
     siteOrigin: options.siteOrigin ?? (() => ORIGIN),
     aiRunConfig: options.aiRunConfig ?? (() => PROVIDER_NOT_CONFIGURED),
+    consentDisclosure:
+      options.consentDisclosure ??
+      (() => {
+        const r = (options.aiRunConfig ?? (() => PROVIDER_NOT_CONFIGURED))();
+        return consentDisclosure(!r.ok ? "not_configured" : r.data.provider === "fake" ? "local_test" : r.data.provider === "gemini" ? "gemini_free" : "evaluation");
+      }),
     verifiedPepper: options.verifiedPepper ?? (() => ({ ok: true, data: { pepper: TEST_PEPPER, version: "p1" } })),
     previewParser: async (input) => {
       parserInputs.push(input);
@@ -208,6 +222,18 @@ export function fakeDeps(options: FakeOptions = {}) {
     logIssue: (event, details) => {
       issues.push({ event, details });
     },
+    email: () => {
+      const t = options.email;
+      if (!t) return { configured: false, send: async () => { throw new Error("email not expected in this test"); } };
+      return {
+        configured: t.configured,
+        send: async (m: EmailMessage) => {
+          emails.push(m);
+          events.push("email.send");
+          return t.send(m);
+        },
+      };
+    },
   };
 
   return {
@@ -220,6 +246,7 @@ export function fakeDeps(options: FakeOptions = {}) {
     events,
     authCalls,
     issues,
+    emails,
     folders,
     get actorLookups() {
       return actorLookups;

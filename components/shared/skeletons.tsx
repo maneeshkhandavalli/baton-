@@ -76,7 +76,7 @@ export function FormSkeleton({ withHeader = false, label = "Loading…", fields 
 /** Review: sections panel · point list · evidence pane. */
 export function WorkspaceSkeleton({ label = "Loading the review…" }: { label?: string }) {
   return (
-    <Frame label={label} className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[15.5rem_minmax(0,1fr)_23rem]">
+    <Frame label={label} className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[14rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[15.5rem_minmax(0,1fr)_26rem]">
       <div className="hidden space-y-3 lg:block">
         <Sheet className="h-36" />
         {[0, 1, 2, 3, 4, 5].map((i) => (

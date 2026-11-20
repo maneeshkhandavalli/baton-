@@ -8,6 +8,7 @@
 import { useRouter } from "next/navigation";
 import { CircleAlert, CircleCheck, CircleDashed, EyeOff, History, UserRoundSearch } from "lucide-react";
 
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { formatDateTime } from "@/components/handover/format";
 import { MaskedText } from "@/components/shared/masked-text";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import type {
   SourceExtractionState,
   UnreviewedSignalMessage,
 } from "@/lib/contracts/extraction";
+import { unsettledSourceUpdates } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -51,10 +53,13 @@ function SourceLine({ s }: { s: SourceExtractionCoverage }) {
   const Icon = ok ? CircleCheck : bad ? CircleAlert : CircleDashed;
   return (
     <li className="space-y-0.5">
-      <p className="flex items-center gap-1.5 text-caption font-medium text-foreground">
-        <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", ok && "text-success-fg", bad && "text-warning-fg")} />
-        <span className="min-w-0 truncate">{s.title ?? "Source"}</span>
-        <span className="font-normal text-muted-foreground">· {stateLabel[s.state]}</span>
+      {/* R3 Task 06: the name wraps instead of truncating in the narrow review rail; the state reads on its own line */}
+      <p className="flex items-start gap-1.5 text-caption font-medium text-foreground">
+        <Icon aria-hidden="true" className={cn("mt-0.5 size-3.5 shrink-0", ok && "text-success-fg", bad && "text-warning-fg")} />
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          {s.title ?? "Source"}
+          <span className={cn("block font-normal", bad ? "text-warning-fg" : "text-muted-foreground")}>{stateLabel[s.state]}</span>
+        </span>
       </p>
       <p className="pl-5 text-2xs text-muted-foreground tabular-nums">
         {s.chunksTotal > 0 && `${s.chunksDone} of ${s.chunksTotal} parts · `}
@@ -69,14 +74,21 @@ function SourceLine({ s }: { s: SourceExtractionCoverage }) {
 /** Coverage summary: per-source completeness, totals and extraction blockers. Renders nothing when unavailable. */
 export function ExtractionCoverageSummary({ report, className }: { report: ExtractionReport | null; className?: string }) {
   if (!report?.available || report.completion === "none") return null;
-  const incomplete = report.completion === "partial" || report.completion === "failed";
+  // R3 Task 05D: a newer version not yet processed or checked, or with changes to decide, is never "fully analysed"
+  const unsettled = unsettledSourceUpdates(report);
+  const incomplete = report.completion === "partial" || report.completion === "failed" || unsettled.length > 0;
   return (
     <section aria-labelledby="coverage-heading" className={cn("rounded-xl border border-border bg-card p-4 shadow-soft", className)}>
-      <h2 id="coverage-heading" className="type-subheading">
-        Source coverage
-      </h2>
+      <div className="flex items-center gap-1">
+        <h2 id="coverage-heading" className="type-subheading">
+          Source coverage
+        </h2>
+        <ContextualHelp topic="source_coverage" label="What is source coverage?" />
+      </div>
       <p className={cn("mt-1 text-xs", incomplete ? "font-medium text-warning-fg" : "text-muted-foreground")}>
-        {report.completion === "complete" && "Every source was fully analysed."}
+        {report.completion === "complete" && unsettled.length === 0 && "Every source was fully analysed."}
+        {report.completion === "complete" && unsettled.length > 0 &&
+          `Every source processed so far was fully analysed, but ${unsettled.length === 1 ? "a source update still needs" : `${unsettled.length} source updates still need`} processing, checking or a decision.`}
         {report.completion === "in_progress" && "Analysis is still running."}
         {report.completion === "partial" && "Not everything was analysed. Points may be missing."}
         {report.completion === "failed" && "No source could be analysed."}

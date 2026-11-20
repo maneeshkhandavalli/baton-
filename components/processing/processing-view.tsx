@@ -5,28 +5,38 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Check, CircleAlert, CircleDashed, FileText, Loader2, MessageCircle, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { AccessBadge } from "@/components/handover/badges";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { formatBytes, formatCount, formatDateRange, formatDateTime } from "@/components/handover/format";
 import { maskKindLabel, sourceKindLabel, sourceStateLabel, stageLabel } from "@/components/handover/labels";
 import { CONSENT_REQUIRED_REASON, runReasonText, sourcesNeedingConsent, stageStatusMeta } from "@/components/shared/run-status";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { CONSENT_STATEMENT_VERSION, ConsentChecklist, consentComplete, emptyConsent } from "@/components/wizard/consent";
+import { ConsentChecklist, DEFAULT_CONSENT_DISCLOSURE, consentComplete, emptyConsent } from "@/components/wizard/consent";
+import type { ConsentDisclosure } from "@/lib/contracts/consent";
 import { useAction } from "@/hooks/use-action";
 import type { ProcessingStatus, SourceSummary } from "@/lib/contracts/dto";
-import type { MaskKind } from "@/lib/contracts/enums";
+import { isChatSourceKind, type MaskKind } from "@/lib/contracts/enums";
 import { cancelProcessing, continueProcessing, startProcessing } from "@/lib/actions/handovers";
 import { recordSourceConsent } from "@/lib/actions/sources";
+import { isCurrentSourceVersion, sourceUpdateStateLabel } from "@/lib/contracts/source-versions";
 import { routes } from "@/lib/routes";
 import { ExtractionCoverageSummary } from "@/components/review/extraction-coverage";
 import type { ExtractionReport } from "@/lib/contracts/extraction";
 import { cn } from "@/lib/utils";
 
+import {
+  candidateVersionNumber,
+  newSourcesAwaitingProcessing,
+  pendingCandidatesAwaitingConsent,
+  processingControls,
+  recordConsentThenStart,
+} from "./processing-controls";
+import { processingHeadline } from "./processing-headline";
 import { sourceErrorText } from "./source-error";
 
 const POLL_MS = 3_000; // D10
 /**
- * Accelerator only (JOB-1): the scheduled worker (docs/round3/autonomous-worker.md) advances runs without this
+ * Accelerator only (JOB-1): the scheduled worker (docs/architecture/autonomous-worker.md) advances runs without this
  * page; while the page is open it also asks for an extra drain so the run moves between scheduler ticks.
  */
 const NUDGE_MS = 20_000;
@@ -38,9 +48,11 @@ interface ProcessingViewProps {
   canCancel: boolean;
   /** R3 Task 03 (EXT-3): per-source extraction coverage; null when unavailable. */
   extraction?: ExtractionReport | null;
+  /** R3 Task 05D: the consent wording for this server's actual AI configuration. */
+  consentDisclosure?: ConsentDisclosure;
 }
 
-export function ProcessingView({ handoverId, status, canStart, canCancel, extraction = null }: ProcessingViewProps) {
+export function ProcessingView({ handoverId, status, canStart, canCancel, extraction = null, consentDisclosure = DEFAULT_CONSENT_DISCLOSURE }: ProcessingViewProps) {
   const router = useRouter();
   const { run, isPending } = useAction();
   const [consent, setConsent] = useState(emptyConsent());
@@ -48,7 +60,17 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
   const [reconsentAll, setReconsentAll] = useState(false);
   // Kept on the page (toasts disappear): why the last Start attempt didn't go through.
   const [startError, setStartError] = useState<string | null>(null);
-  const { run: r, handoverState, sources } = status;
+  const { run: r, handoverState } = status;
+  // R3 Task 05B: the current version of each source (earlier versions and pending updates are not processed)
+  const sources = status.sources.filter(isCurrentSourceVersion);
+  // R3 Task 05C: new versions of sources, and where each stands (a scoped run processes only these)
+  const updates = sources.filter((s) => (s.version?.versionNumber ?? 1) > 1 && s.version?.updateState);
+  // R3 Task 05D: awaiting_detection (processed before change detection existed) is processed again to run the check
+  const pendingUpdates = updates.filter(
+    (s) => s.version?.updateState === "awaiting_processing" || s.version?.updateState === "failed" || s.version?.updateState === "awaiting_detection",
+  );
+  // updates whose change detection found something that still needs a decision
+  const openReviews = updates.reduce((n, s) => n + (s.version?.updateState === "superseded" ? 0 : (s.version?.openReviews ?? 0)), 0);
   const active = r?.status === "queued" || r?.status === "running";
 
   useEffect(() => {
@@ -72,19 +94,42 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
     return acc;
   }, {});
   const totalMasked = Object.values(masking).reduce((a, b) => a + (b ?? 0), 0);
-  const needsConsent = sourcesNeedingConsent(sources, reconsentAll);
+  // 2026-11-20: an uploaded candidate version awaiting consent (a connector's version 2+) is not a current version,
+  // but its consent is collected HERE: recording it activates the version, then the scoped update run starts.
+  const candidates = pendingCandidatesAwaitingConsent(status.sources);
+  const needsConsent = [...sourcesNeedingConsent(sources, reconsentAll), ...candidates];
+  // 2026-11-20: sources ADDED since the last succeeded run (first versions, e.g. a connector's chat_import) also
+  // keep the consent checklist and the start button visible; they are not "updates" (processing-controls.ts).
+  const newSources = newSourcesAwaitingProcessing(sources, r?.status ?? null);
+  const controls = processingControls({
+    active,
+    canStart,
+    handoverState,
+    runStatus: r?.status ?? null,
+    sourceCount: sources.length,
+    pendingUpdates: pendingUpdates.length,
+    newSources: newSources.length,
+    pendingCandidates: candidates.length,
+    needsConsent: needsConsent.length,
+    consentComplete: consentComplete(consent),
+    isPending,
+  });
   const failedSources = sources.filter((s) => s.state === "failed");
   const reason = r?.status === "failed" ? runReasonText(r.error?.message) : null;
   const currentStage = stages.find((s) => s.status === "running");
-  const title = active
-    ? "Processing your sources"
-    : r?.status === "succeeded"
-      ? "Processing complete"
-      : r?.status === "failed"
-        ? "Processing failed"
-        : r?.status === "cancelled"
-          ? "Processing cancelled"
-          : "Ready to process";
+  // Never "complete" while a current version is unprocessed, unchecked or has changes waiting for a decision.
+  const headline = processingHeadline({
+    active,
+    runStatus: r?.status ?? null,
+    startedAt: r?.startedAt ? formatDateTime(r.startedAt) : null,
+    finishedAt: r?.finishedAt ? formatDateTime(r.finishedAt) : null,
+    pendingUpdates: pendingUpdates.length,
+    newSources: newSources.length,
+    pendingCandidates: candidates.length,
+    openReviews,
+    handoverState,
+  });
+  const title = headline.title;
   // One polite announcement per meaningful change (stage or outcome), never per percentage tick.
   const announcement = active
     ? `Processing. ${currentStage ? `Now: ${stageLabel[currentStage.stage].label}.` : "Starting."}`
@@ -94,33 +139,38 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
 
   async function start() {
     setStartError(null);
-    for (const s of needsConsent) {
-      const res = await run(() =>
-        recordSourceConsent({
-          sourceId: s.id,
-          consentStatementVersion: CONSENT_STATEMENT_VERSION,
-          consentConfirmed: true,
-          accessLevel: s.accessLevel,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
-        }),
-      );
-      if (!res.ok) {
-        setStartError(`Couldn't record consent for ${s.title}. ${res.error.message}`);
-        return;
-      }
-    }
-    const started = await run(() => startProcessing({ handoverId }), {
-      success: "Processing started",
-      onError: (e) => {
-        if (e.details?.reason !== CONSENT_REQUIRED_REASON) {
-          setStartError(e.message);
-          return;
-        }
-        setReconsentAll(true);
-        setConsent(emptyConsent());
+    // Consent first (for a candidate this ACTIVATES the new version server-side); processing starts only when every
+    // recording succeeded (processing-controls.ts recordConsentThenStart).
+    await recordConsentThenStart(
+      needsConsent,
+      async (s) => {
+        const res = await run(() =>
+          recordSourceConsent({
+            sourceId: s.id,
+            consentStatementVersion: consentDisclosure.statementVersion,
+            consentConfirmed: true,
+            accessLevel: s.accessLevel,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+          }),
+        );
+        if (!res.ok) setStartError(`Couldn't record consent for ${s.title}. ${res.error.message}`);
+        return res.ok;
       },
-    });
-    if (started.ok) setReconsentAll(false);
+      async () => {
+        const started = await run(() => startProcessing({ handoverId }), {
+          success: "Processing started",
+          onError: (e) => {
+            if (e.details?.reason !== CONSENT_REQUIRED_REASON) {
+              setStartError(e.message);
+              return;
+            }
+            setReconsentAll(true);
+            setConsent(emptyConsent());
+          },
+        });
+        if (started.ok) setReconsentAll(false);
+      },
+    );
   }
 
   return (
@@ -131,29 +181,20 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
         </p>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
-            <p className="type-eyebrow text-muted-foreground">
-              {active ? (
-                <span className="inline-flex items-center gap-1.5 text-primary-fg">
-                  <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
-                  Live · updates every few seconds
-                </span>
-              ) : (
-                "Processing"
-              )}
-            </p>
-            <h2 id="run-heading" className="type-section-title">
-              {title}
-            </h2>
+            {active && (
+              <p className="inline-flex items-center gap-1.5 text-caption font-medium text-primary-fg">
+                <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary" />
+                Live · updates every few seconds
+              </p>
+            )}
+            <div className="flex items-center gap-1">
+              <h2 id="run-heading" className="type-section-title">
+                {title}
+              </h2>
+              <ContextualHelp topic="processing_status" label="What happens during processing?" />
+            </div>
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {active
-                ? `You can leave this page. Baton keeps working and the review opens when it's done.${r?.startedAt ? ` Started ${formatDateTime(r.startedAt)}.` : ""}`
-                : r?.status === "succeeded"
-                  ? `Finished ${formatDateTime(r.finishedAt)}. Every point is ready for your review.`
-                  : r?.status === "failed"
-                    ? "Your sources are safe. Nothing was published."
-                    : handoverState === "draft"
-                      ? "Add consent for every source, then start processing."
-                      : "Start processing to extract source-backed points."}
+              {headline.description}
             </p>
           </div>
           {active && canCancel && (
@@ -227,7 +268,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                       {stageLabel[s.stage].label}
                       <span className="sr-only">: {meta.label}</span>
                     </p>
-                    <p className="text-caption text-muted-foreground">{stageLabel[s.stage].description}</p>
+                    {s.status !== "succeeded" && <p className="text-caption text-muted-foreground">{stageLabel[s.stage].description}</p>}
                     {(s.status === "partial" || s.status === "failed") && (
                       <p aria-hidden="true" className={cn("mt-1 text-caption font-medium", s.status === "partial" ? "text-warning-fg" : "text-destructive-fg")}>
                         {meta.label}
@@ -246,9 +287,28 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
           </ol>
         )}
 
-        {!active && canStart && (handoverState === "draft" || handoverState === "in_review") && r?.status !== "succeeded" && (
+        {updates.length > 0 && (
+          <ul aria-label="Source updates" className="space-y-1 border-t border-border pt-4 text-sm">
+            {updates.map((s) => (
+              <li key={s.id}>
+                <span className="font-medium">{s.title}</span>, version {s.version?.versionNumber}:{" "}
+                <span className="text-muted-foreground">{sourceUpdateStateLabel(s.version?.updateState ?? null, s.version?.updateError ?? null, s.version?.openReviews ?? 0)}</span>
+                {(s.version?.openReviews ?? 0) > 0 && (
+                  <>
+                    {" "}
+                    <Link href={routes.handover.changes(handoverId)} className="font-medium text-primary-fg underline-offset-4 hover:underline">
+                      Decide the changes
+                    </Link>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {controls.showStart && (
           <div className="space-y-4 border-t border-border pt-5">
-            {needsConsent.length > 0 && (
+            {controls.showConsent && (
               <div className="space-y-3">
                 <div className="space-y-1">
                   <h3 className="type-subheading">Confirm consent first</h3>
@@ -258,7 +318,17 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                       : `${needsConsent.length === 1 ? "1 source has" : `${needsConsent.length} sources have`} no consent recorded yet.`}
                   </p>
                 </div>
-                <ConsentChecklist value={consent} onChange={setConsent} />
+                {candidates.length > 0 && (
+                  <ul aria-label="New versions waiting for consent" className="space-y-1 text-sm">
+                    {candidates.map((c) => (
+                      <li key={c.id}>
+                        <span className="font-medium">{c.title}</span>, new version {candidateVersionNumber(c, status.sources)}
+                        <span className="text-muted-foreground"> · not used until you confirm consent</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <ConsentChecklist value={consent} onChange={setConsent} disclosure={consentDisclosure} />
               </div>
             )}
             {startError && (
@@ -267,19 +337,19 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
               </Alert>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="lg" aria-busy={isPending} disabled={isPending || sources.length === 0 || (needsConsent.length > 0 && !consentComplete(consent))} onClick={start}>
+              <Button size="lg" aria-busy={isPending} disabled={controls.startDisabled} onClick={start}>
                 {isPending ? (
                   <>
                     <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
                     Starting…
                   </>
-                ) : r ? (
+                ) : controls.label === "Try again" ? (
                   <>
                     <RotateCcw aria-hidden="true" data-icon="inline-start" />
                     Try again
                   </>
                 ) : (
-                  "Start processing"
+                  controls.label
                 )}
               </Button>
               {handoverState === "draft" &&
@@ -295,6 +365,13 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
                   </Link>
                 ))}
             </div>
+            {newSources.length > 0 && pendingUpdates.length === 0 && (
+              // A source added in review is processed with the others (the scoped run is for version updates only);
+              // extraction matches points it already found instead of duplicating them.
+              <p className="text-caption text-muted-foreground">
+                Baton processes every source again, including the ones already processed. Points it already found are matched, not duplicated.
+              </p>
+            )}
             {sources.length === 0 ? (
               <p className="text-caption text-muted-foreground">This handover has no sources yet. Add at least one to start.</p>
             ) : (
@@ -304,7 +381,7 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
           </div>
         )}
 
-        <ExtractionCoverageSummary report={extraction} className="shadow-none" />
+        <ExtractionCoverageSummary report={extraction} className="rounded-none border-0 border-t bg-transparent px-0 pt-5 pb-0 shadow-none" />
 
         {r?.status === "succeeded" && (
           <div className="flex flex-wrap gap-2 border-t border-border pt-5">
@@ -322,8 +399,8 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
       <aside className="divide-y divide-border self-start overflow-hidden rounded-xl border border-border bg-card shadow-soft">
         <dl className="grid grid-cols-3 gap-2 p-4">
           <Stat label="Sources" value={formatCount(sources.length)} />
-          <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "—"} />
-          <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "—"} />
+          <Stat label="Messages" value={totalMessages ? formatCount(totalMessages) : "0"} />
+          <Stat label="Masked" value={totalMasked ? formatCount(totalMasked) : "0"} />
         </dl>
 
         <section aria-labelledby="sources-heading">
@@ -363,25 +440,24 @@ export function ProcessingView({ handoverId, status, canStart, canCancel, extrac
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col-reverse text-center">
-      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dt className="text-caption text-muted-foreground">{label}</dt>
       <dd className="font-display text-2xl leading-tight tabular-nums">{value}</dd>
     </div>
   );
 }
 
 function SourceRow({ s }: { s: SourceSummary }) {
-  const Icon = s.kind === "whatsapp_export" ? MessageCircle : FileText;
+  const Icon = isChatSourceKind(s.kind) ? MessageCircle : FileText;
   return (
     <li className="space-y-1.5 px-4 py-3">
       <div className="flex items-start gap-2">
         <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{s.title}</p>
-        <AccessBadge level={s.accessLevel} showEveryone={false} />
       </div>
       <p className="pl-6 text-caption text-muted-foreground">
         {sourceKindLabel[s.kind]} · {formatBytes(s.sizeBytes)} ·{" "}
         <span className={cn(s.state === "failed" && "text-destructive-fg", s.state === "parsing" && "text-primary")}>{sourceStateLabel[s.state]}</span>
-        {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${s.kind === "whatsapp_export" ? "messages" : "blocks"}`}
+        {s.messageCount !== null && ` · ${formatCount(s.messageCount)} ${isChatSourceKind(s.kind) ? "messages" : "blocks"}`}
       </p>
       {s.firstMessageAt && <p className="pl-6 text-caption text-muted-foreground">{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</p>}
       <p className="pl-6 text-caption text-muted-foreground">
@@ -396,7 +472,7 @@ function SourceRow({ s }: { s: SourceSummary }) {
 function SourceFailure({ code }: { code: string | null }) {
   const { text, reference } = sourceErrorText(code);
   return (
-    <div className="ml-6 flex items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive-soft/60 px-2.5 py-2 text-caption text-destructive-fg">
+    <div className="ml-6 flex items-start gap-1.5 rounded-md bg-destructive-soft/60 px-2.5 py-2 text-caption text-destructive-fg">
       <AlertTriangle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
       <p className="min-w-0 [overflow-wrap:anywhere]">
         <span className="sr-only">Why it failed: </span>

@@ -31,6 +31,7 @@ import type {
 import { compileExclusions, type CompiledExclusions } from "../privacy/exclusions";
 import { assertIdentityPepper } from "../privacy/identity";
 import { buildChatSource, buildDocumentSource, type BuildCommon } from "./build-source";
+import { parseChatImportLines } from "./chat-import/parse-chat-import";
 import { parseDocx } from "./docx/parse-docx";
 import { parseMarkdownLines } from "./documents/parse-markdown";
 import { ParserAbort, ParserInputError } from "./errors";
@@ -102,6 +103,12 @@ function parseInternal(input: ParseSourceInput, exclusions: CompiledExclusions):
       const lines = splitLines(decodeText(textBytes));
       const chat = parseChatLines(lines, { timezone: input.timezone, dateOrder: input.dateOrder, warnings });
       return buildChatSource(common(chat.totalLines, chat.dateOrder), chat.messages, input.identityPepper);
+    }
+    case "chat_import": {
+      // Round 4: the server-written connector transcript (lib/connectors/transcript.ts); timestamps are UTC instants.
+      if (isZip(bytes)) throw new ParserAbort("unsupported_format", "The file is an archive, not a chat import.");
+      const chat = parseChatImportLines(splitLines(decodeText(bytes)));
+      return buildChatSource(common(chat.totalLines, null), chat.messages, input.identityPepper);
     }
     case "pdf": {
       const doc = parsePdf(bytes, warnings);

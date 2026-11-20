@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Raw-upload retention sweep (Round 3 Task 02, PRIV-2; docs/proposals/retention.md §7, migration
+ * Raw-upload retention sweep (Round 3 Task 02, PRIV-2; docs/architecture/proposals/retention.md §7, migration
  * 20261117200200). The OWNER decides when it runs and how: nothing deletes anything until
  * BATON_RETENTION_MODE=live is set on the deployment (default: off).
  *

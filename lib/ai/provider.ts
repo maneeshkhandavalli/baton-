@@ -3,7 +3,7 @@ import "server-only";
 /**
  * Provider-neutral AI interface (docs/architecture/shared-contracts.md §11.8, D11).
  *
- * The §11.8 types are reproduced verbatim. Additions (docs/integration/interfaces.md, W0 decisions I1):
+ * The §11.8 types are reproduced verbatim. Additions (docs/history/integration/interfaces.md, W0 decisions I1):
  * - `AiCallResult.meta` (optional, additive): non-sensitive call metadata an adapter can report for the
  *   `AiAttemptRecord` (request id and token counts). Never content.
  * - `AiFailure` / `AiResult<T>`: a `Result`-compatible failure branch that still carries the attempt

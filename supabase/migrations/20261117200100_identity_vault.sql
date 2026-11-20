@@ -1,6 +1,6 @@
 -- Round 3 Task 02 (PRIV-1): participant pseudonymisation and the encrypted identity vault.
 -- ADDITIVE: one table, one nullable column on sources, new functions. No existing function is replaced.
--- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/round3/privacy-and-data-protection.md).
+-- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/architecture/privacy-and-data-protection.md).
 --
 -- * public.handover_people: one row per KNOWN participant of a handover (a chat sender). `ordinal` is the
 --   stable placeholder number ([PERSON_n]) used in every source of the handover. `person_key` is

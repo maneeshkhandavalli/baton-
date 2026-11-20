@@ -102,7 +102,7 @@ describe("Tier E: upload → process → review → publish on real Postgres", {
     sourceId = ticket.sourceId;
     await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${sourceId}`, bytes);
     assert.equal(ok(await confirmSourceUploaded({ sourceId }), "confirm").state, "uploaded");
-    ok(await recordSourceConsent({ sourceId, consentStatementVersion: "consent@1", consentConfirmed: true, accessLevel: "everyone",
+    ok(await recordSourceConsent({ sourceId, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true, accessLevel: "everyone",
       timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent");
     const preview = ok(await previewSource({ sourceId }), "preview");
     assert.ok(preview.participants.length >= 2);

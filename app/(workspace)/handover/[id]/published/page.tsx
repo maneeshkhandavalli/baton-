@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { PublishedOpenedSignal } from "@/components/onboarding/guidance";
 import { PublishedHandoverView } from "@/components/published/published-handover-view";
 import { EmptyState } from "@/components/shared/empty-state";
 import { DocumentSkeleton } from "@/components/shared/skeletons";
@@ -18,7 +19,7 @@ export const metadata: Metadata = { title: "Published handover" };
  */
 export default function PublishedPage({ params }: PageProps<"/handover/[id]/published">) {
   return (
-    <PageContainer width="default">
+    <PageContainer width="default" className="lg:py-8">
       <Suspense fallback={<DocumentSkeleton />}>
         <PublishedContent params={params} />
       </Suspense>
@@ -44,5 +45,11 @@ async function PublishedContent({ params }: { params: Promise<{ id: string }> })
   const published = await queries.getPublishedHandover(id);
   if (!published.ok) notFound();
   const viewer = members.ok ? members.data.find((m) => m.isViewer) : undefined;
-  return <PublishedHandoverView handover={published.data} viewerLabel={viewer?.displayName ?? "You"} viewerRole={handover.data.viewerRole} />;
+  return (
+    <>
+      {/* Round 4: the incoming checklist's "Read the handover" is ticked by actually opening it. */}
+      {handover.data.viewerRole === "incoming" || handover.data.viewerRole === "lead" ? <PublishedOpenedSignal /> : null}
+      <PublishedHandoverView handover={published.data} viewerLabel={viewer?.displayName ?? "You"} viewerRole={handover.data.viewerRole} showTitle={false} />
+    </>
+  );
 }

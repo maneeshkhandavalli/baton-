@@ -60,8 +60,11 @@ describe("source boundaries", () => {
   });
 
   it("M1: redirect destinations are never built from request headers", () => {
-    // any read of the Host / X-Forwarded-Host request headers
-    assert.deepEqual(offenders(/\.get\(\s*["'](?:x-forwarded-host|host)["']\s*\)/i, () => false), []);
+    // any read of the Host / X-Forwarded-Host request headers. One exception: the owner-only /test page DISPLAYS
+    // whether BATON_SITE_URL matches the host it was served from; it never builds a redirect, link or fetch from it.
+    assert.deepEqual(offenders(/\.get\(\s*["'](?:x-forwarded-host|host)["']\s*\)/i, (p) => p === "lib/selftest/server.ts"), []);
+    const selftest = files.find((f) => f.path === "lib/selftest/server.ts");
+    if (selftest) assert.doesNotMatch(selftest.text, /redirect\(|NextResponse|fetch\(\s*requestOrigin|new URL\([^)]*requestOrigin/, "the self-check uses the request host for display only");
     for (const f of files.filter((x) => !isTest(x.path) && /emailRedirectTo/.test(x.text))) {
       assert.match(f.text, /authCallbackUrl/, `${f.path} must build emailRedirectTo with authCallbackUrl`);
     }

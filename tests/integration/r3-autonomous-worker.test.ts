@@ -113,7 +113,7 @@ describe("JOB-1: the scheduled worker advances runs with no browser", { skip: !E
       mimeType: "text/plain", sizeBytes: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex") }), "upload");
     await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${ticket.sourceId}`, bytes);
     ok(await confirmSourceUploaded({ sourceId: ticket.sourceId }), "confirm");
-    ok(await recordSourceConsent({ sourceId: ticket.sourceId, consentStatementVersion: "consent@1", consentConfirmed: true,
+    ok(await recordSourceConsent({ sourceId: ticket.sourceId, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true,
       accessLevel: "everyone", timezone: "Asia/Kolkata", dateOrder: "dmy" }), "consent");
     ok(await previewSource({ sourceId: ticket.sourceId }), "preview");
     const { runId } = ok(await startProcessing({ handoverId }), "startProcessing");

@@ -28,9 +28,9 @@ export function CreatorOffers({ offers }: { offers: CreatorTransferOffer[] }) {
   }
 
   return (
-    <section aria-labelledby="offers-heading" className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-soft sm:p-6">
+    <section aria-labelledby="offers-heading" className="space-y-4 rounded-xl border border-border bg-card p-5 sm:p-6">
       <div className="space-y-1">
-        <h2 id="offers-heading" className="text-base font-semibold">
+        <h2 id="offers-heading" className="type-heading">
           Creatorship offers
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -40,7 +40,7 @@ export function CreatorOffers({ offers }: { offers: CreatorTransferOffer[] }) {
       {offers.length === 0 ? (
         <p className="text-sm text-muted-foreground">No offers are waiting for you.</p>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border">
+        <ul className="divide-y divide-border border-y border-border">
           {offers.map((o) => (
             <li key={o.handoverId} className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center">
               <Crown aria-hidden="true" className="hidden size-4 shrink-0 text-muted-foreground sm:block" />

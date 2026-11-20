@@ -27,7 +27,7 @@ import {
   PRIVACY_SURFACE_DECISIONS,
   RELATED_PRIVACY_SURFACE_KINDS,
   RISK_LEVELS,
-  SOURCE_KINDS,
+  USER_UPLOAD_SOURCE_KINDS,
   SUPPORT_VERDICTS,
 } from "./enums";
 import { IDENTITY_HASH_PATTERN } from "./identity";
@@ -273,7 +273,7 @@ export const deleteAccountInput = z.object({
 
 export const createSourceUploadInput = z.object({
   handoverId: uuidSchema,
-  kind: z.enum(SOURCE_KINDS),
+  kind: z.enum(USER_UPLOAD_SOURCE_KINDS),
   fileName: z.string().min(1).max(255),
   mimeType: z.string().max(127),
   sizeBytes: z.number().int().positive().max(MAX_SOURCE_BYTES),
@@ -281,6 +281,19 @@ export const createSourceUploadInput = z.object({
 });
 
 export const sourceIdInput = z.object({ sourceId: uuidSchema });
+
+/**
+ * R3 Task 05B: a new version of an existing source. `previousSourceId` is the version the creator chose to
+ * replace (it must still be the current one when the upload starts and again when consent activates it).
+ */
+export const createSourceVersionUploadInput = z.object({
+  previousSourceId: uuidSchema,
+  kind: z.enum(USER_UPLOAD_SOURCE_KINDS),
+  fileName: z.string().min(1).max(255),
+  mimeType: z.string().max(127),
+  sizeBytes: z.number().int().positive().max(MAX_SOURCE_BYTES),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
 
 export const recordSourceConsentInput = z.object({
   sourceId: uuidSchema,
@@ -497,6 +510,13 @@ export const createGapLinkInput = z.object({
 /** Creator: any token of the handover. Other review roles: Gap Interview links only (§12.4). */
 export const revokeAccessTokenInput = z.object({ tokenId: uuidSchema });
 
+/** R3 Task 06: a raw invitation token (43 base64url characters, lib/db/tokens.ts). */
+export const invitationTokenInput = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
+export const reissueInvitationInput = z.object({
+  tokenId: uuidSchema,
+  expiresInDays: z.number().int().min(1).max(30).default(7),
+});
+
 export const submitGapAnswersInput = z
   .object({
     token: z.string().min(32).max(128).optional(), // either a token or a signed-in session
@@ -636,6 +656,7 @@ export type EraseParticipantInput = z.input<typeof eraseParticipantInput>;
 export type DeleteAccountInput = z.input<typeof deleteAccountInput>;
 export type CreateSourceUploadInput = z.input<typeof createSourceUploadInput>;
 export type SourceIdInput = z.input<typeof sourceIdInput>;
+export type CreateSourceVersionUploadInput = z.input<typeof createSourceVersionUploadInput>;
 export type RecordSourceConsentInput = z.input<typeof recordSourceConsentInput>;
 export type RecordSourceConsentValues = z.output<typeof recordSourceConsentInput>;
 export type ParseContextInput = z.input<typeof parseContextSchema>;
@@ -649,6 +670,8 @@ export type CreateGapQuestionValues = z.output<typeof createGapQuestionInput>;
 export type CreateGapLinkInput = z.input<typeof createGapLinkInput>;
 export type CreateGapLinkValues = z.output<typeof createGapLinkInput>;
 export type RevokeAccessTokenInput = z.input<typeof revokeAccessTokenInput>;
+export type InvitationTokenInput = z.input<typeof invitationTokenInput>;
+export type ReissueInvitationInput = z.input<typeof reissueInvitationInput>;
 export type PrivacySurfaceDecisionInput = z.input<typeof privacySurfaceDecisionInput>;
 export type ReviewPointInput = z.input<typeof reviewPointInput>;
 export type SubmitGapAnswersInput = z.input<typeof submitGapAnswersInput>;

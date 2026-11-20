@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowUpRight, CheckCircle2, CircleHelp, Scale, Send } from "lucide-react";
 
 import { HANDOVER_SECTIONS, blockerLabel, type HandoverSectionId } from "@/components/handover/labels";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { ReadinessRing } from "@/components/shared/readiness-ring";
 import { Button } from "@/components/ui/button";
 import type { PointDetail, ReadinessReport } from "@/lib/contracts/dto";
@@ -22,6 +23,8 @@ interface ReadinessPanelProps {
   gapsHref: string | null;
   canPublish: boolean;
   onPublish: (() => void) | null;
+  /** Round 4: said under the readiness list when this viewer can't publish (only the creator can). */
+  publishNote?: string;
   /** R3 Task 03: extra panels under readiness (extraction coverage, unreviewed signals). */
   extra?: React.ReactNode;
   className?: string;
@@ -51,7 +54,7 @@ function NavButton({ active, onClick, children, count, dots }: { active: boolean
   );
 }
 
-export function ReadinessPanel({ points, readiness, section, onSection, onBlocker, gapsHref, canPublish, onPublish, extra, className }: ReadinessPanelProps) {
+export function ReadinessPanel({ points, readiness, section, onSection, onBlocker, gapsHref, canPublish, onPublish, publishNote, extra, className }: ReadinessPanelProps) {
   const live = points.filter((p) => p.reviewState !== "rejected");
   const conflicts = live.filter((p) => p.evidenceStatus === "conflicting");
   const gaps = live.filter((p) => p.evidenceStatus === "missing");
@@ -63,9 +66,12 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
         <div className="flex items-center gap-3">
           <ReadinessRing value={readiness?.score ?? 0} />
           <div className="min-w-0">
-            <h2 id="readiness-heading" className="type-subheading">
-              Readiness
-            </h2>
+            <div className="flex items-center gap-1">
+              <h2 id="readiness-heading" className="type-subheading">
+                Readiness
+              </h2>
+              <ContextualHelp topic="readiness" label="What does readiness mean?" />
+            </div>
             <p className="text-xs text-muted-foreground">
               {decided} of {points.length} points decided
             </p>
@@ -95,11 +101,15 @@ export function ReadinessPanel({ points, readiness, section, onSection, onBlocke
               </ul>
             )}
             {onPublish && (
-              <Button className="mt-4 w-full" disabled={!canPublish} onClick={onPublish}>
-                <Send aria-hidden="true" data-icon="inline-start" />
-                Publish handover
-              </Button>
+              <div className="mt-4 flex items-center gap-1" data-tour="publish">
+                <Button className="min-w-0 flex-1" disabled={!canPublish} onClick={onPublish}>
+                  <Send aria-hidden="true" data-icon="inline-start" />
+                  Publish handover
+                </Button>
+                <ContextualHelp topic="publishing" label="What does publishing do?" />
+              </div>
             )}
+            {!onPublish && publishNote && <p className="mt-3 text-caption text-muted-foreground">{publishNote}</p>}
           </>
         )}
       </section>

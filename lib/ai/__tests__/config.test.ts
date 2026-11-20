@@ -74,7 +74,7 @@ describe("getAiConfiguration (D11)", () => {
     assert.equal(config.runConfig.adapterVersion, "fake@1");
     assert.match(config.runConfig.extract.model, /^fake-/);
     assert.match(config.runConfig.verify.model, /^fake-/);
-    assert.equal(config.runConfig.extract.promptVersion, "extract@1");
+    assert.equal(config.runConfig.extract.promptVersion, "extract@2");
     assert.equal(config.runConfig.verify.promptVersion, "support@1");
   });
 

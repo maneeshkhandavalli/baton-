@@ -3,12 +3,13 @@
 /** Source Server Functions (§11.3). Logic: lib/actions/core/sources.ts. */
 
 import type { Result } from "../contracts/api";
-import type { SourceSummary, SourceUploadTicket } from "../contracts/dto";
+import type { SourceSummary, SourceUploadTicket, SourceVersionUploadResult } from "../contracts/dto";
 import type { SourcePreview } from "../contracts/parser";
 import type {
   AddExclusionInput,
   ConfirmIdentityMatchInput,
   CreateSourceUploadInput,
+  CreateSourceVersionUploadInput,
   RecordSourceConsentInput,
 } from "../contracts/schemas";
 import * as core from "./core/sources";
@@ -16,6 +17,11 @@ import { actionDeps } from "./deps";
 
 export async function createSourceUpload(input: CreateSourceUploadInput): Promise<Result<SourceUploadTicket>> {
   return core.createSourceUpload(actionDeps(), input);
+}
+
+/** R3 Task 05B: a new version of an existing source (creator only). */
+export async function createSourceVersionUpload(input: CreateSourceVersionUploadInput): Promise<Result<SourceVersionUploadResult>> {
+  return core.createSourceVersionUpload(actionDeps(), input);
 }
 
 export async function confirmSourceUploaded(input: { sourceId: string }): Promise<Result<SourceSummary>> {

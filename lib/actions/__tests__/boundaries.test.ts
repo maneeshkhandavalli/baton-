@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (p: string) => readFileSync(`${ROOT}${p}`, "utf8");
 
-const ACTION_FILES = ["handovers", "sources", "review", "gaps", "members", "privacy", "account"] as const;
+const ACTION_FILES = ["handovers", "sources", "review", "gaps", "members", "privacy", "account", "invitations"] as const;
 
 /** §11.3 canonical placement. */
 const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
@@ -16,12 +16,14 @@ const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
     "createHandover", "startProcessing", "continueProcessing", "cancelProcessing", "publishHandover", "startRevision", "deleteHandover",
     "offerCreatorTransfer", "respondToCreatorTransfer", "updateHandoverDetails",
   ],
-  sources: ["createSourceUpload", "confirmSourceUploaded", "previewSource", "recordSourceConsent", "addExclusion", "confirmIdentityMatch", "removeSource"],
+  sources: ["createSourceUpload", "createSourceVersionUpload", "confirmSourceUploaded", "previewSource", "recordSourceConsent", "addExclusion", "confirmIdentityMatch", "removeSource"],
   review: ["reviewPoint", "createManualPoint"],
   gaps: ["createGapQuestion", "createGapInterviewLink", "revokeAccessToken", "submitGapAnswers", "reviewGapAnswer"],
   members: ["inviteMember", "updateMemberClearance", "removeMember", "acknowledgePublication"],
   privacy: ["eraseParticipant"],
   account: ["getAccountDeletionBlockers", "deleteAccount"],
+  // R3 Task 06 (docs/history/round3/task06-contract.md §6.2)
+  invitations: ["getInvitation", "acceptInvitation", "reissueInvitation", "requestInvitationSignInLink"],
 };
 
 const exportedNames = (text: string) => [...text.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|class)\s+(\w+)/gm)].map((m) => m[1]);
@@ -45,12 +47,15 @@ describe("lib/actions Server Function modules", () => {
     });
   }
 
-  it("covers every action the UI mocks export, plus createManualPoint (§11.3) and continueProcessing (Round 2 hosted drain nudge); neither is in the mocks", () => {
+  it("covers every action the UI mocks export, plus createManualPoint (§11.3), continueProcessing (Round 2 hosted drain nudge) and createSourceVersionUpload (R3 Task 05B); none is in the mocks", () => {
     const mock = new Set(asyncFunctionExports(read("lib/mocks/actions.ts")));
     const real = new Set(Object.values(EXPECTED).flat());
     assert.deepEqual([...mock].filter((n) => !real.has(n)), [], "every mock export exists under the same name");
     const missing = [...real].filter((n) => !mock.has(n));
-    assert.deepEqual(missing.sort(), ["continueProcessing", "createManualPoint"]);
+    assert.deepEqual(missing.sort(), [
+      "acceptInvitation", "continueProcessing", "createManualPoint", "createSourceVersionUpload", "getInvitation",
+      "reissueInvitation", "requestInvitationSignInLink", // R3 Task 06: invitations have no mock (the demo simulates invites)
+    ]);
   });
 
   it("deps.ts is server-only, exports only actionDeps, and offers no override", () => {

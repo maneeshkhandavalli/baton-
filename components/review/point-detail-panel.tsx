@@ -6,13 +6,14 @@ import { AccessBadge } from "@/components/handover/badges";
 import { attributeRows } from "@/components/handover/attributes";
 import { formatDate, formatDateRange, formatDateTime, formatCount } from "@/components/handover/format";
 import { accessLevelMeta, categoryLabel, maskKindLabel, quoteCheckLabel, sourceKindLabel, supportVerdictLabel } from "@/components/handover/labels";
+import { ContextualHelp } from "@/components/shared/contextual-help";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { GUARD_RATIONALE_PREFIX, isGuardedVerdict } from "@/components/shared/support-guard";
 import { MaskedText } from "@/components/shared/masked-text";
 import { statusConfig } from "@/config/status";
 import type { EvidenceItem, PointDetail, SourceSummary } from "@/lib/contracts/dto";
-import { ACCESS_LEVELS, type AccessLevel, type MaskKind } from "@/lib/contracts/enums";
+import { ACCESS_LEVELS, isChatSourceKind, type AccessLevel, type MaskKind } from "@/lib/contracts/enums";
 import { cn } from "@/lib/utils";
 
 import type { PointReviewFlag } from "@/lib/contracts/extraction";
@@ -45,12 +46,16 @@ const reviewActionLabel: Record<string, string> = {
   auto_reopen: "Reopened automatically",
   privacy_hold: "Privacy hold",
   resolve_privacy_review: "Resolved privacy review",
+  change_review: "Decided a source change",
 };
 
-function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+function Section({ title, children, className, help }: { title: string; children: React.ReactNode; className?: string; help?: React.ReactNode }) {
   return (
     <section className={cn("space-y-3 border-t border-border px-5 py-4", className)}>
-      <h3 className="type-eyebrow text-muted-foreground">{title}</h3>
+      <h3 className="flex items-center gap-1 text-sm font-semibold">
+        {title}
+        {help}
+      </h3>
       {children}
     </section>
   );
@@ -105,6 +110,7 @@ function Verification({ e }: { e: EvidenceItem }) {
       ) : (
         <CheckRow ok={quoteOk} warn={e.quoteCheck === "pending"}>
           {quoteCheckLabel[e.quoteCheck]}
+          <ContextualHelp topic="quote_check" label="What is the quote check?" className="-my-1 ml-0.5" />
         </CheckRow>
       )}
       <CheckRow
@@ -112,6 +118,7 @@ function Verification({ e }: { e: EvidenceItem }) {
         warn={e.supportVerdict === "partial" || e.supportVerdict === "unchecked"}
       >
         {supportVerdictLabel[e.supportVerdict]}
+        <ContextualHelp topic="ai_judgement" label="What is the AI judgement?" className="-my-1 ml-0.5" />
         {e.verdictRationale && <MaskedText className="block text-muted-foreground" text={e.verdictRationale} />}
       </CheckRow>
       {!e.isCurrentRevisionVerdict && e.supportVerdict !== "unchecked" && (
@@ -172,7 +179,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
         </Section>
       )}
 
-      <Section title={`Evidence (${point.evidence.length})`}>
+      <Section title={`Evidence (${point.evidence.length})`} help={<ContextualHelp topic="evidence" label="What counts as evidence?" />}>
         {point.evidence.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <CircleDashed aria-hidden="true" className="size-4" />
@@ -190,7 +197,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                   />
                   <Verification e={e} />
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <AccessBadge level={e.accessLevel} />
+                    <AccessBadge level={e.accessLevel} showEveryone={false} />
                     {e.excluded && (
                       <span className="text-xs text-muted-foreground">
                         Excluded{e.exclusionReason && (
@@ -231,10 +238,10 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
             {relatedSources.map((s) => {
               const masked = Object.entries(s.maskingCounts ?? {}).filter(([, n]) => (n ?? 0) > 0) as Array<[MaskKind, number]>;
               return (
-                <li key={s.id} className="rounded-lg border border-border bg-muted/40 p-3">
+                <li key={s.id} className="rounded-lg bg-muted/40 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium">{s.title}</p>
-                    <AccessBadge level={s.accessLevel} />
+                    <AccessBadge level={s.accessLevel} showEveryone={false} />
                   </div>
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                     <dt className="text-muted-foreground">Type</dt>
@@ -245,7 +252,7 @@ export function PointDetailPanel({ point, sources, readOnly, pending, onExclude,
                         <dd>{formatDateRange(s.firstMessageAt, s.lastMessageAt)}</dd>
                       </>
                     )}
-                    <dt className="text-muted-foreground">{s.kind === "whatsapp_export" ? "Messages" : "Blocks"}</dt>
+                    <dt className="text-muted-foreground">{isChatSourceKind(s.kind) ? "Messages" : "Blocks"}</dt>
                     <dd>{formatCount(s.messageCount)}</dd>
                     <dt className="text-muted-foreground">Raw file</dt>
                     <dd>{s.rawDeletedAt ? `Deleted ${formatDate(s.rawDeletedAt)}` : "Kept until processed"}</dd>

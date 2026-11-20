@@ -6,6 +6,7 @@
  * returns `not_found` for anything the viewer may not see (§8.5). Reads never mutate (§8.3).
  */
 
+import type { ChangeReviewItem } from "./change-review";
 import type { Result } from "./api";
 import type {
   AccessTokenSummary,
@@ -70,6 +71,8 @@ export interface BatonQueries {
    * signals and open review flags, with extraction blockers. `available: false` when the database lacks support.
    */
   getExtractionReport(handoverId: string): Promise<Result<ExtractionReport>>;
+  /** R3 Task 05E: change-review items of source updates the viewer may see (review roles; empty on an older database). */
+  getChangeReviews(handoverId: string): Promise<Result<ChangeReviewItem[]>>;
   /** R3 Task 03 (EXT-1). Review roles: signal-bearing messages no live point cites and nobody dismissed. */
   listUnreviewedSignals(handoverId: string, limit?: number): Promise<Result<UnreviewedSignalMessage[]>>;
   /** R3 Task 03 (VER-2/3). Review roles: flags on the current revision of every visible point. */

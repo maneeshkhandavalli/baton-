@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { categoryLabel } from "@/components/handover/labels";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,10 +158,8 @@ export function GapInterview({ token, data }: { token: string; data: GapIntervie
           {q && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge shape="tag" size="sm" tone={q.priority === "required" ? "warning" : "neutral"}>
-                  {q.priority === "required" ? "Important" : "Optional"}
-                </Badge>
-                {q.category && <span className="text-xs text-muted-foreground">{categoryLabel[q.category]}</span>}
+                <span className={cn("text-caption", q.priority === "required" ? "font-medium text-warning-fg" : "text-muted-foreground")}>{q.priority === "required" ? "Important" : "Optional"}</span>
+                {q.category && <span className="text-caption text-muted-foreground">· {categoryLabel[q.category]}</span>}
               </div>
               <h2 id={`q-${q.id}`} className="type-section-title"><MaskedText text={q.question} /></h2>
               {q.context && <p id={`qc-${q.id}`} className="text-sm text-muted-foreground"><MaskedText text={q.context} /></p>}

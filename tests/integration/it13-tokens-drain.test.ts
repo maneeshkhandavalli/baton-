@@ -63,12 +63,15 @@ describe("IT-13: created links", () => {
 
   it("inviteMember: same rules for invitations (/h/)", async () => {
     const w = actionWorld();
-    w.adminDb.returns("invite_member", randomUUID());
+    // R3 Task 06: send limits first; no email transport is configured, so the not_sent outcome is recorded.
+    w.adminDb.returns("consume_rate_limit", true).returns("invite_member", randomUUID()).returns("record_invitation_delivery", randomUUID());
     const result = await inviteMember({ handoverId: w.ids.handover, email: "incoming.person@example.org", role: "incoming", expiresInDays: 7 });
     assert.ok(result.ok, JSON.stringify(result));
     const token = tokenFrom(result.data.url, "/h/");
     assert.equal(w.adminDb.last("invite_member")?.args.p_token_hash, `\\x${sha256(token)}`);
     assertNeverStored(w, token);
+    assert.deepEqual(result.data.delivery, { status: "not_sent", reason: "email_not_configured" });
+    assert.deepEqual(w.adminDb.fns(), ["consume_rate_limit", "consume_rate_limit", "invite_member", "record_invitation_delivery"]);
   });
 
   for (const siteUrl of [undefined, "http://baton.example.test", "https://baton.example.test/path", "https://user:pw@baton.example.test"]) {

@@ -34,6 +34,7 @@ import { getVerifiedPepper } from "../../lib/pipeline/pepper";
 import { createDrainer } from "../../lib/pipeline/runner";
 import { computeIdentityPepperCanary } from "../../lib/privacy/identity";
 import { TEST_PEPPER } from "../../fixtures/parser/load";
+import { releaseBackedOffJobs } from "./support/backoff";
 import { captureConsole } from "./support/console-capture";
 import { PgBackedStorage, PgContainer, PsqlDbClient, lit } from "./support/pg";
 import { allowFakeAi, currentUserId, flushAfter, installCustomBackends, resetPlatform, signInAs } from "./support/platform";
@@ -93,7 +94,7 @@ describe("Tier E (R3): multi-source run with one failing source, and a real conf
       ids[u.name] = ticket.sourceId;
       await storage.upload(SOURCE_BUCKET, `raw/${handoverId}/${ticket.sourceId}`, u.bytes);
       ok(await confirmSourceUploaded({ sourceId: ticket.sourceId }), `confirm ${u.name}`);
-      ok(await recordSourceConsent({ sourceId: ticket.sourceId, consentStatementVersion: "consent@1", consentConfirmed: true,
+      ok(await recordSourceConsent({ sourceId: ticket.sourceId, consentStatementVersion: "local-test-2026-11-18-v1", consentConfirmed: true,
         accessLevel: "everyone", timezone: "Asia/Kolkata", ...(u.kind === "whatsapp_export" ? { dateOrder: "dmy" as const } : {}) }), `consent ${u.name}`);
     }
   });
@@ -112,8 +113,7 @@ describe("Tier E (R3): multi-source run with one failing source, and a real conf
       t.diagnostic(`pass ${i}: ${JSON.stringify(report)} → run ${status}`);
       if (report.claimed === 0 && (status === "queued" || status === "running")) {
         // a retry is waiting for its backoff: make it due now (test-only acceleration of the real schedule)
-        await pg.json(`select to_jsonb(count(*)) from (update public.processing_jobs set next_attempt_at = now() - interval '1 second'
-                        where run_id = ${lit(runId)} and status = 'queued' and next_attempt_at > now() returning 1) x`);
+        t.diagnostic(`released ${await releaseBackedOffJobs(pg, runId)} backed-off job(s)`);
       }
     }
     await captureConsole(() => flushAfter());
