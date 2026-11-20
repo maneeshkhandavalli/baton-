@@ -1,4 +1,4 @@
--- Round 3 Task 06: invitation email delivery records and reissue (docs/round3/task06-contract.md §3.2 items 3-5).
+-- Round 3 Task 06: invitation email delivery records and reissue (docs/history/round3/task06-contract.md §3.2 items 3-5).
 -- ADDITIVE: one append-only, server-only table; three new service-role functions; CREATE OR REPLACE of
 -- list_access_tokens that ADDS one key (delivery_status) and changes nothing else. No existing row is changed.
 --

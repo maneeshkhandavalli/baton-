@@ -1,4 +1,4 @@
--- Round 4 (connectors): the `chat_import` source kind (docs/round4/connectors-contract.md §3).
+-- Round 4 (connectors): the `chat_import` source kind (docs/connectors/connectors-contract.md §3).
 -- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY.
 --
 -- A `chat_import` source is the server-written JSON Lines transcript of a connected channel (GitHub, Discord,

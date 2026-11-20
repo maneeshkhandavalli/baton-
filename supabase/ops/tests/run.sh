@@ -117,7 +117,7 @@ check "listener: valid signature, no Authorization, key never seen" "$(grep '"pa
 
 echo "== at most one scheduler request in flight"
 # A pending dispatch is simulated (a real hung request would also stall pg_net itself: it does not start
-# queued requests while one of its batch is still open; see docs/round3/autonomous-worker.md).
+# queued requests while one of its batch is still open; see docs/architecture/autonomous-worker.md).
 pg -c "insert into baton_ops.worker_dispatches (request_id) values (999999980)" >/dev/null
 check "the tick waits while a dispatch is pending" "$(pg -c "select baton_ops.pipeline_worker_tick()")" "in_flight"
 pg -c "update baton_ops.worker_dispatches set dispatched_at = now() - interval '8 minutes' where request_id = 999999980" >/dev/null

@@ -43,7 +43,7 @@ const MASKED_TODAY: ReadonlyArray<{ text: string; secret: string }> = [
   { text: "passcode = 7788 for the cupboard", secret: "7788" },
 ];
 
-// Residual forms after the E0 fix (owner Agent 4). Each maps to a finding id in docs/qa/round3-findings.md.
+// Residual forms after the E0 fix (owner Agent 4). Each maps to a finding id in docs/history/round3/qa/round3-findings.md.
 const L5_RESIDUAL: ReadonlyArray<{ id: string; text: string; secrets: string[] }> = [
   { id: "QA-L5-R1", text: "card cvv 123 and CVV: 456", secrets: ["123", "456"] },
   { id: "QA-L5-R2", text: "locker pin no: 4821", secrets: ["4821"] },

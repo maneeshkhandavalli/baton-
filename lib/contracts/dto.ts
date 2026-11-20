@@ -105,7 +105,7 @@ export interface CreatedLink {
   expiresAt: string;
 }
 
-// ── R3 Task 06: invitations (docs/round3/task06-contract.md §6.1) ──────────────────────────────────────
+// ── R3 Task 06: invitations (docs/history/round3/task06-contract.md §6.1) ──────────────────────────────────────
 
 /** What happened to the invitation email. The creator always also gets the copyable `url` (D6). */
 export type InvitationDelivery =

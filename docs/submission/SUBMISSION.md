@@ -1,7 +1,7 @@
 # Baton — hackathon submission (DRAFT)
 
 > Draft. Items marked **[to confirm]** are filled in only after they are verified live. Do not submit claims that the
-> status checklist (`docs/round4/STATUS.md`) does not back.
+> status checklist (`docs/status/STATUS.md`) does not back.
 
 **Project link:** [to confirm — hosting option and AI provider pending; see `DEPLOYMENT_PLAN.md`] · **Code:** https://github.com/maneeshkhandavalli/baton- (branch
 `work/r4-integration`) · **Demo without an account:** `<link>/demo`
@@ -54,22 +54,22 @@ stale the week after, and can't be checked.
 
 Next.js 16 (App Router, Cache Components) · React 19 · TypeScript · Tailwind v4 · Supabase (Postgres + RLS, Auth,
 Storage) · Zod · background processing worker · node:test suites (≈3,000 tests) and SQL suites in throwaway Postgres
-containers. Details: `docs/architecture/`, connectors: `docs/round4/connectors-contract.md`.
+containers. Details: `docs/architecture/`, connectors: `docs/connectors/connectors-contract.md`.
 
 ## Verification (honest status)
 
-See `docs/round4/STATUS.md`.
+See `docs/status/STATUS.md`.
 
 * **Browser-verified (Playwright, real interactions, 2026-11-19; local stack, built-in test AI adapter):** sign-up,
   welcome and tours with saved progress, the full creator journey, Gap Interview without an account, publish,
   invitation (reissue, accept, already-used), incoming-member restrictions and acknowledgement, and Living Handover
   (new version → 2 contradictions → corrections → version 2 → re-acknowledge; version 3 → new information).
-  Evidence: `docs/round4/review/browser/VERIFICATION.md`.
+  Evidence: `docs/review/browser/VERIFICATION.md`.
 * **Automated:** ≈3,000 unit/integration tests plus SQL suites in throwaway Postgres containers, all passing.
 * **Live provider delivery:** **Telegram verified live on 2026-11-20** (local isolated stack via an ngrok tunnel,
   development bot, real group messages; capture consent and capture windows, import as versions 1 and 2, processing
   with the test adapter, publication v2, incoming acknowledgement, channel and group disconnect; evidence in
-  `docs/round4/STATUS.md`). **GitHub, Discord, Slack:** [to confirm per provider] — implemented on the same shared
+  `docs/status/STATUS.md`). **GitHub, Discord, Slack:** [to confirm per provider] — implemented on the same shared
   connector infrastructure and tested with synthetic events only; no live event verified.
 * **Processing with a real AI provider:** [to confirm] — verified with the deterministic test adapter only.
 

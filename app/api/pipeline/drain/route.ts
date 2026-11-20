@@ -1,6 +1,6 @@
 /**
  * Pipeline worker endpoint (D10, §9.3): the scheduled sweep that claims and runs due processing jobs. It is
- * what advances a hosted run when nobody has the site open (Round 3 JOB-1, docs/round3/autonomous-worker.md).
+ * what advances a hosted run when nobody has the site open (Round 3 JOB-1, docs/architecture/autonomous-worker.md).
  * Actions also schedule a small drain with `after()`, and the open processing page nudges one every ~20 s;
  * both are accelerators only, this route is the mechanism.
  *

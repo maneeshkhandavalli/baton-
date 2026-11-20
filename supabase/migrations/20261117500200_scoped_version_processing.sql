@@ -1,5 +1,5 @@
 -- Round 3 Task 05C (Living Handover, stage 2): scoped processing of source updates and the publication gate.
--- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/round3/living-handover-versions.md). Requires 20261117500100.
+-- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/architecture/living-handover-versions.md). Requires 20261117500100.
 --
 -- 1. SCOPED RUN. start_source_update_processing(actor, handover, …) starts a run whose SOURCE-SPECIFIC jobs
 --    (parse, extract, verify_quotes) are only for the sources that need them, derived by the database under the

@@ -120,7 +120,7 @@ const PATTERNS: Array<{ id: InjectionPattern; test: (t: string) => boolean }> = 
   },
 ];
 
-// ── PI-11 residuals (QA docs/qa/pi11-residuals.md) ─────────────────────────────
+// ── PI-11 residuals (QA docs/history/round3/qa/pi11-residuals.md) ─────────────────────────────
 
 const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", $: "s" };
 

@@ -1,4 +1,4 @@
--- Baton scheduled pipeline worker (Round 3 JOB-1 / Task 01B, docs/round3/autonomous-worker.md).
+-- Baton scheduled pipeline worker (Round 3 JOB-1 / Task 01B, docs/architecture/autonomous-worker.md).
 --
 -- OPERATOR SCRIPT, NOT A MIGRATION. Nothing applies it automatically. Prerequisites, in order:
 --   1. migration 20261117100100_pipeline_worker_slots.sql is applied (public.pipeline_work_due and the

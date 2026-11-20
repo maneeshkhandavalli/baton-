@@ -1,5 +1,5 @@
 /**
- * R3 Task 06: invitations (docs/round3/task06-contract.md §3, §4, §5, §6.2).
+ * R3 Task 06: invitations (docs/history/round3/task06-contract.md §3, §4, §5, §6.2).
  *
  *   getInvitation       read-only, works signed out; NEVER redeems (safe during render and prefetch, A4).
  *   acceptInvitation    redeems for the verified session user; call it ONLY from an explicit user submit (A4).

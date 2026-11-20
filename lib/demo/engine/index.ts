@@ -1,5 +1,5 @@
 /**
- * The demo engine (R3 Task 06, docs/round3/task06-contract.md §2, D1, A1): an isolated, per-visitor, database-free
+ * The demo engine (R3 Task 06, docs/history/round3/task06-contract.md §2, D1, A1): an isolated, per-visitor, database-free
  * demo workspace. Pure: no React, no I/O, no network, no environment, no global state. It runs in the browser (and in
  * server components for the first paint) and can never reach Supabase, the database, email or an AI provider
  * (lib/demo/__tests__/engine-boundaries.test.ts).

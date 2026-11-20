@@ -1,4 +1,4 @@
--- Baton raw-upload retention schedule (Round 3 Task 02, PRIV-2; docs/round3/privacy-and-data-protection.md).
+-- Baton raw-upload retention schedule (Round 3 Task 02, PRIV-2; docs/architecture/privacy-and-data-protection.md).
 --
 -- OPERATOR SCRIPT, NOT A MIGRATION, and OPT-IN: run it only after the owner approved the retention policy.
 -- It reuses the pipeline worker's scheduler infrastructure (supabase/ops/schedule-pipeline-worker.sql:

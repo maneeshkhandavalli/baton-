@@ -7,7 +7,7 @@
 --   * its handover is soft-deleted (R3-D5 discard cleanup: pending/uploaded/failed sources of a deleted draft).
 -- Anything else is invalid_transition (BTIT0). An already-recorded delete (raw path NULL) stays a no-op for
 -- every state, so retries are idempotent. The future 7-day ceiling for uploaded/failed sources (§12.6) is a
--- separate, fenced retention function (docs/proposals/retention.md §7), not this one.
+-- separate, fenced retention function (docs/architecture/proposals/retention.md §7), not this one.
 
 create or replace function public.mark_source_raw_deleted(p_source_id uuid)
 returns void

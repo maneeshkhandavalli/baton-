@@ -37,7 +37,7 @@ import { sourceErrorText } from "./source-error";
 
 const POLL_MS = 3_000; // D10
 /**
- * Accelerator only (JOB-1): the scheduled worker (docs/round3/autonomous-worker.md) advances runs without this
+ * Accelerator only (JOB-1): the scheduled worker (docs/architecture/autonomous-worker.md) advances runs without this
  * page; while the page is open it also asks for an extra drain so the run moves between scheduler ticks.
  */
 const NUDGE_MS = 20_000;

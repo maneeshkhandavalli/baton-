@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Invitation Server Functions (R3 Task 06, docs/round3/task06-contract.md §6.2). Logic: lib/actions/core/invitations.ts.
+ * Invitation Server Functions (R3 Task 06, docs/history/round3/task06-contract.md §6.2). Logic: lib/actions/core/invitations.ts.
  * acceptInvitation must be called ONLY from an explicit user submit; getInvitation never redeems (A4).
  */
 

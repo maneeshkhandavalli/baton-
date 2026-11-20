@@ -13,7 +13,7 @@ export const SLACK_API = "https://slack.com/api";
 export const SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2/authorize";
 
 /**
- * Bot scopes, each with the reason it is needed (shown in the setup guide, docs/round4/setup/SLACK_SCOPE_AUDIT.md).
+ * Bot scopes, each with the reason it is needed (shown in the setup guide, docs/connectors/SLACK_SCOPE_AUDIT.md).
  *
  * Required (always requested, and checked on the OAuth callback — an install missing any of them is refused):
  *  channels:history   read messages of public channels the app was added to (message.channels, history import)

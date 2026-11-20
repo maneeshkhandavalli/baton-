@@ -20,6 +20,8 @@ Shared contracts (enums, Zod schemas, DTOs, parser and identity contracts, the r
 `lib/contracts/` and are specified in `docs/architecture/shared-contracts.md`. The latest
 reconciliation with the feature branches is in `docs/architecture/contract-reconciliation.md`.
 
+All documentation is indexed in [`docs/README.md`](docs/README.md) (judges: start with `docs/submission/SUBMISSION.md`).
+
 ## Structure
 
 ```

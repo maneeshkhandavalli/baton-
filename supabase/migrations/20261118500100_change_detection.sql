@@ -1,5 +1,5 @@
 -- Round 3 Task 05D (Living Handover, stage 3): deterministic change detection and change-review items.
--- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/round3/living-handover-versions.md). Requires 20261117500200.
+-- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/architecture/living-handover-versions.md). Requires 20261117500200.
 -- ADDITIVE: new columns on source_version_changes (backfilled), one new table, CREATE OR REPLACE of functions with
 -- unchanged signatures, new functions. No existing row is deleted; no published snapshot is touched.
 --

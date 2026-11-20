@@ -22,7 +22,7 @@ const EXPECTED: Record<(typeof ACTION_FILES)[number], string[]> = {
   members: ["inviteMember", "updateMemberClearance", "removeMember", "acknowledgePublication"],
   privacy: ["eraseParticipant"],
   account: ["getAccountDeletionBlockers", "deleteAccount"],
-  // R3 Task 06 (docs/round3/task06-contract.md §6.2)
+  // R3 Task 06 (docs/history/round3/task06-contract.md §6.2)
   invitations: ["getInvitation", "acceptInvitation", "reissueInvitation", "requestInvitationSignInLink"],
 };
 

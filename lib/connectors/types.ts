@@ -1,5 +1,5 @@
 /**
- * Round 4 connector contract (docs/round4/connectors-contract.md). Shared by every provider adapter
+ * Round 4 connector contract (docs/connectors/connectors-contract.md). Shared by every provider adapter
  * (GitHub, Discord, Slack, Telegram). Owned by Main: workers do not change these types; they ask Main.
  *
  * The model in one paragraph: a creator INSTALLS a provider account (a GitHub App installation, a Discord

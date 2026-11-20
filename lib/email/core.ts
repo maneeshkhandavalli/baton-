@@ -1,5 +1,5 @@
 /**
- * Email transport for invitation emails (R3 Task 06, docs/round3/task06-contract.md §5, D5). Pure: no environment reads,
+ * Email transport for invitation emails (R3 Task 06, docs/history/round3/task06-contract.md §5, D5). Pure: no environment reads,
  * no logging, no module state. lib/email/index.ts builds the server's transport from the environment.
  *
  *   * The ONLY production transport is the Resend HTTP API, through `fetch` (no package). It exists only when BOTH

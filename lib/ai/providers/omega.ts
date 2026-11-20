@@ -6,7 +6,7 @@ import "server-only";
  * STATUS: EVALUATION ONLY. Never production-approved. lib/ai/config.ts accepts `AI_PROVIDER=omega` only with
  * NODE_ENV exactly "development"/"test" AND `BATON_ALLOW_EVAL_PROVIDER=1` (the operator's statement that
  * only synthetic data is processed), and never with a data-governance profile: the vendor's retention,
- * upstream processing and no-training terms are unknown (docs/round3/ai-extraction-and-verification.md).
+ * upstream processing and no-training terms are unknown (docs/ai/ai-extraction-and-verification.md).
  *
  * Why raw `fetch` and not the Anthropic SDK: this is a third-party gateway, not Anthropic. Like the Gemini
  * adapter, the host is pinned by Baton's own configuration and nothing is taken from process-wide defaults

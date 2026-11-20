@@ -1,5 +1,5 @@
 -- Round 3 Task 05B (Living Handover, stage 1): the source version model.
--- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/round3/living-handover-versions.md).
+-- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/architecture/living-handover-versions.md).
 --
 -- A source can receive a new, immutable VERSION. A version is an ordinary `sources` row linked to the row it
 -- replaces, so every existing link keeps working unchanged: messages, evidence, jobs, RLS (`source_visible`),

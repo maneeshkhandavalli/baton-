@@ -10,7 +10,7 @@ import type { ConnectorProvider } from "./types";
 
 type Env = Record<string, string | undefined>;
 
-/** Required server variables per provider (exact names; documented in docs/round4/setup/*.md). */
+/** Required server variables per provider (exact names; documented in docs/connectors/*.md). */
 export const CONNECTOR_ENV: Readonly<Record<ConnectorProvider, readonly string[]>> = {
   github: ["GITHUB_APP_ID", "GITHUB_APP_SLUG", "GITHUB_APP_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET", "GITHUB_APP_CLIENT_ID", "GITHUB_APP_CLIENT_SECRET"],
   discord: ["DISCORD_APPLICATION_ID", "DISCORD_PUBLIC_KEY", "DISCORD_BOT_TOKEN", "DISCORD_CLIENT_SECRET"],
@@ -19,7 +19,7 @@ export const CONNECTOR_ENV: Readonly<Record<ConnectorProvider, readonly string[]
 };
 
 /**
- * Optional Slack capabilities (off by default; docs/round4/setup/SLACK_SCOPE_AUDIT.md). Turning one on also needs
+ * Optional Slack capabilities (off by default; docs/connectors/SLACK_SCOPE_AUDIT.md). Turning one on also needs
  * the matching scopes/events in the Slack app and a reinstall from Baton.
  *  SLACK_PRIVATE_CHANNELS=1  private channels (groups:history, groups:read; events message.groups, group_left)
  *  SLACK_SLASH_COMMAND=1     the /handover slash command (commands)

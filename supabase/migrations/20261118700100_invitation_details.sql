@@ -1,4 +1,4 @@
--- Round 3 Task 06: invitation details and idempotent acceptance (docs/round3/task06-contract.md §3.2 items 1-2).
+-- Round 3 Task 06: invitation details and idempotent acceptance (docs/history/round3/task06-contract.md §3.2 items 1-2).
 -- ADDITIVE: one new server-only function and CREATE OR REPLACE of redeem_member_invite (same signature, same grants).
 -- No table or existing row is changed.
 --

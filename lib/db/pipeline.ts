@@ -260,7 +260,7 @@ export async function createSystemGapQuestion(
   })) as string;
 }
 
-// ── Integration worker support (migration 20261112000100, docs/integration/interfaces.md) ─────────────
+// ── Integration worker support (migration 20261112000100, docs/history/integration/interfaces.md) ─────────────
 // Service role only. Every read returns masked, persisted data; nothing here touches raw uploads.
 
 /** DB-1: claims only jobs whose earlier stages are terminal; reaps leases that expired on the last attempt. */

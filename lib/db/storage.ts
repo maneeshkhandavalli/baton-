@@ -274,7 +274,7 @@ async function download(storage: StorageClient, path: string): Promise<Uint8Arra
   return new Uint8Array(await data.arrayBuffer());
 }
 
-/** Best-effort removal; failures are left to the retention sweep (docs/proposals/retention.md). */
+/** Best-effort removal; failures are left to the retention sweep (docs/architecture/proposals/retention.md). */
 async function removeQuietly(storage: StorageClient, path: string): Promise<void> {
   try {
     await storage.from(SOURCE_BUCKET).remove([path]);
@@ -605,7 +605,7 @@ export async function deleteRawSource(db: DbClient, adminStorage: StorageClient,
  * `mark_source_raw_deleted` (idempotent). Database rows are never deleted (the purge stays behind D27).
  *
  * Never throws for Storage or marking failures or for a foreign path: those count as `failed`, keep
- * their raw path and are retried by the retention sweep (docs/proposals/retention.md). Throws a DbError
+ * their raw path and are retried by the retention sweep (docs/architecture/proposals/retention.md). Throws a DbError
  * only when the listing itself is refused (not_found, precondition_failed, unauthenticated, …).
  */
 export async function deleteHandoverRawObjects(

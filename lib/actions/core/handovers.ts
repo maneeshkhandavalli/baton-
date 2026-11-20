@@ -151,7 +151,7 @@ export async function startProcessing(deps: ActionDeps, input: { handoverId: str
 }
 
 /**
- * Accelerator (JOB-1): the scheduled worker (app/api/pipeline/drain, docs/round3/autonomous-worker.md) advances
+ * Accelerator (JOB-1): the scheduled worker (app/api/pipeline/drain, docs/architecture/autonomous-worker.md) advances
  * runs with no page open; this only adds drains between its ticks. The
  * processing page calls this every ~20 s while its run is queued/running; it schedules ONE more fenced
  * drain (`scheduleDrain`, the same `after()` drain startProcessing uses, with the same budget). Claim
@@ -256,7 +256,7 @@ export async function deleteHandover(deps: ActionDeps, input: { handoverId: stri
     try {
       await deleteHandoverRawObjects(db, deps.adminStorage(), actor, v.handoverId);
     } catch {
-      // retried by the retention sweep (docs/proposals/retention.md)
+      // retried by the retention sweep (docs/architecture/proposals/retention.md)
     }
     return ok(null);
   });

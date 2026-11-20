@@ -18,7 +18,7 @@ import { EVIDENCE_STATUSES } from "@/types/status";
 
 /**
  * Landing page, round 2 reconstruction of the Loopsii reference in Baton's identity
- * (docs/landing/loopsii-reference-breakdown.md; styles in app/(marketing)/landing.css; scroll choreography in
+ * (docs/design/landing/loopsii-reference-breakdown.md; styles in app/(marketing)/landing.css; scroll choreography in
  * components/marketing/landing-motion.tsx, motion-allowed only). Section order follows the reference:
  * hero mosaic → statement + orbit → dark pinned band → lime band with the product window → stacked step cards →
  * stage tiles → split panels → roadmap wheel → FAQ → stair-stepped outro → closing card.

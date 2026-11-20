@@ -1,5 +1,5 @@
 /**
- * Typed processing states and failures for the pipeline worker (§9.3, §10, docs/integration/interfaces.md I2).
+ * Typed processing states and failures for the pipeline worker (§9.3, §10, docs/history/integration/interfaces.md I2).
  *
  * Every failure carries an `ErrorCode` (ERROR_CODES only) and a structural reason token. The token is the
  * only text that ever reaches `processing_jobs.error_message` or `processing_runs.error_message`, so it

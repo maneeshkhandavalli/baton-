@@ -6,7 +6,7 @@ import { useEffect } from "react";
 
 /**
  * The landing page's scroll choreography (reference: Loopsii, which drives the same moments with GSAP ScrollTrigger
- * on top of Lenis; docs/landing/loopsii-reference-breakdown.md). Pinned moments are CSS `position: sticky` (no
+ * on top of Lenis; docs/design/landing/loopsii-reference-breakdown.md). Pinned moments are CSS `position: sticky` (no
  * ScrollTrigger pinning, so nothing traps the scroll or changes the page height); GSAP only scrubs properties.
  *
  * Everything is created inside `gsap.matchMedia("(prefers-reduced-motion: no-preference)")`, so with reduced motion

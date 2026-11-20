@@ -1,5 +1,5 @@
 -- Round 3 Task 05E (Living Handover, stage 4): the reviewer decision workflow for change-review items.
--- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/round3/living-handover-versions.md). Requires 20261118500100.
+-- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY (docs/architecture/living-handover-versions.md). Requires 20261118500100.
 -- ADDITIVE: two columns on source_change_review_items, one append-only table, one review-action value, new functions,
 -- and CREATE OR REPLACE of the item guard. No existing row is changed; no published snapshot is touched.
 --

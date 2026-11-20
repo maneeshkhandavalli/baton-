@@ -92,7 +92,7 @@ begin
 end $$;
 
 -- the outgoing member who started the retry cannot cancel it; only the creator can (implementation; §8.2 is
--- silent on cancel). Reported as a product question in docs/qa/round3-findings.md, not a failure.
+-- silent on cancel). Reported as a product question in docs/history/round3/qa/round3-findings.md, not a failure.
 do $$
 declare
   r text;

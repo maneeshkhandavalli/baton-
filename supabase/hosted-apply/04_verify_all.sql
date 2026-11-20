@@ -1,4 +1,4 @@
--- Baton Round 3: every §3 Verify query from docs/round3/migrations.md, combined so the SQL editor shows
+-- Baton Round 3: every §3 Verify query from docs/operations/migrations.md, combined so the SQL editor shows
 -- one result grid. Expected: 19 rows (#4 returns two), ok = true on every row.
 select '#1' as migration, ok from (
   select to_regprocedure('public.update_handover_details(uuid,uuid,timestamptz,text,text,text,text)') is not null

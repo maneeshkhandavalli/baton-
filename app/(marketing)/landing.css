@@ -1,6 +1,6 @@
 /*
  * Landing page reconstruction (round 2): a close structural and motion reconstruction of the Loopsii reference
- * (docs/landing/loopsii-reference-breakdown.md), in Baton's identity. Scoped to `.lp` (the landing page) and
+ * (docs/design/landing/loopsii-reference-breakdown.md), in Baton's identity. Scoped to `.lp` (the landing page) and
  * `.lp-nav` / `.lp-foot` (the marketing header and footer).
  *
  * Unit system: like the reference, sizes are multiples of `--u`, a viewport-relative unit with three bases

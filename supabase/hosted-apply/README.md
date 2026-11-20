@@ -1,7 +1,7 @@
 # Hosted apply: Round 3 Phase D (migrations #14–#18) on baton-dev
 
 Runner and pinned SQL for applying Phase D to the **isolated baton-dev project `xnwppnzvrpthukxjfojj`**.
-Background, per-migration notes and the full rollback recipes: `docs/round3/migrations.md` (§3, §5).
+Background, per-migration notes and the full rollback recipes: `docs/operations/migrations.md` (§3, §5).
 Ported from `baton-multiagent/restore-dev/run-hosted.sh` and `baton-multiagent/hosted-apply/`.
 
 > **Phase D writes to the database. Run `r3phaseD` only with explicit approval.**
@@ -71,7 +71,7 @@ The bundle's own job guard is a `DO` block **before** its `begin;`. That check i
 | 14 | Revokes `EXECUTE` on 8 unfenced pipeline writers from `public`, `anon`, `authenticated`, `service_role` | none (grants only) | Re-grant. Old workers that call these directly fail with `42501` until then. |
 | 15 | Revokes `EXECUTE` on `mark_source_parse_failed(uuid, text)` | none | Re-grant |
 | 16 | `api_get_processing_status` replaced (same signature): stage status gains `partial`; open jobs show `queued`/`running` instead of `failed` | none (read function) | Re-run the `20261111000900` definition. The UI must handle `partial` (the current build does). |
-| 17 | Adds `processing_jobs.claim_generation bigint not null default 0`, then **updates every job row** to `claim_generation = attempt` (30 rows on baton-dev on 2026-11-13). Replaces `_remember_claim_progress`, `_pipeline_claim` and `heartbeat_processing_job` (same signatures). Adds `_pipeline_use_generation` (no API grant) and 8 `pipeline_*` overloads (service_role only). Heartbeat no longer renews an expired lease. | One new column, backfilled. The only trigger on the table (`processing_jobs_claim_progress`) fires only when `attempt` increases, so the backfill does not trigger it. | Per `docs/round3/migrations.md` §3 #17: drop the overloads and helper, restore the three functions, then drop the column. Dropping the column loses the generation values. They are derived data, but jobs that yielded after #17 can't be told apart from new claims any more. Roll back #17 before #14/#15. |
+| 17 | Adds `processing_jobs.claim_generation bigint not null default 0`, then **updates every job row** to `claim_generation = attempt` (30 rows on baton-dev on 2026-11-13). Replaces `_remember_claim_progress`, `_pipeline_claim` and `heartbeat_processing_job` (same signatures). Adds `_pipeline_use_generation` (no API grant) and 8 `pipeline_*` overloads (service_role only). Heartbeat no longer renews an expired lease. | One new column, backfilled. The only trigger on the table (`processing_jobs_claim_progress`) fires only when `attempt` increases, so the backfill does not trigger it. | Per `docs/operations/migrations.md` §3 #17: drop the overloads and helper, restore the three functions, then drop the column. Dropping the column loses the generation values. They are derived data, but jobs that yielded after #17 can't be told apart from new claims any more. Roll back #17 before #14/#15. |
 | 18 | `api_get_point` replaced (same signature): evidence items gain `guarded` and `model_verdict` | none (read function) | Re-run `20261111000900_read_api.sql:160`. Rolling back cannot undo the exposure: reviewers will already have seen which verdicts the injection guard overrode. |
 
 No migration deletes or truncates data. Every change is in one transaction, so a failure leaves the database exactly as it was. After `commit`, `notify pgrst, 'reload schema'` makes PostgREST see #17's overloads.

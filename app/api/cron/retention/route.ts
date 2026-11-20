@@ -5,7 +5,7 @@
  * Callers: the database scheduler (supabase/ops/schedule-raw-retention.sql, POST with a signed
  * `x-baton-dispatch` header bound to the "retention" purpose: a pipeline-drain header is refused here) or a
  * Vercel schedule / manual call (POST or GET with `Authorization: Bearer <CRON_SECRET>`). Same credentials and
- * conventions as the pipeline worker (docs/round3/autonomous-worker.md); no second scheduler.
+ * conventions as the pipeline worker (docs/architecture/autonomous-worker.md); no second scheduler.
  *
  * The response and logs hold counts only. HEAD never runs the sweep.
  */

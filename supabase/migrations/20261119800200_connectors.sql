@@ -1,4 +1,4 @@
--- Round 4: provider connectors (GitHub, Discord, Slack, Telegram). docs/round4/connectors-contract.md §1, §7.
+-- Round 4: provider connectors (GitHub, Discord, Slack, Telegram). docs/connectors/connectors-contract.md §1, §7.
 -- REQUIRES APPROVAL BEFORE ANY HOSTED APPLY.
 --
 -- ADDITIVE: four new server-only tables and service-role-only SECURITY DEFINER functions. No existing table or

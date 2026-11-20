@@ -23,7 +23,7 @@ import "server-only";
  *     Services": no use of prompts or responses to improve Google products; processing under Google's Data
  *     Processing Addendum; prompts and responses still logged for a limited period for abuse monitoring).
  *     Setting it is the operator's attestation that the key belongs to such a project. Owner approval is
- *     still required (docs/round3/privacy-and-data-protection.md §Provider).
+ *     still required (docs/architecture/privacy-and-data-protection.md §Provider).
  * Development and tests are unchanged (synthetic data only).
  *
  * R3 Task 03 (provider evaluation): `AI_PROVIDER=omega` selects the Omega Plus Anthropic-compatible gateway

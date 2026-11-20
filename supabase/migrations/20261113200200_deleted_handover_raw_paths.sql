@@ -1,7 +1,7 @@
 -- Round 3 (Agent 3, R3-D5): raw cleanup on discard. Additive: one read-only, service_role-only function.
 -- delete_handover only soft-deletes the handover; its sources keep their raw paths and, while D27 keeps
 -- purge_handover closed, their raw (unmasked) uploads would stay in Storage indefinitely
--- (docs/proposals/retention.md §4). After delete_handover commits, the server lists the raw paths with
+-- (docs/architecture/proposals/retention.md §4). After delete_handover commits, the server lists the raw paths with
 -- this function, deletes each object (lib/db/storage.ts deleteHandoverRawObjects) and records it with the
 -- existing mark_source_raw_deleted (service role; idempotent; it applies to sources of deleted handovers
 -- too). No database content is deleted here, so the purge gate (D27) is untouched.

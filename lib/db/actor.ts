@@ -36,7 +36,7 @@ export async function getVerifiedActor(): Promise<VerifiedActor | null> {
 }
 
 /**
- * Round 4 connectors (docs/round4/connectors-contract.md §5): the actor of a connector FLUSH, which runs without a
+ * Round 4 connectors (docs/connectors/connectors-contract.md §5): the actor of a connector FLUSH, which runs without a
  * browser session (scheduled sync or a bot command). It is derived from a LINK ID only, never from a user object:
  * `connector_flush_actor` returns the profile that gave capture consent for that link, and only while the link is
  * not revoked, its installation is active and that profile is still the handover's creator. Every mutation the

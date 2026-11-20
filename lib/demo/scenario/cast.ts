@@ -3,7 +3,7 @@
  *
  * Everyone here is invented. Email addresses use example.org and phone numbers use the synthetic
  * `99999 0000N` pattern, so Baton's masking can be seen working on them. See
- * docs/design/collab/demo/scenario.md in the lead worktree for the full story.
+ * docs/history/design/collab/demo/scenario.md in the lead worktree for the full story.
  * Pure data: no React, no I/O, safe in client and server code.
  */
 

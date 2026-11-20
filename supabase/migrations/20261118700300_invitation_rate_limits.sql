@@ -1,4 +1,4 @@
--- Round 3 Task 06: rate limits for invitation details and invitation email (docs/round3/task06-contract.md §3.2 item 6).
+-- Round 3 Task 06: rate limits for invitation details and invitation email (docs/history/round3/task06-contract.md §3.2 item 6).
 -- ADDITIVE: four new scopes in the rate_limit_counters CHECK and in consume_rate_limit's fixed list. Every existing scope
 -- keeps exactly its limit and window; existing counters are untouched.
 --
