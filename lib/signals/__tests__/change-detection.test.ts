@@ -202,6 +202,24 @@ describe("detectChanges", () => {
     assert.ok((c[0].detail.reasons as string[]).includes("reversal_marker"));
   });
 
+  it("a new-version block this run already cites is also an anchor: still one item per point and message (unique dedupe keys)", () => {
+    // Judge repro: a .md notes update whose extraction cites new blocks; those blocks come back as anchors too.
+    const e = ev(1, QUOTE, { sentAt: null, authorLabel: null, heading: "Banking" });
+    const later = msg(2, "Actually the club bank signing mandate moved to [PERSON_2] in April", { sentAt: null, authorLabel: null, heading: "Banking" });
+    const r = detectChanges(input({
+      // the point's own anchor sorts before the duplicated block (ids are random in production)
+      family: "document", watermark: null, oldEvidence: [e], points: [point(1, { citedMessageIds: [U(11)] })],
+      anchors: [{ ...anchor, id: U(11), sentAt: null }, { id: later.id, sourceId: U(2), seq: 2, sentAt: null, authorLabel: null, body: later.body }],
+      newMessages: [msg(1, QUOTE, { sentAt: null, authorLabel: null, heading: "Banking" }), later],
+    }));
+    const keys = r.items.map((i) => i.dedupeKey);
+    assert.equal(new Set(keys).size, keys.length, "the database refuses duplicate dedupe keys for the whole update");
+    const c = r.items.filter((i) => i.kind === "possible_contradiction");
+    assert.equal(c.length, 1);
+    assert.equal(c[0].newMessageId, later.id);
+    assert.equal(r.counts.possibleContradictions, 1);
+  });
+
   it("documents: uncited blocks are only previously uncited; a contradiction there says so", () => {
     const e = ev(1, QUOTE, { sentAt: null, authorLabel: null, heading: "Banking" });
     const r = detectChanges(input({
