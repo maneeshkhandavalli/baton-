@@ -168,10 +168,14 @@ describe("landing: loading", () => {
     const src = read("components/marketing/intro-splash.tsx");
     assert.match(src, /^"use client";/);
     assert.match(src, /aria-hidden="true"/);
-    assert.match(src, /sessionStorage\.getItem/);
-    assert.match(src, /try\{[\s\S]*sessionStorage[\s\S]*\}catch/);
-    assert.match(src, /prefers-reduced-motion: no-preference/);
-    assert.match(src, /setAttribute\("data-show",""\)/, "only the inline script reveals it");
+    // the pre-paint decision is a static classic script, never injected raw HTML (IT-04)
+    assert.match(src, /<script src=\{INTRO_SPLASH_INIT_SRC\} \/>/);
+    assert.doesNotMatch(src, /dangerouslySetInnerHTML/);
+    const init = read("public/intro-splash-init.js");
+    assert.match(init, /sessionStorage\.getItem\("baton:intro-seen"\)/);
+    assert.match(init, /try\{[\s\S]*sessionStorage[\s\S]*\}catch/);
+    assert.match(init, /prefers-reduced-motion: no-preference/);
+    assert.match(init, /setAttribute\("data-show",""\)/, "only the init script reveals it");
     assert.match(read("app/(marketing)/page.tsx"), /<IntroSplash \/>/);
     const css = read("app/(marketing)/landing.css");
     assert.match(css, /\.lp-splash \{\s*display: none;/, "hidden by default (no JS, reduced motion)");
