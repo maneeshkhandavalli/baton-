@@ -6,28 +6,46 @@
  * guided tour, or explore on their own. Closing it any way counts as seen, so it never comes back by itself.
  */
 
-import { BookOpenCheck, FileStack, ShieldCheck, UsersRound } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { GuideRole } from "@/lib/onboarding/state";
 
 import { useGuidance } from "./guidance";
 
 interface Point {
-  icon: typeof FileStack;
   title: string;
   text: string;
 }
 
-export function welcomeCopy(role: GuideRole, opts: { tourAvailable: boolean; acknowledges: boolean }): { lead: string; points: Point[]; tourLabel: string | null } {
+export function welcomeCopy(
+  role: GuideRole,
+  opts: { tourAvailable: boolean; acknowledges: boolean },
+): { lead: string; points: Point[]; tourLabel: string | null } {
   if (role === "incoming") {
     return {
       lead: "Someone has handed a role over to you. Baton keeps what they knew in one place, so you can start without guessing.",
       points: [
-        { icon: FileStack, title: "A handover", text: "Decisions, owners, access, open work and risks, each linked to the message it came from." },
-        { icon: BookOpenCheck, title: "What to do", text: opts.acknowledges ? "Read it, start with your first 7 days, then acknowledge it so the team knows you have it." : "Read it and start with your first 7 days. Come back to it any time." },
-        { icon: ShieldCheck, title: "What you see", text: "Only what your access level allows. Personal details were masked before anything was saved." },
+        {
+          title: "A handover",
+          text: "Decisions, owners, access, open work and risks, each linked to the message it came from.",
+        },
+        {
+          title: "What to do",
+          text: opts.acknowledges
+            ? "Read it, start with your first 7 days, then acknowledge it so the team knows you have it."
+            : "Read it and start with your first 7 days. Come back to it any time.",
+        },
+        {
+          title: "What you see",
+          text: "Only what your access level allows. Personal details were masked before anything was saved.",
+        },
       ],
       tourLabel: opts.tourAvailable ? "Take the guided tour" : null,
     };
@@ -35,9 +53,18 @@ export function welcomeCopy(role: GuideRole, opts: { tourAvailable: boolean; ack
   return {
     lead: "Baton turns a team's chats and documents into a handover the next person can trust, so knowledge doesn't leave with the person who leaves.",
     points: [
-      { icon: FileStack, title: "A handover", text: "Decisions, owners, access, open work and risks of a role, each linked to the message it came from." },
-      { icon: UsersRound, title: "How it works", text: "Add sources with consent, Baton drafts the points, you review them, invite the incoming person and publish." },
-      { icon: ShieldCheck, title: "Privacy first", text: "Phone numbers, emails and payment details are masked before anything is saved, and nothing is shared until you publish." },
+      {
+        title: "A handover",
+        text: "Decisions, owners, access, open work and risks of a role, each linked to the message it came from.",
+      },
+      {
+        title: "How it works",
+        text: "Add sources with consent, Baton drafts the points, you review them, invite the incoming person and publish.",
+      },
+      {
+        title: "Privacy first",
+        text: "Phone numbers, emails and payment details are masked before anything is saved, and nothing is shared until you publish.",
+      },
     ],
     tourLabel: opts.tourAvailable ? "Take the guided tour" : null,
   };
@@ -50,7 +77,10 @@ export function WelcomeDialog() {
   const role = data.roles.primary;
   const steps = data.tours[role] ?? [];
   const acknowledges = steps.some((s) => s.id === "acknowledge");
-  const copy = welcomeCopy(role, { tourAvailable: steps.length > 0, acknowledges });
+  const copy = welcomeCopy(role, {
+    tourAvailable: steps.length > 0,
+    acknowledges,
+  });
 
   const finish = () => {
     closeWelcome();
@@ -58,36 +88,43 @@ export function WelcomeDialog() {
   };
 
   return (
-    <Dialog open={welcomeOpen} onOpenChange={(open) => (open ? undefined : finish())}>
-      <DialogContent className="sm:max-w-lg" data-testid="welcome-dialog">
+    <Dialog
+      open={welcomeOpen}
+      onOpenChange={(open) => (open ? undefined : finish())}
+    >
+      <DialogContent className="sm:max-w-md" data-testid="welcome-dialog">
         <DialogHeader>
-          <p className="type-eyebrow text-muted-foreground">{role === "incoming" ? "Welcome" : "Welcome to Baton"}</p>
-          <DialogTitle>{data.firstName ? `Hello, ${data.firstName}` : role === "incoming" ? "Welcome to your handover" : "Hello"}</DialogTitle>
+          <DialogTitle>
+            {data.firstName
+              ? `Welcome, ${data.firstName}`
+              : role === "incoming"
+                ? "Welcome to your handover"
+                : "Welcome to Baton"}
+          </DialogTitle>
           <DialogDescription>{copy.lead}</DialogDescription>
         </DialogHeader>
-        <ul className="space-y-3 py-1">
+        <ul className="space-y-2.5">
           {copy.points.map((p) => (
-            <li key={p.title} className="flex items-start gap-3">
-              <span aria-hidden="true" className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground">
-                <p.icon className="size-4" />
-              </span>
-              <span className="text-sm leading-relaxed">
-                <span className="font-medium text-foreground">{p.title}. </span>
-                <span className="text-muted-foreground">{p.text}</span>
-              </span>
+            <li key={p.title} className="text-sm leading-relaxed">
+              <span className="font-medium text-foreground">{p.title}. </span>
+              <span className="text-muted-foreground">{p.text}</span>
             </li>
           ))}
         </ul>
         {!copy.tourLabel && role === "incoming" && (
-          <p className="text-caption text-muted-foreground">Your handover isn&rsquo;t published yet. It will appear on your dashboard when the team publishes it.</p>
+          <p className="text-caption text-muted-foreground">
+            Your handover isn&rsquo;t published yet. It will appear on your
+            dashboard when the team publishes it.
+          </p>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={finish}>
+          <Button variant="ghost" className="max-sm:h-10" onClick={finish}>
             {copy.tourLabel ? "Explore on my own" : "Got it"}
           </Button>
           {copy.tourLabel && (
             <Button
               autoFocus
+              className="max-sm:h-10"
               onClick={() => {
                 record({ type: "welcome_seen" });
                 startTour(role);
