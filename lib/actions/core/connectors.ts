@@ -236,6 +236,8 @@ const consentInput = z.object({
  *   and history capability; 4. fetch the history FIRST: if the provider fails, nothing has been written (no setting,
  *   no consent, no capture window, no state change, no announcement); 5. only then save historyDays and record consent
  *   (if recording consent fails, the previous settings are written back: two writes, compensated, not atomic);
+ *   a RETRY on an already capturing link keeps its consent time (store/SQL) and re-fetches the ORIGINAL interval
+ *   (consent time − saved history days), so the batch delivery prefix, the window and Discord's initial cursor stay put;
  *   6. buffer the history in ≤ 100-message batches (fix 1); 7. announce.
  * A history batch that still fails after one retry is surfaced: consent IS recorded (said so in the message), and
  * confirming again re-fetches and re-buffers safely (upserts by provider message id, no duplicates; an already
@@ -258,21 +260,30 @@ export async function recordCaptureConsent(deps: ActionDeps, c: ConnectorDeps, i
       }
       const ctx = c.adapterContext();
       let history: ConnectorMessage[] = [];
+      let wroteSettings = false;
       if (v.historyDays > 0 && adapter.fetchHistory) {
         await store.listLinksForHandover(user, before.handoverId); // creator only: forbidden otherwise (read-only)
         if (inst.installedByProfileId !== actor.profileId) {
           return failWith("forbidden", { message: "Only the person who connected this app can bring in earlier messages." });
         }
         if (inst.status !== "active" || before.state === "revoked") return failWith("invalid_transition", { message: "That can't be changed in the connection's current state." });
-        const since = new Date(c.now() - v.historyDays * 86_400_000).toISOString();
-        history = (await adapter.fetchHistory(ctx, inst, before, since, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush)).slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush);
-        await store.updateLinkSettings(user, v.linkId, { ...before.settings, historyDays: v.historyDays });
+        // The consented interval is fixed at the FIRST successful consent: a retry while the link is already capturing
+        // fetches the same interval again (original consent time − the saved history days), not a rolling "now − N
+        // days" that would drop the oldest messages of a failed batch. The saved setting is not changed by a retry.
+        const savedDays = Number(before.settings.historyDays);
+        const retry = before.state === "capturing" && before.consentedAt !== null && Number.isInteger(savedDays) && savedDays > 0;
+        const sinceMs = retry ? Date.parse(before.consentedAt as string) - savedDays * 86_400_000 : c.now() - v.historyDays * 86_400_000;
+        history = (await adapter.fetchHistory(ctx, inst, before, new Date(sinceMs).toISOString(), CONNECTOR_MESSAGE_LIMITS.messagesPerFlush)).slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush);
+        if (!retry) {
+          await store.updateLinkSettings(user, v.linkId, { ...before.settings, historyDays: v.historyDays });
+          wroteSettings = true;
+        }
       }
       let link: ChannelLinkRecord;
       try {
         link = await store.recordCaptureConsent(user, v.linkId, v.consentVersion);
       } catch (e) {
-        if (v.historyDays > 0) await store.updateLinkSettings(user, v.linkId, before.settings).catch(() => {}); // compensate
+        if (wroteSettings) await store.updateLinkSettings(user, v.linkId, before.settings).catch(() => {}); // compensate
         throw e;
       }
       let incomplete: HistoryImportResult | null = null;

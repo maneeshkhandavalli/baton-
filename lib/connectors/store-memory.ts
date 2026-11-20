@@ -226,10 +226,18 @@ export class MemoryConnectorStore implements ConnectorStore {
     const inst = this.installations.get(l.installationId);
     if (!inst || inst.status !== "active") throw new ConnectorStoreError("invalid_transition");
     const first = l.consentedAt === null;
-    const wasCapturing = l.state === "capturing";
+    // Mirrors connector_record_capture_consent (20261120800500): confirming again while capturing keeps the original
+    // consent time (it anchors the first window, the history interval, history batch ids and Discord's initial cursor).
+    const wasCapturing = l.state === "capturing" && l.consentedAt !== null;
     // Mirrors _trg_connector_capture_window_history (20261120800400): no back-dated window without history import.
     if (!wasCapturing && first && historyDaysOf(l.settings) > 0 && !providerHasHistory(inst.provider)) throw new ConnectorStoreError("validation_failed");
-    Object.assign(l, { state: "capturing", consentVersion, consentedAt: this.iso(), consentedByProfileId: (actor as { profileId: string }).profileId, updatedAt: this.iso() });
+    Object.assign(l, {
+      state: "capturing",
+      consentVersion,
+      consentedAt: wasCapturing ? l.consentedAt : this.iso(),
+      consentedByProfileId: wasCapturing ? l.consentedByProfileId : (actor as { profileId: string }).profileId,
+      updatedAt: this.iso(),
+    });
     if (!wasCapturing) this.openWindow(l.id, this.now() - (first ? historyDaysOf(l.settings) * 86_400_000 : 0));
     this.audit.push({ action: "connector.capture_consented", actor: this.actorKey(actor), entityId: l.id, handoverId: l.handoverId });
     return { ...l };

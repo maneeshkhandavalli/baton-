@@ -25,9 +25,9 @@ The connector infrastructure (capture consent, capture windows, buffer, flush, v
 pending-version consent) is shared by all four providers and covered by synthetic tests for each of them. Only
 **Telegram** has been verified live; Discord, Slack and GitHub have not.
 
-## Last full regression (2026-11-20, PR #7 second-review fixes)
+## Last full regression (2026-11-20, PR #7 history-retry follow-up)
 
-Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 289 ·
+Every command exited 0: typecheck ✅ · lint ✅ · contracts 116 · db 240 · parsers 630 · ui 425 · ai 312 · actions 293 ·
 pipeline 251 · connectors 198 · integration 404 + 1 TODO (PI-11 D11-LIVE-1, live-provider test) · SQL 32/32 files
 (incl. `99_connectors_r4` §12 history invariant and §13 capacity, `99_connector_version_consent`) · integration SQL
 15/15, 0 open findings.
@@ -128,6 +128,13 @@ Migration `20261120800400` is in the repo and passes the SQL suite; it is **not 
   the action says so ("Baton started saving new messages, but some earlier messages couldn't be brought in") and
   confirming again re-imports safely (no duplicates, no second window or announcement). The retry is offered while the
   consent step is open; after a page reload there is no dedicated "retry history" control.
+* **History retries are stable (follow-up).** Confirming consent again while a link is already capturing keeps its
+  original consent time (store and SQL, migration `20261120800500`), so a retry re-fetches the ORIGINAL interval
+  (consent time − saved history days), keeps the batch delivery prefix, opens no second window and leaves Discord's
+  initial pull cursor where it was. Batch delivery ids also carry a digest of which messages the batch holds (ids and
+  times, never text): an unchanged completed batch is skipped as a duplicate, a changed one is reprocessed, so a
+  provider answer that changed between attempts (deleted, edited or newly arrived messages) never silently skips an
+  older message. Migrations `20261120800400` and `20261120800500` are **not applied** to `baton-connectors-test`.
 
 ### Open risks (not fixed)
 

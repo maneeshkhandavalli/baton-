@@ -10,6 +10,8 @@
  * never logged. A `failed` outcome means the provider should retry (respond 5xx); everything else is final (2xx).
  */
 
+import { createHash } from "node:crypto";
+
 import {
   type ChannelLinkRecord,
   CONNECTOR_MESSAGE_KINDS,
@@ -203,8 +205,21 @@ export function historyBatches<T>(messages: readonly T[], size: number = CONNECT
   return out;
 }
 
-/** Deterministic, distinct delivery id of history batch `index` (zero-padded so ids sort in batch order). */
-export const historyDeliveryId = (prefix: string, index: number): string => `${prefix}:${String(index).padStart(3, "0")}`;
+/**
+ * Delivery id of one history batch: the stable import prefix, the batch index (zero-padded, for ordering) and a
+ * digest of WHICH messages the batch holds (provider message id, send time, edit time; never the text).
+ *
+ * Why not the index alone: a retry fetches the same interval again, but the provider's answer can differ (a message
+ * deleted, edited or newly arrived), so batch N may hold different messages than before. With an index-only id the
+ * ledger would call the new batch N a "duplicate" of the old one and silently skip messages that moved into it. With
+ * the digest, an unchanged batch keeps its id (a completed batch is a duplicate and is skipped), and any change gives
+ * a new id that is processed; buffering upserts by provider message id, so re-processing never duplicates rows.
+ */
+export function historyDeliveryId(prefix: string, index: number, batch: readonly Pick<ConnectorMessage, "providerMessageId" | "sentAt" | "editedAt">[]): string {
+  const digest = createHash("sha256");
+  for (const m of batch) digest.update(`${m.providerMessageId} ${m.sentAt} ${m.editedAt ?? ""}`);
+  return `${prefix}:${String(index).padStart(3, "0")}:${digest.digest("hex").slice(0, 16)}`;
+}
 
 export interface HistoryImportResult {
   /** Batches sent through ingestEvent (0 when there was nothing to import). */
@@ -218,7 +233,7 @@ export interface HistoryImportResult {
 /**
  * PR #7 second review, fix 1: a consent-time history import may hold up to messagesPerFlush (5,000) messages, but an
  * event carries at most messagesPerEvent (100) — sanitizeMessages drops the rest. So history goes through the ORDINARY
- * ingest path in ordered batches of ≤ 100, each with its own deterministic delivery id (ledger de-duplication, capture
+ * ingest path in ordered batches of ≤ 100, each with its own deterministic, content-derived delivery id (ledger de-duplication, capture
  * windows, sanitising and per-link filtering all apply unchanged). Every outcome is checked:
  *  - processed / duplicate (already done) / ignored (e.g. nothing in the batch was inside the capture window, or it
  *    sanitised to nothing) → done; ignoring is a final, truthful outcome, never a failure;
@@ -236,7 +251,7 @@ export async function ingestHistory(
   const batches = historyBatches(messages.slice(0, CONNECTOR_MESSAGE_LIMITS.messagesPerFlush));
   const result: HistoryImportResult = { batches: batches.length, buffered: 0, failed: [] };
   for (const [index, batch] of batches.entries()) {
-    const deliveryId = historyDeliveryId(base.deliveryPrefix, index);
+    const deliveryId = historyDeliveryId(base.deliveryPrefix, index, batch);
     const event: NormalizedEvent = {
       provider: base.provider, deliveryId, eventType: "history_import",
       externalAccountId: base.externalAccountId, externalChannelId: base.externalChannelId, messages: batch,

@@ -451,3 +451,58 @@ begin
   perform tests.eq(tests.buf_count(v_link), 20000, 'the link still holds exactly 20,000');
   perform tests.as_owner();
 end $$;
+
+-- ── 14. confirming consent while capturing keeps the consent time (history-retry follow-up) ─────────────────────
+-- Separate statements = separate transactions, so now() moves between them (pg_sleep makes the gap certain).
+do $$
+declare
+  v_inst uuid;
+  v_link uuid;
+begin
+  perform tests.as_service();
+  v_inst := (public.connector_upsert_installation('user', tests.id('ann'), 'slack', 'T0STABLE', 'Stable QA', '{}', null) ->> 'id')::uuid;
+  v_link := (public.connector_link_channel('user', tests.id('ann'), v_inst, tests.id('h'), 'C0STABLE', '#stable', '{}') ->> 'id')::uuid;
+  perform public.connector_update_link_settings('user', tests.id('ann'), v_link, '{"historyDays": 7}');
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link, 'connector-capture-v1');
+  perform tests.as_owner();
+  perform tests.put('stable_link', v_link);
+  perform tests.kv_put('stable_first', (select jsonb_build_object('at', consented_at, 'by', consented_by_profile_id)
+                                          from public.connector_channel_links where id = v_link));
+end $$;
+select pg_sleep(0.05);
+do $$
+declare
+  v_link uuid := tests.id('stable_link');
+begin
+  perform tests.as_service();
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link, 'connector-capture-v2');
+  perform tests.as_owner();
+  perform tests.eq((select jsonb_build_object('at', consented_at, 'by', consented_by_profile_id) from public.connector_channel_links where id = v_link),
+                   tests.kv('stable_first'), 'confirming again while capturing keeps consented_at (and who consented)');
+  perform tests.eq((select consent_version from public.connector_channel_links where id = v_link), 'connector-capture-v2',
+                   'the newer consent version is still recorded');
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link), 1, 'no second window');
+  perform tests.ok((select opened_at = l.consented_at - interval '7 days' from public.connector_capture_windows w
+                      join public.connector_channel_links l on l.id = w.link_id where w.link_id = v_link),
+                   'the first window still starts at the original consent time minus the history days');
+  perform tests.eq((select count(*)::int from public.audit_logs where entity_id = v_link and action = 'connector.capture_consented'), 2,
+                   'both confirmations are audited');
+  perform tests.as_service();
+  perform public.connector_set_link_state('user', tests.id('ann'), v_link, 'paused');
+  perform tests.as_owner();
+end $$;
+select pg_sleep(0.05);
+do $$
+declare
+  v_link uuid := tests.id('stable_link');
+begin
+  perform tests.as_service();
+  perform public.connector_record_capture_consent('user', tests.id('ann'), v_link, 'connector-capture-v2');
+  perform tests.as_owner();
+  perform tests.ok((select consented_at > (tests.kv('stable_first') ->> 'at')::timestamptz from public.connector_channel_links where id = v_link),
+                   'consent after a pause records a new consent time');
+  perform tests.eq((select count(*)::int from public.connector_capture_windows where link_id = v_link), 2, 'and opens a new window');
+  perform tests.ok((select w.opened_at = l.consented_at from public.connector_capture_windows w
+                      join public.connector_channel_links l on l.id = w.link_id where w.link_id = v_link and w.closed_at is null),
+                   'the new window starts at the new consent time (not back-dated)');
+end $$;

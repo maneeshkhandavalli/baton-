@@ -432,10 +432,15 @@ describe("history import in batches (ingestHistory)", () => {
     const b = historyBatches(HIST(250));
     assert.deepEqual(b.map((x) => x.length), [100, 100, 50]);
     assert.deepEqual(b.flat().map((m) => m.providerMessageId), HIST(250).map((m) => m.providerMessageId));
-    const ids = [0, 1, 2].map((i) => historyDeliveryId("history:L:t0", i));
-    assert.deepEqual(ids, ["history:L:t0:000", "history:L:t0:001", "history:L:t0:002"]);
+    const ids = b.map((batch, i) => historyDeliveryId("history:L:t0", i, batch));
+    assert.deepEqual(ids.map((id) => id.split(":").slice(0, 4).join(":")), ["history:L:t0:000", "history:L:t0:001", "history:L:t0:002"]);
+    assert.ok(ids.every((id) => /^history:L:t0:[0-9]{3}:[0-9a-f]{16}$/.test(id)));
     assert.equal(new Set(ids).size, 3);
-    assert.deepEqual([0, 1, 2].map((i) => historyDeliveryId("history:L:t0", i)), ids, "same input → same ids");
+    assert.deepEqual(historyBatches(HIST(250)).map((batch, i) => historyDeliveryId("history:L:t0", i, batch)), ids, "same input → same ids");
+    // a batch whose messages differ (an edit, a deletion, a newly arrived message) gets a different id
+    const edited = b[1].map((m, k) => (k === 5 ? { ...m, editedAt: "2026-11-19T09:00:00.000Z" } : m));
+    assert.notEqual(historyDeliveryId("history:L:t0", 1, edited), ids[1]);
+    assert.notEqual(historyDeliveryId("history:L:t0", 1, b[1].slice(1)), ids[1]);
   });
 
   it("250 history messages are ALL buffered (not just the first 100), each batch ≤ 100, one ledger row per batch", async () => {
@@ -444,8 +449,9 @@ describe("history import in batches (ingestHistory)", () => {
     assert.deepEqual(r, { batches: 3, buffered: 250, failed: [] });
     assert.equal(store.bufferedFor(link.id).length, 250);
     assert.ok(store.sizes.every((n) => n <= CONNECTOR_MESSAGE_LIMITS.messagesPerEvent));
+    const ids = historyBatches(HIST(250)).map((batch, i) => historyDeliveryId(base.deliveryPrefix, i, batch));
     assert.deepEqual(store.events.filter((e) => e.deliveryId.startsWith(base.deliveryPrefix)).map((e) => [e.deliveryId, e.status]),
-      [[`${base.deliveryPrefix}:000`, "processed"], [`${base.deliveryPrefix}:001`, "processed"], [`${base.deliveryPrefix}:002`, "processed"]]);
+      ids.map((id) => [id, "processed"]));
   });
 
   it("reprocessing completed batches is a duplicate: nothing is buffered twice", async () => {
@@ -461,9 +467,10 @@ describe("history import in batches (ingestHistory)", () => {
     store.failFirstIds.add("h0100"); // the second batch fails (twice: first try and the immediate retry)
     const r = await ingestHistory(store, base, HIST(250));
     assert.equal(r.failed.length, 1);
-    assert.deepEqual(r.failed[0], { index: 1, deliveryId: `${base.deliveryPrefix}:001`, code: "internal" });
+    const id1 = historyDeliveryId(base.deliveryPrefix, 1, historyBatches(HIST(250))[1]);
+    assert.deepEqual(r.failed[0], { index: 1, deliveryId: id1, code: "internal" });
     assert.equal(r.buffered, 150, "the other batches are buffered");
-    assert.equal(store.events.find((e) => e.deliveryId === `${base.deliveryPrefix}:001`)?.status, "failed");
+    assert.equal(store.events.find((e) => e.deliveryId === id1)?.status, "failed");
     store.failFirstIds.clear();
     const retry = await ingestHistory(store, base, HIST(250));
     assert.deepEqual(retry.failed, []);
