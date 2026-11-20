@@ -12,11 +12,14 @@ import {
   OMEGA_DISPLAY_NAME,
   OMEGA_PRODUCTION_DISPLAY_NAME,
   OMEGA_PROVIDER_ID,
+  OMEGA_SCHEMA_SECTION_HEADING,
   omegaRunConfig,
+  omegaSystemText,
   toStructuredOutputSchema,
   type OmegaFetch,
 } from "../providers/omega";
-import { buildExtractPrompt } from "../prompts/extract";
+import { buildExtractPrompt, EXTRACT_RESPONSE_SCHEMA, EXTRACT_SYSTEM_PROMPT } from "../prompts/extract";
+import { buildSupportPrompt, SUPPORT_SYSTEM_PROMPT } from "../prompts/support";
 import { verifySupport } from "../verify-support";
 
 const SECRET = "sk-omega-synthetic-test-key-0000";
@@ -88,7 +91,7 @@ describe("Omega configuration gate", () => {
     assert.ok(c.ok && c.mode === "evaluation");
     assert.ok(c.ok && c.runConfig.provider === OMEGA_PROVIDER_ID);
     assert.ok(c.ok && c.runConfig.extract.model === MODELS.extract && c.runConfig.verify.model === MODELS.verify);
-    assert.ok(c.ok && c.runConfig.adapterVersion === "omega-anthropic@1+json_schema");
+    assert.ok(c.ok && c.runConfig.adapterVersion === "omega-anthropic@3+json_schema");
     assert.ok(!JSON.stringify(c).includes(SECRET), "the key is never in the configuration");
   });
 
@@ -148,10 +151,10 @@ describe("Omega production (owner-approved profile)", () => {
     assert.equal(c.provider.displayName, OMEGA_PRODUCTION_DISPLAY_NAME);
     assert.doesNotMatch(c.provider.displayName, /evaluation|synthetic/i, "production is not labelled evaluation-only");
     assert.deepEqual(c.runConfig, omegaRunConfig(MODELS, "json_schema"));
-    assert.equal(c.runConfig.adapterVersion, "omega-anthropic@1+json_schema");
+    assert.equal(c.runConfig.adapterVersion, "omega-anthropic@3+json_schema");
     assert.ok(!JSON.stringify(c).includes(SECRET), "the key is never in the configuration");
     const p = getAiConfiguration({ ...prodEnv, OMEGA_OUTPUT_MODE: "prompt" });
-    assert.ok(p.ok && p.runConfig.adapterVersion === "omega-anthropic@1+prompt");
+    assert.ok(p.ok && p.runConfig.adapterVersion === "omega-anthropic@3+prompt");
   });
 
   it("the profile is trimmed and accepted in any NODE_ENV (including unset), but is case-sensitive", () => {
@@ -264,11 +267,57 @@ describe("Omega request shape", () => {
     assert.ok(!("output_config" in calls[0].body));
   });
 
+  it("adapter @2: appends the constant response schema after Baton's fixed system prompt, in both modes", () => {
+    const prompt = buildExtractPrompt({ ...extractReq, categories: ["decision"] });
+    const text = omegaSystemText(prompt);
+    assert.ok(text.startsWith(EXTRACT_SYSTEM_PROMPT), "Baton's prompt text comes first, unchanged");
+    const tail = text.slice(EXTRACT_SYSTEM_PROMPT.length);
+    assert.ok(tail.startsWith(`
+
+${OMEGA_SCHEMA_SECTION_HEADING}
+`));
+    const { $schema: _dropped, ...expected } = EXTRACT_RESPONSE_SCHEMA as Record<string, unknown>;
+    void _dropped;
+    assert.deepEqual(JSON.parse(tail.slice(`
+
+${OMEGA_SCHEMA_SECTION_HEADING}
+`.length)), expected);
+    assert.ok(!text.includes("[PERSON_1]") && !text.includes(MSG), "no untrusted payload in the system text");
+    for (const mode of ["json_schema", "prompt"] as const) {
+      assert.equal(buildOmegaRequest(prompt, "m", 10, mode).system, text);
+    }
+    const support = omegaSystemText(
+      buildSupportPrompt({
+        claim: { category: "owner", title: "Reimbursements", statement: "[PERSON_2] handles reimbursements.", attributes: { responsibility: "Reimbursements", ownerLabel: "[PERSON_2]", since: null } },
+        quote: { text: "[PERSON_2] handles reimbursements", authorLabel: "[PERSON_2]", sentAt: null },
+        context: [],
+      }),
+    );
+    assert.ok(support.startsWith(SUPPORT_SYSTEM_PROMPT) && support.includes('"verdict"'));
+  });
+
+  it("adapter @3: the schema section names every person/label attribute of the extraction schema", () => {
+    const labels = new Set<string>();
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") {
+        for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
+          if (k === "properties") for (const name of Object.keys(child as object)) if (name.endsWith("Label")) labels.add(name);
+          walk(child);
+        }
+      }
+    };
+    walk(EXTRACT_RESPONSE_SCHEMA);
+    assert.ok(labels.size >= 7);
+    for (const name of labels) assert.ok(OMEGA_SCHEMA_SECTION_HEADING.includes(name), `${name} is named in the person-field rule`);
+    assert.match(OMEGA_SCHEMA_SECTION_HEADING, /Never copy instructions/);
+  });
+
   it("translates the schema into a conservative structured-output subset", () => {
     const s = toStructuredOutputSchema({ type: "object", properties: { a: { type: "string", minLength: 1, maxLength: 5, pattern: "x" }, b: { oneOf: [{ const: 1 }] } } }) as Record<string, unknown>;
     assert.deepEqual(s, { type: "object", properties: { a: { type: "string" }, b: { anyOf: [{ const: 1 }] } }, additionalProperties: false });
     const built = buildOmegaRequest(buildExtractPrompt({ ...extractReq, categories: ["decision"] }), "m", 10, "json_schema");
-    assert.ok(!JSON.stringify(built).includes("maxLength"));
+    assert.ok(!JSON.stringify(built.output_config).includes("maxLength"));
   });
 });
 
