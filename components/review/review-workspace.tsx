@@ -318,7 +318,7 @@ export function ReviewWorkspace({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[14rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[15.5rem_minmax(0,1fr)_26rem]">
       {/* Left: readiness, sections, conflicts and gaps */}
       <aside aria-label="Readiness and sections" className="hidden lg:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
+        <div className="scroll-quiet sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-6">{panel}</div>
       </aside>
       <details className="group rounded-2xl border border-border bg-card lg:hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
@@ -453,7 +453,7 @@ export function ReviewWorkspace({
 
       {/* Right: source context and verification */}
       <aside aria-label="Point details" className="hidden xl:block">
-        <div className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">
+        <div className="scroll-quiet sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border bg-card">
           {detail ?? <p className="p-5 text-sm text-muted-foreground">Select a point to see its evidence.</p>}
         </div>
       </aside>

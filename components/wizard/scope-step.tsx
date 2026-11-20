@@ -99,7 +99,7 @@ export function ScopeStep({ sources, update }: { sources: DraftSource[]; update:
                               </Button>
                             </div>
                           </div>
-                          <ul className="max-h-[26rem] divide-y divide-border overflow-y-auto" aria-label={`Conversations in ${s.name}`}>
+                          <ul className="scroll-quiet max-h-[26rem] divide-y divide-border overflow-y-auto" aria-label={`Conversations in ${s.name}`}>
                             {p.conversations.map((c) => {
                               const included = !s.excludedConversations.includes(c.localId);
                               const people = c.participantLocalIds.map((id) => labelOf.get(id)).filter(Boolean);
