@@ -13,7 +13,7 @@
  */
 
 import { getConnectorSecretKey } from "../connectors/secrets";
-import { isOwner } from "../selftest/gate";
+import { isOwner, parseOwnerEmails } from "../selftest/gate";
 import {
   GMAIL_CSRF_COOKIE,
   GMAIL_STATE_TTL_S,
@@ -80,14 +80,30 @@ function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
+/** "mane…@gmail.com": enough to tell accounts apart in logs without writing the full address. */
+function maskEmail(email: string | null): string {
+  if (!email) return "none";
+  const at = email.indexOf("@");
+  return at > 0 ? `${email.slice(0, Math.min(4, at))}…${email.slice(at)}` : "malformed";
+}
+
 async function ownerOrNull(deps: GmailRouteDeps): Promise<GmailRouteActor | null> {
   let actor: GmailRouteActor | null = null;
   try {
     actor = await deps.getActor();
   } catch {
+    deps.log("gmail_owner_refused", { reason: "actor_lookup_failed" });
     return null;
   }
-  return actor && isOwner({ email: actor.email, emailConfirmed: actor.emailConfirmed }, deps.env) ? actor : null;
+  if (actor && isOwner({ email: actor.email, emailConfirmed: actor.emailConfirmed }, deps.env)) return actor;
+  // The response stays a bare 404 (the route must not reveal itself); the log says which check failed.
+  const reason = !actor ? "not_signed_in" : !actor.emailConfirmed ? "email_unconfirmed" : "not_in_owner_list";
+  deps.log("gmail_owner_refused", {
+    reason,
+    email: maskEmail(actor?.email ?? null),
+    ownerListSize: String(parseOwnerEmails(deps.env.BATON_OWNER_EMAILS).size),
+  });
+  return null;
 }
 
 /** What the routes need beyond the Gmail variables: the state secret and the sealing key. */

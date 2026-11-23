@@ -1,5 +1,6 @@
 "use client";
 
+import { unstable_isUnrecognizedActionError } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -12,6 +13,25 @@ interface RunOptions<T> {
   onSuccess?: (data: T) => void;
   /** Called with the error; return true to suppress the default error toast. */
   onError?: (error: AppError) => boolean | void;
+}
+
+const STALE_RELOAD_KEY = "baton:stale-action-reload";
+
+/**
+ * A new deployment changes server action IDs, so a page loaded from the previous deployment
+ * gets "Server Action not found" on its next click. Reload once to pick up the new build;
+ * the timestamp guard stops a reload loop if the error persists after reloading.
+ */
+function reloadForNewDeployment(): boolean {
+  try {
+    const last = Number(window.sessionStorage.getItem(STALE_RELOAD_KEY) ?? 0);
+    if (Date.now() - last < 30_000) return false;
+    window.sessionStorage.setItem(STALE_RELOAD_KEY, String(Date.now()));
+  } catch {
+    // Storage blocked: still reload, the user clicked and expects something to happen.
+  }
+  window.location.reload();
+  return true;
 }
 
 /**
@@ -31,8 +51,15 @@ export function useAction() {
           let result: Result<T>;
           try {
             result = await action();
-          } catch {
-            result = { ok: false, error: { code: "internal", message: "Something went wrong. Please try again.", retryable: true } };
+          } catch (err) {
+            if (unstable_isUnrecognizedActionError(err)) {
+              const message = reloadForNewDeployment()
+                ? "Baton was just updated. Reloading the page; please try again."
+                : "Baton was just updated. Please refresh the page and try again.";
+              result = { ok: false, error: { code: "internal", message, retryable: true } };
+            } else {
+              result = { ok: false, error: { code: "internal", message: "Something went wrong. Please try again.", retryable: true } };
+            }
           }
           if (result.ok) {
             const message = typeof options.success === "function" ? options.success(result.data) : options.success;
